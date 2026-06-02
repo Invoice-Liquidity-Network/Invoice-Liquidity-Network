@@ -8,15 +8,15 @@ import type { ResolvedConfig, SupportedNetwork } from "./types";
 const DEFAULTS: Record<SupportedNetwork, { networkPassphrase: string; rpcUrl: string }> = {
   mainnet: {
     networkPassphrase: Networks.PUBLIC,
-    rpcUrl: "https://mainnet.sorobanrpc.com",
+    rpcUrl: 'https://mainnet.sorobanrpc.com',
   },
   standalone: {
     networkPassphrase: Networks.STANDALONE,
-    rpcUrl: "http://localhost:8000/soroban/rpc",
+    rpcUrl: 'http://localhost:8000/soroban/rpc',
   },
   testnet: {
     networkPassphrase: Networks.TESTNET,
-    rpcUrl: "https://soroban-testnet.stellar.org",
+    rpcUrl: 'https://soroban-testnet.stellar.org',
   },
 };
 
@@ -144,7 +144,7 @@ function resolveNetwork(fileConfig: ILNConfigFile, env: NodeJS.ProcessEnv): Supp
 }
 
 function expandHome(input: string, env: NodeJS.ProcessEnv): string {
-  if (!input.startsWith("~/")) {
+  if (!input.startsWith('~/')) {
     return input;
   }
   const home = env.HOME;

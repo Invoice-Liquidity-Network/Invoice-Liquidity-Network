@@ -1,8 +1,8 @@
-import type { rpc } from "@stellar/stellar-sdk";
-import { CONFIG } from "./config";
-import { getCursorLedger, setCursorLedger } from "./db";
-import { processEvent, processScheduledNotifications } from "./processor";
-import { server } from "./rpc";
+import type { rpc } from '@stellar/stellar-sdk';
+import { CONFIG } from './config';
+import { getCursorLedger, setCursorLedger } from './db';
+import { processEvent, processScheduledNotifications } from './processor';
+import { server } from './rpc';
 
 const BATCH_SIZE = 200;
 
@@ -21,9 +21,7 @@ export async function pollOnce(): Promise<void> {
     startLedger = stored;
   }
 
-  const filters: rpc.Api.EventFilter[] = [
-    { type: "contract", contractIds: [CONFIG.contractId] },
-  ];
+  const filters: rpc.Api.EventFilter[] = [{ type: 'contract', contractIds: [CONFIG.contractId] }];
   let paginationCursor: string | undefined;
   let highestEventLedger = stored;
   let latestKnownLedger = stored;
@@ -43,14 +41,10 @@ export async function pollOnce(): Promise<void> {
       }
     }
 
-    paginationCursor =
-      response.events.length === BATCH_SIZE ? response.cursor : undefined;
+    paginationCursor = response.events.length === BATCH_SIZE ? response.cursor : undefined;
   } while (paginationCursor);
 
-  const newCursor = Math.max(
-    highestEventLedger,
-    Math.max(0, latestKnownLedger - 1)
-  );
+  const newCursor = Math.max(highestEventLedger, Math.max(0, latestKnownLedger - 1));
   if (newCursor > stored) {
     setCursorLedger(newCursor);
   }
@@ -67,7 +61,7 @@ export async function startPolling(): Promise<void> {
     try {
       await pollOnce();
     } catch (err) {
-      console.error("[poller] Error during poll:", err);
+      console.error('[poller] Error during poll:', err);
     }
     setTimeout(tick, CONFIG.pollIntervalMs);
   };

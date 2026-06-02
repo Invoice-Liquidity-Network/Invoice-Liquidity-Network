@@ -2,42 +2,42 @@ name: Coverage
 
 on:
   push:
-    branches: [ "main" ]
+    branches: ['main']
   pull_request:
-    branches: [ "main" ]
+    branches: ['main']
 
 jobs:
   coverage:
     name: Run tests and collect coverage
     runs-on: ubuntu-latest
-    
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
         with:
           submodules: recursive
-      
+
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: 20
-          
+
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
         with:
           components: llvm-tools-preview
-          
+
       - name: Install cargo-llvm-cov
         uses: taiki-e/install-action@cargo-llvm-cov
-          
+
       - name: Run Rust Coverage
         working-directory: backend
         run: cargo llvm-cov --all-features --workspace --fail-under-lines 80 --lcov --output-path ../rust-lcov.info
-        
+
       - name: Install SDK Dependencies
         working-directory: sdk
         run: npm ci
-        
+
       - name: Run SDK Coverage
         working-directory: sdk
         run: npm run test:coverage -- --coverage.thresholds.lines=80
@@ -57,7 +57,7 @@ jobs:
       - name: Run Notifications Coverage
         working-directory: notifications
         run: npm run test -- --coverage --coverage.thresholds.lines=80
-        
+
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v5
         with:

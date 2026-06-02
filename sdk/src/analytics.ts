@@ -49,11 +49,15 @@ export class AnalyticsSDK {
     this.defaultTtl = defaultTtl;
   }
 
-  private async fetchWithCache<T>(key: string, endpoint: string, ttl: number = this.defaultTtl): Promise<T> {
+  private async fetchWithCache<T>(
+    key: string,
+    endpoint: string,
+    ttl: number = this.defaultTtl
+  ): Promise<T> {
     const now = Date.now();
     const cached = this.cache.get(key);
 
-    if (cached && (now - cached.timestamp < ttl)) {
+    if (cached && now - cached.timestamp < ttl) {
       return cached.data as T;
     }
 
@@ -97,15 +101,27 @@ export class AnalyticsSDK {
   }
 
   async getFreelancerStats(address: string): Promise<FreelancerStats> {
-    return this.fetchWithCache<FreelancerStats>(`freelancer-stats-${address}`, `/freelancers/${address}/stats`);
+    return this.fetchWithCache<FreelancerStats>(
+      `freelancer-stats-${address}`,
+      `/freelancers/${address}/stats`
+    );
   }
 
-  async getInvoiceHistory(address: string, role: 'freelancer' | 'payer' | 'funder'): Promise<AnalyticsInvoice[]> {
-    return this.fetchWithCache<AnalyticsInvoice[]>(`history-${address}-${role}`, `/history/${address}?role=${role}`);
+  async getInvoiceHistory(
+    address: string,
+    role: 'freelancer' | 'payer' | 'funder'
+  ): Promise<AnalyticsInvoice[]> {
+    return this.fetchWithCache<AnalyticsInvoice[]>(
+      `history-${address}-${role}`,
+      `/history/${address}?role=${role}`
+    );
   }
 
   async getTopLPs(limit: number = 10, period: 'all' | 'week' | 'month' = 'all'): Promise<LPStat[]> {
-    return this.fetchWithCache<LPStat[]>(`top-lps-${limit}-${period}`, `/lps/top?limit=${limit}&period=${period}`);
+    return this.fetchWithCache<LPStat[]>(
+      `top-lps-${limit}-${period}`,
+      `/lps/top?limit=${limit}&period=${period}`
+    );
   }
 
   clearCache() {

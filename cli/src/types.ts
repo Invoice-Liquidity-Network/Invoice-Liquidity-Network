@@ -1,4 +1,4 @@
-export type SupportedNetwork = "testnet" | "mainnet" | "standalone";
+export type SupportedNetwork = 'testnet' | 'mainnet' | 'standalone';
 
 export interface ResolvedConfig {
   contractId: string;
@@ -33,7 +33,7 @@ export interface Invoice {
 }
 
 export interface ListedInvoice extends Invoice {
-  role: "freelancer" | "payer" | "funder";
+  role: 'freelancer' | 'payer' | 'funder';
 }
 
 export interface ProtocolConfig {

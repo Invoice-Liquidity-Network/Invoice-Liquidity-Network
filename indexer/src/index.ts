@@ -1,6 +1,6 @@
-import { createApp } from "./api";
-import { CONFIG } from "./config";
-import { startPolling } from "./poller";
+import { createApp } from './api';
+import { CONFIG } from './config';
+import { startPolling } from './poller';
 
 const app = createApp();
 

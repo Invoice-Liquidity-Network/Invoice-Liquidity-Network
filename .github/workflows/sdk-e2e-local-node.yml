@@ -2,7 +2,7 @@ name: SDK E2E (local Stellar node)
 
 on:
   push:
-    branches: [ main ]
+    branches: [main]
   workflow_dispatch:
 
 jobs:

@@ -1,14 +1,14 @@
-export type InvoiceStatus = "Pending" | "Funded" | "Paid" | "Defaulted";
-export type ILNEventType = "submitted" | "funded" | "paid" | "defaulted";
+export type InvoiceStatus = 'Pending' | 'Funded' | 'Paid' | 'Defaulted';
+export type ILNEventType = 'submitted' | 'funded' | 'paid' | 'defaulted';
 
 export type NotificationTrigger =
-  | "invoice_funded"
-  | "invoice_paid"
-  | "invoice_defaulted"
-  | "invoice_due_soon"
-  | "invoice_overdue";
+  | 'invoice_funded'
+  | 'invoice_paid'
+  | 'invoice_defaulted'
+  | 'invoice_due_soon'
+  | 'invoice_overdue';
 
-export type SubscriptionChannel = "email" | "webhook";
+export type SubscriptionChannel = 'email' | 'webhook';
 
 export interface Invoice {
   id: number;
@@ -39,6 +39,6 @@ export interface NotificationPayload {
   recipientAddress: string;
   subject: string;
   message: string;
-  actor: "freelancer" | "lp" | "payer";
+  actor: 'freelancer' | 'lp' | 'payer';
   eventType?: ILNEventType;
 }

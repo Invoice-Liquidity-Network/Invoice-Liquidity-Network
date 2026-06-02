@@ -30,7 +30,7 @@ export interface CliDependencies {
 
 export async function runCli(
   argv: string[],
-  dependencies: Partial<CliDependencies> = {},
+  dependencies: Partial<CliDependencies> = {}
 ): Promise<number> {
   const stdout = dependencies.stdout ?? process.stdout;
   const stderr = dependencies.stderr ?? process.stderr;
@@ -50,8 +50,8 @@ export async function runCli(
 
   const program = new Command();
   program
-    .name("iln")
-    .description("Invoice Liquidity Network CLI")
+    .name('iln')
+    .description('Invoice Liquidity Network CLI')
     .exitOverride()
     .showHelpAfterError()
     .option("--json", "reserved for future machine-readable output")
@@ -72,55 +72,66 @@ export async function runCli(
     });
 
   program
-    .command("submit")
-    .description("Submit a new invoice from the configured signer account.")
-    .requiredOption("--payer <address>", "payer Stellar address")
-    .requiredOption("--amount <amount>", "invoice amount in display units, for example 100 or 12.5")
-    .requiredOption("--due <date>", "due date as YYYY-MM-DD or Unix timestamp")
-    .requiredOption("--rate <bps>", "discount rate in basis points")
-    .option("--token <contractId>", "override token contract ID from config")
-    .action(async (options: { amount: string; due: string; payer: string; rate: string; token?: string }) => {
-      const config = load();
-      const client = createClient(config);
-      const tokenId = options.token ?? config.tokenId;
-      if (!tokenId) {
-        throw new Error(
-          "Missing token ID. Set `tokenId` in .iln.json, set `ILN_TOKEN_ID`, or pass `--token`.",
-        );
+    .command('submit')
+    .description('Submit a new invoice from the configured signer account.')
+    .requiredOption('--payer <address>', 'payer Stellar address')
+    .requiredOption('--amount <amount>', 'invoice amount in display units, for example 100 or 12.5')
+    .requiredOption('--due <date>', 'due date as YYYY-MM-DD or Unix timestamp')
+    .requiredOption('--rate <bps>', 'discount rate in basis points')
+    .option('--token <contractId>', 'override token contract ID from config')
+    .action(
+      async (options: {
+        amount: string;
+        due: string;
+        payer: string;
+        rate: string;
+        token?: string;
+      }) => {
+        const config = load();
+        const client = createClient(config);
+        const tokenId = options.token ?? config.tokenId;
+        if (!tokenId) {
+          throw new Error(
+            'Missing token ID. Set `tokenId` in .iln.json, set `ILN_TOKEN_ID`, or pass `--token`.'
+          );
+        }
+
+        assertStellarAddress(options.payer, 'payer');
+        assertContractId(tokenId, 'token');
+
+        const { invoiceId, txHash } = await client.submitInvoice({
+          amount: parseDisplayAmount(options.amount),
+          discountRate: parseBasisPoints(options.rate),
+          dueDate: parseDueDate(options.due),
+          payer: options.payer,
+          tokenId,
+        });
+
+        ui.success(`Submitted invoice ${invoiceId.toString()} in transaction ${txHash}.`);
       }
-
-      assertStellarAddress(options.payer, "payer");
-      assertContractId(tokenId, "token");
-
-      const { invoiceId, txHash } = await client.submitInvoice({
-        amount: parseDisplayAmount(options.amount),
-        discountRate: parseBasisPoints(options.rate),
-        dueDate: parseDueDate(options.due),
-        payer: options.payer,
-        tokenId,
-      });
-
-      ui.success(`Submitted invoice ${invoiceId.toString()} in transaction ${txHash}.`);
-    });
+    );
 
   program
-    .command("fund")
-    .description("Fund an invoice using the configured signer account.")
-    .requiredOption("--id <invoiceId>", "invoice ID")
-    .option("--amount <amount>", "amount to fund in display units; defaults to the remaining balance")
+    .command('fund')
+    .description('Fund an invoice using the configured signer account.')
+    .requiredOption('--id <invoiceId>', 'invoice ID')
+    .option(
+      '--amount <amount>',
+      'amount to fund in display units; defaults to the remaining balance'
+    )
     .action(async (options: { amount?: string; id: string }) => {
       const client = createClient(load());
       const result = await client.fundInvoice(
         parseInvoiceId(options.id),
-        options.amount ? parseDisplayAmount(options.amount) : undefined,
+        options.amount ? parseDisplayAmount(options.amount) : undefined
       );
       ui.success(`Funded invoice ${options.id} in transaction ${result.hash}.`);
     });
 
   program
-    .command("pay")
-    .description("Mark an invoice as paid using the configured signer account.")
-    .requiredOption("--id <invoiceId>", "invoice ID")
+    .command('pay')
+    .description('Mark an invoice as paid using the configured signer account.')
+    .requiredOption('--id <invoiceId>', 'invoice ID')
     .action(async (options: { id: string }) => {
       const client = createClient(load());
       const result = await client.markPaid(parseInvoiceId(options.id));
@@ -128,9 +139,9 @@ export async function runCli(
     });
 
   program
-    .command("status")
-    .description("Show the current state of an invoice.")
-    .requiredOption("--id <invoiceId>", "invoice ID")
+    .command('status')
+    .description('Show the current state of an invoice.')
+    .requiredOption('--id <invoiceId>', 'invoice ID')
     .action(async (options: { id: string }) => {
       const client = createClient(load());
       const invoice = await client.getInvoice(parseInvoiceId(options.id));
@@ -138,11 +149,11 @@ export async function runCli(
     });
 
   program
-    .command("list")
-    .description("List all invoices associated with a Stellar address.")
-    .requiredOption("--address <address>", "freelancer, payer, or funder Stellar address")
+    .command('list')
+    .description('List all invoices associated with a Stellar address.')
+    .requiredOption('--address <address>', 'freelancer, payer, or funder Stellar address')
     .action(async (options: { address: string }) => {
-      assertStellarAddress(options.address, "address");
+      assertStellarAddress(options.address, 'address');
       const client = createClient(load());
       const invoices = await client.listInvoicesByAddress(options.address);
       ui.info(formatInvoiceList(invoices));
@@ -158,7 +169,7 @@ export async function runCli(
     });
 
   // Development commands
-  const devCommand = program.command("dev").description("Development utilities");
+  const devCommand = program.command('dev').description('Development utilities');
 
   devCommand
     .command("start")
@@ -198,7 +209,7 @@ export async function runCli(
     });
 
   try {
-    await program.parseAsync(argv, { from: "user" });
+    await program.parseAsync(argv, { from: 'user' });
     return 0;
   } catch (error) {
     ui.error(formatUnknownError(error));
@@ -213,7 +224,7 @@ export async function main(): Promise<void> {
 
 function parseInvoiceId(value: string): bigint {
   if (!/^\d+$/.test(value)) {
-    throw new Error("Invoice ID must be a positive integer.");
+    throw new Error('Invoice ID must be a positive integer.');
   }
 
   return BigInt(value);
@@ -221,7 +232,7 @@ function parseInvoiceId(value: string): bigint {
 
 function parseBasisPoints(value: string): number {
   if (!/^\d+$/.test(value)) {
-    throw new Error("Discount rate must be an integer basis-point value.");
+    throw new Error('Discount rate must be an integer basis-point value.');
   }
 
   return Number(value);

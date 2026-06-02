@@ -1,4 +1,4 @@
-export type InvoiceStatus = "Pending" | "Funded" | "Paid" | "Defaulted";
+export type InvoiceStatus = 'Pending' | 'Funded' | 'Paid' | 'Defaulted';
 
 export interface Invoice {
   id: bigint;
@@ -52,10 +52,7 @@ export interface SignTransactionOptions {
 
 export interface TransactionSigner {
   getPublicKey(): Promise<string>;
-  signTransaction(
-    transactionXdr: string,
-    options: SignTransactionOptions,
-  ): Promise<string>;
+  signTransaction(transactionXdr: string, options: SignTransactionOptions): Promise<string>;
 }
 
 export interface RpcServerLike {

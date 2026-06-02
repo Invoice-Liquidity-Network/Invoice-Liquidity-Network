@@ -1,4 +1,4 @@
-import { ContractEvent } from "./types";
+import { ContractEvent } from './types';
 
 /**
  * Raw Horizon transaction operation record shape (minimal subset we need).
@@ -59,13 +59,13 @@ function tryDecodeXdr(xdrBase64: string): unknown {
  */
 export function parseContractEvent(raw: RawHorizonEvent): ContractEvent {
   return {
-    contractId: raw.contract_id ?? "",
-    type: raw.type ?? "unknown",
+    contractId: raw.contract_id ?? '',
+    type: raw.type ?? 'unknown',
     topics: (raw.topics ?? []).map(tryDecodeXdr),
     value: raw.value ? tryDecodeXdr(raw.value) : null,
     ledger: raw.ledger ?? 0,
-    ledgerClosedAt: raw.ledger_closed_at ?? raw.ledger_closed_at ?? "",
-    txHash: raw.tx_hash ?? "",
-    pagingToken: raw.paging_token ?? "",
+    ledgerClosedAt: raw.ledger_closed_at ?? raw.ledger_closed_at ?? '',
+    txHash: raw.tx_hash ?? '',
+    pagingToken: raw.paging_token ?? '',
   };
 }

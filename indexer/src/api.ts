@@ -1,4 +1,4 @@
-import express, { Request, Response } from "express";
+import express, { Request, Response } from 'express';
 import {
   getFreelancerStats,
   getInvoiceById,
@@ -7,7 +7,7 @@ import {
   getProtocolStats,
   getTopLPs,
   queryInvoices,
-} from "./db";
+} from './db';
 
 /**
  * Build and return the Express application.
@@ -19,8 +19,8 @@ export function createApp(): express.Application {
   app.use(express.json());
 
   // ── GET /health ────────────────────────────────────────────────────────────
-  app.get("/health", (_req: Request, res: Response) => {
-    res.json({ status: "ok" });
+  app.get('/health', (_req: Request, res: Response) => {
+    res.json({ status: 'ok' });
   });
 
   // ── GET /invoices ──────────────────────────────────────────────────────────
@@ -29,49 +29,49 @@ export function createApp(): express.Application {
   //   ?freelancer=G...
   //   ?payer=G...
   //   ?funder=G...
-  app.get("/invoices", (req: Request, res: Response) => {
+  app.get('/invoices', (req: Request, res: Response) => {
     const { status, freelancer, payer, funder } = req.query;
 
     const invoices = queryInvoices({
-      status: typeof status === "string" ? status : undefined,
-      freelancer: typeof freelancer === "string" ? freelancer : undefined,
-      payer: typeof payer === "string" ? payer : undefined,
-      funder: typeof funder === "string" ? funder : undefined,
+      status: typeof status === 'string' ? status : undefined,
+      freelancer: typeof freelancer === 'string' ? freelancer : undefined,
+      payer: typeof payer === 'string' ? payer : undefined,
+      funder: typeof funder === 'string' ? funder : undefined,
     });
 
     res.json({ invoices });
   });
 
-  app.get("/stats", (_req: Request, res: Response) => {
+  app.get('/stats', (_req: Request, res: Response) => {
     res.json(getProtocolStats());
   });
 
-  app.get("/lps/top", (req: Request, res: Response) => {
-    const rawLimit = typeof req.query.limit === "string" ? Number(req.query.limit) : 10;
+  app.get('/lps/top', (req: Request, res: Response) => {
+    const rawLimit = typeof req.query.limit === 'string' ? Number(req.query.limit) : 10;
     const limit = Number.isFinite(rawLimit) && rawLimit > 0 ? Math.min(rawLimit, 100) : 10;
-    const period = typeof req.query.period === "string" ? req.query.period : "all";
+    const period = typeof req.query.period === 'string' ? req.query.period : 'all';
 
-    if (!["all", "week", "month"].includes(period)) {
-      res.status(400).json({ error: "Invalid period - expected all, week, or month" });
+    if (!['all', 'week', 'month'].includes(period)) {
+      res.status(400).json({ error: 'Invalid period - expected all, week, or month' });
       return;
     }
 
     res.json(getTopLPs(limit, period));
   });
 
-  app.get("/lps/:address/stats", (req: Request, res: Response) => {
+  app.get('/lps/:address/stats', (req: Request, res: Response) => {
     res.json(getLPStats(req.params.address));
   });
 
-  app.get("/freelancers/:address/stats", (req: Request, res: Response) => {
+  app.get('/freelancers/:address/stats', (req: Request, res: Response) => {
     res.json(getFreelancerStats(req.params.address));
   });
 
-  app.get("/history/:address", (req: Request, res: Response) => {
-    const role = typeof req.query.role === "string" ? req.query.role : "freelancer";
+  app.get('/history/:address', (req: Request, res: Response) => {
+    const role = typeof req.query.role === 'string' ? req.query.role : 'freelancer';
 
-    if (role !== "freelancer" && role !== "payer" && role !== "funder") {
-      res.status(400).json({ error: "Invalid role - expected freelancer, payer, or funder" });
+    if (role !== 'freelancer' && role !== 'payer' && role !== 'funder') {
+      res.status(400).json({ error: 'Invalid role - expected freelancer, payer, or funder' });
       return;
     }
 
@@ -79,11 +79,11 @@ export function createApp(): express.Application {
   });
 
   // ── GET /invoice/:id ───────────────────────────────────────────────────────
-  app.get("/invoice/:id", (req: Request, res: Response) => {
+  app.get('/invoice/:id', (req: Request, res: Response) => {
     const id = parseInt(req.params.id, 10);
 
     if (isNaN(id) || id <= 0) {
-      res.status(400).json({ error: "Invalid invoice ID - must be a positive integer" });
+      res.status(400).json({ error: 'Invalid invoice ID - must be a positive integer' });
       return;
     }
 

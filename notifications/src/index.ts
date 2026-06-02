@@ -1,6 +1,6 @@
-import { createApp } from "./api";
-import { startPolling } from "./poller";
-import { CONFIG } from "./config";
+import { createApp } from './api';
+import { startPolling } from './poller';
+import { CONFIG } from './config';
 
 const app = createApp();
 
@@ -9,7 +9,7 @@ app.listen(CONFIG.port, () => {
 });
 
 startPolling().catch((err) => {
-  console.error("[notifications] Failed to start poller:", err);
+  console.error('[notifications] Failed to start poller:', err);
   process.exit(1);
 });
 

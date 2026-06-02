@@ -1,6 +1,6 @@
-import Database from "better-sqlite3";
-import { CONFIG } from "./config";
-import type { ILNEvent, Invoice, InvoiceStatus } from "./types";
+import Database from 'better-sqlite3';
+import { CONFIG } from './config';
+import type { ILNEvent, Invoice, InvoiceStatus } from './types';
 
 // ─── Singleton connection ─────────────────────────────────────────────────────
 
@@ -17,8 +17,8 @@ export function getDb(): Database.Database {
 /** Create a new database at the given path (use ":memory:" for tests). */
 export function createDb(path: string): Database.Database {
   const db = new Database(path);
-  db.pragma("journal_mode = WAL");
-  db.pragma("foreign_keys = ON");
+  db.pragma('journal_mode = WAL');
+  db.pragma('foreign_keys = ON');
   runMigrations(db);
   return db;
 }
@@ -76,9 +76,7 @@ function runMigrations(db: Database.Database): void {
  * On conflict (same id), only mutable fields are updated.
  * `created_at` is never overwritten.
  */
-export function upsertInvoice(
-  invoice: Omit<Invoice, "created_at" | "updated_at">
-): void {
+export function upsertInvoice(invoice: Omit<Invoice, 'created_at' | 'updated_at'>): void {
   const now = Date.now();
   getDb()
     .prepare(
@@ -120,18 +118,14 @@ export function updateInvoiceStatus(
       .run(status, extra.funder, extra.funded_at ?? null, now, id);
   } else {
     getDb()
-      .prepare(
-        `UPDATE invoices SET status = ?, updated_at = ? WHERE id = ?`
-      )
+      .prepare(`UPDATE invoices SET status = ?, updated_at = ? WHERE id = ?`)
       .run(status, now, id);
   }
 }
 
 /** Return a single invoice by ID, or undefined if not found. */
 export function getInvoiceById(id: number): Invoice | undefined {
-  return getDb()
-    .prepare("SELECT * FROM invoices WHERE id = ?")
-    .get(id) as Invoice | undefined;
+  return getDb().prepare('SELECT * FROM invoices WHERE id = ?').get(id) as Invoice | undefined;
 }
 
 export interface InvoiceFilter {
@@ -148,26 +142,24 @@ export function queryInvoices(filter: InvoiceFilter): Invoice[] {
   const params: (string | number)[] = [];
 
   if (filter.status) {
-    clauses.push("status = ?");
+    clauses.push('status = ?');
     params.push(filter.status);
   }
   if (filter.freelancer) {
-    clauses.push("freelancer = ?");
+    clauses.push('freelancer = ?');
     params.push(filter.freelancer);
   }
   if (filter.payer) {
-    clauses.push("payer = ?");
+    clauses.push('payer = ?');
     params.push(filter.payer);
   }
   if (filter.funder) {
-    clauses.push("funder = ?");
+    clauses.push('funder = ?');
     params.push(filter.funder);
   }
 
-  const where = clauses.length > 0 ? `WHERE ${clauses.join(" AND ")}` : "";
-  return db
-    .prepare(`SELECT * FROM invoices ${where} ORDER BY id ASC`)
-    .all(...params) as Invoice[];
+  const where = clauses.length > 0 ? `WHERE ${clauses.join(' AND ')}` : '';
+  return db.prepare(`SELECT * FROM invoices ${where} ORDER BY id ASC`).all(...params) as Invoice[];
 }
 
 export interface ProtocolStats {
@@ -203,24 +195,21 @@ function discountFor(invoice: Invoice): bigint {
 
 function terminalDefaultRate(invoices: Invoice[]): number {
   const terminal = invoices.filter(
-    (invoice) => invoice.status === "Paid" || invoice.status === "Defaulted"
+    (invoice) => invoice.status === 'Paid' || invoice.status === 'Defaulted'
   );
   if (terminal.length === 0) {
     return 0;
   }
 
-  const defaults = terminal.filter((invoice) => invoice.status === "Defaulted").length;
+  const defaults = terminal.filter((invoice) => invoice.status === 'Defaulted').length;
   return defaults / terminal.length;
 }
 
 export function getProtocolStats(): ProtocolStats {
   const invoices = queryInvoices({});
-  const totalVolume = invoices.reduce(
-    (sum, invoice) => sum + BigInt(invoice.amount),
-    0n
-  );
+  const totalVolume = invoices.reduce((sum, invoice) => sum + BigInt(invoice.amount), 0n);
   const totalYield = invoices
-    .filter((invoice) => invoice.status === "Paid")
+    .filter((invoice) => invoice.status === 'Paid')
     .reduce((sum, invoice) => sum + discountFor(invoice), 0n);
 
   return {
@@ -233,12 +222,9 @@ export function getProtocolStats(): ProtocolStats {
 
 export function getLPStats(address: string): LPStats {
   const invoices = queryInvoices({ funder: address });
-  const deployed = invoices.reduce(
-    (sum, invoice) => sum + BigInt(invoice.amount),
-    0n
-  );
+  const deployed = invoices.reduce((sum, invoice) => sum + BigInt(invoice.amount), 0n);
   const earnedYield = invoices
-    .filter((invoice) => invoice.status === "Paid")
+    .filter((invoice) => invoice.status === 'Paid')
     .reduce((sum, invoice) => sum + discountFor(invoice), 0n);
 
   return {
@@ -253,9 +239,7 @@ export function getFreelancerStats(address: string): FreelancerStats {
   const invoices = queryInvoices({ freelancer: address });
   const fundedInvoices = invoices.filter(
     (invoice) =>
-      invoice.status === "Funded" ||
-      invoice.status === "Paid" ||
-      invoice.status === "Defaulted"
+      invoice.status === 'Funded' || invoice.status === 'Paid' || invoice.status === 'Defaulted'
   );
   const totalReceived = fundedInvoices.reduce(
     (sum, invoice) => sum + BigInt(invoice.amount) - discountFor(invoice),
@@ -264,8 +248,7 @@ export function getFreelancerStats(address: string): FreelancerStats {
   const avgDiscount =
     invoices.length === 0
       ? 0
-      : invoices.reduce((sum, invoice) => sum + invoice.discount_rate, 0) /
-        invoices.length;
+      : invoices.reduce((sum, invoice) => sum + invoice.discount_rate, 0) / invoices.length;
 
   return {
     submitted: invoices.length,
@@ -277,7 +260,7 @@ export function getFreelancerStats(address: string): FreelancerStats {
 
 export function getInvoiceHistory(
   address: string,
-  role: "freelancer" | "payer" | "funder"
+  role: 'freelancer' | 'payer' | 'funder'
 ): Invoice[] {
   return queryInvoices({ [role]: address });
 }
@@ -285,11 +268,11 @@ export function getInvoiceHistory(
 export function getTopLPs(limit: number, period: string): LPStat[] {
   const now = Date.now();
   const since =
-    period === "week"
+    period === 'week'
       ? now - 7 * 24 * 60 * 60 * 1000
-      : period === "month"
-        ? now - 30 * 24 * 60 * 60 * 1000
-        : 0;
+      : period === 'month'
+      ? now - 30 * 24 * 60 * 60 * 1000
+      : 0;
   const invoices = queryInvoices({}).filter((invoice) => {
     if (!invoice.funder) {
       return false;
@@ -310,7 +293,7 @@ export function getTopLPs(limit: number, period: string): LPStat[] {
 
     const current = byAddress.get(funder) ?? { yield: 0n, invoiceCount: 0 };
     current.invoiceCount += 1;
-    if (invoice.status === "Paid") {
+    if (invoice.status === 'Paid') {
       current.yield += discountFor(invoice);
     }
     byAddress.set(funder, current);
@@ -335,11 +318,7 @@ export function getTopLPs(limit: number, period: string): LPStat[] {
 
 /** Return true if this event has already been processed. */
 export function hasEvent(eventId: string): boolean {
-  return (
-    getDb()
-      .prepare("SELECT 1 FROM events WHERE event_id = ?")
-      .get(eventId) !== undefined
-  );
+  return getDb().prepare('SELECT 1 FROM events WHERE event_id = ?').get(eventId) !== undefined;
 }
 
 /**
@@ -361,9 +340,9 @@ export function insertEvent(event: ILNEvent): void {
 
 /** Return the last processed ledger sequence, or 0 if never set. */
 export function getCursorLedger(): number {
-  const row = getDb()
-    .prepare("SELECT last_ledger FROM cursor WHERE id = 1")
-    .get() as { last_ledger: number } | undefined;
+  const row = getDb().prepare('SELECT last_ledger FROM cursor WHERE id = 1').get() as
+    | { last_ledger: number }
+    | undefined;
   return row?.last_ledger ?? 0;
 }
 

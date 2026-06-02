@@ -1,22 +1,28 @@
-﻿import { describe, it, expect } from "vitest";
-import { parseContractError, InvalidDiscountRateError, TokenMismatchError, PayerReputationTooLowError, GenericContractError } from "./errors";
+﻿import { describe, it, expect } from 'vitest';
+import {
+  parseContractError,
+  InvalidDiscountRateError,
+  TokenMismatchError,
+  PayerReputationTooLowError,
+  GenericContractError,
+} from './errors';
 
-describe("Error Mapping SDK", () => {
-  it("maps InvalidDiscountRate", () => {
-    const err = parseContractError("Error: InvalidDiscountRate");
+describe('Error Mapping SDK', () => {
+  it('maps InvalidDiscountRate', () => {
+    const err = parseContractError('Error: InvalidDiscountRate');
     expect(err).toBeInstanceOf(InvalidDiscountRateError);
-    expect(err.code).toBe("INVALID_DISCOUNT_RATE");
+    expect(err.code).toBe('INVALID_DISCOUNT_RATE');
   });
-  it("maps TokenMismatch", () => {
-    const err = parseContractError("Error: TokenMismatch");
+  it('maps TokenMismatch', () => {
+    const err = parseContractError('Error: TokenMismatch');
     expect(err).toBeInstanceOf(TokenMismatchError);
   });
-  it("maps PayerReputationTooLow", () => {
-    const err = parseContractError("Error: PayerReputationTooLow");
+  it('maps PayerReputationTooLow', () => {
+    const err = parseContractError('Error: PayerReputationTooLow');
     expect(err).toBeInstanceOf(PayerReputationTooLowError);
   });
-  it("maps generic errors", () => {
-    const err = parseContractError("UnknownXDRCode");
+  it('maps generic errors', () => {
+    const err = parseContractError('UnknownXDRCode');
     expect(err).toBeInstanceOf(GenericContractError);
   });
 });

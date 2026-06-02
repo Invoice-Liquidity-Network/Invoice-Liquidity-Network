@@ -207,6 +207,12 @@ These settings include required PR reviews, required status checks, dismissing s
 - Avoid `unwrap()` in contract code — use proper error handling with `ContractError`
 - Keep functions small and focused; split logic into modules where appropriate
 
+### Formatting
+
+- Use the shared repo Prettier configuration for JavaScript, TypeScript, JSON, YAML, and related files
+- Run `pnpm format` before committing
+- CI validates formatting automatically with `pnpm format:check`
+
 ### Documentation
 
 - Write in plain, clear English

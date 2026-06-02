@@ -1,14 +1,9 @@
-import { type rpc, scValToNative } from "@stellar/stellar-sdk";
-import { hasEvent, insertEvent, upsertInvoice } from "./db";
-import { fetchInvoice } from "./rpc";
-import type { ILNEventType } from "./types";
+import { type rpc, scValToNative } from '@stellar/stellar-sdk';
+import { hasEvent, insertEvent, upsertInvoice } from './db';
+import { fetchInvoice } from './rpc';
+import type { ILNEventType } from './types';
 
-const KNOWN_EVENT_TYPES = new Set<ILNEventType>([
-  "submitted",
-  "funded",
-  "paid",
-  "defaulted",
-]);
+const KNOWN_EVENT_TYPES = new Set<ILNEventType>(['submitted', 'funded', 'paid', 'defaulted']);
 
 /**
  * Process a single Soroban contract event:
@@ -21,9 +16,7 @@ const KNOWN_EVENT_TYPES = new Set<ILNEventType>([
  * always have accurate state even if events are processed out-of-order or after
  * a re-org.
  */
-export async function processEvent(
-  event: rpc.Api.EventResponse
-): Promise<void> {
+export async function processEvent(event: rpc.Api.EventResponse): Promise<void> {
   // ── Deduplication ─────────────────────────────────────────────────────────
   if (hasEvent(event.id)) {
     return;

@@ -1,8 +1,8 @@
 export enum ProposalActionKind {
-  UpdateFeeRate = "UpdateFeeRate",
-  AddToken = "AddToken",
-  RemoveToken = "RemoveToken",
-  UpdateMaxDiscountRate = "UpdateMaxDiscountRate",
+  UpdateFeeRate = 'UpdateFeeRate',
+  AddToken = 'AddToken',
+  RemoveToken = 'RemoveToken',
+  UpdateMaxDiscountRate = 'UpdateMaxDiscountRate',
 }
 
 export type ProposalAction =
@@ -12,11 +12,11 @@ export type ProposalAction =
   | { kind: ProposalActionKind.UpdateMaxDiscountRate; rate: number };
 
 export enum ProposalStatus {
-  Active = "Active",
-  Passed = "Passed",
-  Rejected = "Rejected",
-  Executed = "Executed",
-  Vetoed = "Vetoed",
+  Active = 'Active',
+  Passed = 'Passed',
+  Rejected = 'Rejected',
+  Executed = 'Executed',
+  Vetoed = 'Vetoed',
 }
 
 export interface GovernanceProposal {
@@ -77,7 +77,7 @@ export interface ListProposalsParams {
   pageSize?: number;
 }
 
-import type { RpcServerLike } from "./types";
+import type { RpcServerLike } from './types';
 
 export interface GovernanceClientConfig {
   contractId: string;

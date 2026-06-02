@@ -1,14 +1,14 @@
-import { HorizonClient, FetchFn } from "./horizon-client";
-import { parseContractEvent, RawHorizonEvent } from "./parse";
+import { HorizonClient, FetchFn } from './horizon-client';
+import { parseContractEvent, RawHorizonEvent } from './parse';
 import {
   ContractEvent,
   EventCallback,
   ILNEventType,
   IndexerOptions,
   SubscriptionHandle,
-} from "./types";
+} from './types';
 
-const DEFAULT_HORIZON_URL = "https://horizon.stellar.org";
+const DEFAULT_HORIZON_URL = 'https://horizon.stellar.org';
 const DEFAULT_PAGE_SIZE = 200;
 const DEFAULT_TIMEOUT_MS = 30_000;
 
@@ -36,11 +36,7 @@ export class ILNEventIndexer {
   /** The ILN contract address to index events against. */
   private contractId: string;
 
-  constructor(
-    contractId: string,
-    options: IndexerOptions = {},
-    fetchFn?: FetchFn
-  ) {
+  constructor(contractId: string, options: IndexerOptions = {}, fetchFn?: FetchFn) {
     this.contractId = contractId;
 
     this.client = new HorizonClient(
@@ -75,10 +71,7 @@ export class ILNEventIndexer {
    * @param address  Stellar account / contract address (G... or C...)
    * @param types    Optional list of event types to keep
    */
-  async getEventsForAddress(
-    address: string,
-    types?: ILNEventType[]
-  ): Promise<ContractEvent[]> {
+  async getEventsForAddress(address: string, types?: ILNEventType[]): Promise<ContractEvent[]> {
     const startUrl = this.client.accountTransactionsUrl(address);
     const events: ContractEvent[] = [];
 
@@ -100,10 +93,7 @@ export class ILNEventIndexer {
    * @param timestamp  Unix epoch seconds (or ISO-8601 string)
    */
   async getEventsSince(timestamp: number | string): Promise<ContractEvent[]> {
-    const cutoff =
-      typeof timestamp === "number"
-        ? new Date(timestamp * 1000)
-        : new Date(timestamp);
+    const cutoff = typeof timestamp === 'number' ? new Date(timestamp * 1000) : new Date(timestamp);
 
     const all = await this._fetchAllContractEvents();
     return all.filter((e) => new Date(e.ledgerClosedAt) >= cutoff);
@@ -127,10 +117,7 @@ export class ILNEventIndexer {
    * setTimeout(() => sub.close(), 60_000);
    * ```
    */
-  subscribe(
-    callback: EventCallback,
-    onError?: (err: Error) => void
-  ): SubscriptionHandle {
+  subscribe(callback: EventCallback, onError?: (err: Error) => void): SubscriptionHandle {
     const streamUrl = this.client.contractEventsUrl(this.contractId);
 
     const abortController = this.client.openStream(

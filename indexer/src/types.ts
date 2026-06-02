@@ -1,6 +1,6 @@
 // ─── Invoice ──────────────────────────────────────────────────────────────────
 
-export type InvoiceStatus = "Pending" | "Funded" | "Paid" | "Defaulted";
+export type InvoiceStatus = 'Pending' | 'Funded' | 'Paid' | 'Defaulted';
 
 /**
  * Invoice row as stored in SQLite.
@@ -25,7 +25,7 @@ export interface Invoice {
 
 // ─── Events ───────────────────────────────────────────────────────────────────
 
-export type ILNEventType = "submitted" | "funded" | "paid" | "defaulted";
+export type ILNEventType = 'submitted' | 'funded' | 'paid' | 'defaulted';
 
 /** Processed ILN contract event as stored in SQLite. */
 export interface ILNEvent {

@@ -7,25 +7,22 @@ import {
   scValToNative,
   TransactionBuilder,
   xdr,
-} from "@stellar/stellar-sdk";
+} from '@stellar/stellar-sdk';
 
-import {
-  GOVERNANCE_READ_ACCOUNT,
-  GOVERNANCE_TX_TIMEOUT_SEC,
-} from "./governance-constants";
-import { ProposalActionKind, ProposalStatus } from "./governance-types";
-import type { ProposalAction } from "./governance-types";
-import type { RpcServerLike } from "./types";
+import { GOVERNANCE_READ_ACCOUNT, GOVERNANCE_TX_TIMEOUT_SEC } from './governance-constants';
+import { ProposalActionKind, ProposalStatus } from './governance-types';
+import type { ProposalAction } from './governance-types';
+import type { RpcServerLike } from './types';
 
-export type BuiltTransaction = ReturnType<TransactionBuilder["build"]>;
+export type BuiltTransaction = ReturnType<TransactionBuilder['build']>;
 
 export function buildReadContractTransaction(
   contractId: string,
   networkPassphrase: string,
   method: string,
-  args: xdr.ScVal[],
+  args: xdr.ScVal[]
 ): BuiltTransaction {
-  return new TransactionBuilder(new Account(GOVERNANCE_READ_ACCOUNT, "0"), {
+  return new TransactionBuilder(new Account(GOVERNANCE_READ_ACCOUNT, '0'), {
     fee: BASE_FEE,
     networkPassphrase,
   })
@@ -34,7 +31,7 @@ export function buildReadContractTransaction(
         contract: contractId,
         function: method,
         args,
-      }),
+      })
     )
     .setTimeout(GOVERNANCE_TX_TIMEOUT_SEC)
     .build();
@@ -46,7 +43,7 @@ export async function buildWriteContractTransaction(
   networkPassphrase: string,
   sourceAddress: string,
   method: string,
-  args: xdr.ScVal[],
+  args: xdr.ScVal[]
 ): Promise<BuiltTransaction> {
   const sourceAccount = (await server.getAccount(sourceAddress)) as Account;
 
@@ -59,7 +56,7 @@ export async function buildWriteContractTransaction(
         contract: contractId,
         function: method,
         args,
-      }),
+      })
     )
     .setTimeout(GOVERNANCE_TX_TIMEOUT_SEC)
     .build();
@@ -89,7 +86,7 @@ export function encodeProposalAction(action: ProposalAction): xdr.ScVal {
     case ProposalActionKind.UpdateFeeRate:
       return xdr.ScVal.scvVec([
         xdr.ScVal.scvSymbol(action.kind),
-        nativeToScVal(action.rate, { type: "u32" }),
+        nativeToScVal(action.rate, { type: 'u32' }),
       ]);
     case ProposalActionKind.AddToken:
       return xdr.ScVal.scvVec([
@@ -104,7 +101,7 @@ export function encodeProposalAction(action: ProposalAction): xdr.ScVal {
     case ProposalActionKind.UpdateMaxDiscountRate:
       return xdr.ScVal.scvVec([
         xdr.ScVal.scvSymbol(action.kind),
-        nativeToScVal(action.rate, { type: "u32" }),
+        nativeToScVal(action.rate, { type: 'u32' }),
       ]);
     default: {
       const exhaustive: never = action;
@@ -125,7 +122,9 @@ export function extractSimulationRetval(simulation: unknown, method: string): xd
 
   if (typedSimulation.error) {
     throw new Error(
-      `Simulation failed for ${method}: ${typedSimulation.error ? String(typedSimulation.error) : "Unknown RPC error."}`,
+      `Simulation failed for ${method}: ${
+        typedSimulation.error ? String(typedSimulation.error) : 'Unknown RPC error.'
+      }`
     );
   }
 
@@ -137,24 +136,28 @@ export function extractSimulationRetval(simulation: unknown, method: string): xd
 }
 
 export function unwrapContractResult(value: unknown, method: string): unknown {
-  if (!value || typeof value !== "object") {
+  if (!value || typeof value !== 'object') {
     return value;
   }
 
-  if ("ok" in value) {
+  if ('ok' in value) {
     return (value as { ok: unknown }).ok;
   }
-  if ("Ok" in value) {
+  if ('Ok' in value) {
     return (value as { Ok: unknown }).Ok;
   }
-  if ("err" in value) {
+  if ('err' in value) {
     throw new Error(
-      `Contract method ${method} returned an error: ${formatContractError((value as { err: unknown }).err)}.`,
+      `Contract method ${method} returned an error: ${formatContractError(
+        (value as { err: unknown }).err
+      )}.`
     );
   }
-  if ("Err" in value) {
+  if ('Err' in value) {
     throw new Error(
-      `Contract method ${method} returned an error: ${formatContractError((value as { Err: unknown }).Err)}.`,
+      `Contract method ${method} returned an error: ${formatContractError(
+        (value as { Err: unknown }).Err
+      )}.`
     );
   }
 
@@ -162,10 +165,10 @@ export function unwrapContractResult(value: unknown, method: string): unknown {
 }
 
 function formatContractError(error: unknown): string {
-  if (typeof error === "string") {
+  if (typeof error === 'string') {
     return error;
   }
-  if (typeof error === "number" || typeof error === "bigint" || typeof error === "boolean") {
+  if (typeof error === 'number' || typeof error === 'bigint' || typeof error === 'boolean') {
     return String(error);
   }
 
@@ -176,21 +179,23 @@ function formatContractError(error: unknown): string {
   }
 }
 
-export function extractContractCall(
-  transaction: BuiltTransaction,
-): { contractId: string; functionName: string; args: xdr.ScVal[] } {
+export function extractContractCall(transaction: BuiltTransaction): {
+  contractId: string;
+  functionName: string;
+  args: xdr.ScVal[];
+} {
   if (transaction.operations.length !== 1) {
-    throw new Error("Transaction must contain exactly one operation.");
+    throw new Error('Transaction must contain exactly one operation.');
   }
 
   const operation = transaction.operations[0];
-  if (!operation || operation.type !== "invokeHostFunction") {
-    throw new Error("Transaction does not contain an invokeHostFunction operation.");
+  if (!operation || operation.type !== 'invokeHostFunction') {
+    throw new Error('Transaction does not contain an invokeHostFunction operation.');
   }
 
   const hostFunction = operation.func;
-  if (hostFunction.switch().name !== "hostFunctionTypeInvokeContract") {
-    throw new Error("Transaction does not contain an invokeContract host function.");
+  if (hostFunction.switch().name !== 'hostFunctionTypeInvokeContract') {
+    throw new Error('Transaction does not contain an invokeContract host function.');
   }
 
   const invokeContractArgs = hostFunction.invokeContract();

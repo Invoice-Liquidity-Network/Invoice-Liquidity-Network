@@ -55,6 +55,8 @@ const invoice = await sdk.getInvoice(1n);
 console.log(invoice);
 ```
 
+> **Security note:** The SDK performs limited input validation and relies on the configured Soroban RPC/Horizon node and signer implementation for contract simulation, transaction preparation, and submission. See [SDK trust model](../docs/sdk-trust-model.md) for details.
+
 ## Token Amounts
 
 SDK methods accept token amounts as `bigint` base units. USDC and EURC use 6 decimals, while XLM uses 7 decimals through the native SAC wrapper. See the [multi-token support guide](../docs/tokens/multi-token-support.md) for supported tokens, trustlines, testnet acquisition, and token-aware parsing examples.
