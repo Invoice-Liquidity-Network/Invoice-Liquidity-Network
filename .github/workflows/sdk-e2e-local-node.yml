@@ -1,0 +1,42 @@
+name: SDK E2E (local Stellar node)
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  e2e-local:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Start local Stellar node via Docker Compose
+        run: |
+          docker compose -f tests/e2e/docker-compose.yml up -d
+
+      - name: Wait for Horizon
+        run: |
+          for i in {1..30}; do
+            if curl -sS http://localhost:8000/ >/dev/null; then
+              echo "Horizon is up"; exit 0;
+            fi
+            sleep 2
+          done
+          echo "Horizon did not start"; exit 1
+
+      - name: Run SDK e2e tests
+        run: pnpm --filter @invoice-liquidity/sdk test:e2e-local
+
+      - name: Tear down Docker Compose
+        if: always()
+        run: docker compose -f tests/e2e/docker-compose.yml down
