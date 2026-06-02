@@ -9,3 +9,7 @@
 - [Notifications](notifications.md)
 - [CI/CD](ci-cd.md)
 - [PR Submission Form](pr-16-submission-form.md)
+
+## Tutorials
+
+- [Governance Participation](tutorials/governance-participation.md) — Read proposals, cast votes, delegate voting power, and monitor execution
