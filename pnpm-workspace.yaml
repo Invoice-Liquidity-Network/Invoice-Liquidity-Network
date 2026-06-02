@@ -3,5 +3,6 @@ packages:
   - cli
   - indexer
   - notifications
+  - docs
   - "examples/*"
   - "packages/*"

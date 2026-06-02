@@ -2,7 +2,7 @@ import pc from "picocolors";
 
 import { formatAmount } from "./amounts";
 import { formatTimestamp } from "./dates";
-import type { Invoice, ListedInvoice, ResolvedConfig } from "./types";
+import type { Invoice, ListedInvoice, ProtocolConfig, ResolvedConfig } from "./types";
 
 export interface Ui {
   error(message: string): void;
@@ -73,6 +73,27 @@ export function formatInvoiceList(invoices: ListedInvoice[]): string {
     cells.map((cell, index) => cell.padEnd(widths[index])).join("  ");
 
   return [pc.bold(renderRow(headers)), ...rows.map(renderRow)].join("\n");
+}
+
+export function formatProtocolConfig(config: ProtocolConfig): string {
+  const lines = [
+    row("Min Amount", config.minInvoiceAmount.toString()),
+    row("Max Rate", `${config.maxDiscountRate} bps`),
+    row("Fee", `${config.protocolFeeBps} bps`),
+    row("Reputation", config.minPayerReputation.toString()),
+    row("Decay", `${config.decayRateBps} bps`),
+    config.minInvoiceDuration == null
+      ? null
+      : row("Min Duration", `${config.minInvoiceDuration}s`),
+    config.maxInvoiceDuration == null
+      ? null
+      : row("Max Duration", `${config.maxInvoiceDuration}s`),
+    config.gracePeriodSeconds == null
+      ? null
+      : row("Grace", `${config.gracePeriodSeconds}s`),
+  ];
+
+  return lines.filter((line): line is string => line !== null).join("\n");
 }
 
 function row(label: string, value: string): string {

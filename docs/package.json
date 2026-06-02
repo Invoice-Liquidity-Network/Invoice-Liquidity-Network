@@ -1,0 +1,25 @@
+{
+  "name": "@invoice-liquidity/docs",
+  "version": "1.0.0",
+  "description": "Invoice Liquidity Network Documentation",
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "test": "echo \"no tests\""
+  },
+  "dependencies": {
+    "next": "^14.0.0",
+    "nextra": "^2.13.0",
+    "nextra-theme-docs": "^2.13.0",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "@docsearch/react": "^3.5.2",
+    "@docsearch/css": "^3.5.2"
+  },
+  "devDependencies": {
+    "typescript": "^5.9.3",
+    "@types/react": "^18.2.0",
+    "@types/node": "^24.7.2"
+  }
+}

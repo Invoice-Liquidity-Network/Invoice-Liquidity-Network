@@ -1,4 +1,4 @@
-import {
+﻿import {
   Account,
   Address,
   BASE_FEE,
@@ -17,13 +17,17 @@ import type {
   Invoice,
   InvoiceStatus,
   MarkPaidParams,
+  ProtocolConfig,
   RpcServerLike,
   SubmitInvoiceParams,
   TransactionSigner,
 } from "./types";
 
+import { parseContractError } from "./errors";
+
 const READ_ACCOUNT = "GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF";
 const POLL_ATTEMPTS = 20;
+const PROTOCOL_CONFIG_CACHE_MS = 5 * 60 * 1000;
 
 type PreparedTransactionLike = { toXDR(): string };
 type BuiltTransaction = ReturnType<TransactionBuilder["build"]>;
@@ -39,6 +43,7 @@ export class ILNSdk {
   private readonly networkPassphrase: string;
   private readonly server: RpcServerLike;
   private readonly signer?: TransactionSigner;
+  private protocolConfigCache: { expiresAt: number; value: ProtocolConfig } | null = null;
 
   constructor(config: ILNSdkConfig) {
     this.contractId = config.contractId;
@@ -119,6 +124,69 @@ export class ILNSdk {
     const simulation = await this.server.simulateTransaction(transaction);
 
     return this.extractInvoiceResult(simulation);
+  }
+
+  /** Fetch reputation score for an address */
+  async getReputation(address: string): Promise<number> {
+    const transaction = this.buildReadTransaction("get_reputation", [
+      this.toAddress(address),
+    ]);
+    const simulation = await this.server.simulateTransaction(transaction);
+    const result = this.extractSimulationRetval(simulation, "get_reputation");
+    const native = scValToNative(result) as unknown;
+    if (typeof native === "number") return native;
+    if (typeof native === "bigint") return Number(native);
+    throw new Error("Unexpected reputation result type");
+  }
+
+  /** Fetch contract-wide statistics */
+  async getStats(): Promise<unknown> {
+    const transaction = this.buildReadTransaction("get_stats", []);
+    const simulation = await this.server.simulateTransaction(transaction);
+    const result = this.extractSimulationRetval(simulation, "get_stats");
+    return scValToNative(result);
+  }
+
+  /** Fetch governance proposal by id */
+  async getProposal(id: bigint): Promise<unknown> {
+    const transaction = this.buildReadTransaction("get_proposal", [
+      nativeToScVal(id, { type: "u64" }),
+    ]);
+    const simulation = await this.server.simulateTransaction(transaction);
+    const result = this.extractSimulationRetval(simulation, "get_proposal");
+    return scValToNative(result);
+  }
+
+  async getProtocolConfig(): Promise<ProtocolConfig> {
+    const now = Date.now();
+    if (this.protocolConfigCache && this.protocolConfigCache.expiresAt > now) {
+      return this.protocolConfigCache.value;
+    }
+
+    const transaction = this.buildReadTransaction("get_protocol_config", []);
+    const simulation = await this.server.simulateTransaction(transaction);
+    const result = this.extractSimulationRetval(simulation, "get_protocol_config");
+    const config = this.parseProtocolConfig(
+      this.unwrapContractResult(scValToNative(result), "get_protocol_config"),
+    );
+
+    this.protocolConfigCache = {
+      expiresAt: now + PROTOCOL_CONFIG_CACHE_MS,
+      value: config,
+    };
+
+    return config;
+  }
+
+  /** Raw storage key lookup */
+  async getStorage(key: string): Promise<string> {
+    const transaction = this.buildReadTransaction("get_storage", [
+      nativeToScVal(key, { type: "string" }),
+    ]);
+    const simulation = await this.server.simulateTransaction(transaction);
+    const result = this.extractSimulationRetval(simulation, "get_storage");
+    const native = scValToNative(result);
+    return typeof native === "string" ? native : String(native);
   }
 
   private buildReadTransaction(method: string, args: xdr.ScVal[]): BuiltTransaction {
@@ -258,6 +326,59 @@ export class ILNSdk {
     };
   }
 
+  private parseProtocolConfig(value: unknown): ProtocolConfig {
+    if (!value || typeof value !== "object") {
+      throw new Error("Contract returned an invalid protocol config payload.");
+    }
+
+    const config = value as Record<string, unknown>;
+
+    return {
+      minInvoiceAmount: this.toBigInt(
+        this.configValue(config, "minInvoiceAmount", "min_invoice_amount", "MIN_INVOICE_AMOUNT"),
+      ),
+      maxDiscountRate: this.toNumberValue(
+        this.configValue(config, "maxDiscountRate", "max_discount_rate", "MAX_DISCOUNT_RATE"),
+        "maxDiscountRate",
+      ),
+      protocolFeeBps: this.toNumberValue(
+        this.configValue(config, "protocolFeeBps", "protocol_fee_bps", "PROTOCOL_FEE_BPS"),
+        "protocolFeeBps",
+      ),
+      minPayerReputation: this.toNumberValue(
+        this.configValue(config, "minPayerReputation", "min_payer_reputation", "MIN_PAYER_REPUTATION"),
+        "minPayerReputation",
+      ),
+      decayRateBps: this.toNumberValue(
+        this.configValue(config, "decayRateBps", "decay_rate_bps", "DECAY_RATE_BPS"),
+        "decayRateBps",
+      ),
+      maxInvoiceDuration: this.optionalNumber(config, "maxInvoiceDuration", "max_invoice_duration", "MAX_INVOICE_DURATION"),
+      minInvoiceDuration: this.optionalNumber(config, "minInvoiceDuration", "min_invoice_duration", "MIN_INVOICE_DURATION"),
+      gracePeriodSeconds: this.optionalNumber(config, "gracePeriodSeconds", "grace_period_seconds", "GRACE_PERIOD_SECONDS"),
+    };
+  }
+
+  private configValue(config: Record<string, unknown>, ...keys: string[]): unknown {
+    for (const key of keys) {
+      if (config[key] !== undefined) {
+        return config[key];
+      }
+    }
+
+    throw new Error(`Protocol config is missing ${keys[0]}.`);
+  }
+
+  private optionalNumber(config: Record<string, unknown>, ...keys: string[]): number | undefined {
+    for (const key of keys) {
+      if (config[key] !== undefined && config[key] !== null) {
+        return this.toNumberValue(config[key], key);
+      }
+    }
+
+    return undefined;
+  }
+
   private extractSimulationRetval(simulation: unknown, method: string): xdr.ScVal {
     const typedSimulation = simulation as SimulationLike;
 
@@ -287,14 +408,10 @@ export class ILNSdk {
       return (value as { Ok: unknown }).Ok;
     }
     if ("err" in value) {
-      throw new Error(
-        `Contract method ${method} returned an error: ${JSON.stringify((value as { err: unknown }).err)}.`,
-      );
+      throw parseContractError((value as { err: unknown }).err);
     }
     if ("Err" in value) {
-      throw new Error(
-        `Contract method ${method} returned an error: ${JSON.stringify((value as { Err: unknown }).Err)}.`,
-      );
+      throw parseContractError((value as { Err: unknown }).Err);
     }
 
     return value;
@@ -374,3 +491,5 @@ export class ILNSdk {
     return String(error);
   }
 }
+
+

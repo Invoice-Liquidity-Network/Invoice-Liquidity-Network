@@ -1,0 +1,29 @@
+{
+  "appId": "YOUR_ALGOLIA_APP_ID",
+  "apiKey": "YOUR_ALGOLIA_API_KEY",
+  "indexName": "iln-docs",
+  "startUrls": ["https://docs.iln.finance/"],
+  "sitemaps": ["https://docs.iln.finance/sitemap.xml"],
+  "rateLimit": 200,
+  "maxDepth": 10,
+  "exclusionPatterns": [
+    "/**/node_modules/**",
+    "/**/.next/**",
+    "/**/.git/**"
+  ],
+  "discoveryPatterns": [
+    "https://docs.iln.finance/**"
+  ],
+  "actions": [
+    {
+      "indexName": "iln-docs",
+      "pathsToMatch": ["https://docs.iln.finance/**"],
+      "recordExtractor": "({$, url}) => {const title = $('h1').text() || $('title').text(); const description = $('meta[name=\"description\"]').attr('content') || $('meta[property=\"og:description\"]').attr('content') || ''; return [{objectID: url, title, description, url, content: $('article').text() || $('body').text()}]; }"
+    }
+  ],
+  "selectors": {
+    "default": {
+      "recordExtractor": "({ $, url }) => { return [{ objectID: url, title: $('h1').text() || $('title').text(), content: $('article').text() || $('body').text(), url }]; }"
+    }
+  }
+}

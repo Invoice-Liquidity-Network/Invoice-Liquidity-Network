@@ -28,3 +28,10 @@ You can report vulnerabilities by:
 
 ## Reward Process
 Valid, critical vulnerabilities reported privately that result in a patch may be eligible for a bug bounty reward, determined on a case-by-case basis.
+
+## Responsible Disclosure Hall of Fame
+We maintain a public hall of fame for security researchers who responsibly disclose vulnerabilities to ILN.
+
+- See the full list in `HALL_OF_FAME.md`
+- Maintainers should add entries after a fix is merged and a disclosure is publicly announced
+- Entries should include researcher handle/name, date, severity, brief description, and CVE/advisory link if applicable

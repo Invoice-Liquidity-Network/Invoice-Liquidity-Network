@@ -1,0 +1,256 @@
+{
+  "info": {
+    "name": "ILN Horizon + Soroban RPC",
+    "_postman_id": "iln-api-collection",
+    "description": "Bruno-compatible collection for Invoice Liquidity Network testnet Horizon and Soroban RPC requests.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "horizon_url",
+      "value": "https://horizon-testnet.stellar.org"
+    },
+    {
+      "key": "rpc_url",
+      "value": "https://soroban-testnet.stellar.org"
+    },
+    {
+      "key": "iln_contract_id",
+      "value": "CCPASLHKRFBMVV5PZG3LKDGKFEDXZMB5U7DK42CVLUVWCMUCSRPVBIMO"
+    },
+    {
+      "key": "distribution_contract_id",
+      "value": "CAQGPMT3EQK4AABMIR66JJXEOCNCLPTDNXMS5OHZXH4LI24UYAF25V5B"
+    },
+    {
+      "key": "governance_contract_id",
+      "value": "CD7GOIU3GNK7EZHG7VI4NRVGMRCU7X2FOCAPQN6EGTSW46BY4EB"
+    },
+    {
+      "key": "account_id",
+      "value": "GXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX"
+    },
+    {
+      "key": "invoice_id",
+      "value": "1"
+    },
+    {
+      "key": "transaction_hash",
+      "value": "YOUR_TX_HASH"
+    },
+    {
+      "key": "get_invoice_tx_xdr",
+      "value": "UNSIGNED_GET_INVOICE_TX_XDR_BASE64"
+    },
+    {
+      "key": "submit_invoice_tx_xdr",
+      "value": "UNSIGNED_SUBMIT_INVOICE_TX_XDR_BASE64"
+    },
+    {
+      "key": "signed_submit_invoice_tx_xdr",
+      "value": "SIGNED_SUBMIT_INVOICE_TX_XDR_BASE64"
+    },
+    {
+      "key": "get_events_cursor",
+      "value": "0"
+    }
+  ],
+  "item": [
+    {
+      "name": "Horizon / Get Account",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{horizon_url}}/accounts/{{account_id}}",
+          "host": [
+            "{{horizon_url}}"
+          ],
+          "path": [
+            "accounts",
+            "{{account_id}}"
+          ]
+        },
+        "description": "Fetch account details for the specified Stellar testnet account. Replace {{account_id}} with a funded account public key."
+      }
+    },
+    {
+      "name": "Horizon / Get Transactions",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{horizon_url}}/accounts/{{account_id}}/transactions?limit=10&order=desc",
+          "host": [
+            "{{horizon_url}}"
+          ],
+          "path": [
+            "accounts",
+            "{{account_id}}",
+            "transactions"
+          ],
+          "query": [
+            {
+              "key": "limit",
+              "value": "10"
+            },
+            {
+              "key": "order",
+              "value": "desc"
+            }
+          ]
+        },
+        "description": "List recent Horizon transactions for the account. Use a valid public key in {{account_id}}."
+      }
+    },
+    {
+      "name": "Horizon / Stream Contract Events",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "text/event-stream"
+          }
+        ],
+        "url": {
+          "raw": "{{horizon_url}}/contracts/{{iln_contract_id}}/events?cursor=now&order=asc",
+          "host": [
+            "{{horizon_url}}"
+          ],
+          "path": [
+            "contracts",
+            "{{iln_contract_id}}",
+            "events"
+          ],
+          "query": [
+            {
+              "key": "cursor",
+              "value": "now"
+            },
+            {
+              "key": "order",
+              "value": "asc"
+            }
+          ]
+        },
+        "description": "Open a Horizon SSE stream for ILN contract events on testnet."
+      }
+    },
+    {
+      "name": "Soroban RPC / Simulate get_invoice",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"jsonrpc\": \"2.0\",\n  \"id\": 1,\n  \"method\": \"simulateTransaction\",\n  \"params\": [\n    {\n      \"transaction\": \"{{get_invoice_tx_xdr}}\"\n    }\n  ]\n}"
+        },
+        "url": {
+          "raw": "{{rpc_url}}",
+          "host": [
+            "{{rpc_url}}"
+          ]
+        },
+        "description": "Simulate a read-only get_invoice contract call. Replace {{get_invoice_tx_xdr}} with the unsigned transaction XDR that invokes get_invoice."
+      }
+    },
+    {
+      "name": "Soroban RPC / Simulate submit_invoice",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"jsonrpc\": \"2.0\",\n  \"id\": 1,\n  \"method\": \"simulateTransaction\",\n  \"params\": [\n    {\n      \"transaction\": \"{{submit_invoice_tx_xdr}}\"\n    }\n  ]\n}"
+        },
+        "url": {
+          "raw": "{{rpc_url}}",
+          "host": [
+            "{{rpc_url}}"
+          ]
+        },
+        "description": "Simulate the submit_invoice contract call with an unsigned transaction XDR. Use SDK or CLI tooling to create the correct XDR transaction with the ILN contract and argument values."
+      }
+    },
+    {
+      "name": "Soroban RPC / Send Transaction",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"jsonrpc\": \"2.0\",\n  \"id\": 1,\n  \"method\": \"sendTransaction\",\n  \"params\": [\n    {\n      \"transaction\": \"{{signed_submit_invoice_tx_xdr}}\"\n    }\n  ]\n}"
+        },
+        "url": {
+          "raw": "{{rpc_url}}",
+          "host": [
+            "{{rpc_url}}"
+          ]
+        },
+        "description": "Submit a signed Soroban transaction to testnet. Replace {{signed_submit_invoice_tx_xdr}} with the signed base64 transaction envelope."
+      }
+    },
+    {
+      "name": "Soroban RPC / Get Transaction",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"jsonrpc\": \"2.0\",\n  \"id\": 1,\n  \"method\": \"getTransaction\",\n  \"params\": [\n    {\n      \"transactionHash\": \"{{transaction_hash}}\"\n    }\n  ]\n}"
+        },
+        "url": {
+          "raw": "{{rpc_url}}",
+          "host": [
+            "{{rpc_url}}"
+          ]
+        },
+        "description": "Fetch the status and result of a Soroban transaction by hash."
+      }
+    },
+    {
+      "name": "Soroban RPC / Get Events",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"jsonrpc\": \"2.0\",\n  \"id\": 1,\n  \"method\": \"getEvents\",\n  \"params\": [\n    {\n      \"filters\": [\n        {\n          \"type\": \"contract\",\n          \"contractIds\": [\"{{iln_contract_id}}\"]\n        }\n      ],\n      \"cursor\": \"{{get_events_cursor}}\",\n      \"limit\": 20\n    }\n  ]\n}"
+        },
+        "url": {
+          "raw": "{{rpc_url}}",
+          "host": [
+            "{{rpc_url}}"
+          ]
+        },
+        "description": "Fetch Soroban contract events for the ILN contract using the RPC getEvents method."
+      }
+    }
+  ]
+}

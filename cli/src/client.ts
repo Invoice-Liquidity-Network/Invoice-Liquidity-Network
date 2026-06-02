@@ -15,6 +15,7 @@ import type {
   ClientOptions,
   Invoice,
   ListedInvoice,
+  ProtocolConfig,
   RpcServerLike,
   SimulationLike,
   SubmitInvoiceInput,
@@ -25,12 +26,14 @@ import type {
 const READ_ACCOUNT = "GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF";
 const BASE_TIMEOUT_SECONDS = 60;
 const POLL_ATTEMPTS = 30;
+const PROTOCOL_CONFIG_CACHE_MS = 5 * 60 * 1000;
 
 export class ILNClient {
   private readonly contractId: string;
   private readonly networkPassphrase: string;
   private readonly server: RpcServerLike;
   private readonly signer: TransactionSigner;
+  private protocolConfigCache: { expiresAt: number; value: ProtocolConfig } | null = null;
 
   constructor(options: ClientOptions) {
     this.contractId = options.contractId;
@@ -117,6 +120,26 @@ export class ILNClient {
     }
 
     return invoices;
+  }
+
+  async getProtocolConfig(): Promise<ProtocolConfig> {
+    const now = Date.now();
+    if (this.protocolConfigCache && this.protocolConfigCache.expiresAt > now) {
+      return this.protocolConfigCache.value;
+    }
+
+    const transaction = this.buildReadTransaction("get_protocol_config", []);
+    const simulation = await this.simulate(transaction, "get_protocol_config");
+    const config = this.parseProtocolConfig(
+      this.unwrapContractResult(this.extractRetval(simulation), "get_protocol_config"),
+    );
+
+    this.protocolConfigCache = {
+      expiresAt: now + PROTOCOL_CONFIG_CACHE_MS,
+      value: config,
+    };
+
+    return config;
   }
 
   private buildReadTransaction(method: string, args: xdr.ScVal[]) {
@@ -263,6 +286,59 @@ export class ILNClient {
       status: this.parseStatus(invoice.status),
       token: this.toString(invoice.token, "token"),
     };
+  }
+
+  private parseProtocolConfig(value: unknown): ProtocolConfig {
+    if (!value || typeof value !== "object") {
+      throw new Error("Contract returned an invalid protocol config payload.");
+    }
+
+    const config = value as Record<string, unknown>;
+
+    return {
+      minInvoiceAmount: this.toBigInt(
+        this.configValue(config, "minInvoiceAmount", "min_invoice_amount", "MIN_INVOICE_AMOUNT"),
+      ),
+      maxDiscountRate: this.toNumber(
+        this.configValue(config, "maxDiscountRate", "max_discount_rate", "MAX_DISCOUNT_RATE"),
+        "max discount rate",
+      ),
+      protocolFeeBps: this.toNumber(
+        this.configValue(config, "protocolFeeBps", "protocol_fee_bps", "PROTOCOL_FEE_BPS"),
+        "protocol fee bps",
+      ),
+      minPayerReputation: this.toNumber(
+        this.configValue(config, "minPayerReputation", "min_payer_reputation", "MIN_PAYER_REPUTATION"),
+        "min payer reputation",
+      ),
+      decayRateBps: this.toNumber(
+        this.configValue(config, "decayRateBps", "decay_rate_bps", "DECAY_RATE_BPS"),
+        "decay rate bps",
+      ),
+      maxInvoiceDuration: this.optionalNumber(config, "maxInvoiceDuration", "max_invoice_duration", "MAX_INVOICE_DURATION"),
+      minInvoiceDuration: this.optionalNumber(config, "minInvoiceDuration", "min_invoice_duration", "MIN_INVOICE_DURATION"),
+      gracePeriodSeconds: this.optionalNumber(config, "gracePeriodSeconds", "grace_period_seconds", "GRACE_PERIOD_SECONDS"),
+    };
+  }
+
+  private configValue(config: Record<string, unknown>, ...keys: string[]): unknown {
+    for (const key of keys) {
+      if (config[key] !== undefined) {
+        return config[key];
+      }
+    }
+
+    throw new Error(`Protocol config is missing ${keys[0]}.`);
+  }
+
+  private optionalNumber(config: Record<string, unknown>, ...keys: string[]): number | undefined {
+    for (const key of keys) {
+      if (config[key] !== undefined && config[key] !== null) {
+        return this.toNumber(config[key], key);
+      }
+    }
+
+    return undefined;
   }
 
   private parseStatus(value: unknown): string {

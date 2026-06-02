@@ -1,0 +1,8 @@
+{
+  "InvalidAmount": "Invalid amount",
+  "AlreadyFunded": "Already funded",
+  "NotFunded": "Not funded",
+  "InvoiceNotFound": "Invoice not found",
+  "NotYetDefaulted": "Not yet defaulted",
+  "Unknown": "Unknown error"
+}

@@ -5,14 +5,18 @@
     "test": "turbo run test",
     "test:coverage": "turbo run test:coverage",
     "build": "turbo run build",
-    "generate:types": "ts-node --esm scripts/generate-types.ts"
+    "generate:types": "ts-node --esm scripts/generate-types.ts",
+    "dead-code:check": "knip"
+    "syncpack:check": "syncpack list-mismatches"
   },
   "devDependencies": {
-    "turbo": "^2.5.4",
     "@commitlint/cli": "^17.6.0",
     "@commitlint/config-conventional": "^17.6.0",
     "husky": "^8.0.0",
+    "knip": "^6.15.0",
+    "syncpack": "^13.0.0",
     "ts-node": "^10.9.2",
+    "turbo": "^2.5.4",
     "typescript": "^5.9.3"
   },
   "engines": {
@@ -21,6 +25,9 @@
   },
   "packageManager": "pnpm@9.0.0",
   "prepare": "husky install",
+  "bin": {
+    "iln": "packages/scripts/bin/iln.js"
+  },
   "pnpm": {
     "overrides": {
       "axios": ">=1.16.0"

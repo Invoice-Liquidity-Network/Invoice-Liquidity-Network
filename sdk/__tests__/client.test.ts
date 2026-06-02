@@ -107,6 +107,42 @@ describe("ILNSdk", () => {
     });
   });
 
+  it("reads and caches live protocol config", async () => {
+    const server = {
+      getAccount: vi.fn(),
+      prepareTransaction: vi.fn(),
+      sendTransaction: vi.fn(),
+      pollTransaction: vi.fn(),
+      simulateTransaction: vi.fn().mockResolvedValue({
+        result: {
+          retval: nativeToScVal({
+            MIN_INVOICE_AMOUNT: 10000000n,
+            MAX_DISCOUNT_RATE: 2000,
+            PROTOCOL_FEE_BPS: 250,
+            MIN_PAYER_REPUTATION: 70,
+            DECAY_RATE_BPS: 25,
+          }),
+        },
+      }),
+    } satisfies RpcServerLike;
+
+    const sdk = createSdk(server);
+
+    await expect(sdk.getProtocolConfig()).resolves.toEqual({
+      minInvoiceAmount: 10000000n,
+      maxDiscountRate: 2000,
+      protocolFeeBps: 250,
+      minPayerReputation: 70,
+      decayRateBps: 25,
+      maxInvoiceDuration: undefined,
+      minInvoiceDuration: undefined,
+      gracePeriodSeconds: undefined,
+    });
+    await sdk.getProtocolConfig();
+
+    expect(server.simulateTransaction).toHaveBeenCalledTimes(1);
+  });
+
   it("rejects fundInvoice when the provided funder does not match the signer", async () => {
     const signer = createKeypairSigner(Keypair.random().secret());
     const server = {

@@ -1,0 +1,12 @@
+{
+  "index": "Home",
+  "analytics": "Analytics",
+  "local-development": "Local Development",
+  "notifications": "Notifications",
+  "ci-cd": "CI/CD",
+  "tokens": "Tokens",
+  "mutation-testing": "Mutation Testing",
+  "cross-repo-sync": "Cross-Repo Sync",
+  "branch-protection": "Branch Protection",
+  "project-board": "Project Board"
+}
