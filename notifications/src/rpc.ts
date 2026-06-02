@@ -7,24 +7,22 @@ import {
   scValToNative,
   TransactionBuilder,
   xdr,
-} from "@stellar/stellar-sdk";
-import { CONFIG } from "./config";
-import type { Invoice } from "./types";
+} from '@stellar/stellar-sdk';
+import { CONFIG } from './config';
+import type { Invoice } from './types';
 
 export const server = new rpc.Server(CONFIG.rpcUrl, {
-  allowHttp: CONFIG.rpcUrl.startsWith("http://"),
+  allowHttp: CONFIG.rpcUrl.startsWith('http://'),
 });
 
-const DUMMY_ACCOUNT = "GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF";
+const DUMMY_ACCOUNT = 'GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF';
 
-export async function fetchInvoice(
-  id: number
-): Promise<Invoice | null> {
+export async function fetchInvoice(id: number): Promise<Invoice | null> {
   try {
-    const account = new Account(DUMMY_ACCOUNT, "0");
+    const account = new Account(DUMMY_ACCOUNT, '0');
 
     const tx = new TransactionBuilder(account, {
-      fee: "1000",
+      fee: '1000',
       networkPassphrase: CONFIG.networkPassphrase,
     })
       .addOperation(
@@ -32,8 +30,8 @@ export async function fetchInvoice(
           func: xdr.HostFunction.hostFunctionTypeInvokeContract(
             new xdr.InvokeContractArgs({
               contractAddress: Address.fromString(CONFIG.contractId).toScAddress(),
-              functionName: "get_invoice",
-              args: [nativeToScVal(BigInt(id), { type: "u64" })],
+              functionName: 'get_invoice',
+              args: [nativeToScVal(BigInt(id), { type: 'u64' })],
             })
           ),
           auth: [],
@@ -72,10 +70,10 @@ export async function fetchInvoice(
   }
 }
 
-function parseStatus(raw: unknown): Invoice["status"] {
+function parseStatus(raw: unknown): Invoice['status'] {
   const key = Object.keys(raw as object)[0];
-  if (key === "Funded") return "Funded";
-  if (key === "Paid") return "Paid";
-  if (key === "Defaulted") return "Defaulted";
-  return "Pending";
+  if (key === 'Funded') return 'Funded';
+  if (key === 'Paid') return 'Paid';
+  if (key === 'Defaulted') return 'Defaulted';
+  return 'Pending';
 }

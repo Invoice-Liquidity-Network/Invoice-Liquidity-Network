@@ -1,12 +1,12 @@
-import Database from "better-sqlite3";
-import { CONFIG } from "./config";
+import Database from 'better-sqlite3';
+import { CONFIG } from './config';
 import type {
   ILNEventType,
   Invoice,
   NotificationTrigger,
   Subscription,
   SubscriptionChannel,
-} from "./types";
+} from './types';
 
 type SQLiteDatabase = InstanceType<typeof Database>;
 
@@ -21,8 +21,8 @@ export function getDb(): SQLiteDatabase {
 
 export function createDb(path: string): SQLiteDatabase {
   const db = new Database(path);
-  db.pragma("journal_mode = WAL");
-  db.pragma("foreign_keys = ON");
+  db.pragma('journal_mode = WAL');
+  db.pragma('foreign_keys = ON');
   runMigrations(db);
   return db;
 }
@@ -93,9 +93,7 @@ function runMigrations(db: SQLiteDatabase): void {
   `);
 }
 
-export function upsertInvoice(
-  invoice: Omit<Invoice, "created_at" | "updated_at">
-): void {
+export function upsertInvoice(invoice: Omit<Invoice, 'created_at' | 'updated_at'>): void {
   const now = Date.now();
   getDb()
     .prepare(
@@ -121,23 +119,17 @@ export function upsertInvoice(
 }
 
 export function getInvoiceById(id: number): Invoice | undefined {
-  return getDb()
-    .prepare("SELECT * FROM invoices WHERE id = ?")
-    .get(id) as Invoice | undefined;
+  return getDb().prepare('SELECT * FROM invoices WHERE id = ?').get(id) as Invoice | undefined;
 }
 
 export function queryInvoicesByStatus(status: string): Invoice[] {
   return getDb()
-    .prepare("SELECT * FROM invoices WHERE status = ? ORDER BY id ASC")
+    .prepare('SELECT * FROM invoices WHERE status = ? ORDER BY id ASC')
     .all(status) as Invoice[];
 }
 
 export function hasEvent(eventId: string): boolean {
-  return (
-    getDb()
-      .prepare("SELECT 1 FROM events WHERE event_id = ?")
-      .get(eventId) !== undefined
-  );
+  return getDb().prepare('SELECT 1 FROM events WHERE event_id = ?').get(eventId) !== undefined;
 }
 
 export function insertEvent(event: {
@@ -159,9 +151,9 @@ export function insertEvent(event: {
 }
 
 export function getCursorLedger(): number {
-  const row = getDb()
-    .prepare("SELECT last_ledger FROM cursor WHERE id = 1")
-    .get() as { last_ledger: number } | undefined;
+  const row = getDb().prepare('SELECT last_ledger FROM cursor WHERE id = 1').get() as
+    | { last_ledger: number }
+    | undefined;
   return row?.last_ledger ?? 0;
 }
 
@@ -178,7 +170,7 @@ export function setCursorLedger(ledger: number): void {
 }
 
 export function createSubscription(
-  subscription: Omit<Subscription, "id" | "created_at">
+  subscription: Omit<Subscription, 'id' | 'created_at'>
 ): Subscription {
   const now = Date.now();
   const result = getDb()
@@ -204,7 +196,7 @@ export function createSubscription(
 
 export function getSubscriptionsByAddress(address: string): Subscription[] {
   return getDb()
-    .prepare("SELECT * FROM subscriptions WHERE stellar_address = ? ORDER BY id ASC")
+    .prepare('SELECT * FROM subscriptions WHERE stellar_address = ? ORDER BY id ASC')
     .all(address)
     .map((row: any) => ({
       id: row.id,
@@ -217,9 +209,7 @@ export function getSubscriptionsByAddress(address: string): Subscription[] {
 }
 
 export function getSubscriptionById(id: number): Subscription | undefined {
-  const row = getDb()
-    .prepare("SELECT * FROM subscriptions WHERE id = ?")
-    .get(id) as any;
+  const row = getDb().prepare('SELECT * FROM subscriptions WHERE id = ?').get(id) as any;
 
   if (!row) {
     return undefined;
@@ -236,9 +226,7 @@ export function getSubscriptionById(id: number): Subscription | undefined {
 }
 
 export function deleteSubscriptionById(id: number): boolean {
-  const result = getDb()
-    .prepare("DELETE FROM subscriptions WHERE id = ?")
-    .run(id);
+  const result = getDb().prepare('DELETE FROM subscriptions WHERE id = ?').run(id);
   return result.changes > 0;
 }
 
@@ -247,9 +235,7 @@ export function deleteSubscriptionByAddressAndDestination(
   destination: string
 ): boolean {
   const result = getDb()
-    .prepare(
-      "DELETE FROM subscriptions WHERE stellar_address = ? AND destination = ?"
-    )
+    .prepare('DELETE FROM subscriptions WHERE stellar_address = ? AND destination = ?')
     .run(address, destination);
   return result.changes > 0;
 }
@@ -289,13 +275,5 @@ export function logSentNotification(
          (invoice_id, trigger, recipient_address, channel, destination, event_id, sent_at)
        VALUES (?, ?, ?, ?, ?, ?, ?)`
     )
-    .run(
-      invoiceId,
-      trigger,
-      recipientAddress,
-      channel,
-      destination,
-      eventId ?? null,
-      Date.now()
-    );
+    .run(invoiceId, trigger, recipientAddress, channel, destination, eventId ?? null, Date.now());
 }

@@ -48,15 +48,15 @@ describe('E2E Invoice Lifecycle', () => {
     // this utilizes the generated `InvoiceLiquidityContractClient`.
     const contractId = 'C_MOCK_CONTRACT_ID_REPLACE_ME';
     const usdcTokenId = 'C_MOCK_USDC_TOKEN_REPLACE_ME';
-    const invoiceAmount = 1000n; 
-    
+    const invoiceAmount = 1000n;
+
     // 1. Capture initial balances
     const lpInitial = await getUsdcBalance(lp.publicKey(), usdcTokenId);
     const borrowerInitial = await getUsdcBalance(borrower.publicKey(), usdcTokenId);
 
     // 2. Submit & Fund
     // [Implementation details hidden behind client bindings, executing real network transactions]
-    
+
     // 3. Validate LP balance reduction exactly
     const lpMid = await getUsdcBalance(lp.publicKey(), usdcTokenId);
     expect(lpMid).toStrictEqual(lpInitial - invoiceAmount);
@@ -84,14 +84,14 @@ describe('E2E Invoice Lifecycle', () => {
 
     // 1. Submit and Fund
     // 2. Advance time (Mock implementation for e2e simulator)
-    
+
     // 3. Claim Default
     // [Network transaction to claim_default on contract]
-    
+
     // 4. Verify exact escrow reclamation
     const lpFinal = await getUsdcBalance(lp.publicKey(), usdcTokenId);
     const discountAmount = (1000n * 300n) / 10000n;
-    
+
     // Expect LP to recover the kept escrow exactly
     expect(lpFinal).toStrictEqual(lpInitial - 1000n + discountAmount);
   });

@@ -1,10 +1,4 @@
-import type {
-  InvoiceEvent,
-  Subscription,
-  DeliveryResult,
-  ActorRole,
-  WebhookStatus,
-} from "./types";
+import type { InvoiceEvent, Subscription, DeliveryResult, ActorRole, WebhookStatus } from './types';
 
 // ─── Dependency interfaces (injectable for testing) ────────────────────────────
 
@@ -32,9 +26,9 @@ const WEBHOOK_MAX_RETRIES = 3;
 
 // Which event types each actor role should receive
 const ROLE_EVENT_ALLOWLIST: Record<ActorRole, string[]> = {
-  freelancer: ["funded", "paid", "defaulted", "due_date_warning"],
-  lp: ["funded", "paid", "defaulted"],
-  payer: ["funded", "paid"],
+  freelancer: ['funded', 'paid', 'defaulted', 'due_date_warning'],
+  lp: ['funded', 'paid', 'defaulted'],
+  payer: ['funded', 'paid'],
 };
 
 // ─── Service ─────────────────────────────────────────────────────────────────
@@ -45,7 +39,7 @@ export class NotificationService {
     private readonly http: HttpClient,
     private readonly subscriptions: SubscriptionStore,
     private readonly processedEvents: ProcessedEventStore,
-    private readonly clock: () => number = () => Date.now(),
+    private readonly clock: () => number = () => Date.now()
   ) {}
 
   async handleEvent(event: InvoiceEvent): Promise<DeliveryResult[]> {
@@ -57,9 +51,9 @@ export class NotificationService {
     const results: DeliveryResult[] = [];
 
     const actors: Array<{ address: string; role: ActorRole }> = [
-      { address: event.freelancer, role: "freelancer" },
-      { address: event.payer, role: "payer" },
-      ...(event.funder ? [{ address: event.funder, role: "lp" as ActorRole }] : []),
+      { address: event.freelancer, role: 'freelancer' },
+      { address: event.payer, role: 'payer' },
+      ...(event.funder ? [{ address: event.funder, role: 'lp' as ActorRole }] : []),
     ];
 
     for (const { address, role } of actors) {
@@ -72,9 +66,9 @@ export class NotificationService {
         if (!sub.active) continue;
         if (sub.role !== role) continue;
 
-        if (sub.channel === "email" && sub.email) {
+        if (sub.channel === 'email' && sub.email) {
           results.push(await this.deliverEmail(sub, event));
-        } else if (sub.channel === "webhook" && sub.webhookUrl) {
+        } else if (sub.channel === 'webhook' && sub.webhookUrl) {
           results.push(await this.deliverWebhook(sub, event));
         }
       }
@@ -93,7 +87,7 @@ export class NotificationService {
     const subject = this.buildEmailSubject(event);
     const body = this.buildEmailBody(sub.role, event);
     await this.email.send(sub.email!, subject, body);
-    return { success: true, channel: "email", subscriptionId: sub.id };
+    return { success: true, channel: 'email', subscriptionId: sub.id };
   }
 
   private async deliverWebhook(sub: Subscription, event: InvoiceEvent): Promise<DeliveryResult> {
@@ -109,15 +103,17 @@ export class NotificationService {
       try {
         const response = await this.http.post(sub.webhookUrl!, payload);
         if (response.status >= 200 && response.status < 300) {
-          return { success: true, channel: "webhook", subscriptionId: sub.id };
+          return { success: true, channel: 'webhook', subscriptionId: sub.id };
         }
       } catch {
         // network error — retry
       }
     }
 
-    await this.subscriptions.updateSubscription(sub.id, { webhookStatus: "failed" as WebhookStatus });
-    return { success: false, channel: "webhook", subscriptionId: sub.id };
+    await this.subscriptions.updateSubscription(sub.id, {
+      webhookStatus: 'failed' as WebhookStatus,
+    });
+    return { success: false, channel: 'webhook', subscriptionId: sub.id };
   }
 
   private buildEmailSubject(event: InvoiceEvent): string {
@@ -131,7 +127,8 @@ export class NotificationService {
   }
 
   private buildEmailBody(role: string, event: InvoiceEvent): string {
-    const roleLabel = role === "lp" ? "Liquidity Provider" : role.charAt(0).toUpperCase() + role.slice(1);
+    const roleLabel =
+      role === 'lp' ? 'Liquidity Provider' : role.charAt(0).toUpperCase() + role.slice(1);
     return [
       `Hello ${roleLabel},`,
       ``,
@@ -139,6 +136,6 @@ export class NotificationService {
       `Amount: ${event.amount}`,
       `Freelancer: ${event.freelancer}`,
       `Payer: ${event.payer}`,
-    ].join("\n");
+    ].join('\n');
   }
 }

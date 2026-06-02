@@ -1,82 +1,97 @@
 // sdk/index.ts
 
-import { mapError } from './errors'
-export { setLocale } from './errors'
-export type { ErrorMessages } from './errors'
+import { mapError } from './errors';
+export { setLocale } from './errors';
+export type { ErrorMessages } from './errors';
 
-export async function submitInvoice(invoke: any, params: {
-  freelancer: string
-  payer: string
-  amount: number
-  dueDate: number
-  discountRate: number
-}) {
+export async function submitInvoice(
+  invoke: any,
+  params: {
+    freelancer: string;
+    payer: string;
+    amount: number;
+    dueDate: number;
+    discountRate: number;
+  }
+) {
   if (!params.amount || params.amount <= 0) {
-    throw new Error('Invalid amount')
+    throw new Error('Invalid amount');
   }
 
   try {
-    const res = await invoke('submit_invoice', params)
-    return res.result
+    const res = await invoke('submit_invoice', params);
+    return res.result;
   } catch (err: any) {
-    throw mapError(err)
+    throw mapError(err);
   }
 }
 
-export async function fundInvoice(invoke: any, params: {
-  funder: string
-  invoiceId: number
-}) {
+export async function fundInvoice(
+  invoke: any,
+  params: {
+    funder: string;
+    invoiceId: number;
+  }
+) {
   if (!params.invoiceId) {
-    throw new Error('Invalid invoiceId')
+    throw new Error('Invalid invoiceId');
   }
 
   try {
-    await invoke('fund_invoice', params)
+    await invoke('fund_invoice', params);
   } catch (err: any) {
-    throw mapError(err)
+    throw mapError(err);
   }
 }
 
-export async function markPaid(invoke: any, params: {
-  invoiceId: number
-}) {
+export async function markPaid(
+  invoke: any,
+  params: {
+    invoiceId: number;
+  }
+) {
   if (!params.invoiceId) {
-    throw new Error('Invalid invoiceId')
+    throw new Error('Invalid invoiceId');
   }
 
   try {
-    await invoke('mark_paid', params)
+    await invoke('mark_paid', params);
   } catch (err: any) {
-    throw mapError(err)
+    throw mapError(err);
   }
 }
 
-export async function claimDefault(invoke: any, params: {
-  invoiceId: number
-}) {
+export async function claimDefault(
+  invoke: any,
+  params: {
+    invoiceId: number;
+  }
+) {
   if (!params.invoiceId) {
-    throw new Error('Invalid invoiceId')
+    throw new Error('Invalid invoiceId');
   }
 
   try {
-    await invoke('claim_default', params)
+    await invoke('claim_default', params);
   } catch (err: any) {
-    throw mapError(err)
+    throw mapError(err);
   }
 }
 
-export async function getInvoice(invoke: any, params: {
-  invoiceId: number
-}) {
+export async function getInvoice(
+  invoke: any,
+  params: {
+    invoiceId: number;
+  }
+) {
   if (!params.invoiceId) {
-    throw new Error('Invalid invoiceId')
+    throw new Error('Invalid invoiceId');
   }
 
   try {
-    const res = await invoke('get_invoice', params)
-    return res
+    const res = await invoke('get_invoice', params);
+    return res;
   } catch (err: any) {
-    throw mapError(err)
+    throw mapError(err);
   }
 }

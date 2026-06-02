@@ -1,10 +1,9 @@
-import { Keypair, Networks, TransactionBuilder } from "@stellar/stellar-sdk";
+import { Keypair, Networks, TransactionBuilder } from '@stellar/stellar-sdk';
 
-import type { NetworkConfig, SignTransactionOptions, TransactionSigner } from "./types";
+import type { NetworkConfig, SignTransactionOptions, TransactionSigner } from './types';
 
-const TESTNET_CONTRACT_ID =
-  "CD3TE3IAHM737P236XZL2OYU275ZKD6MN7YH7PYYAXYIGEH55OPEWYJC";
-const TESTNET_RPC_URL = "https://soroban-testnet.stellar.org";
+const TESTNET_CONTRACT_ID = 'CD3TE3IAHM737P236XZL2OYU275ZKD6MN7YH7PYYAXYIGEH55OPEWYJC';
+const TESTNET_RPC_URL = 'https://soroban-testnet.stellar.org';
 
 export const ILN_TESTNET: NetworkConfig = {
   contractId: TESTNET_CONTRACT_ID,
@@ -20,10 +19,7 @@ export function createKeypairSigner(secretKey: string): TransactionSigner {
       return keypair.publicKey();
     },
     async signTransaction(transactionXdr: string, options: SignTransactionOptions) {
-      const transaction = TransactionBuilder.fromXDR(
-        transactionXdr,
-        options.networkPassphrase,
-      );
+      const transaction = TransactionBuilder.fromXDR(transactionXdr, options.networkPassphrase);
 
       transaction.sign(keypair);
       return transaction.toXDR();
@@ -50,7 +46,7 @@ export function createFreighterSigner(address?: string): TransactionSigner {
 
       if (result.error || !result.signedTxXdr) {
         throw new Error(
-          result.error ? String(result.error) : "Freighter did not return a signed transaction.",
+          result.error ? String(result.error) : 'Freighter did not return a signed transaction.'
         );
       }
 
@@ -69,16 +65,16 @@ type FreighterModule = {
   requestAccess: () => Promise<{ address?: string; error?: unknown }>;
   signTransaction: (
     transactionXdr: string,
-    options: { address?: string; networkPassphrase: string },
+    options: { address?: string; networkPassphrase: string }
   ) => Promise<{ error?: unknown; signedTxXdr?: string }>;
 };
 
 async function loadFreighter(): Promise<FreighterModule> {
-  if (typeof window === "undefined") {
-    throw new Error("Freighter signing is only available in browser environments.");
+  if (typeof window === 'undefined') {
+    throw new Error('Freighter signing is only available in browser environments.');
   }
 
-  const freighter = await import("@stellar/freighter-api");
+  const freighter = await import('@stellar/freighter-api');
   const connected = freighter.isConnected ? await freighter.isConnected() : undefined;
 
   if (connected?.error) {
@@ -86,7 +82,7 @@ async function loadFreighter(): Promise<FreighterModule> {
   }
 
   if (connected && !connected.isConnected) {
-    throw new Error("Freighter extension is not installed or not available.");
+    throw new Error('Freighter extension is not installed or not available.');
   }
 
   return freighter as FreighterModule;
@@ -104,7 +100,7 @@ async function resolveFreighterAddress(freighter: FreighterModule): Promise<stri
   const requested = await freighter.requestAccess();
   if (requested.error || !requested.address) {
     throw new Error(
-      requested.error ? String(requested.error) : "Freighter did not provide an account address.",
+      requested.error ? String(requested.error) : 'Freighter did not provide an account address.'
     );
   }
 
@@ -113,7 +109,7 @@ async function resolveFreighterAddress(freighter: FreighterModule): Promise<stri
 
 async function assertFreighterNetwork(
   freighter: FreighterModule,
-  expectedPassphrase: string = Networks.TESTNET,
+  expectedPassphrase: string = Networks.TESTNET
 ): Promise<void> {
   if (!freighter.getNetworkDetails) {
     return;
@@ -129,6 +125,6 @@ async function assertFreighterNetwork(
     expectedPassphrase &&
     network.networkPassphrase !== expectedPassphrase
   ) {
-    throw new Error("Freighter is connected to a different Stellar network.");
+    throw new Error('Freighter is connected to a different Stellar network.');
   }
 }

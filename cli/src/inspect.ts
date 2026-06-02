@@ -1,21 +1,20 @@
-import { Command } from "commander";
-import type { ILNClient } from "../../sdk/src/client";
-import type { ResolvedConfig } from "./config";
-import type { Ui } from "./format"; // use any if not exported
-
+import { Command } from 'commander';
+import type { ILNClient } from '../../sdk/src/client';
+import type { ResolvedConfig } from './config';
+import type { Ui } from './format'; // use any if not exported
 
 export function registerInspectCommand(
   program: Command,
   createClient: (config: ResolvedConfig) => ILNClient,
   loadConfig: (options?: { cwd?: string; env?: NodeJS.ProcessEnv }) => ResolvedConfig,
-  ui: Ui,
+  ui: Ui
 ) {
-  const inspect = program.command("inspect").description("Inspect contract state");
+  const inspect = program.command('inspect').description('Inspect contract state');
 
   inspect
-    .command("invoice <id>")
-    .description("Print full invoice struct as formatted JSON")
-    .option("--format <type>", "output format", "json")
+    .command('invoice <id>')
+    .description('Print full invoice struct as formatted JSON')
+    .option('--format <type>', 'output format', 'json')
     .action(async (id: string, options: { format: string }) => {
       const config = loadConfig();
       const client = createClient(config);
@@ -24,9 +23,9 @@ export function registerInspectCommand(
     });
 
   inspect
-    .command("reputation <address>")
-    .description("Print reputation score for an address")
-    .option("--format <type>", "output format", "json")
+    .command('reputation <address>')
+    .description('Print reputation score for an address')
+    .option('--format <type>', 'output format', 'json')
     .action(async (address: string, options: { format: string }) => {
       const config = loadConfig();
       const client = createClient(config);
@@ -35,9 +34,9 @@ export function registerInspectCommand(
     });
 
   inspect
-    .command("stats")
-    .description("Print contract-wide statistics")
-    .option("--format <type>", "output format", "json")
+    .command('stats')
+    .description('Print contract-wide statistics')
+    .option('--format <type>', 'output format', 'json')
     .action(async (options: { format: string }) => {
       const config = loadConfig();
       const client = createClient(config);
@@ -46,9 +45,9 @@ export function registerInspectCommand(
     });
 
   inspect
-    .command("proposal <id>")
-    .description("Print governance proposal")
-    .option("--format <type>", "output format", "json")
+    .command('proposal <id>')
+    .description('Print governance proposal')
+    .option('--format <type>', 'output format', 'json')
     .action(async (id: string, options: { format: string }) => {
       const config = loadConfig();
       const client = createClient(config);
@@ -57,9 +56,9 @@ export function registerInspectCommand(
     });
 
   inspect
-    .command("storage <key>")
-    .description("Raw storage key lookup for advanced debugging")
-    .option("--format <type>", "output format", "json")
+    .command('storage <key>')
+    .description('Raw storage key lookup for advanced debugging')
+    .option('--format <type>', 'output format', 'json')
     .action(async (key: string, options: { format: string }) => {
       const config = loadConfig();
       const client = createClient(config);
@@ -68,7 +67,7 @@ export function registerInspectCommand(
     });
 
   function outputResult(data: unknown, format: string) {
-    if (format === "json") {
+    if (format === 'json') {
       ui.info(JSON.stringify(data, null, 2));
     } else {
       // Placeholder for future table format

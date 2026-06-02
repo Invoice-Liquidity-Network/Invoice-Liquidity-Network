@@ -2,9 +2,9 @@ name: Snyk Security Scanning
 
 on:
   push:
-    branches: [ "main" ]
+    branches: ['main']
   pull_request:
-    branches: [ "main" ]
+    branches: ['main']
   schedule:
     - cron: '0 3 * * 0' # Weekly scan at 3 AM on Sunday
 

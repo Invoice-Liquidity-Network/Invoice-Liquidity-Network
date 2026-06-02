@@ -1,5 +1,12 @@
 import { describe, it, expect } from 'vitest';
-import { Keypair, Server, TransactionBuilder, Operation, BASE_FEE, Networks } from '@stellar/stellar-sdk';
+import {
+  Keypair,
+  Server,
+  TransactionBuilder,
+  Operation,
+  BASE_FEE,
+  Networks,
+} from '@stellar/stellar-sdk';
 
 const FRIENDBOT = 'http://localhost:8000/friendbot';
 const HORIZON = 'http://localhost:8000';
@@ -26,11 +33,13 @@ describe('SDK e2e against local Stellar node', () => {
       fee: BASE_FEE,
       networkPassphrase: Networks.TESTNET,
     })
-      .addOperation(Operation.payment({
-        destination: kpB.publicKey(),
-        asset: undefined as any,
-        amount: '1',
-      }))
+      .addOperation(
+        Operation.payment({
+          destination: kpB.publicKey(),
+          asset: undefined as any,
+          amount: '1',
+        })
+      )
       .setTimeout(30)
       .build();
 

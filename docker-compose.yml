@@ -5,5 +5,5 @@ services:
     image: stellar/quickstart:testing
     command: --standalone --enable-soroban-rpc
     ports:
-      - "8000:8000"
-      - "11626:11626"
+      - '8000:8000'
+      - '11626:11626'

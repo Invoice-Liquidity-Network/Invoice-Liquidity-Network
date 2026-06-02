@@ -63,13 +63,8 @@
         "header": [],
         "url": {
           "raw": "{{horizon_url}}/accounts/{{account_id}}",
-          "host": [
-            "{{horizon_url}}"
-          ],
-          "path": [
-            "accounts",
-            "{{account_id}}"
-          ]
+          "host": ["{{horizon_url}}"],
+          "path": ["accounts", "{{account_id}}"]
         },
         "description": "Fetch account details for the specified Stellar testnet account. Replace {{account_id}} with a funded account public key."
       }
@@ -81,14 +76,8 @@
         "header": [],
         "url": {
           "raw": "{{horizon_url}}/accounts/{{account_id}}/transactions?limit=10&order=desc",
-          "host": [
-            "{{horizon_url}}"
-          ],
-          "path": [
-            "accounts",
-            "{{account_id}}",
-            "transactions"
-          ],
+          "host": ["{{horizon_url}}"],
+          "path": ["accounts", "{{account_id}}", "transactions"],
           "query": [
             {
               "key": "limit",
@@ -115,14 +104,8 @@
         ],
         "url": {
           "raw": "{{horizon_url}}/contracts/{{iln_contract_id}}/events?cursor=now&order=asc",
-          "host": [
-            "{{horizon_url}}"
-          ],
-          "path": [
-            "contracts",
-            "{{iln_contract_id}}",
-            "events"
-          ],
+          "host": ["{{horizon_url}}"],
+          "path": ["contracts", "{{iln_contract_id}}", "events"],
           "query": [
             {
               "key": "cursor",
@@ -153,9 +136,7 @@
         },
         "url": {
           "raw": "{{rpc_url}}",
-          "host": [
-            "{{rpc_url}}"
-          ]
+          "host": ["{{rpc_url}}"]
         },
         "description": "Simulate a read-only get_invoice contract call. Replace {{get_invoice_tx_xdr}} with the unsigned transaction XDR that invokes get_invoice."
       }
@@ -176,9 +157,7 @@
         },
         "url": {
           "raw": "{{rpc_url}}",
-          "host": [
-            "{{rpc_url}}"
-          ]
+          "host": ["{{rpc_url}}"]
         },
         "description": "Simulate the submit_invoice contract call with an unsigned transaction XDR. Use SDK or CLI tooling to create the correct XDR transaction with the ILN contract and argument values."
       }
@@ -199,9 +178,7 @@
         },
         "url": {
           "raw": "{{rpc_url}}",
-          "host": [
-            "{{rpc_url}}"
-          ]
+          "host": ["{{rpc_url}}"]
         },
         "description": "Submit a signed Soroban transaction to testnet. Replace {{signed_submit_invoice_tx_xdr}} with the signed base64 transaction envelope."
       }
@@ -222,9 +199,7 @@
         },
         "url": {
           "raw": "{{rpc_url}}",
-          "host": [
-            "{{rpc_url}}"
-          ]
+          "host": ["{{rpc_url}}"]
         },
         "description": "Fetch the status and result of a Soroban transaction by hash."
       }
@@ -245,9 +220,7 @@
         },
         "url": {
           "raw": "{{rpc_url}}",
-          "host": [
-            "{{rpc_url}}"
-          ]
+          "host": ["{{rpc_url}}"]
         },
         "description": "Fetch Soroban contract events for the ILN contract using the RPC getEvents method."
       }

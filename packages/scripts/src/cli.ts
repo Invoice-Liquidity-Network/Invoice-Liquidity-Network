@@ -52,7 +52,10 @@ async function runSmokeTest(opts: { timeout?: number }) {
   // Example smoke checks: verify contract id strings exist
   const missing = Object.entries(contractIds || {}).filter(([, v]) => !v);
   if (missing.length) {
-    console.error('Smoke test failed: some contract IDs are missing', missing.map(([k]) => k));
+    console.error(
+      'Smoke test failed: some contract IDs are missing',
+      missing.map(([k]) => k)
+    );
     process.exitCode = 2;
     return;
   }

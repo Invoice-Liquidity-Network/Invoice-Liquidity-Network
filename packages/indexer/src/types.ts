@@ -38,13 +38,13 @@ export interface IndexerOptions {
  * Known ILN contract event types.
  */
 export type ILNEventType =
-  | "InvoiceCreated"
-  | "InvoiceFunded"
-  | "InvoiceRepaid"
-  | "InvoiceDefaulted"
-  | "LiquidityAdded"
-  | "LiquidityRemoved"
-  | "ReputationUpdated"
+  | 'InvoiceCreated'
+  | 'InvoiceFunded'
+  | 'InvoiceRepaid'
+  | 'InvoiceDefaulted'
+  | 'LiquidityAdded'
+  | 'LiquidityRemoved'
+  | 'ReputationUpdated'
   | string; // allow arbitrary strings for forward-compat
 
 /**

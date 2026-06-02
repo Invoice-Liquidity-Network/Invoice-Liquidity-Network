@@ -1,6 +1,6 @@
-import { Resend } from "resend";
-import { CONFIG } from "./config";
-import type { NotificationPayload, Subscription } from "./types";
+import { Resend } from 'resend';
+import { CONFIG } from './config';
+import type { NotificationPayload, Subscription } from './types';
 
 const resend = new Resend(CONFIG.resendApiKey);
 
@@ -31,9 +31,9 @@ export async function sendWebhook(
   let response;
   try {
     response = await fetch(subscription.destination, {
-      method: "POST",
+      method: 'POST',
       headers: {
-        "Content-Type": "application/json",
+        'Content-Type': 'application/json',
       },
       body: JSON.stringify({
         trigger: payload.trigger,
@@ -53,7 +53,9 @@ export async function sendWebhook(
   }
 
   if (attempt >= CONFIG.maxWebhookRetry) {
-    throw new Error(`Webhook failed after ${attempt} attempts: ${response?.status || 'Network Error'}`);
+    throw new Error(
+      `Webhook failed after ${attempt} attempts: ${response?.status || 'Network Error'}`
+    );
   }
 
   const backoff = CONFIG.webhookBackoffBaseMs * 2 ** (attempt - 1);
@@ -65,7 +67,7 @@ export async function deliverNotification(
   subscription: Subscription,
   payload: NotificationPayload
 ): Promise<void> {
-  if (subscription.channel === "email") {
+  if (subscription.channel === 'email') {
     await sendEmail(subscription, payload);
     return;
   }

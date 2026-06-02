@@ -1,36 +1,46 @@
-import { Keypair } from "@stellar/stellar-sdk";
-import { Writable } from "node:stream";
+import { Keypair } from '@stellar/stellar-sdk';
+import { Writable } from 'node:stream';
 
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi } from 'vitest';
 
-import { runCli } from "../src/cli";
-import type { Invoice, ListedInvoice, ResolvedConfig } from "../src/types";
+import { runCli } from '../src/cli';
+import type { Invoice, ListedInvoice, ResolvedConfig } from '../src/types';
 
 const TEST_CONFIG: ResolvedConfig = {
-  contractId: validAddress("C"),
-  keypairPath: "/tmp/iln.secret",
-  network: "testnet",
-  networkPassphrase: "Test SDF Network ; September 2015",
-  rpcUrl: "https://soroban-testnet.stellar.org",
-  tokenId: validAddress("T"),
+  contractId: validAddress('C'),
+  keypairPath: '/tmp/iln.secret',
+  network: 'testnet',
+  networkPassphrase: 'Test SDF Network ; September 2015',
+  rpcUrl: 'https://soroban-testnet.stellar.org',
+  tokenId: validAddress('T'),
 };
 
-describe("runCli", () => {
-  it("submits an invoice using config token fallback", async () => {
+describe('runCli', () => {
+  it('submits an invoice using config token fallback', async () => {
     const stdout = createMemoryStream();
     const stderr = createMemoryStream();
     const client = {
-      submitInvoice: vi.fn().mockResolvedValue({ invoiceId: 42n, txHash: "abc123" }),
+      submitInvoice: vi.fn().mockResolvedValue({ invoiceId: 42n, txHash: 'abc123' }),
     };
 
     const exitCode = await runCli(
-      ["submit", "--payer", validAddress(), "--amount", "100", "--due", "2025-12-31", "--rate", "300"],
+      [
+        'submit',
+        '--payer',
+        validAddress(),
+        '--amount',
+        '100',
+        '--due',
+        '2025-12-31',
+        '--rate',
+        '300',
+      ],
       {
         createClient: () => client as any,
         loadConfig: () => TEST_CONFIG,
         stderr,
         stdout,
-      },
+      }
     );
 
     expect(exitCode).toBe(0);
@@ -39,19 +49,19 @@ describe("runCli", () => {
         amount: 1_000_000_000n,
         discountRate: 300,
         tokenId: TEST_CONFIG.tokenId,
-      }),
+      })
     );
-    expect(stdout.toString()).toContain("Submitted invoice 42");
-    expect(stderr.toString()).toBe("");
+    expect(stdout.toString()).toContain('Submitted invoice 42');
+    expect(stderr.toString()).toBe('');
   });
 
-  it("auto-funds the remaining balance when amount is omitted", async () => {
+  it('auto-funds the remaining balance when amount is omitted', async () => {
     const stdout = createMemoryStream();
     const client = {
-      fundInvoice: vi.fn().mockResolvedValue({ hash: "tx-hash" }),
+      fundInvoice: vi.fn().mockResolvedValue({ hash: 'tx-hash' }),
     };
 
-    const exitCode = await runCli(["fund", "--id", "7"], {
+    const exitCode = await runCli(['fund', '--id', '7'], {
       createClient: () => client as any,
       loadConfig: () => TEST_CONFIG,
       stderr: createMemoryStream(),
@@ -60,10 +70,10 @@ describe("runCli", () => {
 
     expect(exitCode).toBe(0);
     expect(client.fundInvoice).toHaveBeenCalledWith(7n, undefined);
-    expect(stdout.toString()).toContain("Funded invoice 7");
+    expect(stdout.toString()).toContain('Funded invoice 7');
   });
 
-  it("prints invoice status details", async () => {
+  it('prints invoice status details', async () => {
     const stdout = createMemoryStream();
     const invoice: Invoice = {
       amount: 1_000_000_000n,
@@ -74,15 +84,15 @@ describe("runCli", () => {
       fundedAt: null,
       funder: null,
       id: 3n,
-      payer: validAddress("B"),
-      status: "Pending",
-      token: "CTOKEN",
+      payer: validAddress('B'),
+      status: 'Pending',
+      token: 'CTOKEN',
     };
     const client = {
       getInvoice: vi.fn().mockResolvedValue(invoice),
     };
 
-    const exitCode = await runCli(["status", "--id", "3"], {
+    const exitCode = await runCli(['status', '--id', '3'], {
       createClient: () => client as any,
       loadConfig: () => TEST_CONFIG,
       stderr: createMemoryStream(),
@@ -90,20 +100,22 @@ describe("runCli", () => {
     });
 
     expect(exitCode).toBe(0);
-    expect(stdout.toString()).toContain("Status");
-    expect(stdout.toString()).toContain("Pending");
+    expect(stdout.toString()).toContain('Status');
+    expect(stdout.toString()).toContain('Pending');
   });
 
-  it("lists invoices for an address", async () => {
+  it('lists invoices for an address', async () => {
     const stdout = createMemoryStream();
     const client = {
-      listInvoicesByAddress: vi.fn().mockResolvedValue([
-        createListedInvoice({ id: 1n, role: "freelancer", status: "Pending" }),
-        createListedInvoice({ id: 2n, role: "payer", status: "Funded" }),
-      ]),
+      listInvoicesByAddress: vi
+        .fn()
+        .mockResolvedValue([
+          createListedInvoice({ id: 1n, role: 'freelancer', status: 'Pending' }),
+          createListedInvoice({ id: 2n, role: 'payer', status: 'Funded' }),
+        ]),
     };
 
-    const exitCode = await runCli(["list", "--address", validAddress()], {
+    const exitCode = await runCli(['list', '--address', validAddress()], {
       createClient: () => client as any,
       loadConfig: () => TEST_CONFIG,
       stderr: createMemoryStream(),
@@ -111,28 +123,31 @@ describe("runCli", () => {
     });
 
     expect(exitCode).toBe(0);
-    expect(stdout.toString()).toContain("ID");
-    expect(stdout.toString()).toContain("freelancer");
-    expect(stdout.toString()).toContain("Funded");
+    expect(stdout.toString()).toContain('ID');
+    expect(stdout.toString()).toContain('freelancer');
+    expect(stdout.toString()).toContain('Funded');
   });
 
-  it("prints actionable errors", async () => {
+  it('prints actionable errors', async () => {
     const stderr = createMemoryStream();
 
-    const exitCode = await runCli(["submit", "--payer", "not-a-key", "--amount", "100", "--due", "2025-12-31", "--rate", "300"], {
-      createClient: () => ({}) as any,
-      loadConfig: () => TEST_CONFIG,
-      stderr,
-      stdout: createMemoryStream(),
-    });
+    const exitCode = await runCli(
+      ['submit', '--payer', 'not-a-key', '--amount', '100', '--due', '2025-12-31', '--rate', '300'],
+      {
+        createClient: () => ({}) as any,
+        loadConfig: () => TEST_CONFIG,
+        stderr,
+        stdout: createMemoryStream(),
+      }
+    );
 
     expect(exitCode).toBe(1);
-    expect(stderr.toString()).toContain("Invalid payer address");
+    expect(stderr.toString()).toContain('Invalid payer address');
   });
 });
 
 function createMemoryStream(): Writable & { toString(): string } {
-  let output = "";
+  let output = '';
   return Object.assign(
     new Writable({
       write(chunk, _encoding, callback) {
@@ -144,12 +159,12 @@ function createMemoryStream(): Writable & { toString(): string } {
       toString() {
         return output;
       },
-    },
+    }
   );
 }
 
 function createListedInvoice(
-  overrides: Partial<ListedInvoice> & Pick<ListedInvoice, "id" | "role" | "status">,
+  overrides: Partial<ListedInvoice> & Pick<ListedInvoice, 'id' | 'role' | 'status'>
 ): ListedInvoice {
   const { id, role, status, ...rest } = overrides;
   return {
@@ -161,14 +176,14 @@ function createListedInvoice(
     fundedAt: null,
     funder: null,
     id,
-    payer: validAddress("B"),
+    payer: validAddress('B'),
     role,
     status,
-    token: "CTOKEN",
+    token: 'CTOKEN',
     ...rest,
   };
 }
 
-function validAddress(seed = "A"): string {
+function validAddress(seed = 'A'): string {
   return Keypair.random().publicKey();
 }

@@ -34,7 +34,7 @@ describe('AnalyticsSDK', () => {
     expect(mockedAxios.get).toHaveBeenCalledTimes(1);
 
     // Wait for TTL (1s)
-    await new Promise(resolve => setTimeout(resolve, 1100));
+    await new Promise((resolve) => setTimeout(resolve, 1100));
 
     await sdk.getProtocolStats();
     expect(mockedAxios.get).toHaveBeenCalledTimes(2);

@@ -9,9 +9,9 @@
  *   SECRET_KEY=S... INDEXER_URL=https://... ts-node index.ts [--dry-run] [--top-n 5]
  */
 
-import axios from "axios";
-import { Command } from "commander";
-import { ILNSdk, createKeypairSigner, ILN_TESTNET } from "@invoice-liquidity/sdk";
+import axios from 'axios';
+import { Command } from 'commander';
+import { ILNSdk, createKeypairSigner, ILN_TESTNET } from '@invoice-liquidity/sdk';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -46,7 +46,7 @@ interface LPCriteria {
 // ─── Config ───────────────────────────────────────────────────────────────────
 
 const DEFAULT_CRITERIA: LPCriteria = {
-  minYieldBps: 100,           // 1%
+  minYieldBps: 100, // 1%
   maxAmount: 100_000_000_000n, // 10,000 USDC in stroops
   minReputation: 0,
   allowedTokens: [],
@@ -54,8 +54,8 @@ const DEFAULT_CRITERIA: LPCriteria = {
   topN: 5,
 };
 
-const INDEXER_URL = process.env.INDEXER_URL ?? "https://iln-indexer.up.railway.app";
-const SECRET_KEY = process.env.SECRET_KEY ?? "";
+const INDEXER_URL = process.env.INDEXER_URL ?? 'https://iln-indexer.up.railway.app';
+const SECRET_KEY = process.env.SECRET_KEY ?? '';
 const CONTRACT_ID = process.env.CONTRACT_ID ?? ILN_TESTNET.contractId;
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -79,7 +79,7 @@ function log(msg: string): void {
 
 async function fetchPendingInvoices(indexerUrl: string): Promise<IndexerInvoice[]> {
   const { data } = await axios.get<{ invoices: IndexerInvoice[] }>(
-    `${indexerUrl}/invoices?status=Pending`,
+    `${indexerUrl}/invoices?status=Pending`
   );
   return data.invoices;
 }
@@ -100,7 +100,9 @@ function sortByYieldDesc(invoices: IndexerInvoice[]): IndexerInvoice[] {
 
 async function run(criteria: LPCriteria, dryRun: boolean): Promise<void> {
   log(`Starting LP automation. dry-run=${dryRun}`);
-  log(`Criteria: minYieldBps=${criteria.minYieldBps}, maxAmount=${criteria.maxAmount}, topN=${criteria.topN}`);
+  log(
+    `Criteria: minYieldBps=${criteria.minYieldBps}, maxAmount=${criteria.maxAmount}, topN=${criteria.topN}`
+  );
 
   // 1. Fetch pending invoices from indexer
   const pending = await fetchPendingInvoices(INDEXER_URL);
@@ -111,17 +113,17 @@ async function run(criteria: LPCriteria, dryRun: boolean): Promise<void> {
   log(`${candidates.length} invoices match criteria after filtering`);
 
   if (candidates.length === 0) {
-    log("Nothing to fund. Exiting.");
+    log('Nothing to fund. Exiting.');
     return;
   }
 
   // 3. Set up SDK (only needed for live run)
   let sdk: ILNSdk | null = null;
-  let funderAddress = "";
+  let funderAddress = '';
 
   if (!dryRun) {
     if (!SECRET_KEY) {
-      throw new Error("SECRET_KEY env var is required for live mode.");
+      throw new Error('SECRET_KEY env var is required for live mode.');
     }
     const signer = createKeypairSigner(SECRET_KEY);
     funderAddress = await signer.getPublicKey();
@@ -149,9 +151,9 @@ async function run(criteria: LPCriteria, dryRun: boolean): Promise<void> {
     if (dryRun) {
       log(
         `[DRY-RUN] Would fund invoice #${invoice.id}  ` +
-        `yield=${yieldBps(invoice)}bps  amount=${invoice.amount}  cost=${cost}`,
+          `yield=${yieldBps(invoice)}bps  amount=${invoice.amount}  cost=${cost}`
       );
-      results.push({ id: invoice.id, status: "dry-run", cost });
+      results.push({ id: invoice.id, status: 'dry-run', cost });
       totalSpent += cost;
       continue;
     }
@@ -160,23 +162,23 @@ async function run(criteria: LPCriteria, dryRun: boolean): Promise<void> {
     try {
       await sdk!.fundInvoice({ funder: funderAddress, invoiceId: BigInt(invoice.id) });
       log(`✓ Funded invoice #${invoice.id}  cost=${cost} stroops`);
-      results.push({ id: invoice.id, status: "funded", cost });
+      results.push({ id: invoice.id, status: 'funded', cost });
       totalSpent += cost;
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       log(`✗ Skipped invoice #${invoice.id}: ${message}`);
-      results.push({ id: invoice.id, status: "skipped", error: message });
+      results.push({ id: invoice.id, status: 'skipped', error: message });
     }
   }
 
   // 5. Summary
-  log("─── Run summary ───────────────────────────────────────");
+  log('─── Run summary ───────────────────────────────────────');
   log(`Total invoices evaluated : ${candidates.length}`);
-  log(`Funded                   : ${results.filter((r) => r.status === "funded").length}`);
-  log(`Dry-run (would fund)     : ${results.filter((r) => r.status === "dry-run").length}`);
-  log(`Skipped (errors)         : ${results.filter((r) => r.status === "skipped").length}`);
+  log(`Funded                   : ${results.filter((r) => r.status === 'funded').length}`);
+  log(`Dry-run (would fund)     : ${results.filter((r) => r.status === 'dry-run').length}`);
+  log(`Skipped (errors)         : ${results.filter((r) => r.status === 'skipped').length}`);
   log(`Total spent              : ${totalSpent} stroops`);
-  log("───────────────────────────────────────────────────────");
+  log('───────────────────────────────────────────────────────');
 }
 
 // ─── CLI ──────────────────────────────────────────────────────────────────────
@@ -184,13 +186,25 @@ async function run(criteria: LPCriteria, dryRun: boolean): Promise<void> {
 const program = new Command();
 
 program
-  .name("lp-automation")
-  .description("Automatically fund ILN invoices matching LP criteria")
-  .option("--dry-run", "Log what would be funded without submitting transactions", false)
-  .option("--top-n <n>", "Maximum invoices to fund per run", String(DEFAULT_CRITERIA.topN))
-  .option("--min-yield <bps>", "Minimum yield in basis points", String(DEFAULT_CRITERIA.minYieldBps))
-  .option("--max-amount <stroops>", "Maximum invoice amount in stroops", String(DEFAULT_CRITERIA.maxAmount))
-  .option("--max-spend <stroops>", "Maximum total spend per run in stroops", String(DEFAULT_CRITERIA.maxSpendPerRun))
+  .name('lp-automation')
+  .description('Automatically fund ILN invoices matching LP criteria')
+  .option('--dry-run', 'Log what would be funded without submitting transactions', false)
+  .option('--top-n <n>', 'Maximum invoices to fund per run', String(DEFAULT_CRITERIA.topN))
+  .option(
+    '--min-yield <bps>',
+    'Minimum yield in basis points',
+    String(DEFAULT_CRITERIA.minYieldBps)
+  )
+  .option(
+    '--max-amount <stroops>',
+    'Maximum invoice amount in stroops',
+    String(DEFAULT_CRITERIA.maxAmount)
+  )
+  .option(
+    '--max-spend <stroops>',
+    'Maximum total spend per run in stroops',
+    String(DEFAULT_CRITERIA.maxSpendPerRun)
+  )
   .parse(process.argv);
 
 const opts = program.opts<{
@@ -210,6 +224,6 @@ const criteria: LPCriteria = {
 };
 
 run(criteria, opts.dryRun).catch((err) => {
-  console.error("Fatal:", err instanceof Error ? err.message : String(err));
+  console.error('Fatal:', err instanceof Error ? err.message : String(err));
   process.exit(1);
 });

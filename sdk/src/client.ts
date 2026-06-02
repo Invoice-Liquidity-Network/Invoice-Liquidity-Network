@@ -8,7 +8,7 @@
   scValToNative,
   nativeToScVal,
   xdr,
-} from "@stellar/stellar-sdk";
+} from '@stellar/stellar-sdk';
 
 import type {
   ClaimDefaultParams,
@@ -20,17 +20,17 @@ import type {
   RpcServerLike,
   SubmitInvoiceParams,
   TransactionSigner,
-} from "./types";
+} from './types';
 
-import { parseContractError } from "./errors";
+import { parseContractError } from './errors';
 
-import { parseContractError } from "./errors";
+import { parseContractError } from './errors';
 
-const READ_ACCOUNT = "GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF";
+const READ_ACCOUNT = 'GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF';
 const POLL_ATTEMPTS = 20;
 
 type PreparedTransactionLike = { toXDR(): string };
-type BuiltTransaction = ReturnType<TransactionBuilder["build"]>;
+type BuiltTransaction = ReturnType<TransactionBuilder['build']>;
 type SimulationLike = {
   error?: unknown;
   result?: {
@@ -55,19 +55,19 @@ export class ILNSdk {
     const signerAddress = await this.requireSignerAddress();
 
     if (signerAddress !== params.freelancer) {
-      throw new Error("submitInvoice must be signed by the freelancer address.");
+      throw new Error('submitInvoice must be signed by the freelancer address.');
     }
 
-    const transaction = await this.buildWriteTransaction(params.freelancer, "submit_invoice", [
+    const transaction = await this.buildWriteTransaction(params.freelancer, 'submit_invoice', [
       this.toAddress(params.freelancer),
       this.toAddress(params.payer),
-      nativeToScVal(params.amount, { type: "i128" }),
-      nativeToScVal(params.dueDate, { type: "u64" }),
-      nativeToScVal(params.discountRate, { type: "u32" }),
+      nativeToScVal(params.amount, { type: 'i128' }),
+      nativeToScVal(params.dueDate, { type: 'u64' }),
+      nativeToScVal(params.discountRate, { type: 'u32' }),
     ]);
 
     const simulation = await this.server.simulateTransaction(transaction);
-    const invoiceId = this.extractBigIntResult(simulation, "submit_invoice");
+    const invoiceId = this.extractBigIntResult(simulation, 'submit_invoice');
     const preparedTransaction = await this.prepareTransaction(transaction);
 
     await this.signAndSend(preparedTransaction, params.freelancer);
@@ -78,12 +78,12 @@ export class ILNSdk {
     const signerAddress = await this.requireSignerAddress();
 
     if (signerAddress !== params.funder) {
-      throw new Error("fundInvoice must be signed by the funder address.");
+      throw new Error('fundInvoice must be signed by the funder address.');
     }
 
-    const transaction = await this.buildWriteTransaction(params.funder, "fund_invoice", [
+    const transaction = await this.buildWriteTransaction(params.funder, 'fund_invoice', [
       this.toAddress(params.funder),
-      nativeToScVal(params.invoiceId, { type: "u64" }),
+      nativeToScVal(params.invoiceId, { type: 'u64' }),
     ]);
 
     const preparedTransaction = await this.prepareTransaction(transaction);
@@ -92,8 +92,8 @@ export class ILNSdk {
 
   async markPaid(params: MarkPaidParams): Promise<void> {
     const payer = await this.requireSignerAddress();
-    const transaction = await this.buildWriteTransaction(payer, "mark_paid", [
-      nativeToScVal(params.invoiceId, { type: "u64" }),
+    const transaction = await this.buildWriteTransaction(payer, 'mark_paid', [
+      nativeToScVal(params.invoiceId, { type: 'u64' }),
     ]);
     const preparedTransaction = await this.prepareTransaction(transaction);
 
@@ -104,12 +104,12 @@ export class ILNSdk {
     const signerAddress = await this.requireSignerAddress();
 
     if (signerAddress !== params.funder) {
-      throw new Error("claimDefault must be signed by the funder address.");
+      throw new Error('claimDefault must be signed by the funder address.');
     }
 
-    const transaction = await this.buildWriteTransaction(params.funder, "claim_default", [
+    const transaction = await this.buildWriteTransaction(params.funder, 'claim_default', [
       this.toAddress(params.funder),
-      nativeToScVal(params.invoiceId, { type: "u64" }),
+      nativeToScVal(params.invoiceId, { type: 'u64' }),
     ]);
     const preparedTransaction = await this.prepareTransaction(transaction);
 
@@ -117,8 +117,8 @@ export class ILNSdk {
   }
 
   async getInvoice(invoiceId: bigint): Promise<Invoice> {
-    const transaction = this.buildReadTransaction("get_invoice", [
-      nativeToScVal(invoiceId, { type: "u64" }),
+    const transaction = this.buildReadTransaction('get_invoice', [
+      nativeToScVal(invoiceId, { type: 'u64' }),
     ]);
     const simulation = await this.server.simulateTransaction(transaction);
 
@@ -127,48 +127,46 @@ export class ILNSdk {
 
   /** Fetch reputation score for an address */
   async getReputation(address: string): Promise<number> {
-    const transaction = this.buildReadTransaction("get_reputation", [
-      this.toAddress(address),
-    ]);
+    const transaction = this.buildReadTransaction('get_reputation', [this.toAddress(address)]);
     const simulation = await this.server.simulateTransaction(transaction);
-    const result = this.extractSimulationRetval(simulation, "get_reputation");
+    const result = this.extractSimulationRetval(simulation, 'get_reputation');
     const native = scValToNative(result) as unknown;
-    if (typeof native === "number") return native;
-    if (typeof native === "bigint") return Number(native);
-    throw new Error("Unexpected reputation result type");
+    if (typeof native === 'number') return native;
+    if (typeof native === 'bigint') return Number(native);
+    throw new Error('Unexpected reputation result type');
   }
 
   /** Fetch contract-wide statistics */
   async getStats(): Promise<unknown> {
-    const transaction = this.buildReadTransaction("get_stats", []);
+    const transaction = this.buildReadTransaction('get_stats', []);
     const simulation = await this.server.simulateTransaction(transaction);
-    const result = this.extractSimulationRetval(simulation, "get_stats");
+    const result = this.extractSimulationRetval(simulation, 'get_stats');
     return scValToNative(result);
   }
 
   /** Fetch governance proposal by id */
   async getProposal(id: bigint): Promise<unknown> {
-    const transaction = this.buildReadTransaction("get_proposal", [
-      nativeToScVal(id, { type: "u64" }),
+    const transaction = this.buildReadTransaction('get_proposal', [
+      nativeToScVal(id, { type: 'u64' }),
     ]);
     const simulation = await this.server.simulateTransaction(transaction);
-    const result = this.extractSimulationRetval(simulation, "get_proposal");
+    const result = this.extractSimulationRetval(simulation, 'get_proposal');
     return scValToNative(result);
   }
 
   /** Raw storage key lookup */
   async getStorage(key: string): Promise<string> {
-    const transaction = this.buildReadTransaction("get_storage", [
-      nativeToScVal(key, { type: "string" }),
+    const transaction = this.buildReadTransaction('get_storage', [
+      nativeToScVal(key, { type: 'string' }),
     ]);
     const simulation = await this.server.simulateTransaction(transaction);
-    const result = this.extractSimulationRetval(simulation, "get_storage");
+    const result = this.extractSimulationRetval(simulation, 'get_storage');
     const native = scValToNative(result);
-    return typeof native === "string" ? native : String(native);
+    return typeof native === 'string' ? native : String(native);
   }
 
   private buildReadTransaction(method: string, args: xdr.ScVal[]): BuiltTransaction {
-    return new TransactionBuilder(new Account(READ_ACCOUNT, "0"), {
+    return new TransactionBuilder(new Account(READ_ACCOUNT, '0'), {
       fee: BASE_FEE,
       networkPassphrase: this.networkPassphrase,
     })
@@ -177,7 +175,7 @@ export class ILNSdk {
           contract: this.contractId,
           function: method,
           args,
-        }),
+        })
       )
       .setTimeout(30)
       .build();
@@ -186,7 +184,7 @@ export class ILNSdk {
   private async buildWriteTransaction(
     sourceAddress: string,
     method: string,
-    args: xdr.ScVal[],
+    args: xdr.ScVal[]
   ): Promise<BuiltTransaction> {
     const sourceAccount = (await this.server.getAccount(sourceAddress)) as Account;
 
@@ -199,7 +197,7 @@ export class ILNSdk {
           contract: this.contractId,
           function: method,
           args,
-        }),
+        })
       )
       .setTimeout(30)
       .build();
@@ -207,14 +205,14 @@ export class ILNSdk {
 
   private async requireSignerAddress(): Promise<string> {
     if (!this.signer) {
-      throw new Error("A transaction signer is required for state-changing contract calls.");
+      throw new Error('A transaction signer is required for state-changing contract calls.');
     }
 
     return this.signer.getPublicKey();
   }
 
   private async prepareTransaction(
-    transaction: BuiltTransaction,
+    transaction: BuiltTransaction
   ): Promise<PreparedTransactionLike> {
     try {
       return await this.server.prepareTransaction(transaction);
@@ -225,21 +223,18 @@ export class ILNSdk {
 
   private async signAndSend(
     preparedTransaction: PreparedTransactionLike,
-    sourceAddress: string,
+    sourceAddress: string
   ): Promise<void> {
     const signer = this.signer;
     if (!signer) {
-      throw new Error("A transaction signer is required for state-changing contract calls.");
+      throw new Error('A transaction signer is required for state-changing contract calls.');
     }
 
     const signedXdr = await signer.signTransaction(preparedTransaction.toXDR(), {
       address: sourceAddress,
       networkPassphrase: this.networkPassphrase,
     });
-    const signedTransaction = TransactionBuilder.fromXDR(
-      signedXdr,
-      this.networkPassphrase,
-    );
+    const signedTransaction = TransactionBuilder.fromXDR(signedXdr, this.networkPassphrase);
     const response = (await this.server.sendTransaction(signedTransaction)) as {
       errorResultXdr?: string;
       hash?: string;
@@ -247,12 +242,14 @@ export class ILNSdk {
     };
 
     if (!response.hash || !response.status) {
-      throw new Error("RPC server returned an invalid sendTransaction response.");
+      throw new Error('RPC server returned an invalid sendTransaction response.');
     }
 
-    if (response.status !== "PENDING" && response.status !== "DUPLICATE") {
+    if (response.status !== 'PENDING' && response.status !== 'DUPLICATE') {
       throw new Error(
-        `Transaction submission failed with status ${response.status}. ${response.errorResultXdr ?? ""}`.trim(),
+        `Transaction submission failed with status ${response.status}. ${
+          response.errorResultXdr ?? ''
+        }`.trim()
       );
     }
 
@@ -264,9 +261,7 @@ export class ILNSdk {
     };
 
     if (finalStatus.status !== rpc.Api.GetTransactionStatus.SUCCESS) {
-      throw new Error(
-        `Transaction did not succeed. Final status: ${String(finalStatus.status)}.`,
-      );
+      throw new Error(`Transaction did not succeed. Final status: ${String(finalStatus.status)}.`);
     }
   }
 
@@ -276,31 +271,29 @@ export class ILNSdk {
   }
 
   private extractInvoiceResult(simulation: unknown): Invoice {
-    const result = this.extractSimulationRetval(simulation, "get_invoice");
-    const nativeInvoice = this.unwrapContractResult(
-      scValToNative(result),
-      "get_invoice",
-    ) as Record<string, unknown>;
+    const result = this.extractSimulationRetval(simulation, 'get_invoice');
+    const nativeInvoice = this.unwrapContractResult(scValToNative(result), 'get_invoice') as Record<
+      string,
+      unknown
+    >;
 
     return {
       id: this.toBigInt(nativeInvoice.id),
-      freelancer: this.toStringValue(nativeInvoice.freelancer, "freelancer"),
-      payer: this.toStringValue(nativeInvoice.payer, "payer"),
+      freelancer: this.toStringValue(nativeInvoice.freelancer, 'freelancer'),
+      payer: this.toStringValue(nativeInvoice.payer, 'payer'),
       amount: this.toBigInt(nativeInvoice.amount),
-      dueDate: this.toNumberValue(
-        nativeInvoice.due_date ?? nativeInvoice.dueDate,
-        "dueDate",
-      ),
+      dueDate: this.toNumberValue(nativeInvoice.due_date ?? nativeInvoice.dueDate, 'dueDate'),
       discountRate: this.toNumberValue(
         nativeInvoice.discount_rate ?? nativeInvoice.discountRate,
-        "discountRate",
+        'discountRate'
       ),
       status: this.parseStatus(nativeInvoice.status),
-      funder: nativeInvoice.funder == null ? null : this.toStringValue(nativeInvoice.funder, "funder"),
+      funder:
+        nativeInvoice.funder == null ? null : this.toStringValue(nativeInvoice.funder, 'funder'),
       fundedAt:
         nativeInvoice.funded_at == null && nativeInvoice.fundedAt == null
           ? null
-          : this.toNumberValue(nativeInvoice.funded_at ?? nativeInvoice.fundedAt, "fundedAt"),
+          : this.toNumberValue(nativeInvoice.funded_at ?? nativeInvoice.fundedAt, 'fundedAt'),
     };
   }
 
@@ -310,7 +303,7 @@ export class ILNSdk {
     if (typedSimulation.error) {
       const error = typedSimulation.error;
       throw new Error(
-        `Simulation failed for ${method}: ${error ? String(error) : "Unknown RPC error."}`,
+        `Simulation failed for ${method}: ${error ? String(error) : 'Unknown RPC error.'}`
       );
     }
 
@@ -322,20 +315,20 @@ export class ILNSdk {
   }
 
   private unwrapContractResult(value: unknown, method: string): unknown {
-    if (!value || typeof value !== "object") {
+    if (!value || typeof value !== 'object') {
       return value;
     }
 
-    if ("ok" in value) {
+    if ('ok' in value) {
       return (value as { ok: unknown }).ok;
     }
-    if ("Ok" in value) {
+    if ('Ok' in value) {
       return (value as { Ok: unknown }).Ok;
     }
-    if ("err" in value) {
+    if ('err' in value) {
       throw parseContractError((value as { err: unknown }).err);
     }
-    if ("Err" in value) {
+    if ('Err' in value) {
       throw parseContractError((value as { Err: unknown }).Err);
     }
 
@@ -347,13 +340,13 @@ export class ILNSdk {
   }
 
   private toBigInt(value: unknown): bigint {
-    if (typeof value === "bigint") {
+    if (typeof value === 'bigint') {
       return value;
     }
-    if (typeof value === "number") {
+    if (typeof value === 'number') {
       return BigInt(value);
     }
-    if (typeof value === "string") {
+    if (typeof value === 'string') {
       return BigInt(value);
     }
 
@@ -361,10 +354,10 @@ export class ILNSdk {
   }
 
   private toNumberValue(value: unknown, field: string): number {
-    if (typeof value === "number") {
+    if (typeof value === 'number') {
       return value;
     }
-    if (typeof value === "bigint") {
+    if (typeof value === 'bigint') {
       return Number(value);
     }
 
@@ -372,7 +365,7 @@ export class ILNSdk {
   }
 
   private toStringValue(value: unknown, field: string): string {
-    if (typeof value === "string") {
+    if (typeof value === 'string') {
       return value;
     }
 
@@ -380,28 +373,28 @@ export class ILNSdk {
   }
 
   private parseStatus(value: unknown): InvoiceStatus {
-    if (typeof value === "string") {
+    if (typeof value === 'string') {
       return this.normalizeStatus(value);
     }
 
-    if (value && typeof value === "object") {
+    if (value && typeof value === 'object') {
       const [key] = Object.keys(value as Record<string, unknown>);
       if (key) {
         return this.normalizeStatus(key);
       }
     }
 
-    throw new Error("Unable to parse invoice status from contract response.");
+    throw new Error('Unable to parse invoice status from contract response.');
   }
 
   private normalizeStatus(value: string): InvoiceStatus {
     const normalized = value.slice(0, 1).toUpperCase() + value.slice(1).toLowerCase();
 
     switch (normalized) {
-      case "Pending":
-      case "Funded":
-      case "Paid":
-      case "Defaulted":
+      case 'Pending':
+      case 'Funded':
+      case 'Paid':
+      case 'Defaulted':
         return normalized;
       default:
         throw new Error(`Unknown invoice status "${value}".`);
@@ -416,5 +409,3 @@ export class ILNSdk {
     return String(error);
   }
 }
-
-

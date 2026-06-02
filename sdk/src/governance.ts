@@ -1,6 +1,6 @@
-import { nativeToScVal, rpc } from "@stellar/stellar-sdk";
+import { nativeToScVal, rpc } from '@stellar/stellar-sdk';
 
-import { GovernanceContractMethod } from "./governance-constants";
+import { GovernanceContractMethod } from './governance-constants';
 import type {
   CastVoteParams,
   CreateProposalParams,
@@ -11,7 +11,7 @@ import type {
   ListProposalsParams,
   UndelegateVotesParams,
   VetoProposalParams,
-} from "./governance-types";
+} from './governance-types';
 import {
   buildReadContractTransaction,
   buildWriteContractTransaction,
@@ -20,8 +20,8 @@ import {
   toBytesN32ScVal,
   toOptionalProposalStatusScVal,
   type BuiltTransaction,
-} from "./governance-utils";
-import type { RpcServerLike } from "./types";
+} from './governance-utils';
+import type { RpcServerLike } from './types';
 
 export class GovernanceClient {
   private readonly contractId: string;
@@ -45,8 +45,8 @@ export class GovernanceClient {
         toAddressScVal(params.proposer),
         encodeProposalAction(params.action),
         toBytesN32ScVal(params.descriptionHash),
-        nativeToScVal(params.proposedValue, { type: "i128" }),
-      ],
+        nativeToScVal(params.proposedValue, { type: 'i128' }),
+      ]
     );
   }
 
@@ -59,9 +59,9 @@ export class GovernanceClient {
       GovernanceContractMethod.CastVote,
       [
         toAddressScVal(params.voter),
-        nativeToScVal(params.proposalId, { type: "u64" }),
-        nativeToScVal(params.support, { type: "bool" }),
-      ],
+        nativeToScVal(params.proposalId, { type: 'u64' }),
+        nativeToScVal(params.support, { type: 'bool' }),
+      ]
     );
   }
 
@@ -73,9 +73,9 @@ export class GovernanceClient {
       params.source,
       GovernanceContractMethod.ExecuteProposal,
       [
-        nativeToScVal(params.proposalId, { type: "u64" }),
-        nativeToScVal(params.totalSupply, { type: "i128" }),
-      ],
+        nativeToScVal(params.proposalId, { type: 'u64' }),
+        nativeToScVal(params.totalSupply, { type: 'i128' }),
+      ]
     );
   }
 
@@ -86,10 +86,7 @@ export class GovernanceClient {
       this.networkPassphrase,
       params.admin,
       GovernanceContractMethod.VetoProposal,
-      [
-        nativeToScVal(params.proposalId, { type: "u64" }),
-        toBytesN32ScVal(params.reasonHash),
-      ],
+      [nativeToScVal(params.proposalId, { type: 'u64' }), toBytesN32ScVal(params.reasonHash)]
     );
   }
 
@@ -100,7 +97,7 @@ export class GovernanceClient {
       this.networkPassphrase,
       params.delegator,
       GovernanceContractMethod.DelegateVotes,
-      [toAddressScVal(params.delegator), toAddressScVal(params.delegate)],
+      [toAddressScVal(params.delegator), toAddressScVal(params.delegate)]
     );
   }
 
@@ -111,7 +108,7 @@ export class GovernanceClient {
       this.networkPassphrase,
       params.delegator,
       GovernanceContractMethod.UndelegateVotes,
-      [toAddressScVal(params.delegator)],
+      [toAddressScVal(params.delegator)]
     );
   }
 
@@ -120,7 +117,7 @@ export class GovernanceClient {
       this.contractId,
       this.networkPassphrase,
       GovernanceContractMethod.GetProposal,
-      [nativeToScVal(params.proposalId, { type: "u64" })],
+      [nativeToScVal(params.proposalId, { type: 'u64' })]
     );
   }
 
@@ -134,9 +131,9 @@ export class GovernanceClient {
       GovernanceContractMethod.ListProposals,
       [
         toOptionalProposalStatusScVal(params.status),
-        nativeToScVal(page, { type: "u32" }),
-        nativeToScVal(pageSize, { type: "u32" }),
-      ],
+        nativeToScVal(page, { type: 'u32' }),
+        nativeToScVal(pageSize, { type: 'u32' }),
+      ]
     );
   }
 }
@@ -145,7 +142,7 @@ export {
   GovernanceContractMethod,
   GOVERNANCE_TESTNET,
   GOVERNANCE_TESTNET_CONTRACT_ID,
-} from "./governance-constants";
+} from './governance-constants';
 export {
   ProposalActionKind,
   ProposalStatus,
@@ -160,9 +157,9 @@ export {
   type ProposalAction,
   type UndelegateVotesParams,
   type VetoProposalParams,
-} from "./governance-types";
+} from './governance-types';
 export {
   parseGovernanceProposal,
   parseGovernanceProposalListSimulation,
   parseGovernanceProposalSimulation,
-} from "./governance-parser";
+} from './governance-parser';

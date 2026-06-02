@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from 'vitest';
 import {
   Account,
   BASE_FEE,
@@ -8,12 +8,12 @@ import {
   TransactionBuilder,
   xdr,
   Operation,
-} from "@stellar/stellar-sdk";
+} from '@stellar/stellar-sdk';
 
-import { ILNSdk } from "../src/client";
-import { ILN_TESTNET, createKeypairSigner } from "../src/signers";
+import { ILNSdk } from '../src/client';
+import { ILN_TESTNET, createKeypairSigner } from '../src/signers';
 
-const READ_ACCOUNT = "GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF";
+const READ_ACCOUNT = 'GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF';
 const TX_TIMEOUT_SECONDS = 60;
 const INVOICE_AMOUNT = 10_000_000n;
 const DISCOUNT_RATE = 300;
@@ -39,7 +39,7 @@ function sleep(ms: number): Promise<void> {
 
 async function readContract(method: string, args: xdr.ScVal[]): Promise<unknown> {
   const server = new rpc.Server(ILN_TESTNET.rpcUrl);
-  const readTx = new TransactionBuilder(new Account(READ_ACCOUNT, "0"), {
+  const readTx = new TransactionBuilder(new Account(READ_ACCOUNT, '0'), {
     fee: BASE_FEE,
     networkPassphrase: ILN_TESTNET.networkPassphrase,
   })
@@ -48,7 +48,7 @@ async function readContract(method: string, args: xdr.ScVal[]): Promise<unknown>
         contract: ILN_TESTNET.contractId,
         function: method,
         args,
-      }),
+      })
     )
     .setTimeout(TX_TIMEOUT_SECONDS)
     .build();
@@ -65,31 +65,33 @@ async function readContract(method: string, args: xdr.ScVal[]): Promise<unknown>
 }
 
 function unwrapResult(value: unknown): unknown {
-  if (!value || typeof value !== "object") {
+  if (!value || typeof value !== 'object') {
     return value;
   }
-  if ("ok" in value) {
+  if ('ok' in value) {
     return (value as { ok: unknown }).ok;
   }
-  if ("Ok" in value) {
+  if ('Ok' in value) {
     return (value as { Ok: unknown }).Ok;
   }
-  if ("err" in value || "Err" in value) {
+  if ('err' in value || 'Err' in value) {
     throw new Error(`Contract returned an error: ${JSON.stringify(value)}.`);
   }
   return value;
 }
 
-describe.skipIf(!hasRequiredSecrets)("SDK testnet integration", () => {
-  const freelancerSigner = FREELANCER_SECRET ? createKeypairSigner(FREELANCER_SECRET) : null as any;
-  const payerSigner = PAYER_SECRET ? createKeypairSigner(PAYER_SECRET) : null as any;
-  const funderSigner = FUNDER_SECRET ? createKeypairSigner(FUNDER_SECRET) : null as any;
+describe.skipIf(!hasRequiredSecrets)('SDK testnet integration', () => {
+  const freelancerSigner = FREELANCER_SECRET
+    ? createKeypairSigner(FREELANCER_SECRET)
+    : (null as any);
+  const payerSigner = PAYER_SECRET ? createKeypairSigner(PAYER_SECRET) : (null as any);
+  const funderSigner = FUNDER_SECRET ? createKeypairSigner(FUNDER_SECRET) : (null as any);
 
   const freelancerSdk = new ILNSdk({ ...ILN_TESTNET, signer: freelancerSigner });
   const payerSdk = new ILNSdk({ ...ILN_TESTNET, signer: payerSigner });
   const funderSdk = new ILNSdk({ ...ILN_TESTNET, signer: funderSigner });
 
-  it("runs submit -> fund -> mark_paid and verifies LP yield", async () => {
+  it('runs submit -> fund -> mark_paid and verifies LP yield', async () => {
     const freelancer = await freelancerSigner.getPublicKey();
     const payer = await payerSigner.getPublicKey();
     const funder = await funderSigner.getPublicKey();
@@ -111,18 +113,18 @@ describe.skipIf(!hasRequiredSecrets)("SDK testnet integration", () => {
     await payerSdk.markPaid({ invoiceId });
 
     const invoice = await freelancerSdk.getInvoice(invoiceId);
-    expect(invoice.status).toBe("Paid");
+    expect(invoice.status).toBe('Paid');
     expect(invoice.funder).toBe(funder);
 
-    const claimYieldRaw = await readContract("claim_yield", [
-      nativeToScVal(invoiceId, { type: "u64" }),
+    const claimYieldRaw = await readContract('claim_yield', [
+      nativeToScVal(invoiceId, { type: 'u64' }),
     ]);
     const yieldValue = BigInt(unwrapResult(claimYieldRaw) as bigint | number | string);
     const expectedYield = (INVOICE_AMOUNT * BigInt(DISCOUNT_RATE)) / 10_000n;
     expect(yieldValue).toBe(expectedYield);
   }, 120_000);
 
-  it("runs submit -> fund -> wait past due date -> claim_default and verifies default", async () => {
+  it('runs submit -> fund -> wait past due date -> claim_default and verifies default', async () => {
     const freelancer = await freelancerSigner.getPublicKey();
     const payer = await payerSigner.getPublicKey();
     const funder = await funderSigner.getPublicKey();
@@ -150,6 +152,6 @@ describe.skipIf(!hasRequiredSecrets)("SDK testnet integration", () => {
     });
 
     const invoice = await freelancerSdk.getInvoice(invoiceId);
-    expect(invoice.status).toBe("Defaulted");
+    expect(invoice.status).toBe('Defaulted');
   }, 180_000);
 });
