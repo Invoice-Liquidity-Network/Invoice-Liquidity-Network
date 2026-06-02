@@ -34,6 +34,17 @@ export interface MarkPaidParams {
   invoiceId: bigint;
 }
 
+export interface ProtocolConfig {
+  minInvoiceAmount: bigint;
+  maxDiscountRate: number;
+  protocolFeeBps: number;
+  minPayerReputation: number;
+  decayRateBps: number;
+  maxInvoiceDuration?: number;
+  minInvoiceDuration?: number;
+  gracePeriodSeconds?: number;
+}
+
 export interface SignTransactionOptions {
   address?: string;
   networkPassphrase: string;

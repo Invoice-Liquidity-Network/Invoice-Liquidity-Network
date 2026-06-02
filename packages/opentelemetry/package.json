@@ -1,0 +1,21 @@
+{
+  "name": "@invoice-liquidity/opentelemetry",
+  "version": "0.1.0",
+  "description": "OpenTelemetry instrumentation for the ILN SDK",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "test": "vitest run"
+  },
+  "peerDependencies": {
+    "@opentelemetry/api": "^1.4.0",
+    "@invoice-liquidity/sdk": "workspace:*"
+  },
+  "devDependencies": {
+    "@opentelemetry/api": "^1.4.0",
+    "@invoice-liquidity/sdk": "workspace:*",
+    "typescript": "^5.0.0",
+    "vitest": "^4.1.5"
+  }
+}

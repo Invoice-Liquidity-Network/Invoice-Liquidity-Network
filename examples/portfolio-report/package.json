@@ -9,14 +9,14 @@
   },
   "dependencies": {
     "@iln/indexer": "file:../../packages/indexer",
-    "@stellar/stellar-sdk": "^12.0.0",
-    "commander": "^11.1.0",
+    "@stellar/stellar-sdk": "^15.0.1",
+    "commander": "^14.0.3",
     "json2csv": "^6.0.0-alpha.2"
   },
   "devDependencies": {
     "@types/json2csv": "^5.0.7",
-    "@types/node": "^20.0.0",
-    "ts-node": "^10.9.1",
-    "typescript": "^5.0.0"
+    "@types/node": "^24.7.2",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.9.3"
   }
 }

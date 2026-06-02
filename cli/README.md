@@ -43,6 +43,22 @@ Environment fallbacks:
 
 ## Commands
 
+### Local Development Environment
+
+```bash
+iln dev start
+iln dev status
+iln dev stop
+iln dev reset
+```
+
+- `start` launches the local Stellar quickstart Docker container, registers the local network, creates/funds development keys, deploys a built ILN WASM when available, and writes `.env.local`.
+- `stop` removes the local quickstart container.
+- `reset` removes local generated state and starts fresh.
+- `status` prints node, RPC, contract, and token state.
+
+Requires Docker to be installed and running. Contract deployment also requires the Stellar CLI and a built contract WASM.
+
 ### Submit
 
 ```bash

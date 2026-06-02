@@ -141,6 +141,40 @@ jobs:
               body: '🚨 **CI Lint failed!** Please check the action logs for details.'
             })
 
+  syncpack:
+    name: Dependency version consistency
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Check for version mismatches
+        run: pnpm syncpack:check
+
+      - name: Comment PR on failure
+        if: failure() && github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: '🚨 **Dependency version mismatch detected!** Run `pnpm syncpack:check` locally and align versions before merging.'
+            })
+
   node-tests:
     name: Run Node.js tests
     runs-on: ubuntu-latest
@@ -199,6 +233,12 @@ jobs:
 
       - name: Run coverage (fails if any package drops below 80%)
         run: pnpm test:coverage
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v5
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          slug: Nursca/Invoice-Liquidity-Network
 
       - name: Comment PR on failure
         if: failure() && github.event_name == 'pull_request'
