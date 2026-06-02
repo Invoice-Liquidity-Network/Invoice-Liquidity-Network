@@ -3,3 +3,4 @@ packages:
   - cli
   - indexer
   - notifications
+  - packages/shared
