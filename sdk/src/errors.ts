@@ -34,6 +34,20 @@ export class GenericContractError extends ILNError {
   }
 }
 
+export class SimulationError extends ILNError {
+  public readonly contractError: unknown;
+
+  constructor(method: string, contractError: unknown) {
+    const message = contractError instanceof Error ? contractError.message : String(contractError);
+    super(
+      `Simulation failed for ${method}: ${message}`,
+      "SIMULATION_FAILED",
+      "Inspect the decoded contract error and fix the transaction inputs before signing.",
+    );
+    this.contractError = contractError;
+  }
+}
+
 export function parseContractError(xdrError: unknown): ILNError {
   const errorStr = typeof xdrError === 'string' ? xdrError : JSON.stringify(xdrError);
   if (errorStr.includes("InvalidDiscountRate")) return new InvalidDiscountRateError();

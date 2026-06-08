@@ -23,7 +23,7 @@ import type {
   TransactionSigner,
 } from "./types";
 
-import { parseContractError } from "./errors";
+import { parseContractError, SimulationError } from "./errors";
 
 const READ_ACCOUNT = "GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF";
 const POLL_ATTEMPTS = 20;
@@ -52,6 +52,59 @@ export class ILNSdk {
     this.signer = config.signer;
   }
 
+  /**
+   * Simulate a mutation transaction and validate the result.
+   * If simulation fails, throws SimulationError with the decoded contract error.
+   * The prepareTransaction RPC call will automatically apply auth entries and resource footprint.
+   *
+   * @param transaction - The built transaction to simulate
+   * @param methodName - The name of the contract method being called (for error messages)
+   * @param shouldSimulate - Whether to run simulation (default true)
+   * @throws SimulationError if shouldSimulate is true and simulation fails
+   */
+  private async simulateAndValidateMutation(
+    transaction: BuiltTransaction,
+    methodName: string,
+    shouldSimulate: boolean = true,
+  ): Promise<void> {
+    if (!shouldSimulate) {
+      return;
+    }
+
+    try {
+      const simulation = await this.server.simulateTransaction(transaction);
+      
+      if (!simulation) {
+        throw new SimulationError(
+          methodName,
+          new Error(`Simulation for ${methodName} returned no response.`),
+        );
+      }
+      
+      const typedSimulation = simulation as SimulationLike;
+
+      if (typedSimulation.error) {
+        const error = typedSimulation.error;
+        throw new SimulationError(
+          methodName,
+          error instanceof Error ? error : new Error(String(error)),
+        );
+      }
+
+      if (!typedSimulation.result) {
+        throw new SimulationError(
+          methodName,
+          new Error(`Simulation did not return a result for ${methodName}.`),
+        );
+      }
+    } catch (err) {
+      if (err instanceof SimulationError) {
+        throw err;
+      }
+      throw new SimulationError(methodName, err instanceof Error ? err : new Error(String(err)));
+    }
+  }
+
   async submitInvoice(params: SubmitInvoiceParams): Promise<bigint> {
     const signerAddress = await this.requireSignerAddress();
 
@@ -67,10 +120,14 @@ export class ILNSdk {
       nativeToScVal(params.discountRate, { type: "u32" }),
     ]);
 
+    const shouldSimulate = params.simulate ?? true;
+    await this.simulateAndValidateMutation(transaction, "submit_invoice", shouldSimulate);
+
     const simulation = await this.server.simulateTransaction(transaction);
     const invoiceId = this.extractBigIntResult(simulation, "submit_invoice");
-    const preparedTransaction = await this.prepareTransaction(transaction);
 
+    // prepareTransaction automatically applies auth entries and resource footprint from simulation
+    const preparedTransaction = await this.prepareTransaction(transaction);
     await this.signAndSend(preparedTransaction, params.freelancer);
     return invoiceId;
   }
@@ -87,6 +144,10 @@ export class ILNSdk {
       nativeToScVal(params.invoiceId, { type: "u64" }),
     ]);
 
+    const shouldSimulate = params.simulate ?? true;
+    await this.simulateAndValidateMutation(transaction, "fund_invoice", shouldSimulate);
+
+    // prepareTransaction automatically applies auth entries and resource footprint from simulation
     const preparedTransaction = await this.prepareTransaction(transaction);
     await this.signAndSend(preparedTransaction, params.funder);
   }
@@ -96,8 +157,12 @@ export class ILNSdk {
     const transaction = await this.buildWriteTransaction(payer, "mark_paid", [
       nativeToScVal(params.invoiceId, { type: "u64" }),
     ]);
-    const preparedTransaction = await this.prepareTransaction(transaction);
 
+    const shouldSimulate = params.simulate ?? true;
+    await this.simulateAndValidateMutation(transaction, "mark_paid", shouldSimulate);
+
+    // prepareTransaction automatically applies auth entries and resource footprint from simulation
+    const preparedTransaction = await this.prepareTransaction(transaction);
     await this.signAndSend(preparedTransaction, payer);
   }
 
@@ -112,8 +177,12 @@ export class ILNSdk {
       this.toAddress(params.funder),
       nativeToScVal(params.invoiceId, { type: "u64" }),
     ]);
-    const preparedTransaction = await this.prepareTransaction(transaction);
 
+    const shouldSimulate = params.simulate ?? true;
+    await this.simulateAndValidateMutation(transaction, "claim_default", shouldSimulate);
+
+    // prepareTransaction automatically applies auth entries and resource footprint from simulation
+    const preparedTransaction = await this.prepareTransaction(transaction);
     await this.signAndSend(preparedTransaction, params.funder);
   }
 

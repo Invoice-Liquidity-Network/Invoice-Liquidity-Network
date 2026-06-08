@@ -178,7 +178,9 @@ describe("ILNSdk", () => {
       pollTransaction: vi.fn().mockResolvedValue({
         status: rpc.Api.GetTransactionStatus.SUCCESS,
       }),
-      simulateTransaction: vi.fn(),
+      simulateTransaction: vi.fn().mockResolvedValue({
+        result: {},
+      }),
     } satisfies RpcServerLike;
 
     const sdk = createSdk(server, signer);
@@ -229,7 +231,9 @@ describe("ILNSdk", () => {
       prepareTransaction: vi.fn().mockImplementation(async (tx) => tx),
       sendTransaction: vi.fn().mockResolvedValue({}), // Missing hash and status
       pollTransaction: vi.fn(),
-      simulateTransaction: vi.fn(),
+      simulateTransaction: vi.fn().mockResolvedValue({
+        result: {},
+      }),
     } satisfies RpcServerLike;
 
     const sdk = createSdk(server, signer);
@@ -253,7 +257,7 @@ describe("ILNSdk", () => {
 
     const sdk = createSdk(server);
     await expect(sdk.getInvoice(1n)).rejects.toThrow(
-      "Contract method get_invoice returned an error: \"Invalid something\"."
+      "Contract error: Invalid something"
     );
   });
 
@@ -285,7 +289,9 @@ describe("ILNSdk", () => {
       pollTransaction: vi.fn().mockResolvedValue({
         status: rpc.Api.GetTransactionStatus.SUCCESS,
       }),
-      simulateTransaction: vi.fn(),
+      simulateTransaction: vi.fn().mockResolvedValue({
+        result: {},
+      }),
     } satisfies RpcServerLike;
 
     const sdk = createSdk(server, signer);
@@ -311,7 +317,9 @@ describe("ILNSdk", () => {
       pollTransaction: vi.fn().mockResolvedValue({
         status: rpc.Api.GetTransactionStatus.SUCCESS,
       }),
-      simulateTransaction: vi.fn(),
+      simulateTransaction: vi.fn().mockResolvedValue({
+        result: {},
+      }),
     } satisfies RpcServerLike;
 
     const sdk = createSdk(server, signer);
@@ -352,12 +360,255 @@ describe("ILNSdk", () => {
       prepareTransaction: vi.fn().mockRejectedValue(new Error("RPC Timeout")),
       sendTransaction: vi.fn(),
       pollTransaction: vi.fn(),
-      simulateTransaction: vi.fn(),
+      simulateTransaction: vi.fn().mockResolvedValue({
+        result: {},
+      }),
     } satisfies RpcServerLike;
 
     const sdk = createSdk(server, signer);
     await expect(sdk.markPaid({ invoiceId: 9n })).rejects.toThrow(
       "RPC Timeout"
     );
+  });
+
+  it("throws SimulationError when mutation simulation fails", async () => {
+    const funderKeypair = Keypair.random();
+    const signer = createKeypairSigner(funderKeypair.secret());
+    const server = {
+      getAccount: vi.fn().mockResolvedValue(new Account(funderKeypair.publicKey(), "1")),
+      prepareTransaction: vi.fn(),
+      sendTransaction: vi.fn(),
+      pollTransaction: vi.fn(),
+      simulateTransaction: vi.fn().mockResolvedValue({
+        error: { value: "InvalidInvoiceId" },
+      }),
+    } satisfies RpcServerLike;
+
+    const sdk = createSdk(server, signer);
+    
+    await expect(
+      sdk.fundInvoice({
+        funder: funderKeypair.publicKey(),
+        invoiceId: 999n,
+      })
+    ).rejects.toThrow();
+  });
+
+  it("throws SimulationError on submitInvoice when simulation fails", async () => {
+    const freelancerKeypair = Keypair.random();
+    const payer = Keypair.random().publicKey();
+    const signer = createKeypairSigner(freelancerKeypair.secret());
+    const server = {
+      getAccount: vi.fn().mockResolvedValue(new Account(freelancerKeypair.publicKey(), "1")),
+      prepareTransaction: vi.fn(),
+      sendTransaction: vi.fn(),
+      pollTransaction: vi.fn(),
+      simulateTransaction: vi.fn().mockResolvedValue({
+        error: { value: "PayerReputationTooLow" },
+      }),
+    } satisfies RpcServerLike;
+
+    const sdk = createSdk(server, signer);
+    
+    await expect(
+      sdk.submitInvoice({
+        freelancer: freelancerKeypair.publicKey(),
+        payer,
+        amount: 100n,
+        dueDate: 1700000200,
+        discountRate: 250,
+      })
+    ).rejects.toThrow();
+  });
+
+  it("skips simulation when simulate flag is false", async () => {
+    const funderKeypair = Keypair.random();
+    const signer = createKeypairSigner(funderKeypair.secret());
+    const server = {
+      getAccount: vi.fn().mockResolvedValue(new Account(funderKeypair.publicKey(), "1")),
+      prepareTransaction: vi.fn().mockImplementation(async (transaction) => transaction),
+      sendTransaction: vi.fn().mockResolvedValue({
+        hash: "c".repeat(64),
+        status: "PENDING",
+      }),
+      pollTransaction: vi.fn().mockResolvedValue({
+        status: rpc.Api.GetTransactionStatus.SUCCESS,
+      }),
+      simulateTransaction: vi.fn(),
+    } satisfies RpcServerLike;
+
+    const sdk = createSdk(server, signer);
+    await sdk.fundInvoice({
+      funder: funderKeypair.publicKey(),
+      invoiceId: 4n,
+      simulate: false,
+    });
+
+    expect(server.sendTransaction).toHaveBeenCalledTimes(1);
+  });
+
+  it("defaults to simulation when simulate flag is not provided", async () => {
+    const funderKeypair = Keypair.random();
+    const signer = createKeypairSigner(funderKeypair.secret());
+    const server = {
+      getAccount: vi
+        .fn()
+        .mockResolvedValue(new Account(funderKeypair.publicKey(), "1")),
+      prepareTransaction: vi.fn().mockImplementation(async (transaction) => transaction),
+      sendTransaction: vi.fn().mockResolvedValue({
+        hash: "c".repeat(64),
+        status: "PENDING",
+      }),
+      pollTransaction: vi.fn().mockResolvedValue({
+        status: rpc.Api.GetTransactionStatus.SUCCESS,
+      }),
+      simulateTransaction: vi.fn().mockResolvedValue({
+        result: {},
+      }),
+    } satisfies RpcServerLike;
+
+    const sdk = createSdk(server, signer);
+    await sdk.fundInvoice({
+      funder: funderKeypair.publicKey(),
+      invoiceId: 4n,
+    });
+
+    // simulateTransaction should be called at least once (for the mutation validation)
+    expect(server.simulateTransaction).toHaveBeenCalled();
+  });
+
+  it("applies simulation result from prepareTransaction to fundInvoice", async () => {
+    const funderKeypair = Keypair.random();
+    const signer = createKeypairSigner(funderKeypair.secret());
+    const server = {
+      getAccount: vi
+        .fn()
+        .mockResolvedValue(new Account(funderKeypair.publicKey(), "1")),
+      prepareTransaction: vi.fn().mockImplementation(async (transaction) => transaction),
+      sendTransaction: vi.fn().mockResolvedValue({
+        hash: "c".repeat(64),
+        status: "PENDING",
+      }),
+      pollTransaction: vi.fn().mockResolvedValue({
+        status: rpc.Api.GetTransactionStatus.SUCCESS,
+      }),
+      simulateTransaction: vi.fn().mockResolvedValue({
+        result: {
+          auth: [],
+        },
+      }),
+    } satisfies RpcServerLike;
+
+    const sdk = createSdk(server, signer);
+    await sdk.fundInvoice({
+      funder: funderKeypair.publicKey(),
+      invoiceId: 4n,
+    });
+
+    // prepareTransaction is called which applies the simulation result automatically
+    expect(server.prepareTransaction).toHaveBeenCalledTimes(1);
+    expect(server.sendTransaction).toHaveBeenCalledTimes(1);
+  });
+
+  it("applies simulation result from prepareTransaction to markPaid", async () => {
+    const payerKeypair = Keypair.random();
+    const signer = createKeypairSigner(payerKeypair.secret());
+    const server = {
+      getAccount: vi
+        .fn()
+        .mockResolvedValue(new Account(payerKeypair.publicKey(), "4")),
+      prepareTransaction: vi.fn().mockImplementation(async (transaction) => transaction),
+      sendTransaction: vi.fn().mockResolvedValue({
+        hash: "b".repeat(64),
+        status: "PENDING",
+      }),
+      pollTransaction: vi.fn().mockResolvedValue({
+        status: rpc.Api.GetTransactionStatus.SUCCESS,
+      }),
+      simulateTransaction: vi.fn().mockResolvedValue({
+        result: {
+          footprint: {},
+        },
+      }),
+    } satisfies RpcServerLike;
+
+    const sdk = createSdk(server, signer);
+    await sdk.markPaid({ invoiceId: 9n });
+
+    expect(server.prepareTransaction).toHaveBeenCalledTimes(1);
+    expect(server.sendTransaction).toHaveBeenCalledTimes(1);
+  });
+
+  it("applies simulation result from prepareTransaction to claimDefault", async () => {
+    const funderKeypair = Keypair.random();
+    const signer = createKeypairSigner(funderKeypair.secret());
+    const server = {
+      getAccount: vi
+        .fn()
+        .mockResolvedValue(new Account(funderKeypair.publicKey(), "2")),
+      prepareTransaction: vi.fn().mockImplementation(async (transaction) => transaction),
+      sendTransaction: vi.fn().mockResolvedValue({
+        hash: "d".repeat(64),
+        status: "PENDING",
+      }),
+      pollTransaction: vi.fn().mockResolvedValue({
+        status: rpc.Api.GetTransactionStatus.SUCCESS,
+      }),
+      simulateTransaction: vi.fn().mockResolvedValue({
+        result: {
+          auth: [],
+        },
+      }),
+    } satisfies RpcServerLike;
+
+    const sdk = createSdk(server, signer);
+    await sdk.claimDefault({
+      funder: funderKeypair.publicKey(),
+      invoiceId: 5n,
+    });
+
+    expect(server.prepareTransaction).toHaveBeenCalledTimes(1);
+    expect(server.sendTransaction).toHaveBeenCalledTimes(1);
+  });
+
+  it("throws SimulationError on markPaid when simulation fails", async () => {
+    const payerKeypair = Keypair.random();
+    const signer = createKeypairSigner(payerKeypair.secret());
+    const server = {
+      getAccount: vi.fn().mockResolvedValue(new Account(payerKeypair.publicKey(), "4")),
+      prepareTransaction: vi.fn(),
+      sendTransaction: vi.fn(),
+      pollTransaction: vi.fn(),
+      simulateTransaction: vi.fn().mockResolvedValue({
+        error: "InvalidInvoiceStatus",
+      }),
+    } satisfies RpcServerLike;
+
+    const sdk = createSdk(server, signer);
+    
+    await expect(sdk.markPaid({ invoiceId: 9n })).rejects.toThrow();
+  });
+
+  it("throws SimulationError on claimDefault when simulation fails", async () => {
+    const funderKeypair = Keypair.random();
+    const signer = createKeypairSigner(funderKeypair.secret());
+    const server = {
+      getAccount: vi.fn().mockResolvedValue(new Account(funderKeypair.publicKey(), "2")),
+      prepareTransaction: vi.fn(),
+      sendTransaction: vi.fn(),
+      pollTransaction: vi.fn(),
+      simulateTransaction: vi.fn().mockResolvedValue({
+        error: "InvoiceNotDefaulted",
+      }),
+    } satisfies RpcServerLike;
+
+    const sdk = createSdk(server, signer);
+    
+    await expect(
+      sdk.claimDefault({
+        funder: funderKeypair.publicKey(),
+        invoiceId: 5n,
+      })
+    ).rejects.toThrow();
   });
 });

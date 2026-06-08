@@ -12,7 +12,11 @@ export interface Invoice {
   fundedAt: number | null;
 }
 
-export interface SubmitInvoiceParams {
+export interface MutationOptions {
+  simulate?: boolean;
+}
+
+export interface SubmitInvoiceParams extends MutationOptions {
   freelancer: string;
   payer: string;
   amount: bigint;
@@ -20,17 +24,17 @@ export interface SubmitInvoiceParams {
   discountRate: number;
 }
 
-export interface FundInvoiceParams {
+export interface FundInvoiceParams extends MutationOptions {
   funder: string;
   invoiceId: bigint;
 }
 
-export interface ClaimDefaultParams {
+export interface ClaimDefaultParams extends MutationOptions {
   funder: string;
   invoiceId: bigint;
 }
 
-export interface MarkPaidParams {
+export interface MarkPaidParams extends MutationOptions {
   invoiceId: bigint;
 }
 
