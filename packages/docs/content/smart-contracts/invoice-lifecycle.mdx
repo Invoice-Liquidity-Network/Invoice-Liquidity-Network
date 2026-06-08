@@ -1,0 +1,97 @@
+# Invoice Lifecycle
+
+An invoice in ILN progresses through several states from creation to final settlement.
+
+## State Machine
+
+```mermaid
+stateDiagram-v2
+    [*] --> Pending: submit_invoice()
+    Pending --> Funded: fund_invoice()
+    Funded --> Paid: mark_paid()
+    Funded --> Defaulted: due_date + grace_period
+    Defaulted --> Liquidated: liquidation_threshold
+    Pending --> Cancelled: cancel_invoice()
+    Cancelled --> [*]
+    Paid --> [*]
+    Liquidated --> [*]
+
+    State Details
+Pending
+The initial state after submit_invoice() is called.
+Invoice is visible to LPs in the marketplace
+Issuer can cancel if not yet funded
+No funds have been transferred
+// Example: Submitting an invoice
+let invoice_id = contract.submit_invoice(
+    &issuer,           // Your Stellar address
+    &payer_address,    // Who owes the money
+    &100_0000000,      // 100 USDC (7 decimals)
+    &300,              // 3% discount rate
+    &1735689600,       // Due date (Unix timestamp)
+    &usdc_token_id,    // USDC contract address
+);
+
+Funded
+An LP has called fund_invoice() and transferred USDC.
+Issuer receives amount - discount immediately
+LP position is recorded in the Distribution contract
+Invoice cannot be cancelled
+
+Yield calculation:
+Issuer receives: 100 USDC - (100 USDC × 3%) = 97 USDC
+LP will receive: 100 USDC on due date
+LP yield: 3 USDC
+Paid
+The payer has settled the invoice.
+Full amount transferred to LP
+Protocol fee (0.5%) deducted and sent to treasury
+Invoice position burned
+
+Defaulted
+The due date + grace period has passed without payment.
+No new LPs can fund
+Late fees accrue (1% per day)
+LP can trigger liquidation after threshold
+
+Liquidated
+The invoice collateral is seized and distributed.
+Remaining collateral sold at auction
+LP receives proceeds + late fees
+Any surplus returned to issuer
+Deficit recorded as bad debt
+
+Cancelled
+The issuer cancelled before funding.
+No funds transferred
+Invoice position burned
+No fees charged
+
+
+Events
+Each state transition emits events for indexing:
+pub struct InvoiceSubmitted {
+    pub invoice_id: u64,
+    pub issuer: Address,
+    pub amount: i128,
+}
+
+pub struct InvoiceFunded {
+    pub invoice_id: u64,
+    pub lp: Address,
+    pub funded_amount: i128,
+}
+
+pub struct InvoicePaid {
+    pub invoice_id: u64,
+    pub payer: Address,
+    pub amount: i128,
+}
+
+Time Parameters
+| Parameter             | Default      | Description                                  |
+| --------------------- | ------------ | -------------------------------------------- |
+| Due Date              | User-defined | When invoice is expected to be paid          |
+| Grace Period          | 7 days       | Extra time after due date before default     |
+| Liquidation Threshold | 30 days      | Time after default before forced liquidation |
+| Late Fee Rate         | 1% / day     | Applied during default period                |

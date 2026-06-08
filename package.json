@@ -1,23 +1,34 @@
 {
   "name": "invoice-liquidity-network",
   "private": true,
+  "workspaces": [
+    "packages/*"
+  ],
   "scripts": {
     "test": "turbo run test",
     "test:coverage": "turbo run test:coverage",
     "build": "turbo run build",
+    "licence:check": "node scripts/check-licenses.js",
     "generate:types": "ts-node --esm scripts/generate-types.ts",
+    "dev": "turbo run dev",
+    "lint": "turbo run lint",
+    "docs:dev": "npm run dev -w @invoice-liquidity/docs",
+    "docs:build": "npm run build -w @invoice-liquidity/docs",
+    "react:dev": "npm run dev -w @iln/react",
+    "react:build": "npm run build -w @iln/react",
+    "react:test": "npm run test -w @iln/react",
     "dead-code:check": "knip",
-    "syncpack:check": "syncpack list-mismatches",
-    "changeset": "changeset",
-    "changeset:version": "changeset version",
-    "changeset:publish": "changeset publish"
+    "gitleaks:scan": "pnpm exec gitleaks detect --no-git -s . --config gitleaks.toml --baseline-path .secrets.baseline",
+    "gitleaks:baseline": "pnpm exec gitleaks detect --no-git -s . --config gitleaks.toml --report-format json --report-path .secrets.baseline",
+    "syncpack:check": "syncpack list-mismatches"
   },
   "devDependencies": {
-    "@changesets/cli": "3.1.2",
+    "@changesets/cli": "2.31.0",
     "@commitlint/cli": "^17.6.0",
     "@commitlint/config-conventional": "^17.6.0",
+    "gitleaks-secret-scanner": "^2.1.1",
     "husky": "^8.0.0",
-    "knip": "^6.15.0",
+    "license-checker-rseidelsohn": "^5.0.1",
     "syncpack": "^13.0.0",
     "ts-node": "^10.9.2",
     "turbo": "^2.5.4",

@@ -1,18 +1,8 @@
 import axios from 'axios';
 
-export interface ProtocolStats {
-  totalInvoices: number;
-  totalVolume: bigint;
-  totalYield: bigint;
-  defaultRate: number;
-}
+import type { ContractStats, InvoiceState, LPStats } from "@iln/shared";
 
-export interface LPStats {
-  deployed: bigint;
-  yield: bigint;
-  invoiceCount: number;
-  defaultRate: number;
-}
+export type ProtocolStats = ContractStats;
 
 export interface FreelancerStats {
   submitted: number;
@@ -28,7 +18,7 @@ export interface AnalyticsInvoice {
   amount: bigint;
   due_date: number;
   discount_rate: number;
-  status: string;
+  status: InvoiceState;
   funder: string | null;
 }
 

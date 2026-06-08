@@ -1,0 +1,37 @@
+name: SDK Browser Tests
+
+on:
+  push:
+    paths:
+      - 'packages/sdk/**'
+  pull_request:
+    paths:
+      - 'packages/sdk/**'
+
+jobs:
+  browser-tests:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: packages/sdk
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: packages/sdk/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build browser bundle
+        run: npm run build:browser
+
+      - name: Install Playwright browsers
+        run: npx playwright install --with-deps chromium firefox webkit
+
+      - name: Run browser compatibility tests
+        run: npm run test:browser

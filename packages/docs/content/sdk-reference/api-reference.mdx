@@ -1,0 +1,128 @@
+# API Reference
+
+## ILNClient
+
+Main class for interacting with the ILN protocol.
+
+### Constructor
+
+```typescript
+new ILNClient(config: ILNClientConfig)
+
+
+ILNClientConfig
+| Property     | Type                                   | Required | Description                       |
+| ------------ | -------------------------------------- | -------- | --------------------------------- |
+| `network`    | `Networks`                             | Yes      | Stellar network (TESTNET, PUBLIC) |
+| `contractId` | `string`                               | Yes      | InvoiceLiquidity contract address |
+| `rpcUrl`     | `string`                               | Yes      | Soroban RPC endpoint              |
+| `wallet`     | `FreighterWallet \| Keypair \| string` | Yes      | Wallet configuration              |
+
+
+Methods
+connectWallet()
+async connectWallet(): Promise<void>
+Initializes the wallet connection. Required before calling state-changing methods.
+Throws:
+WalletNotFoundError — Freighter extension not installed
+WalletConnectionError — User rejected connection
+
+submitInvoice()
+async submitInvoice(params: SubmitInvoiceParams): Promise<number>
+Creates a new invoice on-chain.
+Parameters:
+| Property       | Type     | Description                               |
+| -------------- | -------- | ----------------------------------------- |
+| `payer`        | `string` | Stellar address of the invoice payer      |
+| `amount`       | `number` | Invoice amount in stroops (smallest unit) |
+| `discountRate` | `number` | Discount rate in basis points (1 = 0.01%) |
+| `dueDate`      | `number` | Unix timestamp when invoice is due        |
+| `token`        | `string` | Contract ID of the payment token          |
+
+
+Returns: Promise<number> — The newly created invoice ID
+Example:
+const invoiceId = await client.submitInvoice({
+  payer: 'GDRMKYQMTNZ3XPRF7K7L3PFBJQI2S2Y2E3KJQF3KHKY3XT3LZXG3G5X2',
+  amount: 100_0000000, // 100 USDC
+  discountRate: 300,   // 3%
+  dueDate: 1735689600,
+  token: 'USDC_CONTRACT_ID',
+});
+
+fundInvoice()
+async fundInvoice(invoiceId: number): Promise<TransactionResult>
+
+Funds a pending invoice as a liquidity provider.
+Parameters:
+| Property    | Type     | Description               |
+| ----------- | -------- | ------------------------- |
+| `invoiceId` | `number` | ID of the invoice to fund |
+
+
+Returns: Promise<TransactionResult>
+interface TransactionResult {
+  success: boolean;
+  transactionHash: string;
+  ledger: number;
+}
+
+markPaid()
+async markPaid(invoiceId: number): Promise<TransactionResult>
+Marks an invoice as paid. Typically called by the payer or an oracle.
+
+getInvoice()
+async getInvoice(invoiceId: number): Promise<Invoice>
+Retrieves invoice details from the contract.
+
+Returns: Invoice
+interface Invoice {
+  id: number;
+  issuer: string;
+  payer: string;
+  amount: number;
+  discountRate: number;
+  dueDate: number;
+  status: InvoiceStatus;
+  fundedBy: string | null;
+  token: string;
+}
+
+enum InvoiceStatus {
+  Pending = 0,
+  Funded = 1,
+  Paid = 2,
+  Defaulted = 3,
+  Liquidated = 4,
+}
+
+getInvoicesByIssuer()
+async getInvoicesByIssuer(issuer: string): Promise<Invoice[]>
+Returns all invoices created by a specific address.
+
+getInvoicesByStatus()
+async getInvoicesByStatus(status: InvoiceStatus): Promise<Invoice[]>
+Returns all invoices with a specific status (useful for LP marketplace).
+
+Types
+InvoiceStatus
+enum InvoiceStatus {
+  Pending = 0,
+  Funded = 1,
+  Paid = 2,
+  Defaulted = 3,
+  Liquidated = 4,
+  Cancelled = 5,
+}
+
+Error Types
+| Error                    | Description                              |
+| ------------------------ | ---------------------------------------- |
+| `InvoiceNotFoundError`   | Invoice ID does not exist                |
+| `InvalidStatusError`     | Operation not allowed in current state   |
+| `InsufficientFundsError` | Wallet balance too low                   |
+| `ExpiredInvoiceError`    | Invoice past due date                    |
+| `UnauthorizedError`      | Caller not authorized for this operation |
+
+
+

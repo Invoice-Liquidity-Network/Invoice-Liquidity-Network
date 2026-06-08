@@ -1,4 +1,4 @@
-﻿import {
+import {
   Account,
   Address,
   BASE_FEE,
@@ -9,21 +9,31 @@
   nativeToScVal,
   xdr,
 } from "@stellar/stellar-sdk";
+import { createLogger } from "./logger";
+
+import type { Invoice, InvoiceState } from "@iln/shared";
 
 import type {
   ClaimDefaultParams,
   FundInvoiceParams,
   ILNSdkConfig,
-  Invoice,
-  InvoiceStatus,
   MarkPaidParams,
   ProtocolConfig,
   RpcServerLike,
   SubmitInvoiceParams,
   TransactionSigner,
+  CompatibilityResult,
 } from "./types";
 
 import { parseContractError, SimulationError } from "./errors";
+import { checkCompatibility } from "./compatibility";
+import { GenericContractError, parseContractError } from "./errors";
+import {
+  resolveRequestTimeouts,
+  TimeoutError,
+  withTimeout,
+  type RequestTimeouts,
+} from "./timeouts";
 
 const READ_ACCOUNT = "GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF";
 const POLL_ATTEMPTS = 20;
@@ -31,6 +41,7 @@ const PROTOCOL_CONFIG_CACHE_MS = 5 * 60 * 1000;
 
 type PreparedTransactionLike = { toXDR(): string };
 type BuiltTransaction = ReturnType<TransactionBuilder["build"]>;
+type TransactionOperation = Parameters<TransactionBuilder["addOperation"]>[0];
 type SimulationLike = {
   error?: unknown;
   result?: {
@@ -43,6 +54,7 @@ export class ILNSdk {
   private readonly networkPassphrase: string;
   private readonly server: RpcServerLike;
   private readonly signer?: TransactionSigner;
+  private readonly requestTimeouts: RequestTimeouts;
   private protocolConfigCache: { expiresAt: number; value: ProtocolConfig } | null = null;
 
   constructor(config: ILNSdkConfig) {
@@ -50,6 +62,139 @@ export class ILNSdk {
     this.networkPassphrase = config.networkPassphrase;
     this.server = config.server ?? new rpc.Server(config.rpcUrl);
     this.signer = config.signer;
+    this.requestTimeouts = resolveRequestTimeouts(config);
+  }
+
+  public buildSubmitInvoiceOperation(params: SubmitInvoiceParams): TransactionOperation {
+    return this.buildInvokeContractFunctionOperation(params.freelancer, "submit_invoice", [
+      this.toAddress(params.freelancer),
+      this.toAddress(params.payer),
+      nativeToScVal(params.amount, { type: "i128" }),
+      nativeToScVal(params.dueDate, { type: "u64" }),
+      nativeToScVal(params.discountRate, { type: "u32" }),
+    ]);
+  }
+
+  public buildFundInvoiceOperation(params: FundInvoiceParams): TransactionOperation {
+    return this.buildInvokeContractFunctionOperation(params.funder, "fund_invoice", [
+      this.toAddress(params.funder),
+      nativeToScVal(params.invoiceId, { type: "u64" }),
+    ]);
+  }
+
+  public buildMarkPaidOperation(sourceAddress: string, params: MarkPaidParams): TransactionOperation {
+    return this.buildInvokeContractFunctionOperation(sourceAddress, "mark_paid", [
+      nativeToScVal(params.invoiceId, { type: "u64" }),
+    ]);
+  }
+
+  public buildClaimDefaultOperation(params: ClaimDefaultParams): TransactionOperation {
+    return this.buildInvokeContractFunctionOperation(params.funder, "claim_default", [
+      this.toAddress(params.funder),
+      nativeToScVal(params.invoiceId, { type: "u64" }),
+    ]);
+  }
+
+  public async batch(operations: TransactionOperation[]): Promise<BuiltTransaction> {
+    if (operations.length === 0) {
+      throw new Error("Batch must contain at least one operation.");
+    }
+
+    if (operations.length > 100) {
+      throw new Error("Batch cannot contain more than 100 operations.");
+    }
+
+    const sourceAddress = await this.resolveBatchSourceAddress(operations);
+    const sourceAccount = (await this.server.getAccount(sourceAddress)) as Account;
+
+    const transactionBuilder = new TransactionBuilder(sourceAccount, {
+      fee: BASE_FEE,
+      networkPassphrase: this.networkPassphrase,
+    });
+
+    for (const operation of operations) {
+      transactionBuilder.addOperation(operation);
+    }
+
+    const transaction = transactionBuilder.setTimeout(30).build();
+    const simulation = await this.server.simulateTransaction(transaction);
+    this.validateBatchSimulation(simulation);
+
+    return transaction;
+  }
+
+  private buildInvokeContractFunctionOperation(
+    sourceAddress: string,
+    method: string,
+    args: xdr.ScVal[],
+  ): TransactionOperation {
+    return Operation.invokeContractFunction({
+      source: sourceAddress,
+      contract: this.contractId,
+      function: method,
+      args,
+    });
+  }
+
+  private async resolveBatchSourceAddress(
+    operations: TransactionOperation[],
+  ): Promise<string> {
+    const sources = operations
+      .map((operation) => this.getOperationSourceAddress(operation))
+      .filter((source): source is string => source !== undefined && source !== null);
+
+    if (sources.length > 0) {
+      const uniqueSources = [...new Set(sources)];
+      if (uniqueSources.length !== 1) {
+        throw new Error("All operations in a batch must originate from the same source account.");
+      }
+      return uniqueSources[0];
+    }
+
+    if (!this.signer) {
+      throw new Error(
+        "Batch requires at least one operation source or a configured transaction signer.",
+      );
+    }
+
+    return this.signer.getPublicKey();
+  }
+
+  private getOperationSourceAddress(operation: TransactionOperation): string | undefined {
+    if ((operation as { source?: string }).source) {
+      return (operation as { source?: string }).source;
+    }
+
+    const sourceAccount = (operation as { _attributes?: { sourceAccount?: { _value?: unknown } } })?._attributes?.sourceAccount;
+    if (!sourceAccount || !sourceAccount._value) {
+      return undefined;
+    }
+
+    try {
+      return Address.account(sourceAccount._value).toString();
+    } catch {
+      return undefined;
+    }
+  }
+
+  private validateBatchSimulation(simulation: unknown): void {
+    const typedSimulation = simulation as SimulationLike;
+    if (typedSimulation.error) {
+      const error = typedSimulation.error;
+      throw new Error(
+        `Batch simulation failed: ${error ? String(error) : "Unknown RPC error."}`,
+      );
+    }
+  }
+
+  async checkCompatibility(): Promise<CompatibilityResult> {
+    const invoke = async (method: string): Promise<any> => {
+      const transaction = this.buildReadTransaction(method, []);
+      const simulation = await this.server.simulateTransaction(transaction);
+      return scValToNative(this.extractSimulationRetval(simulation, method));
+    };
+
+    return checkCompatibility(invoke);
   }
 
   /**
@@ -124,11 +269,19 @@ export class ILNSdk {
     await this.simulateAndValidateMutation(transaction, "submit_invoice", shouldSimulate);
 
     const simulation = await this.server.simulateTransaction(transaction);
+    const simulation = await this.simulateWriteTransaction("submit_invoice", transaction);
     const invoiceId = this.extractBigIntResult(simulation, "submit_invoice");
 
     // prepareTransaction automatically applies auth entries and resource footprint from simulation
     const preparedTransaction = await this.prepareTransaction(transaction);
     await this.signAndSend(preparedTransaction, params.freelancer);
+    if (this.logger.enabled) {
+      this.logger("submitInvoice prepared transaction", {
+        xdr: this.toHex(preparedTransaction.toXDR()),
+      });
+    }
+
+    await this.signAndSend(preparedTransaction, params.freelancer, "submitInvoice");
     return invoiceId;
   }
 
@@ -148,8 +301,20 @@ export class ILNSdk {
     await this.simulateAndValidateMutation(transaction, "fund_invoice", shouldSimulate);
 
     // prepareTransaction automatically applies auth entries and resource footprint from simulation
+    if (this.logger.enabled) {
+      this.logger("fundInvoice called", { params });
+      this.logger("fundInvoice transaction", { xdr: this.toHex(transaction.toXDR()) });
+    }
+
     const preparedTransaction = await this.prepareTransaction(transaction);
-    await this.signAndSend(preparedTransaction, params.funder);
+
+    if (this.logger.enabled) {
+      this.logger("fundInvoice prepared transaction", {
+        xdr: this.toHex(preparedTransaction.toXDR()),
+      });
+    }
+
+    await this.signAndSend(preparedTransaction, params.funder, "fundInvoice");
   }
 
   async markPaid(params: MarkPaidParams): Promise<void> {
@@ -164,6 +329,21 @@ export class ILNSdk {
     // prepareTransaction automatically applies auth entries and resource footprint from simulation
     const preparedTransaction = await this.prepareTransaction(transaction);
     await this.signAndSend(preparedTransaction, payer);
+
+    if (this.logger.enabled) {
+      this.logger("markPaid called", { params });
+      this.logger("markPaid transaction", { xdr: this.toHex(transaction.toXDR()) });
+    }
+
+    const preparedTransaction = await this.prepareTransaction(transaction);
+
+    if (this.logger.enabled) {
+      this.logger("markPaid prepared transaction", {
+        xdr: this.toHex(preparedTransaction.toXDR()),
+      });
+    }
+
+    await this.signAndSend(preparedTransaction, payer, "markPaid");
   }
 
   async claimDefault(params: ClaimDefaultParams): Promise<void> {
@@ -184,13 +364,32 @@ export class ILNSdk {
     // prepareTransaction automatically applies auth entries and resource footprint from simulation
     const preparedTransaction = await this.prepareTransaction(transaction);
     await this.signAndSend(preparedTransaction, params.funder);
+
+    if (this.logger.enabled) {
+      this.logger("claimDefault called", { params });
+      this.logger("claimDefault transaction", { xdr: this.toHex(transaction.toXDR()) });
+    }
+
+    const preparedTransaction = await this.prepareTransaction(transaction);
+
+    if (this.logger.enabled) {
+      this.logger("claimDefault prepared transaction", {
+        xdr: this.toHex(preparedTransaction.toXDR()),
+      });
+    }
+
+    await this.signAndSend(preparedTransaction, params.funder, "claimDefault");
   }
 
   async getInvoice(invoiceId: bigint): Promise<Invoice> {
     const transaction = this.buildReadTransaction("get_invoice", [
       nativeToScVal(invoiceId, { type: "u64" }),
     ]);
-    const simulation = await this.server.simulateTransaction(transaction);
+    const simulation = await this.simulateReadTransaction("get_invoice", transaction);
+
+    if (this.logger.enabled) {
+      this.logger("getInvoice simulation result", this.summarizeSimulation(simulation));
+    }
 
     return this.extractInvoiceResult(simulation);
   }
@@ -200,7 +399,7 @@ export class ILNSdk {
     const transaction = this.buildReadTransaction("get_reputation", [
       this.toAddress(address),
     ]);
-    const simulation = await this.server.simulateTransaction(transaction);
+    const simulation = await this.simulateReadTransaction("get_reputation", transaction);
     const result = this.extractSimulationRetval(simulation, "get_reputation");
     const native = scValToNative(result) as unknown;
     if (typeof native === "number") return native;
@@ -211,7 +410,7 @@ export class ILNSdk {
   /** Fetch contract-wide statistics */
   async getStats(): Promise<unknown> {
     const transaction = this.buildReadTransaction("get_stats", []);
-    const simulation = await this.server.simulateTransaction(transaction);
+    const simulation = await this.simulateReadTransaction("get_stats", transaction);
     const result = this.extractSimulationRetval(simulation, "get_stats");
     return scValToNative(result);
   }
@@ -221,7 +420,7 @@ export class ILNSdk {
     const transaction = this.buildReadTransaction("get_proposal", [
       nativeToScVal(id, { type: "u64" }),
     ]);
-    const simulation = await this.server.simulateTransaction(transaction);
+    const simulation = await this.simulateReadTransaction("get_proposal", transaction);
     const result = this.extractSimulationRetval(simulation, "get_proposal");
     return scValToNative(result);
   }
@@ -233,7 +432,7 @@ export class ILNSdk {
     }
 
     const transaction = this.buildReadTransaction("get_protocol_config", []);
-    const simulation = await this.server.simulateTransaction(transaction);
+    const simulation = await this.simulateReadTransaction("get_protocol_config", transaction);
     const result = this.extractSimulationRetval(simulation, "get_protocol_config");
     const config = this.parseProtocolConfig(
       this.unwrapContractResult(scValToNative(result), "get_protocol_config"),
@@ -252,7 +451,7 @@ export class ILNSdk {
     const transaction = this.buildReadTransaction("get_storage", [
       nativeToScVal(key, { type: "string" }),
     ]);
-    const simulation = await this.server.simulateTransaction(transaction);
+    const simulation = await this.simulateReadTransaction("get_storage", transaction);
     const result = this.extractSimulationRetval(simulation, "get_storage");
     const native = scValToNative(result);
     return typeof native === "string" ? native : String(native);
@@ -279,7 +478,11 @@ export class ILNSdk {
     method: string,
     args: xdr.ScVal[],
   ): Promise<BuiltTransaction> {
-    const sourceAccount = (await this.server.getAccount(sourceAddress)) as Account;
+    const sourceAccount = (await withTimeout(
+      `getAccount:${method}`,
+      this.requestTimeouts.writeMs,
+      this.server.getAccount(sourceAddress),
+    )) as Account;
 
     return new TransactionBuilder(sourceAccount, {
       fee: BASE_FEE,
@@ -308,8 +511,15 @@ export class ILNSdk {
     transaction: BuiltTransaction,
   ): Promise<PreparedTransactionLike> {
     try {
-      return await this.server.prepareTransaction(transaction);
+      return await withTimeout(
+        "prepareTransaction",
+        this.requestTimeouts.writeMs,
+        this.server.prepareTransaction(transaction),
+      );
     } catch (error) {
+      if (error instanceof TimeoutError) {
+        throw error;
+      }
       throw new Error(`Failed to prepare contract transaction: ${this.toErrorMessage(error)}`);
     }
   }
@@ -317,6 +527,7 @@ export class ILNSdk {
   private async signAndSend(
     preparedTransaction: PreparedTransactionLike,
     sourceAddress: string,
+    methodName?: string,
   ): Promise<void> {
     const signer = this.signer;
     if (!signer) {
@@ -331,11 +542,23 @@ export class ILNSdk {
       signedXdr,
       this.networkPassphrase,
     );
-    const response = (await this.server.sendTransaction(signedTransaction)) as {
+    const response = (await withTimeout(
+      "sendTransaction",
+      this.requestTimeouts.writeMs,
+      this.server.sendTransaction(signedTransaction),
+    )) as {
       errorResultXdr?: string;
       hash?: string;
       status?: string;
     };
+
+    if (this.logger.enabled) {
+      this.logger(`${methodName ?? "signAndSend"} transaction response`, {
+        hash: response.hash,
+        status: response.status,
+        response,
+      });
+    }
 
     if (!response.hash || !response.status) {
       throw new Error("RPC server returned an invalid sendTransaction response.");
@@ -347,12 +570,20 @@ export class ILNSdk {
       );
     }
 
-    const finalStatus = (await this.server.pollTransaction(response.hash, {
-      attempts: POLL_ATTEMPTS,
-    })) as {
+    const finalStatus = (await withTimeout(
+      "pollTransaction",
+      this.requestTimeouts.writeMs,
+      this.server.pollTransaction(response.hash, {
+        attempts: POLL_ATTEMPTS,
+      }),
+    )) as {
       resultXdr?: string;
       status?: string;
     };
+
+    if (this.logger.enabled) {
+      this.logger(`${methodName ?? "signAndSend"} final status`, finalStatus);
+    }
 
     if (finalStatus.status !== rpc.Api.GetTransactionStatus.SUCCESS) {
       throw new Error(
@@ -361,9 +592,68 @@ export class ILNSdk {
     }
   }
 
+  private summarizeSimulation(simulation: unknown): Record<string, unknown> {
+    if (!simulation || typeof simulation !== "object") {
+      return { simulation };
+    }
+
+    const data = simulation as Record<string, unknown>;
+    const result = data.result as Record<string, unknown> | undefined;
+
+    return {
+      error: data.error,
+      status: data.status,
+      fee: result?.fee,
+      resources: result?.resources,
+      retval: result?.retval,
+      result,
+    };
+  }
+
+  private toHex(xdrData: string): string {
+    if (typeof Buffer !== "undefined") {
+      return Buffer.from(xdrData, "base64").toString("hex");
+    }
+
+    if (typeof atob !== "undefined") {
+      const binary = atob(xdrData);
+      let hex = "";
+
+      for (let i = 0; i < binary.length; i += 1) {
+        hex += binary.charCodeAt(i).toString(16).padStart(2, "0");
+      }
+
+      return hex;
+    }
+
+    return xdrData;
+  }
+
   private extractBigIntResult(simulation: unknown, method: string): bigint {
     const result = this.extractSimulationRetval(simulation, method);
     return this.toBigInt(this.unwrapContractResult(scValToNative(result), method));
+  }
+
+  private simulateReadTransaction(
+    method: string,
+    transaction: BuiltTransaction,
+  ): Promise<unknown> {
+    return withTimeout(
+      `simulateTransaction:${method}`,
+      this.requestTimeouts.readMs,
+      this.server.simulateTransaction(transaction),
+    );
+  }
+
+  private simulateWriteTransaction(
+    method: string,
+    transaction: BuiltTransaction,
+  ): Promise<unknown> {
+    return withTimeout(
+      `simulateTransaction:${method}`,
+      this.requestTimeouts.simulationMs,
+      this.server.simulateTransaction(transaction),
+    );
   }
 
   private extractInvoiceResult(simulation: unknown): Invoice {
@@ -477,13 +767,42 @@ export class ILNSdk {
       return (value as { Ok: unknown }).Ok;
     }
     if ("err" in value) {
-      throw parseContractError((value as { err: unknown }).err);
+      const error = (value as { err: unknown }).err;
+      const parsedError = parseContractError(error);
+      if (parsedError instanceof GenericContractError) {
+        throw new Error(
+          `Contract method ${method} returned an error: ${this.formatContractError(error)}.`,
+        );
+      }
+      throw parsedError;
     }
     if ("Err" in value) {
-      throw parseContractError((value as { Err: unknown }).Err);
+      const error = (value as { Err: unknown }).Err;
+      const parsedError = parseContractError(error);
+      if (parsedError instanceof GenericContractError) {
+        throw new Error(
+          `Contract method ${method} returned an error: ${this.formatContractError(error)}.`,
+        );
+      }
+      throw parsedError;
     }
 
     return value;
+  }
+
+  private formatContractError(error: unknown): string {
+    if (typeof error === "string") {
+      return error;
+    }
+    if (typeof error === "number" || typeof error === "bigint" || typeof error === "boolean") {
+      return String(error);
+    }
+
+    try {
+      return JSON.stringify(error);
+    } catch {
+      return String(error);
+    }
   }
 
   private toAddress(address: string) {
@@ -523,7 +842,7 @@ export class ILNSdk {
     throw new Error(`Expected string ${field} value but received ${typeof value}.`);
   }
 
-  private parseStatus(value: unknown): InvoiceStatus {
+  private parseStatus(value: unknown): InvoiceState {
     if (typeof value === "string") {
       return this.normalizeStatus(value);
     }
@@ -538,7 +857,7 @@ export class ILNSdk {
     throw new Error("Unable to parse invoice status from contract response.");
   }
 
-  private normalizeStatus(value: string): InvoiceStatus {
+  private normalizeStatus(value: string): InvoiceState {
     const normalized = value.slice(0, 1).toUpperCase() + value.slice(1).toLowerCase();
 
     switch (normalized) {
@@ -560,5 +879,3 @@ export class ILNSdk {
     return String(error);
   }
 }
-
-

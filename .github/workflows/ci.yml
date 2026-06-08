@@ -228,6 +228,40 @@ jobs:
               body: '🚨 **Coverage dropped below 80%!** Please check the action logs for details.'
             })
 
+  license-compliance:
+    name: Dependency license compliance check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Run license compliance check
+        run: pnpm licence:check
+
+      - name: Comment PR on failure
+        if: failure() && github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: '🚨 **Dependency license compliance check failed!** Please verify your package dependencies conform to the license policy.'
+            })
+
   sdk-types-sync:
     name: SDK types in sync
     needs: pnpm-cache

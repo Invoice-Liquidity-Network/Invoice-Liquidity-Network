@@ -180,6 +180,32 @@ describe("runCli", () => {
     expect(status).toHaveBeenCalledTimes(1);
     expect(loadConfig).not.toHaveBeenCalled();
   });
+
+  it("decodes ScVal XDR without requiring ILN config", async () => {
+    const stdout = createMemoryStream();
+    const loadConfig = vi.fn(() => {
+      throw new Error("config should not be loaded");
+    });
+
+    const exitCode = await runCli(
+      [
+        "xdr",
+        "decode",
+        "AAAAEQAAAAEAAAADAAAADgAAAAZhbW91bnQAAAAAAAUAAAAAO5rKAAAAAA4AAAACaWQAAAAAAAUAAAAAAAAAKgAAAA4AAAAGc3RhdHVzAAAAAAAOAAAABkZ1bmRlZAAA",
+      ],
+      {
+        createClient: () => ({}) as any,
+        loadConfig,
+        stderr: createMemoryStream(),
+        stdout,
+      },
+    );
+
+    expect(exitCode).toBe(0);
+    expect(loadConfig).not.toHaveBeenCalled();
+    expect(stdout.toString()).toContain('"amount": "1000000000"');
+    expect(stdout.toString()).toContain('"status": "Funded"');
+  });
 });
 
 function createMemoryStream(): Writable & { toString(): string } {

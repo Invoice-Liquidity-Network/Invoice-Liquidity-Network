@@ -122,6 +122,12 @@ export class ILNClient {
     return invoices;
   }
 
+  async getVersion(): Promise<string> {
+    const transaction = this.buildReadTransaction("get_version", []);
+    const simulation = await this.simulate(transaction, "get_version");
+    return String(this.unwrapContractResult(this.extractRetval(simulation), "get_version"));
+  }
+
   async getProtocolConfig(): Promise<ProtocolConfig> {
     const now = Date.now();
     if (this.protocolConfigCache && this.protocolConfigCache.expiresAt > now) {

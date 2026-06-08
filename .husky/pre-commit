@@ -1,0 +1,4 @@
+#!/bin/sh
+. "$(dirname "$0")/_/husky.sh"
+
+pnpm exec gitleaks detect --no-git -s . --config gitleaks.toml --baseline-path .secrets.baseline

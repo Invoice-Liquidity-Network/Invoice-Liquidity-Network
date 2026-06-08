@@ -1,0 +1,29 @@
+{
+  "name": "@iln/shared",
+  "version": "0.1.0",
+  "description": "Shared ILN domain types for the SDK, frontend, and related packages.",
+  "license": "MIT",
+  "private": false,
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "check": "tsc -p tsconfig.json --noEmit",
+    "test": "tsc -p tsconfig.json && tsd"
+  },
+  "devDependencies": {
+    "tsd": "^0.31.2",
+    "typescript": "^5.9.3"
+  }
+}

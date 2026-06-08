@@ -1,0 +1,43 @@
+{
+  "name": "@iln/eslint-config",
+  "version": "1.0.0",
+  "description": "Shared ESLint configuration for Invoice Liquidity Network monorepo",
+  "license": "MIT",
+  "exports": {
+    "./base": "./configs/base.js",
+    "./react": "./configs/react.js",
+    "./node": "./configs/node.js"
+  },
+  "files": [
+    "configs"
+  ],
+  "devDependencies": {
+    "eslint": "^8.0.0",
+    "@typescript-eslint/eslint-plugin": "^6.0.0",
+    "@typescript-eslint/parser": "^6.0.0",
+    "eslint-config-prettier": "^9.0.0",
+    "eslint-plugin-react": "^7.32.0",
+    "eslint-plugin-react-hooks": "^4.6.0",
+    "eslint-plugin-jsx-a11y": "^6.8.0"
+  },
+  "peerDependencies": {
+    "eslint": ">=8.0.0",
+    "@typescript-eslint/eslint-plugin": ">=6.0.0",
+    "@typescript-eslint/parser": ">=6.0.0",
+    "eslint-config-prettier": ">=9.0.0",
+    "eslint-plugin-react": ">=7.32.0",
+    "eslint-plugin-react-hooks": ">=4.6.0",
+    "eslint-plugin-jsx-a11y": ">=6.8.0"
+  },
+  "peerDependenciesMeta": {
+    "eslint-plugin-react": {
+      "optional": true
+    },
+    "eslint-plugin-react-hooks": {
+      "optional": true
+    },
+    "eslint-plugin-jsx-a11y": {
+      "optional": true
+    }
+  }
+}

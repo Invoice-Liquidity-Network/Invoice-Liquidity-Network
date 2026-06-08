@@ -1,0 +1,61 @@
+# Horizon API Reference
+
+While the ILN SDK abstracts most interactions, you may need to query Stellar's Horizon API directly for historical data and analytics.
+
+## Base URLs
+
+| Network | URL |
+|---------|-----|
+| Testnet | `https://horizon-testnet.stellar.org` |
+| Mainnet | `https://horizon.stellar.org` |
+
+## Querying Contract Events
+
+### Invoice Submitted Events
+
+```bash
+curl "https://horizon-testnet.stellar.org/ledgers/{ledger_sequence}/effects?type=contract_event"
+
+
+Filtering by Contract
+const response = await fetch(
+  'https://horizon-testnet.stellar.org/accounts/CCPASLHKRFBMVV5PZG3LKDGKFEDXZMB5U7DK42CVLUVWCMUCSRPVBIMO/payments?order=desc&limit=200'
+);
+const data = await response.json();
+
+
+Transaction History
+Get all transactions involving the ILN contract:
+curl "https://horizon-testnet.stellar.org/accounts/{CONTRACT_ID}/transactions?order=desc"
+
+Account Balances
+Check token balances for any address:
+curl "https://horizon-testnet.stellar.org/accounts/{ADDRESS}"
+
+Response includes all trustlines and balances:
+{
+  "balances": [
+    {
+      "balance": "1000.0000000",
+      "asset_type": "credit_alphanum4",
+      "asset_code": "USDC",
+      "asset_issuer": "GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN"
+    }
+  ]
+}
+
+Rate Limits
+| Endpoint    | Limit               |
+| ----------- | ------------------- |
+| Horizon     | 3600 requests/hour  |
+| Soroban RPC | 100 requests/minute |
+
+
+Pagination
+All list endpoints use cursor-based pagination:
+# Get next page
+curl "https://horizon-testnet.stellar.org/accounts/{ID}/payments?cursor={cursor}&limit=200"
+
+# Get previous page
+curl "https://horizon-testnet.stellar.org/accounts/{ID}/payments?cursor={cursor}&order=asc&limit=200"
+

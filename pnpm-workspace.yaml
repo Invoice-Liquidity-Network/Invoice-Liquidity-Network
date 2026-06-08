@@ -3,6 +3,7 @@ packages:
   - cli
   - indexer
   - notifications
+  - packages/shared
   - docs
   - "examples/*"
   - "packages/*"

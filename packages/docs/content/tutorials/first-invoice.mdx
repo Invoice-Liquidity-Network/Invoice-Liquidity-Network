@@ -1,0 +1,77 @@
+# Your First Invoice
+
+This tutorial walks you through submitting an invoice, funding it as an LP, and marking it as paid — all on Stellar testnet.
+
+## Prerequisites
+
+- [Freighter wallet](https://www.freighter.app/) installed
+- Testnet XLM (get from [Friendbot](https://laboratory.stellar.org/#account-creator?network=test))
+- Node.js 18+
+
+## Step 1: Install the CLI
+
+```bash
+npm install -g @invoice-liquidity/cli
+iln --version
+
+Step 2: Fund Testnet Wallets
+# Generate a freelancer wallet
+iln wallet create --name freelancer --save
+
+# Generate an LP wallet  
+iln wallet create --name lp --save
+
+# Fund both with testnet XLM
+iln wallet fund --name freelancer
+iln wallet fund --name lp
+
+
+Step 3: Submit an Invoice
+As the freelancer:
+iln submit \
+  --wallet freelancer \
+  --payer GDRMKYQMTNZ3XPRF7K7L3PFBJQI2S2Y2E3KJQF3KHKY3XT3LZXG3G5X2 \
+  --amount 100 \
+  --due 2025-12-31 \
+  --rate 300 \
+  --token USDC
+Output:
+✓ Invoice submitted successfully
+  ID: 1
+  Amount: 100 USDC
+  Discount: 3 USDC (3%)
+  Due: 2025-12-31
+
+
+  Step 4: Fund the Invoice
+As the LP:
+iln fund \
+  --wallet lp \
+  --id 1
+Output:
+✓ Invoice funded successfully
+  LP will receive: 100 USDC on 2025-12-31
+  Yield: 3 USDC (3%)
+
+
+  Step 5: Mark as Paid
+When the payer settles:
+iln pay \
+  --wallet freelancer \
+  --id 1
+Output:
+✓ Invoice marked as paid
+  LP received: 100 USDC
+  Protocol fee: 0.5 USDC
+
+
+  Verify on Explorer
+Check your transactions on Stellar Expert:
+https://stellar.expert/explorer/testnet/account/YOUR_ADDRESS
+
+
+
+Next Steps
+Try the LP Funding Guide to earn yield
+Integrate the SDK into your app
+Read about Smart Contract Architecture

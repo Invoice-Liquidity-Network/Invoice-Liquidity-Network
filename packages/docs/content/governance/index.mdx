@@ -1,0 +1,79 @@
+# Governance Overview
+
+ILN uses on-chain governance to manage protocol parameters, ensuring decentralized control over the protocol's evolution.
+
+## Governance Token
+
+The ILN Governance contract manages protocol changes through token-weighted voting. Holders of the governance token can:
+
+- Propose parameter changes
+- Vote on active proposals
+- Delegate voting power
+
+## Proposal Lifecycle
+
+```mermaid
+stateDiagram-v2
+    [*] --> Pending: create_proposal()
+    Pending --> Active: voting_delay elapsed
+    Active --> Succeeded: votes_for > votes_against AND quorum met
+    Active --> Defeated: votes_against >= votes_for OR quorum not met
+    Succeeded --> Executed: execute_proposal()
+    Succeeded --> Expired: execution_delay exceeded
+    Defeated --> [*]
+    Expired --> [*]
+    Executed --> [*]
+
+
+    Parameters
+    | Parameter            | Default Value | Description                              |
+| -------------------- | ------------- | ---------------------------------------- |
+| `voting_delay`       | 1 day         | Time before voting starts after proposal |
+| `voting_period`      | 7 days        | Duration of voting                       |
+| `execution_delay`    | 2 days        | Time after success before execution      |
+| `quorum`             | 4%            | Minimum participation required           |
+| `proposal_threshold` | 1000 ILN      | Minimum tokens to create proposal        |
+
+
+Creating a Proposal
+import { ILNClient } from '@invoice-liquidity/sdk';
+
+const client = new ILNClient({ /* config */ });
+
+// Create a proposal to change the minimum invoice amount
+const proposalId = await client.createProposal({
+  parameter: 'MinInvoiceAmount',
+  newValue: 50_0000000, // 50 USDC
+  description: 'Increase minimum invoice amount to reduce spam',
+});
+
+Voting
+// Vote for a proposal
+await client.vote({
+  proposalId: 1,
+  support: true, // true = for, false = against
+});
+
+// Check proposal status
+const status = await client.getProposalStatus(1);
+console.log(status); // 'Pending' | 'Active' | 'Succeeded' | 'Defeated' | 'Executed'
+
+
+Delegation
+You can delegate your voting power to another address:
+await client.delegateVote('GDELEGATE_ADDRESS');
+
+Emergency Actions
+In case of critical vulnerabilities, a 3-of-5 multisig can execute emergency parameter changes without a full governance vote. This is a temporary measure until the protocol matures.
+| Multisig Member   | Role                     |
+| ----------------- | ------------------------ |
+| Core Dev 1        | Technical lead           |
+| Core Dev 2        | Security lead            |
+| Community Rep 1   | Elected by token holders |
+| Community Rep 2   | Elected by token holders |
+| External Security | Independent auditor      |
+
+
+Governance Contract Address
+Testnet: CD7GOIU3GNK7EZHG7XWBC7VI4NRVGMRCU7X2FOCAPQN6EGTSW46BY4EB
+Mainnet: Coming after audit

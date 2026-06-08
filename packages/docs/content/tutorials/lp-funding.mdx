@@ -1,0 +1,122 @@
+# LP Funding Guide
+
+Learn how to provide liquidity to ILN invoices and earn yield.
+
+## What You'll Learn
+
+- How to evaluate invoice opportunities
+- How to fund invoices via CLI and SDK
+- How to track your LP positions
+- Risk management strategies
+
+## Prerequisites
+
+- LP wallet with USDC on Stellar testnet
+- Understanding of invoice discount rates
+
+## Understanding Returns
+
+When you fund an invoice, you earn the discount rate as yield:
+
+Investment: 97 USDC
+Return: 100 USDC
+Profit: 3 USDC (3.09% return)
+Annualized: ~37% APY (for 30-day invoice)
+
+
+
+## Step 1: Browse Available Invoices
+
+```bash
+iln list --status pending
+Output:
+┌────┬─────────────┬────────┬──────────┬─────────────┐
+│ ID │ Issuer      │ Amount │ Discount │ Due Date    │
+├────┼─────────────┼────────┼──────────┼─────────────┤
+│ 1  │ G...ABC     │ 100    │ 3%       │ 2025-02-15  │
+│ 2  │ G...DEF     │ 500    │ 5%       │ 2025-03-01  │
+│ 3  │ G...GHI     │ 50     │ 2%       │ 2025-01-30  │
+└────┴─────────────┴────────┴──────────┴─────────────┘
+
+
+Step 2: Evaluate Risk
+Consider these factors:
+| Factor        | Low Risk    | High Risk    |
+| ------------- | ----------- | ------------ |
+| Discount Rate | < 5%        | > 10%        |
+| Due Date      | < 30 days   | > 90 days    |
+| Payer History | Verified    | Unknown      |
+| Amount        | < 1000 USDC | > 10000 USDC |
+
+
+Step 3: Fund an Invoice
+iln fund --wallet lp --id 1
+
+
+Step 4: Track Your Positions
+iln positions --wallet lp
+Output:
+┌────┬────────┬──────────┬─────────────┬──────────┬───────────┐
+│ ID │ Amount │ Discount │ Due Date    │ Status   │ Expected  │
+├────┼────────┼──────────┼─────────────┼──────────┼───────────┤
+│ 1  │ 100    │ 3%       │ 2025-02-15  │ Funded   │ 100 USDC  │
+└────┴────────┴──────────┴─────────────┴──────────┴───────────┘
+
+
+Step 5: Receive Payment
+When the invoice is paid:
+Full amount (100 USDC) is transferred to your wallet
+Protocol fee (0.5%) is deducted
+You receive 99.5 USDC
+
+
+
+Risk Management
+
+Diversification
+Don't put all funds in one invoice. Spread across:
+- Multiple issuers
+- Different due dates
+- Various discount rates
+
+Due Diligence
+- Check issuer reputation on-chain
+- Verify payer identity when possible
+- Start with smaller amounts
+
+Exit Strategy
+- Invoices are non-transferable until secondary market launches
+- Only fund amounts you can hold until due date
+- Consider grace period (7 days) in your planning
+
+
+Automated Funding (Advanced)
+Set up auto-funding rules:
+import { ILNClient } from '@invoice-liquidity/sdk';
+
+const client = new ILNClient({ /* config */ });
+
+// Auto-fund invoices matching criteria
+client.onInvoice('submitted', async (invoice) => {
+  if (
+    invoice.discountRate >= 300 &&    // At least 3% discount
+    invoice.amount <= 1000_0000000 &&  // Max 1000 USDC
+    invoice.dueDate - Date.now() < 86400 * 60 // Due within 60 days
+  ) {
+    await client.fundInvoice(invoice.id);
+    console.log(`Auto-funded invoice ${invoice.id}`);
+  }
+});
+
+Monitoring
+Set up notifications for your LP activities:
+iln webhook create \
+  --url https://your-app.com/webhooks/lp \
+  --events invoice.funded,invoice.paid,invoice.defaulted
+
+
+
+  Next Steps
+Review Smart Contract Architecture
+Explore Governance to influence protocol parameters
+Build your own Frontend

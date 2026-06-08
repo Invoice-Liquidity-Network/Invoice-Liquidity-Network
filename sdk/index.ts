@@ -80,3 +80,5 @@ export async function getInvoice(invoke: any, params: {
     throw mapError(err)
   }
 }
+
+export { checkCompatibility, SDK_VERSION, MIN_CONTRACT_VERSION } from './src/compatibility'

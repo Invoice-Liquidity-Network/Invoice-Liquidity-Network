@@ -23,6 +23,7 @@ jobs:
     permissions:
       contents: write
       pull-requests: write
+      id-token: write  # required for SLSA provenance attestation
 
     steps:
       - name: Checkout
@@ -45,14 +46,23 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Create Release PR or Publish
+        id: changesets
         uses: changesets/action@v1
         with:
           # Opens a "Version Packages" PR when changesets are present.
           # Publishes to npm when the Version Packages PR is merged.
-          publish: pnpm changeset:publish
+          publish: pnpm changeset publish --provenance
           version: pnpm changeset:version
           title: 'chore: version packages'
           commit: 'chore: version packages'
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: Attest build provenance
+        if: steps.changesets.outputs.published == 'true'
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: |
+            sdk/dist/**
+            cli/dist/**
