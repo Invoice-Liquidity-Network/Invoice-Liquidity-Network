@@ -1,5 +1,5 @@
 {
-  "name": "@iln/sdk",
+  "name": "@invoice-liquidity/sdk",
   "version": "0.1.0",
   "description": "TypeScript SDK for the Invoice Liquidity Network Soroban contract.",
   "license": "MIT",
@@ -36,7 +36,7 @@
     "@iln/shared": "workspace:*",
     "@stellar/freighter-api": "^6.0.1",
     "@stellar/stellar-sdk": "^15.0.1",
-    "debug": "^5.1.0"
+    "debug": "^4.4.3"
   },
   "peerDependencies": {
     "react": ">=17"
