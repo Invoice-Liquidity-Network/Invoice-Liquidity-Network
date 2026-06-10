@@ -1,0 +1,97 @@
+{
+  "$schema": "https://unpkg.com/knip@6/schema.json",
+  "workspaces": {
+    ".": {
+      "entry": [
+        "scripts/*.ts"
+      ],
+      "project": [
+        "scripts/**/*.ts"
+      ],
+      "ignoreDependencies": [
+        "husky"
+      ]
+    },
+    "sdk": {
+      "entry": [
+        "index.ts",
+        "__tests__/**/*.test.ts"
+      ],
+      "project": [
+        "src/**/*.ts",
+        "*.ts"
+      ],
+      "ignoreDependencies": [
+        "@commitlint/cli",
+        "@commitlint/config-conventional"
+      ]
+    },
+    "cli": {
+      "entry": [
+        "src/bin.ts",
+        "src/cli.ts"
+      ],
+      "project": [
+        "src/**/*.ts"
+      ],
+      "ignoreDependencies": [
+        "@commitlint/cli",
+        "@commitlint/config-conventional"
+      ]
+    },
+    "indexer": {
+      "project": [
+        "src/**/*.ts"
+      ],
+      "ignoreDependencies": [
+        "@commitlint/cli",
+        "@commitlint/config-conventional"
+      ]
+    },
+    "notifications": {
+      "project": [
+        "src/**/*.ts"
+      ],
+      "ignoreDependencies": [
+        "@commitlint/cli",
+        "@commitlint/config-conventional"
+      ]
+    },
+    "docs": {
+      "entry": [
+        "pages/**/*.{ts,tsx,mdx}",
+        "theme.config.jsx",
+        "next.config.{js,mjs}"
+      ],
+      "project": [
+        "**/*.{ts,tsx,jsx}"
+      ]
+    },
+    "packages/indexer": {
+      "project": [
+        "src/**/*.ts"
+      ],
+      "ignoreDependencies": [
+        "@commitlint/cli",
+        "@commitlint/config-conventional"
+      ]
+    },
+    "packages/opentelemetry": {
+      "entry": [
+        "tests/**/*.test.ts"
+      ],
+      "project": [
+        "src/**/*.ts"
+      ]
+    },
+    "packages/scripts": {
+      "entry": [
+        "**/*.{ts,js}"
+      ],
+      "project": [
+        "**/*.{ts,js}"
+      ]
+    }
+  },
+  "ignoreExportsUsedInFile": true
+}

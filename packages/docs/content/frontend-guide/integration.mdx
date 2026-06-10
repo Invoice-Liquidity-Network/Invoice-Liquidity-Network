@@ -1,0 +1,171 @@
+# React Integration
+
+The ILN SDK works seamlessly with React applications. This guide covers best practices for building a frontend on top of the protocol.
+
+## Installation
+
+```bash
+npm install @invoice-liquidity/sdk react react-dom
+npm install -D @types/react @types/react-dom
+
+
+React Context Setup
+Create a provider to share the ILN client across your app:
+// contexts/ILNContext.tsx
+import React, { createContext, useContext, useState, useEffect } from 'react';
+import { ILNClient } from '@invoice-liquidity/sdk';
+import { Networks } from '@stellar/stellar-sdk';
+
+interface ILNContextType {
+  client: ILNClient | null;
+  connected: boolean;
+  connect: () => Promise<void>;
+  disconnect: () => void;
+}
+
+const ILNContext = createContext<ILNContextType | undefined>(undefined);
+
+export function ILNProvider({ children }: { children: React.ReactNode }) {
+  const [client, setClient] = useState<ILNClient | null>(null);
+  const [connected, setConnected] = useState(false);
+
+  useEffect(() => {
+    const ilnClient = new ILNClient({
+      network: Networks.TESTNET,
+      contractId: process.env.NEXT_PUBLIC_ILN_CONTRACT_ID!,
+      rpcUrl: process.env.NEXT_PUBLIC_SOROBAN_RPC_URL!,
+    });
+    setClient(ilnClient);
+  }, []);
+
+  const connect = async () => {
+    if (!client) return;
+    await client.connectWallet();
+    setConnected(true);
+  };
+
+  const disconnect = () => {
+    setConnected(false);
+  };
+
+  return (
+    <ILNContext.Provider value={{ client, connected, connect, disconnect }}>
+      {children}
+    </ILNContext.Provider>
+  );
+}
+
+export function useILN() {
+  const context = useContext(ILNContext);
+  if (!context) throw new Error('useILN must be used within ILNProvider');
+  return context;
+}
+
+
+Invoice Submission Form
+// components/SubmitInvoiceForm.tsx
+import { useState } from 'react';
+import { useILN } from '../contexts/ILNContext';
+
+export function SubmitInvoiceForm() {
+  const { client, connected } = useILN();
+  const [loading, setLoading] = useState(false);
+  const [invoiceId, setInvoiceId] = useState<number | null>(null);
+
+  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    if (!client) return;
+
+    setLoading(true);
+    const formData = new FormData(e.currentTarget);
+    
+    try {
+      const id = await client.submitInvoice({
+        payer: formData.get('payer') as string,
+        amount: Number(formData.get('amount')) * 10_000_000, // Convert to stroops
+        discountRate: Number(formData.get('discountRate')),
+        dueDate: Math.floor(new Date(formData.get('dueDate') as string).getTime() / 1000),
+        token: formData.get('token') as string,
+      });
+      setInvoiceId(id);
+    } catch (error) {
+      console.error('Failed to submit invoice:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  if (!connected) {
+    return <p>Please connect your wallet first</p>;
+  }
+
+  return (
+    <form onSubmit={handleSubmit}>
+      <div>
+        <label>Payer Address</label>
+        <input name="payer" required placeholder="G..." />
+      </div>
+      <div>
+        <label>Amount (USDC)</label>
+        <input name="amount" type="number" required min="10" />
+      </div>
+      <div>
+        <label>Discount Rate (%)</label>
+        <input name="discountRate" type="number" required min="0" max="10" step="0.01" />
+      </div>
+      <div>
+        <label>Due Date</label>
+        <input name="dueDate" type="date" required />
+      </div>
+      <div>
+        <label>Token</label>
+        <select name="token" required>
+          <option value="USDC_ID">USDC</option>
+          <option value="EURC_ID">EURC</option>
+        </select>
+      </div>
+      <button type="submit" disabled={loading}>
+        {loading ? 'Submitting...' : 'Submit Invoice'}
+      </button>
+      
+      {invoiceId && <p>Invoice created: #{invoiceId}</p>}
+    </form>
+  );
+}
+
+
+Environment Variables
+# .env.local
+NEXT_PUBLIC_ILN_CONTRACT_ID=CCPASLHKRFBMVV5PZG3LKDGKFEDXZMB5U7DK42CVLUVWCMUCSRPVBIMO
+NEXT_PUBLIC_SOROBAN_RPC_URL=https://soroban-testnet.stellar.org
+NEXT_PUBLIC_NETWORK_PASSPHRASE=Test SDF Network ; September 2015
+
+
+
+Next.js App Router
+For Next.js 15 App Router, mark client components:
+// app/submit/page.tsx
+'use client';
+
+import { SubmitInvoiceForm } from '@/components/SubmitInvoiceForm';
+
+export default function SubmitPage() {
+  return (
+    <div>
+      <h1>Submit Invoice</h1>
+      <SubmitInvoiceForm />
+    </div>
+  );
+}
+
+
+Recommended Libraries
+| Library                  | Purpose                          |
+| ------------------------ | -------------------------------- |
+| `@stellar/freighter-api` | Freighter wallet integration     |
+| `@stellar/stellar-sdk`   | Stellar base types and utilities |
+| `tailwindcss`            | Styling                          |
+| `@tanstack/react-query`  | Server state management          |
+| `zustand`                | Client state management          |
+
+

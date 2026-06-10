@@ -6,14 +6,27 @@ import { parseDisplayAmount } from "./amounts";
 import { ILNClient } from "./client";
 import { loadConfig } from "./config";
 import { parseDueDate } from "./dates";
+import { LocalDevEnvironment } from "./dev-environment";
 import { formatUnknownError } from "./errors";
+import { decodeScValXdr, formatDecodedScVal } from "./xdr";
+import {
+  createUi,
+  describeConfig,
+  formatInvoiceDetails,
+  formatInvoiceList,
+  formatProtocolConfig,
+} from "./format";
 import { registerInspectCommand } from "./inspect";
 import { createKeypairFileSigner } from "./signer";
 import { TestnetAccountSeeder } from "./dev-seed";
+import type { Ui } from "./format";
 import type { ResolvedConfig, RpcServerLike } from "./types";
+
+import { checkCompatibility } from "@invoice-liquidity/sdk";
 
 export interface CliDependencies {
   createClient(config: ResolvedConfig): ILNClient;
+  createDevEnvironment?(ui: Ui): Pick<LocalDevEnvironment, "reset" | "start" | "status" | "stop">;
   loadConfig(options?: { cwd?: string; env?: NodeJS.ProcessEnv }): ResolvedConfig;
   stderr: NodeJS.WritableStream;
   stdout: NodeJS.WritableStream;
@@ -35,6 +48,9 @@ export async function runCli(
       rpcUrl: config.rpcUrl,
       signer: createKeypairFileSigner(config.keypairPath),
     }));
+  const createDevEnvironment =
+    dependencies.createDevEnvironment ??
+    ((devUi: Ui) => new LocalDevEnvironment({ ui: devUi }));
 
   const program = new Command();
   program
@@ -43,7 +59,17 @@ export async function runCli(
     .exitOverride()
     .showHelpAfterError()
     .option("--json", "reserved for future machine-readable output")
-    .hook("preAction", () => {
+    .hook("preAction", (_thisCommand, actionCommand) => {
+      const isConfiglessXdrCommand =
+        actionCommand.name() === "decode" && actionCommand.parent?.name() === "xdr";
+      if (
+        isConfiglessXdrCommand ||
+        (actionCommand.parent?.name() === "dev" &&
+          ["reset", "start", "status", "stop"].includes(actionCommand.name()))
+      ) {
+        return;
+      }
+
       try {
         const config = load();
         ui.info(`Using ${describeConfig(config)}`);
@@ -129,8 +155,91 @@ export async function runCli(
       ui.info(formatInvoiceList(invoices));
     });
 
+  // Compatibility check command
+  const compatCommand = program.command("compat").description("SDK and contract compatibility utilities");
+
+  compatCommand
+    .command("check")
+    .description("Check SDK compatibility with the deployed contract version.")
+    .action(async () => {
+      const config = load();
+      const client = createClient(config);
+      
+      ui.info("Checking contract compatibility...");
+      const result = await checkCompatibility(async (method: string) => {
+        if (method === "get_version") {
+          return client.getVersion();
+        }
+        throw new Error(`Unsupported compatibility check invoke method: ${method}`);
+      });
+
+      ui.info(`SDK Version:      ${result.sdkVersion}`);
+      ui.info(`Contract Version: ${result.contractVersion}`);
+      
+      if (result.compatible) {
+        ui.success("Compatibility check passed! The SDK is fully compatible with the deployed contract.");
+      } else {
+        ui.error("Compatibility check failed!");
+        result.issues.forEach((issue) => {
+          ui.error(` - ${issue}`);
+        });
+        throw new Error("Compatibility check failed.");
+      }
+    });
+
+  program
+    .command("config")
+    .description("Show live protocol configuration from the ILN contract.")
+    .action(async () => {
+      const client = createClient(load());
+      const config = await client.getProtocolConfig();
+      ui.info(formatProtocolConfig(config));
+    });
+
+  const xdrCommand = program.command("xdr").description("Inspect Soroban XDR values");
+
+  xdrCommand
+    .command("decode")
+    .description("Decode a base64 Soroban ScVal XDR value.")
+    .argument("[base64]", "base64-encoded ScVal XDR")
+    .action((base64?: string) => {
+      if (!base64) {
+        throw new Error("Missing base64 ScVal XDR. Usage: iln xdr decode <base64>");
+      }
+
+      stdout.write(formatDecodedScVal(decodeScValXdr(base64)));
+    });
+
   // Development commands
   const devCommand = program.command("dev").description("Development utilities");
+
+  devCommand
+    .command("start")
+    .description("Start a local Stellar node, deploy contracts, fund accounts, and write .env.local.")
+    .action(async () => {
+      await createDevEnvironment(ui).start();
+    });
+
+  devCommand
+    .command("stop")
+    .description("Stop and remove the local Stellar node container.")
+    .action(async () => {
+      await createDevEnvironment(ui).stop();
+    });
+
+  devCommand
+    .command("reset")
+    .description("Stop, clear local state, and start a fresh local environment.")
+    .action(async () => {
+      await createDevEnvironment(ui).reset();
+    });
+
+  devCommand
+    .command("status")
+    .description("Show local node, contract, and account environment status.")
+    .action(async () => {
+      await createDevEnvironment(ui).status();
+    });
 
   devCommand
     .command("seed")

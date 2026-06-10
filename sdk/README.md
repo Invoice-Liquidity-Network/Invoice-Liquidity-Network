@@ -2,6 +2,8 @@
 
 Typed JavaScript and TypeScript SDK for the Invoice Liquidity Network Soroban contract on Stellar.
 
+By participating in this project, you agree to abide by our [Code of Conduct](../CODE_OF_CONDUCT.md).
+
 ## Install
 
 ```bash
@@ -55,6 +57,43 @@ const invoice = await sdk.getInvoice(1n);
 console.log(invoice);
 ```
 
+> **Security note:** The SDK performs limited input validation and relies on the configured Soroban RPC/Horizon node and signer implementation for contract simulation, transaction preparation, and submission. See [SDK trust model](../docs/sdk-trust-model.md) for details.
+
+## Request timeouts
+
+SDK network calls fail fast with `TimeoutError` when the configured deadline is exceeded.
+
+Defaults:
+
+- Read operations: `10_000ms`
+- Write operations: `30_000ms`
+- Simulation operations: `15_000ms`
+- `timeoutMs`: fallback default for all categories when operation-specific values are not supplied
+
+```ts
+import { ILNSdk, ILN_TESTNET, TimeoutError } from "@invoice-liquidity/sdk";
+
+const sdk = new ILNSdk({
+  ...ILN_TESTNET,
+  timeoutMs: 30_000,
+  timeouts: {
+    readMs: 10_000,
+    writeMs: 30_000,
+    simulationMs: 15_000,
+  },
+});
+
+try {
+  await sdk.getInvoice(1n);
+} catch (error) {
+  if (error instanceof TimeoutError) {
+    console.error(`${error.operation} timed out after ${error.timeoutMs}ms`);
+  }
+}
+```
+
+Read timeouts apply to read-only contract queries, write timeouts apply to account loading, transaction preparation, submission, and polling, and simulation timeouts apply to pre-submit simulations.
+
 ## Token Amounts
 
 SDK methods accept token amounts as `bigint` base units. USDC and EURC use 6 decimals, while XLM uses 7 decimals through the native SAC wrapper. See the [multi-token support guide](../docs/tokens/multi-token-support.md) for supported tokens, trustlines, testnet acquisition, and token-aware parsing examples.
@@ -88,6 +127,8 @@ getInvoice(invoiceId: bigint): Promise<Invoice>;
 ```
 
 ## Invoice type
+
+The canonical domain definitions live in `@iln/shared`; the SDK re-exports them for compatibility.
 
 ```ts
 type InvoiceStatus = "Pending" | "Funded" | "Paid" | "Defaulted";
@@ -147,6 +188,16 @@ npm install
 npm test
 ```
 
+## Debug Logging
+
+Enable SDK debug logging with the `ILN_DEBUG` environment variable:
+
+```bash
+ILN_DEBUG=1 node ./dist/index.js
+```
+
+When enabled, the SDK emits namespaced debug output under `iln:sdk:invoice` using `console.debug`.
+
 ## Integration tests (testnet)
 
 The integration suite runs real transactions against the deployed Stellar testnet contract.
@@ -166,3 +217,23 @@ Required environment variables:
 - `FUNDER_SECRET` - funded Stellar testnet secret for funding and default claim
 
 If these variables are not set, integration tests are skipped automatically so CI and local unit test runs remain unaffected.
+
+## E2E tests (local node)
+
+The SDK provides an end-to-end test suite that runs against a local Stellar node. This tests the complete invoice lifecycle (including partial payments, disputes, and cancellations) natively on a local network.
+
+To run the E2E tests:
+
+1. Start the local node environment:
+   ```bash
+   docker-compose -f ../tests/e2e/docker-compose.yml up -d
+   ```
+2. Wait for the node (Horizon) to become healthy.
+3. Run the tests:
+   ```bash
+   npm run test:e2e-local
+   ```
+4. Tear down the local node:
+   ```bash
+   docker-compose -f ../tests/e2e/docker-compose.yml down
+   ```

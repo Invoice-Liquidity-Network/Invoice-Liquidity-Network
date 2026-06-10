@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ILN Testnet Explorer</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: system-ui, sans-serif; background: #0f172a; color: #e2e8f0; min-height: 100vh; padding: 2rem 1rem; }
+    header { text-align: center; margin-bottom: 2rem; }
+    header h1 { font-size: 1.75rem; font-weight: 700; color: #818cf8; }
+    header p { color: #94a3b8; font-size: 0.9rem; margin-top: 0.25rem; }
+    .controls { display: flex; gap: 0.5rem; max-width: 860px; margin: 0 auto 2rem; flex-wrap: wrap; }
+    .controls input { flex: 1; min-width: 180px; padding: 0.5rem 0.75rem; border-radius: 6px; border: 1px solid #334155; background: #1e293b; color: #e2e8f0; font-size: 0.875rem; }
+    .controls input::placeholder { color: #64748b; }
+    button { padding: 0.5rem 1rem; border-radius: 6px; border: none; cursor: pointer; font-size: 0.875rem; font-weight: 600; }
+    .btn-primary { background: #6366f1; color: #fff; }
+    .btn-primary:hover { background: #4f46e5; }
+    .btn-secondary { background: #1e293b; color: #94a3b8; border: 1px solid #334155; }
+    .btn-secondary:hover { background: #334155; }
+    .stats { display: flex; gap: 1rem; max-width: 860px; margin: 0 auto 2rem; flex-wrap: wrap; }
+    .stat { background: #1e293b; border: 1px solid #334155; border-radius: 8px; padding: 0.875rem 1.25rem; flex: 1; min-width: 120px; }
+    .stat-label { font-size: 0.75rem; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em; }
+    .stat-value { font-size: 1.5rem; font-weight: 700; color: #818cf8; margin-top: 0.25rem; }
+    .section { max-width: 860px; margin: 0 auto 2rem; }
+    .section h2 { font-size: 1rem; font-weight: 600; color: #94a3b8; margin-bottom: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em; }
+    .invoice-card { background: #1e293b; border: 1px solid #334155; border-radius: 8px; padding: 1rem 1.25rem; margin-bottom: 0.75rem; }
+    .invoice-card:hover { border-color: #6366f1; }
+    .invoice-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.75rem; }
+    .invoice-id { font-weight: 700; color: #818cf8; }
+    .badge { padding: 0.2rem 0.6rem; border-radius: 999px; font-size: 0.75rem; font-weight: 600; }
+    .badge-Pending  { background: #422006; color: #fbbf24; }
+    .badge-Funded   { background: #1e3a5f; color: #60a5fa; }
+    .badge-Paid     { background: #052e16; color: #4ade80; }
+    .badge-Defaulted{ background: #3b0f0f; color: #f87171; }
+    .invoice-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 0.5rem; font-size: 0.8rem; }
+    .invoice-field label { display: block; color: #64748b; font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 0.15rem; }
+    .invoice-field span { color: #cbd5e1; word-break: break-all; }
+    .address { font-family: monospace; font-size: 0.75rem; }
+    .event-row { background: #1e293b; border: 1px solid #334155; border-radius: 6px; padding: 0.6rem 1rem; margin-bottom: 0.5rem; display: flex; gap: 1rem; align-items: center; flex-wrap: wrap; font-size: 0.82rem; }
+    .event-type { font-weight: 600; min-width: 160px; }
+    .event-type.submitted { color: #a78bfa; }
+    .event-type.funded    { color: #60a5fa; }
+    .event-type.paid      { color: #4ade80; }
+    .event-type.defaulted { color: #f87171; }
+    .event-meta { color: #64748b; }
+    a { color: #818cf8; text-decoration: none; }
+    a:hover { text-decoration: underline; }
+    .error { color: #f87171; font-size: 0.875rem; margin-top: 0.5rem; }
+    .empty { color: #64748b; font-size: 0.875rem; padding: 1rem 0; }
+    #loading { text-align: center; color: #64748b; padding: 2rem; display: none; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>ILN Testnet Explorer</h1>
+    <p>Decoded Invoice Liquidity Network contract events on Stellar Testnet</p>
+  </header>
+
+  <div class="controls">
+    <input id="indexerUrl" type="text" value="https://indexer.iln.finance" placeholder="Indexer URL" />
+    <input id="invoiceSearch" type="number" min="1" placeholder="Invoice ID (or URL ?invoice=N)" />
+    <button class="btn-primary" onclick="loadInvoice()">Load Invoice</button>
+    <button class="btn-secondary" onclick="loadAll()">All Invoices</button>
+    <select id="statusFilter" style="padding:0.5rem 0.75rem;border-radius:6px;border:1px solid #334155;background:#1e293b;color:#e2e8f0;font-size:0.875rem;">
+      <option value="">All statuses</option>
+      <option value="Pending">Pending</option>
+      <option value="Funded">Funded</option>
+      <option value="Paid">Paid</option>
+      <option value="Defaulted">Defaulted</option>
+    </select>
+  </div>
+
+  <div id="statsBar" class="stats" style="display:none">
+    <div class="stat"><div class="stat-label">Total Invoices</div><div class="stat-value" id="statTotal">—</div></div>
+    <div class="stat"><div class="stat-label">Funded</div><div class="stat-value" id="statFunded">—</div></div>
+    <div class="stat"><div class="stat-label">Paid</div><div class="stat-value" id="statPaid">—</div></div>
+    <div class="stat"><div class="stat-label">Volume (USDC)</div><div class="stat-value" id="statVolume">—</div></div>
+  </div>
+
+  <div id="loading">Loading…</div>
+  <div id="errorMsg" class="error" style="max-width:860px;margin:0 auto;"></div>
+
+  <div id="invoiceSection" class="section" style="display:none">
+    <h2>Invoice</h2>
+    <div id="invoiceCards"></div>
+  </div>
+
+  <div id="eventSection" class="section" style="display:none">
+    <h2>Recent Events</h2>
+    <div id="eventList"></div>
+  </div>
+
+  <script>
+    const CONTRACT_ID = "CCPASLHKRFBMVV5PZG3LKDGKFEDXZMB5U7DK42CVLUVWCMUCSRPVBIMO";
+    const STELLAR_EXPERT = "https://stellar.expert/explorer/testnet";
+    const STROOPS = 10_000_000n;
+
+    function base() { return document.getElementById("indexerUrl").value.replace(/\/$/, ""); }
+    function setError(msg) { document.getElementById("errorMsg").textContent = msg; }
+    function setLoading(v) { document.getElementById("loading").style.display = v ? "block" : "none"; }
+
+    function stroops(s) {
+      const v = BigInt(s);
+      const w = v / STROOPS, f = (v % STROOPS).toString().padStart(7, "0");
+      return `${w}.${f}`;
+    }
+    function fmtDate(unix) { return new Date(unix * 1000).toLocaleDateString(undefined, {year:"numeric",month:"short",day:"numeric"}); }
+    function shortAddr(a) { return a ? `${a.slice(0,6)}…${a.slice(-4)}` : "—"; }
+    function addrLink(a) {
+      if (!a) return "—";
+      return `<a href="${STELLAR_EXPERT}/account/${a}" target="_blank" class="address" title="${a}">${shortAddr(a)}</a>`;
+    }
+    function ledgerLink(ledger, label) {
+      return `<a href="${STELLAR_EXPERT}/ledger/${ledger}" target="_blank">${label ?? ledger}</a>`;
+    }
+
+    const STATUS_COLORS = { Pending:"badge-Pending", Funded:"badge-Funded", Paid:"badge-Paid", Defaulted:"badge-Defaulted" };
+    const EVENT_ICONS = { submitted:"📄 Invoice Submitted", funded:"💰 Invoice Funded", paid:"✅ Invoice Paid", defaulted:"⚠️ Invoice Defaulted" };
+
+    function renderInvoice(inv) {
+      const discountPct = (inv.discount_rate / 100).toFixed(2);
+      const amountUSDC = stroops(inv.amount);
+      return `
+        <div class="invoice-card">
+          <div class="invoice-header">
+            <span class="invoice-id">Invoice #${inv.id}</span>
+            <span class="badge ${STATUS_COLORS[inv.status] || ''}">${inv.status}</span>
+          </div>
+          <div class="invoice-grid">
+            <div class="invoice-field"><label>Amount</label><span>${amountUSDC} USDC</span></div>
+            <div class="invoice-field"><label>Due Date</label><span>${fmtDate(inv.due_date)}</span></div>
+            <div class="invoice-field"><label>Discount Rate</label><span>${discountPct}%</span></div>
+            <div class="invoice-field"><label>Freelancer</label><span>${addrLink(inv.freelancer)}</span></div>
+            <div class="invoice-field"><label>Payer</label><span>${addrLink(inv.payer)}</span></div>
+            <div class="invoice-field"><label>Funder</label><span>${addrLink(inv.funder)}</span></div>
+            ${inv.funded_at ? `<div class="invoice-field"><label>Funded At</label><span>${fmtDate(inv.funded_at)}</span></div>` : ""}
+            <div class="invoice-field"><label>Contract</label><span><a href="${STELLAR_EXPERT}/contract/${CONTRACT_ID}" target="_blank" class="address">${shortAddr(CONTRACT_ID)}</a></span></div>
+          </div>
+        </div>`;
+    }
+
+    function renderEvent(ev) {
+      const icon = EVENT_ICONS[ev.event_type] || ev.event_type;
+      const ts = new Date(ev.ledger_closed_at).toLocaleString();
+      return `
+        <div class="event-row">
+          <span class="event-type ${ev.event_type}">${icon}</span>
+          <span>Invoice <strong>#${ev.invoice_id}</strong></span>
+          <span class="event-meta">Ledger ${ledgerLink(ev.ledger)}</span>
+          <span class="event-meta">${ts}</span>
+        </div>`;
+    }
+
+    async function apiFetch(path) {
+      const res = await fetch(base() + path);
+      if (!res.ok) throw new Error(`API error ${res.status} for ${path}`);
+      return res.json();
+    }
+
+    async function loadStats() {
+      try {
+        const data = await apiFetch("/stats");
+        document.getElementById("statsBar").style.display = "flex";
+        document.getElementById("statTotal").textContent = data.total_invoices ?? "—";
+        document.getElementById("statFunded").textContent = data.funded_invoices ?? "—";
+        document.getElementById("statPaid").textContent = data.paid_invoices ?? "—";
+        const vol = data.total_volume_stroops ? stroops(data.total_volume_stroops) : "—";
+        document.getElementById("statVolume").textContent = vol;
+      } catch { /* stats are non-critical */ }
+    }
+
+    async function loadInvoice() {
+      const id = document.getElementById("invoiceSearch").value;
+      if (!id) { setError("Enter an invoice ID."); return; }
+      setError(""); setLoading(true);
+      try {
+        const data = await apiFetch(`/invoice/${id}`);
+        document.getElementById("invoiceSection").style.display = "block";
+        document.getElementById("invoiceCards").innerHTML = renderInvoice(data.invoice);
+        document.getElementById("eventSection").style.display = "none";
+      } catch (e) { setError(e.message); }
+      setLoading(false);
+    }
+
+    async function loadAll() {
+      setError(""); setLoading(true);
+      const status = document.getElementById("statusFilter").value;
+      const qs = status ? `?status=${status}` : "";
+      try {
+        const [data, eventsData] = await Promise.allSettled([
+          apiFetch(`/invoices${qs}`),
+          apiFetch("/history/all").catch(() => null),
+        ]);
+
+        if (data.status === "fulfilled") {
+          const invoices = data.value.invoices ?? [];
+          document.getElementById("invoiceSection").style.display = "block";
+          document.getElementById("invoiceCards").innerHTML = invoices.length
+            ? invoices.map(renderInvoice).join("")
+            : `<p class="empty">No invoices found.</p>`;
+        }
+
+        // Attempt to load recent events (endpoint may not exist on all deployments)
+        const events = eventsData.status === "fulfilled" && eventsData.value?.events;
+        if (events?.length) {
+          document.getElementById("eventSection").style.display = "block";
+          document.getElementById("eventList").innerHTML = events.map(renderEvent).join("");
+        }
+
+        await loadStats();
+      } catch (e) { setError(e.message); }
+      setLoading(false);
+    }
+
+    // Auto-load from ?invoice= query param or load all on start
+    (function init() {
+      const params = new URLSearchParams(location.search);
+      const id = params.get("invoice");
+      if (id) {
+        document.getElementById("invoiceSearch").value = id;
+        loadInvoice();
+      } else {
+        loadAll();
+      }
+    })();
+  </script>
+</body>
+</html>

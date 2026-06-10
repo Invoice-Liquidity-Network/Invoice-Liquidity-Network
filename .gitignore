@@ -35,3 +35,6 @@ build/
 
 # Load test results
 tests/load/results/
+
+# Docker output directory
+.docker-output/

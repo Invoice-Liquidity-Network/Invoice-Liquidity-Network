@@ -1,0 +1,97 @@
+{
+  "dashboard": {
+    "id": null,
+    "uid": "iln-observability",
+    "title": "ILN Protocol Observability",
+    "timezone": "browser",
+    "schemaVersion": 30,
+    "version": 0,
+    "refresh": "5s",
+    "panels": [
+      {
+        "type": "graph",
+        "title": "Invoice submissions per hour",
+        "gridPos": { "x": 0, "y": 0, "w": 12, "h": 8 },
+        "targets": [
+          {
+            "expr": "rate(iln_invoice_submissions_total[1h])",
+            "legendFormat": "Submissions",
+            "refId": "A"
+          }
+        ]
+      },
+      {
+        "type": "graph",
+        "title": "Funded invoices per hour",
+        "gridPos": { "x": 12, "y": 0, "w": 12, "h": 8 },
+        "targets": [
+          {
+            "expr": "rate(iln_funded_invoices_total[1h])",
+            "legendFormat": "Funded",
+            "refId": "A"
+          }
+        ]
+      },
+      {
+        "type": "graph",
+        "title": "Settlement rate (paid / funded)",
+        "gridPos": { "x": 0, "y": 8, "w": 12, "h": 8 },
+        "targets": [
+          {
+            "expr": "irate(iln_paid_invoices_total[5m]) / irate(iln_funded_invoices_total[5m])",
+            "legendFormat": "Settlement Rate",
+            "refId": "A"
+          }
+        ]
+      },
+      {
+        "type": "graph",
+        "title": "Dispute rate",
+        "gridPos": { "x": 12, "y": 8, "w": 12, "h": 8 },
+        "targets": [
+          {
+            "expr": "irate(iln_defaulted_invoices_total[5m]) / irate(iln_invoice_submissions_total[5m])",
+            "legendFormat": "Dispute Rate",
+            "refId": "A"
+          }
+        ]
+      },
+      {
+        "type": "graph",
+        "title": "Average transaction fee",
+        "gridPos": { "x": 0, "y": 16, "w": 12, "h": 8 },
+        "targets": [
+          {
+            "expr": "iln_transaction_fee_sum / iln_transaction_fee_count",
+            "legendFormat": "Avg Fee",
+            "refId": "A"
+          }
+        ]
+      },
+      {
+        "type": "graph",
+        "title": "Contract call error rate by type",
+        "gridPos": { "x": 12, "y": 16, "w": 12, "h": 8 },
+        "targets": [
+          {
+            "expr": "sum by (error_type) (rate(iln_contract_error_total[5m]))",
+            "legendFormat": "{{error_type}}",
+            "refId": "A"
+          }
+        ]
+      },
+      {
+        "type": "graph",
+        "title": "LP portfolio size distribution",
+        "gridPos": { "x": 0, "y": 24, "w": 24, "h": 8 },
+        "targets": [
+          {
+            "expr": "sum by (lp) (iln_lp_portfolio_size_usd)",
+            "legendFormat": "{{lp}}",
+            "refId": "A"
+          }
+        ]
+      }
+    ]
+  }
+}

@@ -1,8 +1,10 @@
 import { describe, expect, it, vi } from "vitest";
 import {
   Account,
+  Address,
   Keypair,
   nativeToScVal,
+  Operation,
   rpc,
 } from "@stellar/stellar-sdk";
 
@@ -105,6 +107,114 @@ describe("ILNSdk", () => {
     expect(server.pollTransaction).toHaveBeenCalledWith("a".repeat(64), {
       attempts: 20,
     });
+  });
+
+  it("builds and simulates a batched transaction from matching operation sources", async () => {
+    const freelancer = Keypair.random().publicKey();
+    const server = {
+      getAccount: vi.fn().mockResolvedValue(new Account(freelancer, "10")),
+      prepareTransaction: vi.fn(),
+      sendTransaction: vi.fn(),
+      pollTransaction: vi.fn(),
+      simulateTransaction: vi.fn().mockResolvedValue({}),
+    } satisfies RpcServerLike;
+
+    const sdk = createSdk(server);
+    const operations = [
+      Operation.invokeContractFunction({
+        source: freelancer,
+        contract: CONTRACT_ID,
+        function: "submit_invoice",
+        args: [
+          Address.fromString(freelancer).toScVal(),
+          Address.fromString(Keypair.random().publicKey()).toScVal(),
+          nativeToScVal(10_000_000n, { type: "i128" }),
+          nativeToScVal(1700000000, { type: "u64" }),
+          nativeToScVal(300, { type: "u32" }),
+        ],
+      }),
+      Operation.invokeContractFunction({
+        source: freelancer,
+        contract: CONTRACT_ID,
+        function: "submit_invoice",
+        args: [
+          Address.fromString(freelancer).toScVal(),
+          Address.fromString(Keypair.random().publicKey()).toScVal(),
+          nativeToScVal(20_000_000n, { type: "i128" }),
+          nativeToScVal(1700000200, { type: "u64" }),
+          nativeToScVal(250, { type: "u32" }),
+        ],
+      }),
+    ];
+
+    const transaction = await sdk.batch(operations);
+
+    expect(transaction.operations).toHaveLength(2);
+    expect(transaction.operations[0].type).toBe("invokeHostFunction");
+    expect(transaction.operations[0].source).toBe(freelancer);
+    expect(transaction.operations[1].source).toBe(freelancer);
+    expect(server.simulateTransaction).toHaveBeenCalledWith(transaction);
+  });
+
+  it("rejects a batch with more than 100 operations", async () => {
+    const source = Keypair.random().publicKey();
+    const server = {
+      getAccount: vi.fn(),
+      prepareTransaction: vi.fn(),
+      sendTransaction: vi.fn(),
+      pollTransaction: vi.fn(),
+      simulateTransaction: vi.fn(),
+    } satisfies RpcServerLike;
+
+    const sdk = createSdk(server);
+    const operations = Array.from({ length: 101 }, () =>
+      Operation.invokeContractFunction({
+        source,
+        contract: CONTRACT_ID,
+        function: "mark_paid",
+        args: [nativeToScVal(1n, { type: "u64" })],
+      }),
+    );
+
+    await expect(sdk.batch(operations)).rejects.toThrow(
+      "Batch cannot contain more than 100 operations.",
+    );
+  });
+
+  it("reads and caches live protocol config", async () => {
+    const server = {
+      getAccount: vi.fn(),
+      prepareTransaction: vi.fn(),
+      sendTransaction: vi.fn(),
+      pollTransaction: vi.fn(),
+      simulateTransaction: vi.fn().mockResolvedValue({
+        result: {
+          retval: nativeToScVal({
+            MIN_INVOICE_AMOUNT: 10000000n,
+            MAX_DISCOUNT_RATE: 2000,
+            PROTOCOL_FEE_BPS: 250,
+            MIN_PAYER_REPUTATION: 70,
+            DECAY_RATE_BPS: 25,
+          }),
+        },
+      }),
+    } satisfies RpcServerLike;
+
+    const sdk = createSdk(server);
+
+    await expect(sdk.getProtocolConfig()).resolves.toEqual({
+      minInvoiceAmount: 10000000n,
+      maxDiscountRate: 2000,
+      protocolFeeBps: 250,
+      minPayerReputation: 70,
+      decayRateBps: 25,
+      maxInvoiceDuration: undefined,
+      minInvoiceDuration: undefined,
+      gracePeriodSeconds: undefined,
+    });
+    await sdk.getProtocolConfig();
+
+    expect(server.simulateTransaction).toHaveBeenCalledTimes(1);
   });
 
   it("rejects fundInvoice when the provided funder does not match the signer", async () => {
@@ -217,7 +327,7 @@ describe("ILNSdk", () => {
 
     const sdk = createSdk(server);
     await expect(sdk.getInvoice(1n)).rejects.toThrow(
-      "Contract method get_invoice returned an error: \"Invalid something\"."
+      "Contract method get_invoice returned an error: Invalid something."
     );
   });
 
@@ -323,5 +433,112 @@ describe("ILNSdk", () => {
     await expect(sdk.markPaid({ invoiceId: 9n })).rejects.toThrow(
       "RPC Timeout"
     );
+  });
+
+  it("times out read-only contract calls with the configured read timeout", async () => {
+    vi.useFakeTimers();
+
+    const server = {
+      getAccount: vi.fn(),
+      prepareTransaction: vi.fn(),
+      sendTransaction: vi.fn(),
+      pollTransaction: vi.fn(),
+      simulateTransaction: vi.fn().mockReturnValue(new Promise(() => undefined)),
+    } satisfies RpcServerLike;
+
+    const sdk = new ILNSdk({
+      contractId: CONTRACT_ID,
+      networkPassphrase: NETWORK_PASSPHRASE,
+      rpcUrl: "https://example.test",
+      server,
+      timeouts: { readMs: 10 },
+    });
+
+    const promise = sdk.getInvoice(1n);
+    const assertion = expect(promise).rejects.toMatchObject({
+      name: "TimeoutError",
+      operation: "simulateTransaction:get_invoice",
+      timeoutMs: 10,
+    });
+    await vi.advanceTimersByTimeAsync(10);
+    await assertion;
+
+    vi.useRealTimers();
+  });
+
+  it("times out write RPC calls with the configured write timeout", async () => {
+    vi.useFakeTimers();
+
+    const payerKeypair = Keypair.random();
+    const signer = createKeypairSigner(payerKeypair.secret());
+    const server = {
+      getAccount: vi.fn().mockReturnValue(new Promise(() => undefined)),
+      prepareTransaction: vi.fn(),
+      sendTransaction: vi.fn(),
+      pollTransaction: vi.fn(),
+      simulateTransaction: vi.fn(),
+    } satisfies RpcServerLike;
+
+    const sdk = new ILNSdk({
+      contractId: CONTRACT_ID,
+      networkPassphrase: NETWORK_PASSPHRASE,
+      rpcUrl: "https://example.test",
+      server,
+      signer,
+      timeouts: { writeMs: 20 },
+    });
+
+    const promise = sdk.markPaid({ invoiceId: 9n });
+    const assertion = expect(promise).rejects.toMatchObject({
+      name: "TimeoutError",
+      operation: "getAccount:mark_paid",
+      timeoutMs: 20,
+    });
+    await vi.advanceTimersByTimeAsync(20);
+    await assertion;
+
+    vi.useRealTimers();
+  });
+
+  it("times out pre-submit simulation calls with the configured simulation timeout", async () => {
+    vi.useFakeTimers();
+
+    const freelancerKeypair = Keypair.random();
+    const signer = createKeypairSigner(freelancerKeypair.secret());
+    const server = {
+      getAccount: vi
+        .fn()
+        .mockResolvedValue(new Account(freelancerKeypair.publicKey(), "12")),
+      prepareTransaction: vi.fn(),
+      sendTransaction: vi.fn(),
+      pollTransaction: vi.fn(),
+      simulateTransaction: vi.fn().mockReturnValue(new Promise(() => undefined)),
+    } satisfies RpcServerLike;
+
+    const sdk = new ILNSdk({
+      contractId: CONTRACT_ID,
+      networkPassphrase: NETWORK_PASSPHRASE,
+      rpcUrl: "https://example.test",
+      server,
+      signer,
+      timeouts: { simulationMs: 30 },
+    });
+
+    const promise = sdk.submitInvoice({
+      amount: 10000000n,
+      discountRate: 250,
+      dueDate: 1700000200,
+      freelancer: freelancerKeypair.publicKey(),
+      payer: Keypair.random().publicKey(),
+    });
+    const assertion = expect(promise).rejects.toMatchObject({
+      name: "TimeoutError",
+      operation: "simulateTransaction:submit_invoice",
+      timeoutMs: 30,
+    });
+    await vi.advanceTimersByTimeAsync(30);
+    await assertion;
+
+    vi.useRealTimers();
   });
 });

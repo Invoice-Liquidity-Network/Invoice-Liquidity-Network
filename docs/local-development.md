@@ -1,43 +1,53 @@
 # Local Development Environment
-This guide explains how to quickly set up a local Soroban testing environment for the Invoice Liquidity Network project. The Hardhat-style test environment allows you to develop, build, and test locally in under 5 minutes.
+This guide explains how to quickly set up a local [Soroban](glossary.md#soroban) testing environment for the Invoice Liquidity Network project. The Hardhat-style test environment allows you to develop, build, and test locally in under 5 minutes.
 ## Prerequisites
-Before starting, ensure you have the following installed on your system:
-- **Docker**: Used to run the isolated local Stellar node (`stellar-local`).
-## Setup in Under 5 Minutes
-We provide a streamlined `Makefile` at the repository root to automate the entire setup process. 
-Run the commands below sequentially:
-### 1. Install Dependencies
+
+- **Docker** and **Docker Compose**: Required to run the local Stellar node and initialization services.
+- Ensure ports `8000` and `11626` are available.
+- *(Optional)* A compiled `.wasm` contract file located at `backend/target/wasm32-unknown-unknown/release/invoice_liquidity.wasm` or similar. If not found, a dummy contract ID will be generated for testing.
+
+## Start the Environment
+
+To start the complete environment (Stellar node, contract deployment, and account seeding), run:
+
 ```bash
-make setup
+docker compose up
 ```
-This script detects your OS natively (works on Ubuntu 22+ and macOS 13+) and installs:
-- Cargo / Rust (if missing)
-- the WebAssembly target (`wasm32-unknown-unknown`)
-- `stellar-cli` (Stellar's development interface)
-### 2. Build the Contract
+
+For detached mode, use:
+
 ```bash
-make build
+docker compose up -d
 ```
-Compiles the `InvoiceLiquidityContract` Rust source code into a scalable `.wasm` format targeting `wasm32-unknown-unknown`. It ensures all workspace crates are correctly synchronized.
-### 3. Deploy to Local Network
-```bash
-make deploy-local
-```
-This command spins up the official `stellar/quickstart` Docker image to act as your Standalone local Stellar node. It generates an admin account, funds it with Friendbot, and seamlessly maps the local test network to your stellar configuration. Then, it deploys the built `.wasm` contract to this node. The resulting Contract ID is cached in `.local-contract-id`.
-### 4. Seed Test Data
-```bash
-make seed
-```
-Creates generic end-to-end testing identities inside test wallets: **freelancer**, **payer**, and **funder**. It wraps the native network asset (XLM) to act as a **Mock USDC Token** locally. It automatically invokes the contract initialization sequence and submits 3 distinct sample invoices simulating real-world states for testing frontend applications cleanly.
-### 5. Run Contracts Tests
-```bash
-make test
-```
-Executes the comprehensive inline integration and unit test suite explicitly.
----
+
+The stack will:
+1. Start a local Stellar Quickstart node.
+2. Wait for the node to become healthy.
+3. Deploy the smart contract (via the `contract-deployer` service).
+4. Create and fund test accounts and mock assets (via the `account-seeder` service).
+
+## Output Directory Contents
+
+Once the `account-seeder` service completes, it writes essential information to the git-ignored `.docker-output/` directory:
+
+- `.docker-output/accounts.json`: Contains the public and secret keys for the `freelancer`, `payer`, and `funder` test accounts, along with the deployed `usdc` and `eurc` asset IDs, and the `contractId`.
+- `.docker-output/contract-id.txt`: The raw deployed contract ID.
+- `.docker-output/usdc-id.txt` / `.docker-output/eurc-id.txt`: The raw IDs of the mock tokens.
+
+These files are formatted for easy consumption by the frontend and CLI tools.
+
 ## Tearing Down
-To clean up your local network effectively, halt the running Docker container, and delete the temporary config files, execute:
+
+To stop the environment and completely clear the local chain state and volumes, run:
+
 ```bash
-make clean
+docker compose down -v
 ```
-This spins down `stellar-local` efficiently leaving your local registry completely decoupled.
+
+> **Note:** The `-v` flag ensures that the local persistent chain data (`stellar-data` volume) is removed, giving you a completely fresh slate on your next start.
+
+## Common Troubleshooting
+
+- **Containers failing to start:** Ensure Docker is running and ports `8000` and `11626` are not occupied by other services.
+- **Contract deployed with dummy ID:** If you see `dummy-contract-id-for-local-dev` in `.docker-output/contract-id.txt`, it means the compiled `.wasm` file wasn't found. Ensure you've built the contract locally first using `make build` or standard Rust cargo commands inside the contract workspace.
+- **Node healthcheck failing:** In rare cases, the quickstart node takes longer to initialize. The seeder and deployer will patiently wait or retry via Docker Compose dependency checks.

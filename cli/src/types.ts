@@ -36,6 +36,17 @@ export interface ListedInvoice extends Invoice {
   role: "freelancer" | "payer" | "funder";
 }
 
+export interface ProtocolConfig {
+  minInvoiceAmount: bigint;
+  maxDiscountRate: number;
+  protocolFeeBps: number;
+  minPayerReputation: number;
+  decayRateBps: number;
+  maxInvoiceDuration?: number;
+  minInvoiceDuration?: number;
+  gracePeriodSeconds?: number;
+}
+
 export interface SubmitInvoiceInput {
   amount: bigint;
   discountRate: number;

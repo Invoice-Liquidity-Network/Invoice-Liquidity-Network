@@ -1,0 +1,83 @@
+# ==============================================================================
+# Changeset Check — Issue #247
+#
+# Enforces that every PR touching package source files includes a changeset.
+# This ensures changelog entries and semver bumps are never missed.
+#
+# Runs on: PRs touching packages/** or sdk/**
+# Skips:   PRs that only touch docs, tests, CI config, or non-package files
+# ==============================================================================
+
+name: Changeset Check
+
+on:
+  pull_request:
+    paths:
+      - 'packages/**'
+      - 'sdk/**'
+
+jobs:
+  changeset-check:
+    name: Require changeset for package changes
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Check for changeset
+        run: |
+          # Get list of changed files in this PR
+          CHANGED=$(git diff --name-only origin/main...HEAD)
+
+          # Check if any package source files changed
+          PKG_CHANGED=$(echo "$CHANGED" | grep -E '^(packages|sdk)/' || true)
+
+          if [ -z "$PKG_CHANGED" ]; then
+            echo "No package source files changed — changeset not required."
+            exit 0
+          fi
+
+          # Check if a changeset file was added
+          CHANGESET=$(echo "$CHANGED" | grep -E '^\.changeset/.+\.md$' || true)
+
+          if [ -z "$CHANGESET" ]; then
+            echo ""
+            echo "❌ Package source files were changed but no changeset was found."
+            echo ""
+            echo "Please add a changeset by running:"
+            echo "  pnpm changeset"
+            echo ""
+            echo "Changed package files:"
+            echo "$PKG_CHANGED"
+            exit 1
+          fi
+
+          echo "✅ Changeset found: $CHANGESET"
+
+      - name: Comment PR on failure
+        if: failure() && github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: '❌ **Changeset required!** This PR changes package source files but does not include a changeset.\n\nPlease run `pnpm changeset` locally, follow the prompts, and commit the generated `.changeset/*.md` file.\n\nSee [CONTRIBUTING.md](../blob/main/CONTRIBUTING.md#changeset-workflow) for details.'
+            })

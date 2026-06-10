@@ -1,0 +1,40 @@
+name: Dead Code Check
+
+# This is an advisory check. It reports unused exports, files, and
+# dependencies via `knip` but does not block merges if violations are
+# found. The intent is to surface dead code without disrupting valid
+# work-in-progress branches. See CONTRIBUTING.md for how to interpret
+# and address the output locally.
+
+on:
+  pull_request:
+    branches:
+      - main
+  push:
+    branches:
+      - main
+
+jobs:
+  pnpm-cache:
+    uses: ./.github/workflows/reusable-cache-pnpm.yml
+
+  knip:
+    name: knip
+    needs: pnpm-cache
+    runs-on: ubuntu-latest
+    # Advisory only — do not fail the workflow on violations.
+    continue-on-error: true
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm with store cache
+        uses: ./.github/actions/setup-pnpm
+        with:
+          install-args: --frozen-lockfile --ignore-scripts
+
+      - name: Run knip
+        # Even if knip exits non-zero, do not fail the job. The PR will
+        # show a warning indicator rather than a red X, so reviewers can
+        # see the report but the check does not gate the merge.
+        run: pnpm dead-code:check || true

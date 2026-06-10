@@ -1,4 +1,5 @@
 import { RawHorizonEvent } from "./parse";
+import { TimeoutError } from "./errors";
 
 export interface HorizonPage {
   _embedded: {
@@ -67,6 +68,16 @@ export class HorizonClient {
         throw new Error(`Horizon responded with HTTP ${res.status}: ${url}`);
       }
       return (await res.json()) as HorizonPage;
+    } catch (error) {
+      if (
+        error &&
+        typeof error === "object" &&
+        "name" in error &&
+        error.name === "AbortError"
+      ) {
+        throw new TimeoutError("Horizon fetchPage", this.timeoutMs);
+      }
+      throw error;
     } finally {
       clearTimeout(timer);
     }

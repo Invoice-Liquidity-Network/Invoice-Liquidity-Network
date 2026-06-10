@@ -18,8 +18,19 @@ on:
         type: boolean
 
 jobs:
+  testnet-health:
+    if: ${{ github.event.inputs.network == 'testnet' && github.event.inputs.dry_run != 'true' }}
+    uses: ./.github/workflows/reusable-testnet-health.yml
+
   deploy:
     name: Deploy to ${{ github.event.inputs.network }}
+    needs: testnet-health
+    if: |
+      always() && !cancelled() && (
+        github.event.inputs.dry_run == 'true' ||
+        github.event.inputs.network == 'mainnet' ||
+        needs.testnet-health.outputs.healthy == 'true'
+      )
     runs-on: ubuntu-latest
     environment: ${{ github.event.inputs.network }}
     permissions:
@@ -36,11 +47,6 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 20
-
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v4
-        with:
-          version: 9
 
       - name: Install deploy tooling
         run: npm install -g tsx

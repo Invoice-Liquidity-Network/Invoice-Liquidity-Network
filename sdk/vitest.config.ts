@@ -3,7 +3,12 @@ import base from "../vitest.config";
 
 export default mergeConfig(base, {
   test: {
-    include: ["src/**/*.test.ts", "__tests__/**/*.test.ts", "tests/**/*.test.ts"],
+    include: [
+      "src/**/*.test.ts",
+      "__tests__/**/*.test.ts",
+      "tests/**/*.test.ts",
+      "../packages/sdk/tests/**/*.test.ts",
+    ],
     coverage: {
       include: ["src/**/*.ts"],
       exclude: ["src/**/*.test.ts"],

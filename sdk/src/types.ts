@@ -1,16 +1,18 @@
-export type InvoiceStatus = "Pending" | "Funded" | "Paid" | "Defaulted";
+import type { InvoiceState } from "@iln/shared";
 
-export interface Invoice {
-  id: bigint;
-  freelancer: string;
-  payer: string;
-  amount: bigint;
-  dueDate: number;
-  discountRate: number;
-  status: InvoiceStatus;
-  funder: string | null;
-  fundedAt: number | null;
-}
+export type {
+  ContractEvent,
+  ContractStats,
+  GovernanceProposal,
+  Invoice,
+  InvoiceState,
+  LPStats,
+  ProposalStatus,
+  ReputationScore,
+  Token,
+} from "@iln/shared";
+
+export type InvoiceStatus = InvoiceState;
 
 export interface SubmitInvoiceParams {
   freelancer: string;
@@ -32,6 +34,17 @@ export interface ClaimDefaultParams {
 
 export interface MarkPaidParams {
   invoiceId: bigint;
+}
+
+export interface ProtocolConfig {
+  minInvoiceAmount: bigint;
+  maxDiscountRate: number;
+  protocolFeeBps: number;
+  minPayerReputation: number;
+  decayRateBps: number;
+  maxInvoiceDuration?: number;
+  minInvoiceDuration?: number;
+  gracePeriodSeconds?: number;
 }
 
 export interface SignTransactionOptions {
@@ -61,10 +74,31 @@ export interface ILNSdkConfig {
   networkPassphrase: string;
   signer?: TransactionSigner;
   server?: RpcServerLike;
+  /**
+   * Fallback timeout for SDK network requests in milliseconds.
+   * Defaults to 30_000 when an operation-specific timeout is not configured.
+   */
+  timeoutMs?: number;
+  /**
+   * Operation-specific request timeouts in milliseconds.
+   * Defaults: readMs 10_000, writeMs 30_000, simulationMs 15_000.
+   */
+  timeouts?: {
+    readMs?: number;
+    writeMs?: number;
+    simulationMs?: number;
+  };
 }
 
 export interface NetworkConfig {
   contractId: string;
   rpcUrl: string;
   networkPassphrase: string;
+}
+
+export interface CompatibilityResult {
+  compatible: boolean;
+  contractVersion: string;
+  sdkVersion: string;
+  issues: string[];
 }

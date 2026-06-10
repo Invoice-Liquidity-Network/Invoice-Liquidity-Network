@@ -2,13 +2,13 @@
 
 ## Overview
 
-ILN analytics expose indexed invoice state for dashboards, portfolio views, and risk monitoring. Integrators can read protocol totals, LP performance, freelancer activity, invoice history, and ranked LP yield without calling Soroban RPC directly.
+ILN analytics expose indexed invoice state for dashboards, portfolio views, and risk monitoring. Integrators can read protocol totals, [LP](glossary.md#lp-liquidity-provider) performance, [freelancer](glossary.md#freelancer) activity, invoice history, and ranked LP yield without calling [Soroban](glossary.md#soroban) RPC directly.
 
 The indexer watches ILN contract events, fetches the latest `get_invoice(id)` state from Soroban RPC, stores normalized rows in SQLite, and serves REST endpoints. The SDK analytics module wraps those endpoints with TypeScript types and a small in-memory cache.
 
 Analytics are derived from on-chain invoice data only:
 
-- invoice amount, due date, discount rate, lifecycle status, freelancer, payer, funder, and funding timestamp
+- invoice amount, [due date](glossary.md#due-date), [discount rate](glossary.md#discount-rate), lifecycle status, [freelancer](glossary.md#freelancer), [payer](glossary.md#payer), funder, and funding timestamp
 - contract status transitions emitted by `submitted`, `funded`, `paid`, and `defaulted` events
 - realized LP yield from paid invoices
 
@@ -20,7 +20,7 @@ Contract formulas verified against [invoice_liquidity/src/lib.rs](../invoice-liq
 
 | Metric | Formula | Notes |
 | --- | --- | --- |
-| Discount amount | `floor(amount * discount_rate / 10_000)` | `discount_rate` is basis points. `300` means `3.00%`. |
+| Discount amount | `floor(amount * discount_rate / 10_000)` | `discount_rate` is [basis points](glossary.md#basis-points-bps). `300` means `3.00%`. |
 | Freelancer payout | `amount - discount_amount` | Paid to the freelancer once an invoice becomes fully funded. |
 | LP realized yield | `discount_amount` for invoices with status `Paid` | `mark_paid` transfers `amount + discount_amount` to the LP. |
 | Default recovery | `discount_amount` for invoices with status `Defaulted` | `claim_default` returns only the escrowed discount to the LP; it is not counted as realized yield. |
@@ -35,7 +35,7 @@ Contract formulas verified against [invoice_liquidity/src/lib.rs](../invoice-liq
 | Freelancer total received | `sum(amount - discount_amount)` for funded freelancer invoices | Based on contract funding payout. |
 | Average discount | `sum(discount_rate) / submitted` | Returned in basis points; `0` when there are no invoices. |
 
-The contract also updates payer reputation: `mark_paid` increments score by `1`; `claim_default` subtracts `5`, floored at `0`. The public analytics API does not currently expose payer score history.
+The contract also updates [payer](glossary.md#payer) [reputation score](glossary.md#reputation-score): `mark_paid` increments score by `1`; `claim_default` subtracts `5`, floored at `0`. The public analytics API does not currently expose payer score history.
 
 ## Indexer API Reference
 

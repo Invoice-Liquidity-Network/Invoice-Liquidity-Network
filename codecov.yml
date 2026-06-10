@@ -1,0 +1,27 @@
+coverage:
+  status:
+    project:
+      default:
+        target: 80%
+    patch:
+      default:
+        target: 70%
+
+flags:
+  sdk:
+    paths:
+      - sdk/
+  indexer:
+    paths:
+      - indexer/
+  frontend:
+    paths:
+      - frontend/
+  notifications:
+    paths:
+      - notifications/
+
+comment:
+  layout: "reach, diff, flags, files"
+  behavior: default
+  require_changes: false

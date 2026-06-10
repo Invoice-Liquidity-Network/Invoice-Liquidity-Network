@@ -1,0 +1,87 @@
+# Soroban RPC Reference
+
+For advanced use cases, interact directly with the Soroban RPC server.
+
+## getTransaction
+
+Check the status of a submitted transaction:
+
+```bash
+curl -X POST https://soroban-testnet.stellar.org \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "jsonrpc": "2.0",
+    "id": 1,
+    "method": "getTransaction",
+    "params": {
+      "hash": "YOUR_TX_HASH"
+    }
+  }'
+
+
+  simulateTransaction
+Simulate a contract call before submitting:
+const simulation = await rpc.simulateTransaction(transaction);
+console.log(simulation.minResourceFee); // Estimated fee
+console.log(simulation.result); // Expected return value
+
+getLedgerEntries
+Read contract state directly:
+curl -X POST https://soroban-testnet.stellar.org \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "jsonrpc": "2.0",
+    "id": 1,
+    "method": "getLedgerEntries",
+    "params": {
+      "keys": [
+        {
+          "contract_data": {
+            "contract": "CCPASLHKRFBMVV5PZG3LKDGKFEDXZMB5U7DK42CVLUVWCMUCSRPVBIMO",
+            "key": { "ledger_key_contract_instance": {} },
+            "durability": "persistent"
+          }
+        }
+      ]
+    }
+  }'
+
+
+  getEvents
+Subscribe to contract events:
+curl -X POST https://soroban-testnet.stellar.org \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "jsonrpc": "2.0",
+    "id": 1,
+    "method": "getEvents",
+    "params": {
+      "startLedger": 500000,
+      "endLedger": 500100,
+      "filters": [
+        {
+          "type": "contract",
+          "contractIds": ["CCPASLHKRFBMVV5PZG3LKDGKFEDXZMB5U7DK42CVLUVWCMUCSRPVBIMO"],
+          "topics": [["*"]]
+        }
+      ],
+      "pagination": {
+        "limit": 100
+      }
+    }
+  }'
+
+
+  RPC Methods Reference
+  | Method                | Description                 |
+| --------------------- | --------------------------- |
+| `getHealth`           | Check server status         |
+| `getLatestLedger`     | Get current ledger sequence |
+| `getNetwork`          | Get network passphrase      |
+| `getTransaction`      | Get transaction status      |
+| `sendTransaction`     | Submit a transaction        |
+| `simulateTransaction` | Dry-run a transaction       |
+| `getEvents`           | Query contract events       |
+| `getLedgerEntries`    | Read ledger state           |
+
+

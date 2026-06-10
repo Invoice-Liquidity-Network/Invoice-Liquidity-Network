@@ -1,0 +1,65 @@
+# Reusable workflow: probe public Stellar testnet Horizon availability.
+name: Reusable testnet health
+
+on:
+  workflow_call:
+    inputs:
+      horizon-url:
+        description: Horizon base URL to health-check
+        required: false
+        type: string
+        default: https://horizon-testnet.stellar.org
+      max-attempts:
+        description: Number of HTTP attempts before marking unhealthy
+        required: false
+        type: number
+        default: 3
+      retry-delay-seconds:
+        description: Seconds to wait between failed attempts
+        required: false
+        type: number
+        default: 5
+    outputs:
+      healthy:
+        description: "true when Horizon responds with a valid stellar.json document"
+        value: ${{ jobs.health.outputs.healthy }}
+
+jobs:
+  health:
+    name: Horizon testnet health
+    runs-on: ubuntu-latest
+    outputs:
+      healthy: ${{ steps.check.outputs.healthy }}
+    steps:
+      - name: Check Horizon testnet
+        id: check
+        shell: bash
+        env:
+          HORIZON_URL: ${{ inputs.horizon-url }}
+          MAX_ATTEMPTS: ${{ inputs.max-attempts }}
+          RETRY_DELAY: ${{ inputs.retry-delay-seconds }}
+        run: |
+          set -euo pipefail
+          attempt=1
+          healthy=false
+
+          while [ "${attempt}" -le "${MAX_ATTEMPTS}" ]; do
+            echo "Horizon health attempt ${attempt}/${MAX_ATTEMPTS} (${HORIZON_URL})"
+            if curl --fail --silent --show-error \
+              "${HORIZON_URL}/.well-known/stellar.json" \
+              | grep -q "network_passphrase"; then
+              healthy=true
+              break
+            fi
+            if [ "${attempt}" -lt "${MAX_ATTEMPTS}" ]; then
+              sleep "${RETRY_DELAY}"
+            fi
+            attempt=$((attempt + 1))
+          done
+
+          echo "healthy=${healthy}" >> "$GITHUB_OUTPUT"
+          if [ "${healthy}" = "true" ]; then
+            echo "Horizon testnet is healthy"
+          else
+            echo "::warning::Horizon testnet is unhealthy or unreachable"
+          fi

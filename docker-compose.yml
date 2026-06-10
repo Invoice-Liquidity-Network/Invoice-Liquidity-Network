@@ -1,9 +1,41 @@
 version: '3.8'
 
 services:
-  stellar:
+  stellar-node:
     image: stellar/quickstart:testing
     command: --standalone --enable-soroban-rpc
     ports:
       - "8000:8000"
       - "11626:11626"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -s http://localhost:8000/friendbot | grep -q '\"status\": 400'"]
+      interval: 5s
+      timeout: 5s
+      retries: 15
+    volumes:
+      - stellar-data:/opt/stellar
+
+  contract-deployer:
+    build:
+      context: ./contract-deployer
+    depends_on:
+      stellar-node:
+        condition: service_healthy
+    volumes:
+      - .:/workspace
+    working_dir: /workspace
+
+  account-seeder:
+    build:
+      context: ./account-seeder
+    depends_on:
+      contract-deployer:
+        condition: service_completed_successfully
+      stellar-node:
+        condition: service_healthy
+    volumes:
+      - .:/workspace
+    working_dir: /workspace
+
+volumes:
+  stellar-data:

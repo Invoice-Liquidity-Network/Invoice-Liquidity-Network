@@ -1,4 +1,5 @@
 import { ILNEventIndexer } from "../src/indexer";
+import { TimeoutError } from "../src/errors";
 import { ContractEvent } from "../src/types";
 import { RawHorizonEvent } from "../src/parse";
 
@@ -50,6 +51,37 @@ describe("ILNEventIndexer", () => {
   // ── getEventsForInvoice ──────────────────────────────────────────────────
 
   describe("getEventsForInvoice", () => {
+    it("throws TimeoutError when a Horizon query exceeds the configured timeout", async () => {
+      jest.useFakeTimers();
+
+      const fetchMock = jest.fn((_url: string, init?: RequestInit): Promise<Response> => {
+        return new Promise<Response>((_resolve, reject) => {
+          init?.signal?.addEventListener("abort", () => {
+            reject(new DOMException("The operation was aborted.", "AbortError"));
+          });
+        });
+      });
+      const indexer = new ILNEventIndexer(
+        CONTRACT_ID,
+        { timeoutMs: 25 },
+        fetchMock
+      );
+
+      const promise = indexer.getEventsForInvoice("invoice-001");
+      const assertion = expect(promise).rejects.toMatchObject({
+        name: "TimeoutError",
+        operation: "Horizon fetchPage",
+        timeoutMs: 25,
+      });
+
+      jest.advanceTimersByTime(25);
+
+      await assertion;
+      await expect(promise).rejects.toBeInstanceOf(TimeoutError);
+
+      jest.useRealTimers();
+    });
+
     it("returns events whose first topic matches the invoice id", async () => {
       const events = [
         makeRawEvent({ topics: ["invoice-001", "addr-A"], tx_hash: "tx1" }),

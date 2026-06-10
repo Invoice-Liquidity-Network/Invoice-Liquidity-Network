@@ -1,0 +1,71 @@
+# Webhook Notifications
+
+ILN provides webhook notifications for real-time updates on invoice events.
+
+## Configuration
+
+Set up webhooks via the ILN API or CLI:
+
+```bash
+iln webhook create \
+  --url https://your-app.com/webhooks/iln \
+  --events invoice.submitted,invoice.funded,invoice.paid
+
+  Event Types
+  | Event                | Description                 | Payload              |
+| -------------------- | --------------------------- | -------------------- |
+| `invoice.submitted`  | New invoice created         | Invoice details      |
+| `invoice.funded`     | Invoice funded by LP        | Invoice + LP details |
+| `invoice.paid`       | Invoice marked paid         | Payment details      |
+| `invoice.defaulted`  | Invoice past due date       | Invoice + delay info |
+| `invoice.liquidated` | Invoice liquidated          | Liquidation details  |
+| `proposal.created`   | Governance proposal created | Proposal details     |
+
+
+Webhook Payload
+{
+  "event": "invoice.funded",
+  "timestamp": "2025-01-15T10:30:00Z",
+  "data": {
+    "invoice_id": 42,
+    "issuer": "G...",
+    "funded_by": "G...",
+    "amount": 1000000000,
+    "discount_rate": 300,
+    "transaction_hash": "abc123..."
+  }
+}
+
+
+Signature Verification
+Verify webhook authenticity using the signature header:
+import { createHmac } from 'crypto';
+
+const secret = process.env.ILN_WEBHOOK_SECRET;
+
+function verifyWebhook(payload: string, signature: string): boolean {
+  const expected = createHmac('sha256', secret)
+    .update(payload)
+    .digest('hex');
+  return signature === `sha256=${expected}`;
+}
+
+
+Retry Policy
+If your endpoint returns a non-2xx status code, ILN will retry:
+
+| Attempt | Delay      |
+| ------- | ---------- |
+| 1       | Immediate  |
+| 2       | 5 seconds  |
+| 3       | 25 seconds |
+| 4       | 2 minutes  |
+| 5       | 10 minutes |
+After 5 failed attempts, the webhook is disabled. Re-enable via the dashboard or CLI.
+
+
+Local Development
+Use ngrok to test webhooks locally:
+ngrok http 3000
+iln webhook create --url https://your-ngrok-url.ngrok.io/webhooks/iln
+

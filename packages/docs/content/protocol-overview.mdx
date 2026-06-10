@@ -1,0 +1,93 @@
+
+---
+
+## NEW FILE: `packages/docs/content/protocol-overview.mdx`
+
+```mdx
+---
+title: Protocol Overview
+description: High-level architecture and design of the Invoice Liquidity Network
+---
+
+# Protocol Overview
+
+The Invoice Liquidity Network (ILN) is a decentralised invoice factoring protocol that connects freelancers and SMEs with DeFi liquidity providers on the Stellar blockchain.
+
+## Architecture
+
+```mermaid
+graph TB
+    subgraph "User Layer"
+        F[Freelancer dApp]
+        L[LP Dashboard]
+    end
+    
+    subgraph "Protocol Layer"
+        SDK[ILN SDK]
+        CLI[ILN CLI]
+    end
+    
+    subgraph "Contract Layer"
+        IC[Invoice Contract]
+        DC[Distribution Contract]
+        GC[Governance Contract]
+    end
+    
+    subgraph "Stellar Layer"
+        SC[Soroban Runtime]
+        H[Horizon API]
+    end
+    
+    F --> SDK
+    L --> SDK
+    SDK --> IC
+    SDK --> DC
+    SDK --> GC
+    CLI --> IC
+    IC --> SC
+    DC --> SC
+    GC --> SC
+    SC --> H
+
+
+    Core Concepts
+Invoice Tokenisation
+Every invoice submitted to ILN is tokenised as a unique Soroban asset representing the right to receive payment. This enables:
+Fractional ownership — Multiple LPs can fund a single invoice
+Transferability — Invoice positions can be traded or collateralised
+Programmability — Smart contract logic governs the entire lifecycle
+
+Discount Rate Mechanism
+The discount rate represents the yield earned by liquidity providers. It is determined by:
+Market demand — Higher demand for funding = lower discount rates
+Payer reputation — Verified payers command better rates
+Invoice duration — Longer due dates = higher discounts
+
+LP Yield = Invoice Amount × (Discount Rate / 10000)
+
+
+Multi-Token Support
+
+ILN supports multiple stablecoins and assets:
+| Token | Contract Address | Status |
+| ----- | ---------------- | ------ |
+| USDC  | Native           | ✅ Live |
+| EURC  | Native           | ✅ Live |
+| XLM   | Native           | ✅ Live |
+
+
+Security Model
+Soroban Runtime — Stellar's audited smart contract platform
+Formal verification — Critical paths verified with mathematical proofs
+Bug bounty — Active bounty program via Immunefi
+Audit — Trail of Bits audit scheduled for Q2 2025
+
+Protocol Parameters
+Governed by the ILN Governance contract:| Parameter               | Default    | Description                    |
+| ----------------------- | ---------- | ------------------------------ |
+| `MIN_INVOICE_AMOUNT`    | 10 USDC    | Minimum invoice value          |
+| `MAX_DISCOUNT_RATE`     | 1000 (10%) | Maximum allowed discount       |
+| `GRACE_PERIOD`          | 7 days     | Extra time after due date      |
+| `LIQUIDATION_THRESHOLD` | 30 days    | Time before forced liquidation |
+
+

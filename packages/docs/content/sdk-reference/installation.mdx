@@ -1,0 +1,90 @@
+# SDK Installation
+
+The ILN SDK provides a typed interface for interacting with the protocol from JavaScript/TypeScript applications.
+
+## Requirements
+
+- Node.js 18+
+- A Stellar wallet (Freighter for browser, keypair for Node.js)
+
+## Installation
+
+```bash
+npm install @invoice-liquidity/sdk
+# or
+yarn add @invoice-liquidity/sdk
+# or
+pnpm add @invoice-liquidity/sdk
+
+
+
+Quick Start
+import { ILNClient } from '@invoice-liquidity/sdk';
+import { Networks } from '@stellar/stellar-sdk';
+
+const client = new ILNClient({
+  network: Networks.TESTNET,
+  contractId: 'CCPASLHKRFBMVV5PZG3LKDGKFEDXZMB5U7DK42CVLUVWCMUCSRPVBIMO',
+  rpcUrl: 'https://soroban-testnet.stellar.org',
+});
+
+// Connect wallet
+await client.connectWallet();
+
+// Submit an invoice
+const invoiceId = await client.submitInvoice({
+  payer: 'G...',
+  amount: 100_0000000, // 100 USDC
+  discountRate: 300, // 3%
+  dueDate: Math.floor(Date.now() / 1000) + 86400 * 30, // 30 days
+  token: 'USDC_CONTRACT_ID',
+});
+
+console.log('Invoice submitted:', invoiceId);
+
+
+Configuration
+Network Options
+| Network | RPC URL                               | Contract ID                                                |
+| ------- | ------------------------------------- | ---------------------------------------------------------- |
+| Testnet | `https://soroban-testnet.stellar.org` | `CCPASLHKRFBMVV5PZG3LKDGKFEDXZMB5U7DK42CVLUVWCMUCSRPVBIMO` |
+| Mainnet | `https://soroban-rpc.stellar.org`     | Coming soon                                                |
+
+
+Browser vs Node.js
+// Browser (with Freighter wallet)
+import { ILNClient } from '@invoice-liquidity/sdk';
+
+const client = new ILNClient({
+  network: Networks.TESTNET,
+  contractId: '...',
+  wallet: 'freighter', // Auto-detects Freighter extension
+});
+
+// Node.js (with secret key)
+import { ILNClient } from '@invoice-liquidity/sdk';
+import { Keypair } from '@stellar/stellar-sdk';
+
+const keypair = Keypair.fromSecret('S...');
+const client = new ILNClient({
+  network: Networks.TESTNET,
+  contractId: '...',
+  wallet: keypair,
+});
+
+
+TypeScript Support
+The SDK is written in TypeScript and includes full type definitions:
+import type { 
+  Invoice, 
+  InvoiceStatus, 
+  SubmitInvoiceParams,
+  FundInvoiceParams 
+} from '@invoice-liquidity/sdk';
+
+
+
+Next Steps
+Read the API Reference for detailed method documentation
+Learn about Error Handling patterns
+Check the Frontend Guide for React integration

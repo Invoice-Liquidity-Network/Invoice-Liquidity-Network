@@ -1,281 +1,237 @@
 # Contributing to Invoice Liquidity Network
 
-Thank you for your interest in contributing. ILN is an open-source protocol and we welcome contributions of all kinds smart contract code, frontend, documentation, research, and testing.
+Thank you for your interest in contributing. Invoice Liquidity Network (ILN) is a multi-repository project. This guide explains how the three-repo structure works, where to open issues, how PRs are reviewed, how decisions are made, and how the Drips Wave model works.
 
 ---
 
-## Table of Contents
+## Project structure
 
 - [Ways to contribute](#ways-to-contribute)
 - [Applying to work on an issue](#applying-to-work-on-an-issue)
 - [Project board](#project-board)
 - [Development setup](#development-setup)
+- [CI/CD pipeline reference](#cicd-pipeline-reference)
 - [Submitting a pull request](#submitting-a-pull-request)
 - [Branch protection](#branch-protection)
 - [Code standards](#code-standards)
 - [Automated dependency updates](#automated-dependency-updates)
 - [Getting help](#getting-help)
+| Repository | Purpose | Typical contributions |
+|------------|---------|-----------------------|
+| `Invoice-Liquidity-Network` | Project-level repo: shared docs, SDK, CLI, indexer, notifications, repo tooling, developer guides | SDK, CLI, docs, indexer improvements, notifications, repo workflows, shared tests |
+| `ILN-Frontend` | Frontend dApp: freelancer dashboard, LP analytics, governance UI, visual polish | UI, UX, styles, React components, frontend integration |
+| `ILN-Smart-Contract` | Soroban / Rust smart contracts, on-chain invoice lifecycle, contract tests | contract logic, on-chain validations, Rust tests, protocol security |
+
+This document is the entry point for first-time contributors and for anyone who wants to work across repos.
 
 ---
 
-## Ways to contribute
+## Where to contribute
 
-To contribute. We welcome:
+Start by choosing the right repo for the issue or improvement.
 
-- **Help wanted issues** — labeled `help wanted`, high priority
-- **Good first issues** — labeled `good first issue`, scoped for newcomers to the codebase
-- **Bug reports** — open an issue using the bug report template
-- **Documentation** — improvements to README, docs/, or inline code comments
-- **Security disclosures** — see [Responsible disclosure](#responsible-disclosure) below
-
----
-
-## Applying to work on an issue
-
-We use an application process to avoid duplicate work.
-
-### Step 1 — Find an issue
-
-Browse [open issues](../../issues) and filter by label:
-
+- **Bug in contract behavior or on-chain logic** → `ILN-Smart-Contract`
+- **Visual issue, layout bug, or frontend flow problem** → `ILN-Frontend`
+- **SDK, CLI, docs, indexer, notifications, or shared repository tooling** → `Invoice-Liquidity-Network`
+- **Governance process, roadmap, coordination, or project-level policy** → `Invoice-Liquidity-Network`
 | Label              | Meaning                            |
 | ------------------ | ---------------------------------- |
 | `help wanted`      | High priority, no funding attached |
 | `good first issue` | Well-scoped, good entry point      |
 | `in progress`      | Already claimed, do not apply      |
 
-### Step 2 — Comment your application
-
-Leave a comment on the issue with the following:
-
-```
-**Applying to work on this issue**
-
-- **What I plan to build:** [brief description of your approach]
-- **Relevant experience:** [links to past work, GitHub repos, or context]
-- **Estimated timeline:** [how many days you need]
-- **Questions / blockers:** [anything you need clarified before starting]
-```
-
-### Step 3 — Wait for assignment
-
-A maintainer will review your application within **48 hours** and either:
-
-- Assign the issue to you and add the `in progress` label, or
-- Ask follow-up questions, or
-- Let you know the issue has already been assigned
-
-Do not start building before you are assigned.
-
-### Step 4 — Build and submit a PR
-
-Once assigned, fork the repo, build your solution, and open a pull request referencing the issue (e.g. `Closes #12`). See [Submitting a pull request](#submitting-a-pull-request) below.
-
-### Step 5 — Review and merge
-
-A maintainer will review your PR. Expect one or two rounds of feedback.
+If you are unsure or the work spans multiple repos, open the issue in `Invoice-Liquidity-Network` and clearly explain the affected repo(s). Maintainers will help route it.
 
 ---
 
-## Project board
+## Drips Wave contribution model
 
-The ILN organisation uses a single [GitHub Projects v2 board](https://github.com/orgs/Invoice-Liquidity-Network/projects/1) that spans all three repositories (main, frontend, smart contract).
+The Drips Wave system is our project prioritization and complexity model. Every issue is assigned a Wave point value during triage.
 
-### Board views
+### How points are assigned
 
-| View | What it shows |
-|------|---------------|
-| **All Open Issues** | Every open issue across all repos — start here |
-| **Smart Contract Sprint** | Active Rust/Soroban work |
-| **Frontend Sprint** | Active Next.js/UI work |
-| **SDK / Main Sprint** | SDK, CLI, indexer, and docs work |
-| **Blocked** | Issues waiting on an external dependency |
+- `1 point` — small docs updates, typo fixes, minor test cleanups
+- `2 points` — small bug fixes, minor frontend polish, SDK/CLI small improvements
+- `3 points` — medium bug fixes, new helper behavior, contract interface updates, documentation with code changes
+- `4 points` — new feature in one repo, significant UX flow changes, contract + SDK coordination
+- `5+ points` — large cross-repo work, major architecture changes, governance or protocol enhancements
 
-### Picking up an issue from the board
+Maintainers assign points during issue triage and use them to group work into Waves. If you are new, ask for “Drips Wave points” in the issue comment and maintainers will assign the appropriate complexity level.
 
-1. Open the [All Open Issues](https://github.com/orgs/Invoice-Liquidity-Network/projects/1/views/1) view and filter by `label:good-first-issue` or `label:help-wanted`.
-2. Click the issue title to open it in its home repository.
-3. Follow the [Applying to work on an issue](#applying-to-work-on-an-issue) process — comment your application and wait to be assigned.
-4. Once assigned, the issue status updates to **In Progress** on the board automatically.
-5. Open a PR with `Closes #N` in the description; on merge the issue moves to **Done**.
+### Why it matters
 
-> If your issue is blocked by something external, apply the `blocked` label — it will move to the **Blocked** view automatically.
+- It helps contributors choose work at the right size
+- It makes review and planning easier
+- It keeps PRs focused and aligned with project priorities
 
-For maintainer setup instructions see [`docs/project-board.md`](./docs/project-board.md).
+When you open or apply to work on an issue, include the Wave points if available.
 
 ---
 
-## Development setup
+## Getting started (first-time contributor)
 
 ### Prerequisites
 
-- [Rust](https://rustup.rs/) 1.74 or higher
-- [Stellar CLI](https://developers.stellar.org/docs/tools/developer-tools/stellar-cli)
-- A funded Stellar testnet wallet (see README quickstart)
-- Node.js 18+ (for frontend contributions)
+- Node.js 18+
+- `pnpm` 9+
+- Rust 1.74+
+- Docker
+- Stellar CLI
 
-### Fork and clone
-
-```bash
-# Fork the repo on GitHub, then:
-git clone https://github.com/YOUR_USERNAME/invoice-liquidity-network.git
-cd invoice-liquidity-network
-
-# Add upstream remote
-git remote add upstream https://github.com/MAINTAINER_USERNAME/invoice-liquidity-network.git
-```
-
-### Build the contract
+### Clone the project with submodules
 
 ```bash
-cd contracts/invoice_liquidity
-cargo build --target wasm32-unknown-unknown --release
+git clone --recurse-submodules https://github.com/Invoice-Liquidity-Network/Invoice-Liquidity-Network.git
+cd Invoice-Liquidity-Network
+git submodule update --init --recursive
+pnpm install
 ```
 
-### Run tests
+### Start local development
+
+- Use `README.md` and `docs/local-development.md` in this repo for the root development setup.
+- The frontend and smart contract repositories each have their own setup instructions once their submodules are initialized.
+- Run the root test suite with:
 
 ```bash
-cargo test
+pnpm test
 ```
 
-All tests must pass before you open a PR. If you are adding new functionality, include tests for it.
+### Local repo basics
 
-### SDK type generation
+- `sdk/` — TypeScript SDK and client helpers
+- `cli/` — command-line interface for contract interactions
+- `indexer/` — event indexer service for frontend data
+- `notifications/` — webhook notification service
+- `docs/` — shared documentation and contribution guides
 
-The SDK exposes TypeScript types that are generated from the Soroban contract spec JSON. The generated file lives at `sdk/src/generated/types.ts` and is committed to the repo so SDK consumers do not need to run the generator.
+---
 
-**When to regenerate:** any time the smart contract structs, enums, or errors change.
+## Issue process
 
-**How to regenerate:**
+1. Search open issues in the appropriate repo.
+2. If you find an existing issue, comment with your interest and proposed approach.
+3. If you do not find an issue, open a new one in the most relevant repo using the decision tree above.
+4. In your issue comment, include:
+   - what you plan to build
+   - why the change is needed
+   - any relevant experience or prior work
+   - an estimated timeline
+5. Wait for maintainers to assign the issue and add labels.
 
-```bash
-# 1. Build the contract and export its spec
-cd ILN-Smart-Contract
-stellar contract build
-stellar contract info --wasm target/wasm32v1-none/release/*.wasm --output-format json > target/spec.json
-cd ..
+### Issue labels
 
-# 2. Run the generator
-pnpm generate:types
-```
+Common labels include:
 
-Commit the updated `sdk/src/generated/types.ts` alongside your contract change. CI will regenerate and fail if the committed file does not match.
+- `help wanted` — good opportunity for contributors
+- `good first issue` — ideal for newcomers
+- `in progress` — claimed by a contributor
+- `bug` — defect in functionality
+- `enhancement` — new feature or improvement
+- `design` — architecture or UX proposal
 
-### Keeping your fork up to date
+---
 
-```bash
-git fetch upstream
-git checkout main
-git merge upstream/main
-```
+## CI/CD pipeline reference
+
+The repository's GitHub Actions workflows are documented in [docs/ci-cd.md](./docs/ci-cd.md). That reference explains what each workflow does, what secrets it needs, how long it usually takes, and how to debug failures.
+
+Use it before pushing changes so you can match the relevant CI checks locally.
 
 ---
 
 ## Submitting a pull request
+## Pull request process
 
-1. **Create a branch** named after the issue: `git checkout -b fix/issue-12-payer-verification`
-2. **Make your changes** with clear, focused commits
-3. **Run the test suite** and confirm everything passes
-4. **Open a PR** against the `main` branch of this repo
-5. **Fill in the PR template** — describe what you changed, why, and how to test it
-6. **Reference the issue** in the PR description: `Closes #12`
+1. Fork the repository.
+2. Create a branch named for the scope of the work:
+   - `fix/...`, `feat/...`, `docs/...`, `chore/...`
+3. Make focused changes with clear commit messages.
+4. Run the relevant tests and verify the change locally.
+5. Open a PR against `main`.
+6. In the PR description, include:
+   - what changed
+   - why it changed
+   - how to test it
+   - related issue reference (`Closes #...`)
 
 ### PR checklist
 
-- [ ] Tests pass locally (`cargo test`)
-- [ ] New functionality has test coverage
-- [ ] No unnecessary dependencies added
-- [ ] Code follows the style guidelines below
-- [ ] Docs updated if the change affects public interfaces
+- [ ] Branch is based on current `main`
+- [ ] Tests pass locally
+- [ ] New behavior includes test coverage
+- [ ] Documentation is updated where needed
+- [ ] Code is easy to review and scoped to one purpose
+- [ ] The PR references the relevant issue or discussion
+
+### Cross-repo contributions
+
+If the work touches more than one repo, mention the affected repos clearly in the issue and PRs. Maintain separate PRs for each repo unless instructed otherwise by a maintainer.
 
 ---
 
-## Branch protection
+## Code review expectations
 
-Branch protection settings for the `main` branch are documented in [docs/branch-protection.md](docs/branch-protection.md).
-These settings include required PR reviews, required status checks, dismissing stale reviews on new commits, requiring linear history, and restricting force pushes.
+- Keep PRs small and focused.
+- Explain your changes clearly in the PR description.
+- Add tests for bug fixes and new behavior.
+- Update docs when public interfaces or workflows change.
+- Run the repository-specific test suite before requesting review.
+- Respond to review feedback in a timely manner.
+- Be open to suggestions and improve the implementation iteratively.
 
----
+### Review timeline
 
-## Code standards
-
-### Rust / Soroban contracts
-
-- Follow standard Rust formatting: run `cargo fmt` before committing
-- Run `cargo clippy` and resolve warnings before opening a PR
-- All public functions must have doc comments (`///`)
-- Avoid `unwrap()` in contract code — use proper error handling with `ContractError`
-- Keep functions small and focused; split logic into modules where appropriate
-
-### Documentation
-
-- Write in plain, clear English
-- Use sentence case for headings
-- Code examples must be tested and working
-- Update the relevant section of `docs/` for any interface changes
-
-### Commit messages
-
-We follow the Conventional Commits specification. Use the format:
-
-```
-type(scope?): short description
-
-Optional longer explanation of why the change was made,
-not just what was changed.
-```
-
-Allowed types: `feat`, `fix`, `docs`, `chore`, `test`, `refactor`, `perf`, `ci`, `design`, `build`
-
-Commit messages are validated automatically:
-
-- Local: Husky runs `commitlint` on commit messages via the `commit-msg` hook.
-- CI: Pull request titles are validated by a GitHub Action. The PR title is used as the squash commit message, so it must follow the same format.
-
-Example: `ci: add commitlint for conventional commit enforcement`
+Maintainers aim to review contributions within 48 hours. Larger or cross-repo work may take longer.
 
 ---
 
-## Automated dependency updates
+## Decision making
 
-This repository uses [Renovate](https://github.com/renovatebot/renovate) to keep npm, pnpm, Cargo, and GitHub Actions dependencies current. Configuration lives in [`renovate.json`](./renovate.json) at the repository root.
+Project decisions are made through issue discussion, design proposals, and maintainer review.
 
-### Behavior
+- Small changes: approved by maintainers after issue/PR discussion.
+- Larger technical changes: require a design issue or RFC-style proposal first.
+- Cross-repo coordination: handled in the root repository and tracked through issue comments.
 
-| Update type | Behavior |
-|-------------|----------|
-| Patch | Individual pull requests (ungrouped for safe auto-merge); merged automatically when CI passes after a short release-age window |
-| Minor, pin, digest | Grouped into a single weekly pull request (Mondays, 09:00 UTC) |
-| Major | Separate pull requests with migration notes; never auto-merged |
-| `@stellar/*` major | Requires dependency-dashboard approval and manual review |
-| Lock files | Refreshed weekly (Mondays, 09:00 UTC) |
+When in doubt, ask in the issue or open a discussion to confirm the recommended approach.
 
-Renovate runs on weekdays between 09:00 and 10:00 UTC.
+### Secret scanning and false positives
 
-### Enabling Renovate on a fork
+This repository enforces secret scanning locally before each commit.
 
-1. Install the [Mend Renovate GitHub App](https://github.com/apps/renovate) on your fork or organization.
-2. Grant access to this repository.
-3. Renovate opens an onboarding pull request; merge it to activate updates.
+- A Husky `pre-commit` hook runs `gitleaks` against the repository.
+- The scan is configured in `gitleaks.toml` and includes ILN-specific rules for Stellar secret seeds, Ethereum private keys, AWS credentials, and generic API tokens.
+- Existing findings are recorded in `.secrets.baseline`; new commits must not introduce additional findings.
 
-Maintainers enable Renovate on the upstream repository the same way.
+If you encounter a false positive:
 
-### Validating configuration locally
+1. Confirm the value is not an actual secret.
+2. If the finding is valid and should remain in the baseline, regenerate the baseline with:
 
 ```bash
-npx --yes --package renovate renovate-config-validator renovate.json
+pnpm run gitleaks:baseline
 ```
 
-Optional full dry run (requires a GitHub token with repository read access):
+3. If the finding is not relevant and should be ignored permanently, add a specific allowlist entry to `gitleaks.toml` rather than disabling scanning globally.
 
-```bash
-export RENOVATE_TOKEN="$GITHUB_TOKEN"
-npx --yes --package renovate renovate --platform=github \
-  --dry-run=full \
-  Invoice-Liquidity-Network/Invoice-Liquidity-Network
-```
+4. Document any baseline or allowlist updates in your PR so reviewers can verify the change.
 
-Review the dry-run output for expected package managers, schedules, and grouping before merging configuration changes.
+---
+
+## Getting help
+
+- **GitHub Discussions** — for questions, ideas, and early proposals
+- **Issues** — for bug reports, feature requests, and task planning
+- **Discord** — community chat and support (invite link pending)
+
+If you are new to Soroban development, start with the [Stellar Developer Docs](https://developers.stellar.org/docs/build/smart-contracts/overview) and the [Soroban examples repo](https://github.com/stellar/soroban-examples).
+
+---
+
+## Code of Conduct
+
+This project follows the [Contributor Covenant](https://www.contributor-covenant.org/version/2/1/code_of_conduct/) Code of Conduct. By contributing, you agree to uphold the standards in that policy.
 
 ---
 
@@ -283,31 +239,13 @@ Review the dry-run output for expected package managers, schedules, and grouping
 
 If you discover a security vulnerability in the smart contract or any part of ILN, please **do not open a public issue**.
 
-Email us at: `margretnursca@gmail.com` (or open a [GitHub Security Advisory](../../security/advisories/new))
+Email us at `margretnursca@gmail.com` or open a GitHub Security Advisory.
 
 Please include:
 
-- A description of the vulnerability
-- Steps to reproduce
-- Your assessment of impact
-- Any suggested fix if you have one
+- a description of the vulnerability
+- steps to reproduce
+- your assessment of impact
+- any suggested fix
 
-We will acknowledge your report within 48 hours and work with you on a responsible disclosure timeline.
-
-## Getting help
-
-- **GitHub Discussions** — for questions, ideas, and general conversation: [Discussions tab](../../discussions)
-- **Issues** — for bug reports and feature requests only
-- **Discord** — [invite link] _(add your community link here)_
-
-If you are new to Soroban development, the [Stellar Developer Docs](https://developers.stellar.org/docs/build/smart-contracts/overview) are the best starting point. The [Soroban examples repo](https://github.com/stellar/soroban-examples) is also very useful for understanding contract patterns.
-
----
-
-## Code of Conduct
-
-This project follows the [Contributor Covenant](https://www.contributor-covenant.org/version/2/1/code_of_conduct/) Code of Conduct. By participating, you agree to uphold it. Maintainers reserve the right to remove anyone who violates these standards.
-
----
-
-_Questions about the contribution process? Open a [Discussion](../../discussions) and we'll help._
+We will acknowledge your report within 48 hours.

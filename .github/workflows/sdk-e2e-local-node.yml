@@ -6,19 +6,20 @@ on:
   workflow_dispatch:
 
 jobs:
+  pnpm-cache:
+    uses: ./.github/workflows/reusable-cache-pnpm.yml
+
   e2e-local:
+    needs: pnpm-cache
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
+      - name: Setup pnpm with store cache
+        uses: ./.github/actions/setup-pnpm
         with:
-          node-version: '18'
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+          node-version: "18"
 
       - name: Start local Stellar node via Docker Compose
         run: |

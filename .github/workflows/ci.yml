@@ -10,6 +10,12 @@ permissions:
   issues: write
 
 jobs:
+  pnpm-cache:
+    uses: ./.github/workflows/reusable-cache-pnpm.yml
+
+  testnet-health:
+    uses: ./.github/workflows/reusable-testnet-health.yml
+
   test:
     name: Run tests
     runs-on: ubuntu-latest
@@ -141,24 +147,40 @@ jobs:
               body: '🚨 **CI Lint failed!** Please check the action logs for details.'
             })
 
-  node-tests:
-    name: Run Node.js tests
+  syncpack:
+    name: Dependency version consistency
+    needs: pnpm-cache
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
-      - uses: pnpm/action-setup@v4
-        with:
-          version: 9
+      - name: Setup pnpm with store cache
+        uses: ./.github/actions/setup-pnpm
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 20
-          cache: pnpm
+      - name: Check for version mismatches
+        run: pnpm syncpack:check
 
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+      - name: Comment PR on failure
+        if: failure() && github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: '🚨 **Dependency version mismatch detected!** Run `pnpm syncpack:check` locally and align versions before merging.'
+            })
+
+  node-tests:
+    name: Run Node.js tests
+    needs: pnpm-cache
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup pnpm with store cache
+        uses: ./.github/actions/setup-pnpm
 
       - name: Run all tests
         run: pnpm test
@@ -177,25 +199,22 @@ jobs:
 
   node-coverage:
     name: Node.js coverage (≥80%)
+    needs: pnpm-cache
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
-      - uses: pnpm/action-setup@v4
-        with:
-          version: 9
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 20
-          cache: pnpm
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+      - name: Setup pnpm with store cache
+        uses: ./.github/actions/setup-pnpm
 
       - name: Run coverage (fails if any package drops below 80%)
         run: pnpm test:coverage
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v5
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          slug: Nursca/Invoice-Liquidity-Network
 
       - name: Comment PR on failure
         if: failure() && github.event_name == 'pull_request'
@@ -209,13 +228,11 @@ jobs:
               body: '🚨 **Coverage dropped below 80%!** Please check the action logs for details.'
             })
 
-  sdk-types-sync:
-    name: SDK types in sync
+  license-compliance:
+    name: Dependency license compliance check
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-        with:
-          submodules: recursive
 
       - uses: pnpm/action-setup@v4
         with:
@@ -230,14 +247,55 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Run license compliance check
+        run: pnpm licence:check
+
+      - name: Comment PR on failure
+        if: failure() && github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: '🚨 **Dependency license compliance check failed!** Please verify your package dependencies conform to the license policy.'
+            })
+
+  sdk-types-sync:
+    name: SDK types in sync
+    needs: pnpm-cache
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Setup pnpm with store cache
+        uses: ./.github/actions/setup-pnpm
+
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
         with:
           targets: wasm32v1-none
 
+      - name: Cache Stellar CLI (cargo install)
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+          key: ${{ runner.os }}-stellar-cli-opt
+          restore-keys: |
+            ${{ runner.os }}-stellar-cli-
+
       - name: Install Stellar CLI
-        run: |
-          cargo install --locked stellar-cli --features opt
+        run: cargo install --locked stellar-cli --features opt
+
+      - name: Configure testnet
+        run: stellar network use testnet
 
       - name: Build contract (skip if submodule empty)
         working-directory: ./ILN-Smart-Contract
@@ -271,3 +329,33 @@ jobs:
               repo: context.repo.repo,
               body: '🚨 **SDK types are out of sync!** Run `pnpm generate:types` and commit the changes.'
             })
+
+  sdk-testnet-integration:
+    name: SDK testnet integration tests
+    needs: [pnpm-cache, testnet-health]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && needs.testnet-health.outputs.healthy == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup pnpm with store cache
+        uses: ./.github/actions/setup-pnpm
+
+      - name: Run SDK testnet integration tests
+        working-directory: ./sdk
+        run: pnpm test:integration:testnet
+        env:
+          FREELANCER_SECRET: ${{ secrets.TESTNET_FREELANCER_SECRET }}
+          PAYER_SECRET: ${{ secrets.TESTNET_PAYER_SECRET }}
+          FUNDER_SECRET: ${{ secrets.TESTNET_FUNDER_SECRET }}
+
+  sdk-testnet-skipped:
+    name: SDK testnet integration (skipped — unhealthy testnet)
+    needs: [testnet-health]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && needs.testnet-health.outputs.healthy != 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Report skipped integration tests
+        run: |
+          echo "::warning::Horizon testnet was unhealthy; SDK testnet integration tests were skipped."

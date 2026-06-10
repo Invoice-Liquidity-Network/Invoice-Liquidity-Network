@@ -1,0 +1,125 @@
+# Reusable workflow: install Stellar CLI, configure testnet, and create a funded identity.
+# Callable from this repo or sibling repos (ILN-Smart-Contract, ILN-Frontend).
+name: Reusable Stellar setup
+
+on:
+  workflow_call:
+    inputs:
+      identity-name:
+        description: Name of the Stellar identity to generate and fund on testnet
+        required: false
+        type: string
+        default: ci-test
+      network:
+        description: Stellar network name (built-in testnet or a custom network alias)
+        required: false
+        type: string
+        default: testnet
+      fund-identity:
+        description: When true, fund the identity via Friendbot (testnet only)
+        required: false
+        type: boolean
+        default: true
+      horizon-url:
+        description: Horizon base URL used when registering a custom testnet network
+        required: false
+        type: string
+        default: https://horizon-testnet.stellar.org
+      rpc-url:
+        description: Soroban RPC URL used when registering a custom testnet network
+        required: false
+        type: string
+        default: https://soroban-testnet.stellar.org
+      network-passphrase:
+        description: Network passphrase for custom testnet registration
+        required: false
+        type: string
+        default: "Test SDF Network ; September 2015"
+      stellar-cli-features:
+        description: Cargo features passed to stellar-cli install
+        required: false
+        type: string
+        default: opt
+    outputs:
+      identity-name:
+        description: Identity alias created or reused in the Stellar CLI config
+        value: ${{ jobs.setup.outputs.identity-name }}
+      public-key:
+        description: Public key (G-address) of the funded identity
+        value: ${{ jobs.setup.outputs.public-key }}
+      network:
+        description: Network alias configured for subsequent CLI commands
+        value: ${{ jobs.setup.outputs.network }}
+
+jobs:
+  setup:
+    name: Stellar CLI and testnet identity
+    runs-on: ubuntu-latest
+    outputs:
+      identity-name: ${{ steps.identity.outputs.identity-name }}
+      public-key: ${{ steps.identity.outputs.public-key }}
+      network: ${{ steps.network.outputs.network }}
+    steps:
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Stellar CLI (cargo install)
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+          key: ${{ runner.os }}-stellar-cli-${{ inputs.stellar-cli-features }}
+          restore-keys: |
+            ${{ runner.os }}-stellar-cli-
+
+      - name: Install Stellar CLI
+        run: cargo install --locked stellar-cli --features ${{ inputs.stellar-cli-features }}
+
+      - name: Configure Stellar network
+        id: network
+        shell: bash
+        run: |
+          set -euo pipefail
+          NETWORK="${{ inputs.network }}"
+          echo "network=${NETWORK}" >> "$GITHUB_OUTPUT"
+
+          if [ "${NETWORK}" = "testnet" ]; then
+            stellar network add testnet \
+              --rpc-url "${{ inputs.rpc-url }}" \
+              --network-passphrase "${{ inputs.network-passphrase }}" \
+              2>/dev/null || true
+            stellar network use testnet
+          else
+            echo "Using custom network alias: ${NETWORK}"
+            stellar network use "${NETWORK}"
+          fi
+
+      - name: Create funded test identity
+        id: identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          IDENTITY="${{ inputs.identity-name }}"
+          NETWORK="${{ inputs.network }}"
+          echo "identity-name=${IDENTITY}" >> "$GITHUB_OUTPUT"
+
+          if [ "${{ inputs.fund-identity }}" = "true" ]; then
+            stellar keys generate "${IDENTITY}" --network "${NETWORK}" --fund
+          else
+            stellar keys generate "${IDENTITY}" --network "${NETWORK}" || true
+          fi
+
+          PUBLIC_KEY="$(stellar keys address "${IDENTITY}")"
+          echo "public-key=${PUBLIC_KEY}" >> "$GITHUB_OUTPUT"
+          echo "Configured identity ${IDENTITY} (${PUBLIC_KEY}) on ${NETWORK}"
+
+      - name: Verify Horizon connectivity
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl --fail --silent --show-error \
+            "${{ inputs.horizon-url }}/.well-known/stellar.json" \
+            | grep -q "network_passphrase"

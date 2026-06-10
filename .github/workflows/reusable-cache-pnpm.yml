@@ -1,0 +1,62 @@
+# Reusable workflow: restore/save the pnpm store with lockfile-scoped cache keys.
+# Run as an early job; caller jobs should use ./.github/actions/setup-pnpm with the same inputs.
+name: Reusable pnpm cache
+
+on:
+  workflow_call:
+    inputs:
+      node-version:
+        description: Node.js version for setup-node
+        required: false
+        type: string
+        default: "20"
+      pnpm-version:
+        description: pnpm version for pnpm/action-setup
+        required: false
+        type: string
+        default: "9"
+      lockfile-path:
+        description: Path to pnpm-lock.yaml (relative to repository root)
+        required: false
+        type: string
+        default: pnpm-lock.yaml
+      cache-key-prefix:
+        description: Prefix for actions/cache keys (use the same value in caller workflows)
+        required: false
+        type: string
+        default: iln
+      install-dependencies:
+        description: When true, run pnpm install after restoring the store cache
+        required: false
+        type: boolean
+        default: false
+      install-args:
+        description: Arguments passed to pnpm install (ignored when install-dependencies is false)
+        required: false
+        type: string
+        default: --frozen-lockfile
+    outputs:
+      cache-hit:
+        description: Whether the pnpm store cache was restored on a full key match
+        value: ${{ jobs.cache.outputs.cache-hit }}
+
+jobs:
+  cache:
+    name: pnpm store cache
+    runs-on: ubuntu-latest
+    outputs:
+      cache-hit: ${{ steps.setup-pnpm.outputs.cache-hit }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm with store cache
+        id: setup-pnpm
+        uses: ./.github/actions/setup-pnpm
+        with:
+          node-version: ${{ inputs.node-version }}
+          pnpm-version: ${{ inputs.pnpm-version }}
+          lockfile-path: ${{ inputs.lockfile-path }}
+          cache-key-prefix: ${{ inputs.cache-key-prefix }}
+          install-args: ${{ inputs.install-dependencies == true && inputs.install-args || '' }}
+

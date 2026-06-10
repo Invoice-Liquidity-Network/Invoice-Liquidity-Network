@@ -1,0 +1,80 @@
+---
+title: Getting Started
+description: Learn how to build on the Invoice Liquidity Network protocol
+---
+
+import { Cards, Card } from 'nextra/components'
+
+# Invoice Liquidity Network
+
+**Turn unpaid invoices into instant liquidity on-chain, on Stellar.**
+
+ILN is an open-source, decentralised invoice factoring protocol built on Stellar using Soroban smart contracts. Freelancers, creators, and SMEs unlock the value of outstanding invoices immediately, while DeFi liquidity providers earn yield by funding them at a discount.
+
+No banks. No credit checks. No 60-day waits.
+
+## Quick Start
+
+<Cards>
+  <Card title="🚀 Submit Your First Invoice" href="/tutorials/first-invoice">
+    Learn how to submit and fund an invoice in under 10 minutes
+  </Card>
+  <Card title="💰 Become a Liquidity Provider" href="/tutorials/lp-funding">
+    Start earning yield by funding invoices at a discount
+  </Card>
+  <Card title="🔌 Integrate the SDK" href="/sdk-reference/installation">
+    Add ILN to your application with our TypeScript SDK
+  </Card>
+  <Card title="📜 Explore Smart Contracts" href="/smart-contracts/architecture">
+    Understand the Soroban contract architecture
+  </Card>
+</Cards>
+
+## What is ILN?
+
+```mermaid
+sequenceDiagram
+    participant F as Freelancer
+    participant C as ILN Contract
+    participant L as Liquidity Provider
+    F->>C: submit_invoice(amount, payer, due_date, discount)
+    L->>C: fund_invoice(id)
+    C->>F: Transfer USDC (amount - discount)
+    Note over C: Invoice due date reached
+    F->>C: mark_paid(id)
+    C->>L: Transfer full amount
+    Note over L: LP earns the spread
+
+
+    Submit — A freelancer calls submit_invoice() with amount, payer, due date, and discount rate
+Fund — A liquidity provider calls fund_invoice(), sending USDC. The freelancer receives funds immediately
+Pay — The payer settles the invoice, releasing the full amount to the LP
+Earn — The LP earns the discount spread as yield
+
+Testnet Deployment
+| Contract          | Contract ID                                                |
+| ----------------- | ---------------------------------------------------------- |
+| ILN-Distribution  | `CAQGPMT3EQK4AABMIR66JJXEOCNCLPTDNXMS5OHZXH4LI24UYAF25V5B` |
+| Invoice-Liquidity | `CCPASLHKRFBMVV5PZG3LKDGKFEDXZMB5U7DK42CVLUVWCMUCSRPVBIMO` |
+| ILN-Governance    | `CD7GOIU3GNK7EZHG7XWBC7VI4NRVGMRCU7X2FOCAPQN6EGTSW46BY4EB` |
+
+
+⚠️ Mainnet deployment coming after audit. Do not use with real funds until then.
+
+Prerequisites
+Node.js 18+
+Stellar CLI
+A Stellar wallet (Freighter recommended)
+
+Installation
+# Install the SDK
+npm install @invoice-liquidity/sdk
+
+# Or install the CLI globally
+npm install -g @invoice-liquidity/cli
+
+Next Steps
+Read the Protocol Overview to understand the architecture
+Follow the First Invoice Tutorial to get hands-on
+Check the SDK Reference for API details
+Review Smart Contract Architecture for deep dives

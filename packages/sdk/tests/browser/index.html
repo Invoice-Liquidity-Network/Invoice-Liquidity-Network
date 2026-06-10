@@ -1,0 +1,22 @@
+<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8" /><title>ILN SDK browser test</title></head>
+<body>
+<script type="module">
+  import { randomBytes, sha256 } from '/src/index.browser.ts';
+
+  window.__ilnReady = false;
+  window.__ilnError = null;
+
+  try {
+    const bytes = randomBytes(32);
+    const hash = await sha256(bytes);
+    window.__ilnRandomBytesLength = bytes.length;
+    window.__ilnHashLength = hash.length;
+    window.__ilnReady = true;
+  } catch (err) {
+    window.__ilnError = err.message;
+  }
+</script>
+</body>
+</html>

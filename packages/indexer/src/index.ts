@@ -8,3 +8,4 @@ export type {
 } from "./types";
 export { parseContractEvent } from "./parse";
 export type { RawHorizonEvent } from "./parse";
+export { TimeoutError } from "./errors";

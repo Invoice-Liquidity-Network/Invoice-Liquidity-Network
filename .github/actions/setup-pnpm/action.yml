@@ -1,0 +1,62 @@
+# In-repo composite action: keep cache keys aligned with reusable-cache-pnpm.yml
+name: Setup pnpm with store cache
+description: Setup pnpm and Node.js and restore the pnpm store using ILN cache keys
+
+inputs:
+  node-version:
+    description: Node.js version
+    required: false
+    default: "20"
+  pnpm-version:
+    description: pnpm version
+    required: false
+    default: "9"
+  lockfile-path:
+    description: Path to pnpm-lock.yaml
+    required: false
+    default: pnpm-lock.yaml
+  cache-key-prefix:
+    description: Cache key prefix (must match reusable-cache-pnpm.yml)
+    required: false
+    default: iln
+  install-args:
+    description: Arguments for pnpm install (empty to skip install)
+    required: false
+    default: --frozen-lockfile
+
+outputs:
+  cache-hit:
+    description: Whether the pnpm store matched the primary cache key
+    value: ${{ steps.pnpm-cache.outputs.cache-hit }}
+
+runs:
+  using: composite
+  steps:
+    - name: Setup pnpm
+      uses: pnpm/action-setup@v4
+      with:
+        version: ${{ inputs.pnpm-version }}
+
+    - name: Get pnpm store directory
+      id: pnpm-store
+      shell: bash
+      run: echo "STORE_PATH=$(pnpm store path --silent)" >> "$GITHUB_OUTPUT"
+
+    - name: Cache pnpm store
+      id: pnpm-cache
+      uses: actions/cache@v4
+      with:
+        path: ${{ steps.pnpm-store.outputs.STORE_PATH }}
+        key: ${{ inputs.cache-key-prefix }}-${{ runner.os }}-pnpm-${{ hashFiles(inputs.lockfile-path) }}
+        restore-keys: |
+          ${{ inputs.cache-key-prefix }}-${{ runner.os }}-pnpm-
+
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: ${{ inputs.node-version }}
+
+    - name: Install dependencies
+      if: inputs.install-args != ''
+      shell: bash
+      run: pnpm install ${{ inputs.install-args }}
