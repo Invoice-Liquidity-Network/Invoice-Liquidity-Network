@@ -1,73 +1,168 @@
-# @iln/sdk
+# `@invoice-liquidity/sdk`
 
-Typed TypeScript SDK for the Invoice Liquidity Network — works in Node.js and modern browsers.
+Typed JavaScript and TypeScript SDK for the Invoice Liquidity Network Soroban contract on Stellar.
 
 ## Install
 
 ```bash
-npm install @iln/sdk
+npm install @invoice-liquidity/sdk
 ```
 
-## Node.js usage
+## Quickstart
+
+### Browser + Freighter
 
 ```ts
-import { InvoiceClient } from '@iln/sdk';
+import { ILNSdk, ILN_TESTNET, createFreighterSigner } from "@invoice-liquidity/sdk";
 
-const client = new InvoiceClient('https://horizon-testnet.stellar.org', 'CONTRACT_ID');
-await client.submitInvoice({ /* ... */ });
+const sdk = new ILNSdk({
+  ...ILN_TESTNET,
+  signer: createFreighterSigner(),
+});
+
+const invoiceId = await sdk.submitInvoice({
+  freelancer: "G...",
+  payer: "G...",
+  amount: 25_000_000n,
+  dueDate: Math.floor(Date.now() / 1000) + 7 * 24 * 60 * 60,
+  discountRate: 300,
+});
+
+await sdk.fundInvoice({
+  funder: "G...",
+  invoiceId,
+});
+
+await sdk.markPaid({
+  invoiceId,
+});
+
+const invoice = await sdk.getInvoice(invoiceId);
+console.log(invoice.status);
 ```
 
-## Browser usage (ES module bundle)
-
-The SDK ships a dedicated browser bundle at `dist/browser/index.js`. It uses the
-[Web Crypto API](https://developer.mozilla.org/en-US/docs/Web/API/Web_Crypto_API) instead of
-Node.js `crypto`, making it compatible with strict Content Security Policies and sandboxed
-`<iframe>` environments.
-
-### Via CDN / `<script type="module">`
-
-```html
-<script type="module">
-  import { InvoiceClient, randomBytes, sha256 } from './node_modules/@iln/sdk/dist/browser/index.js';
-
-  const client = new InvoiceClient('https://horizon-testnet.stellar.org', 'CONTRACT_ID');
-</script>
-```
-
-### Via a bundler (Vite, Webpack, etc.)
-
-Bundlers that respect the `browser` export condition pick the browser bundle automatically:
+### Node.js
 
 ```ts
-import { InvoiceClient } from '@iln/sdk'; // → dist/browser/index.js in browser builds
+import { ILNSdk, ILN_TESTNET, createKeypairSigner } from "@invoice-liquidity/sdk";
+
+const sdk = new ILNSdk({
+  ...ILN_TESTNET,
+  signer: createKeypairSigner(process.env.STELLAR_SECRET_KEY!),
+});
+
+const invoice = await sdk.getInvoice(1n);
+console.log(invoice);
 ```
 
-### WASM / CSP notes
+## Token Amounts
 
-- The bundle is built with [`vite-plugin-wasm`](https://github.com/Menci/vite-plugin-wasm) so any
-  WASM modules loaded by dependencies are inlined and do not require a `wasm-unsafe-eval` CSP
-  directive.
-- All randomness and hashing uses `crypto.getRandomValues` / `crypto.subtle` — no Node.js
-  built-ins are referenced.
-- Tested in Chrome, Firefox, Safari, and sandboxed iframes via Playwright.
+SDK methods accept token amounts as `bigint` base units. USDC and EURC use 6 decimals, while XLM uses 7 decimals through the native SAC wrapper. See the [multi-token support guide](../docs/tokens/multi-token-support.md) for supported tokens, trustlines, testnet acquisition, and token-aware parsing examples.
 
-## Build
+## API
 
-```bash
-# Node.js CJS + ESM build
-npm run build
+```ts
+submitInvoice(params: {
+  freelancer: string;
+  payer: string;
+  amount: bigint;
+  dueDate: number;
+  discountRate: number;
+}): Promise<bigint>;
 
-# Browser ES module bundle → dist/browser/index.js
-npm run build:browser
+fundInvoice(params: {
+  funder: string;
+  invoiceId: bigint;
+}): Promise<void>;
+
+markPaid(params: {
+  invoiceId: bigint;
+}): Promise<void>;
+
+claimDefault(params: {
+  funder: string;
+  invoiceId: bigint;
+}): Promise<void>;
+
+getInvoice(invoiceId: bigint): Promise<Invoice>;
 ```
 
-## Test
+## Invoice type
+
+```ts
+type InvoiceStatus = "Pending" | "Funded" | "Paid" | "Defaulted";
+
+interface Invoice {
+  id: bigint;
+  freelancer: string;
+  payer: string;
+  amount: bigint;
+  dueDate: number;
+  discountRate: number;
+  status: InvoiceStatus;
+  funder: string | null;
+  fundedAt: number | null;
+}
+```
+
+## Notifications
+
+The SDK provides a `NotificationsClient` to programmatically manage your invoice notification subscriptions.
+
+```ts
+import { NotificationsClient, NotificationTrigger } from "@invoice-liquidity/sdk";
+
+const notifications = new NotificationsClient("http://localhost:4001");
+
+// Subscribe to email notifications
+const emailSub = await notifications.subscribeEmail(
+  "G...",
+  "user@example.com",
+  [NotificationTrigger.InvoiceFunded, NotificationTrigger.InvoiceSettled]
+);
+
+// Subscribe to webhook
+const webhookSub = await notifications.subscribeWebhook(
+  "G...",
+  "https://my-app.com/webhook",
+  [NotificationTrigger.DueDateWarning]
+);
+
+// Test webhook
+const testResult = await notifications.testWebhook(webhookSub.id);
+console.log(testResult.success); // true
+
+// List subscriptions
+const subs = await notifications.listSubscriptions("G...");
+
+// Unsubscribe
+await notifications.unsubscribe(emailSub.id);
+```
+
+## Development
 
 ```bash
-# Unit tests (Jest)
+cd sdk
+npm install
 npm test
-
-# Browser compatibility tests (Playwright — requires browsers installed)
-npx playwright install
-npm run test:browser
 ```
+
+## Integration tests (testnet)
+
+The integration suite runs real transactions against the deployed Stellar testnet contract.
+
+```bash
+cd sdk
+FREELANCER_SECRET=S... \
+PAYER_SECRET=S... \
+FUNDER_SECRET=S... \
+npm run test:integration
+```
+
+Required environment variables:
+
+- `FREELANCER_SECRET` - funded Stellar testnet secret for invoice submission
+- `PAYER_SECRET` - funded Stellar testnet secret for `mark_paid`
+- `FUNDER_SECRET` - funded Stellar testnet secret for funding and default claim
+
+If these variables are not set, integration tests are skipped automatically so CI and local unit test runs remain unaffected.

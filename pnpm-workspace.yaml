@@ -1,9 +1,6 @@
 packages:
-  - sdk
-  - cli
-  - indexer
-  - notifications
-  - packages/shared
-  - docs
-  - "examples/*"
-  - "packages/*"
+  - "packages/sdk"
+  - "packages/docs"
+  - "packages/scripts"
+  - "packages/shared"
+  - "packages/eslint-config"

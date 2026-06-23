@@ -1,56 +1,28 @@
 {
   "name": "invoice-liquidity-network",
   "private": true,
-  "workspaces": [
-    "packages/*",
-    "frontend"
-  ],
   "scripts": {
-    "test": "turbo run test",
-    "test:coverage": "turbo run test:coverage",
-    "build": "turbo run build",
-    "licence:check": "node scripts/check-licenses.js",
-    "generate:types": "ts-node --esm scripts/generate-types.ts",
-    "dev": "turbo run dev",
-    "lint": "turbo run lint",
-    "type-check": "turbo run type-check",
-    "docs:dev": "npm run dev -w @invoice-liquidity/docs",
-    "docs:build": "npm run build -w @invoice-liquidity/docs",
-    "react:dev": "npm run dev -w @iln/react",
-    "react:build": "npm run build -w @iln/react",
-    "react:test": "npm run test -w @iln/react",
-    "dead-code:check": "knip",
-    "gitleaks:scan": "pnpm exec gitleaks detect --no-git -s . --config gitleaks.toml --baseline-path .secrets.baseline",
-    "gitleaks:baseline": "pnpm exec gitleaks detect --no-git -s . --config gitleaks.toml --report-format json --report-path .secrets.baseline",
-    "syncpack:check": "syncpack list-mismatches"
+    "dev": "pnpm -r dev",
+    "lint": "pnpm -r lint",
+    "build": "pnpm -r build",
+    "test": "pnpm -r test",
+    "test:coverage": "turbo run test:coverage"
   },
   "devDependencies": {
-    "@changesets/cli": "2.31.0",
+    "turbo": "^2.5.4",
     "@commitlint/cli": "^17.6.0",
     "@commitlint/config-conventional": "^17.6.0",
-    "chromatic": "^17.4.1",
-    "gitleaks-secret-scanner": "^2.1.1",
-    "husky": "^8.0.0",
-    "license-checker-rseidelsohn": "^5.0.1",
-    "syncpack": "^13.0.0",
-    "ts-node": "^10.9.2",
-    "turbo": "^2.5.4",
-    "typescript": "^5.9.3"
+    "husky": "^8.0.0"
   },
   "engines": {
-    "node": ">=18",
+    "node": ">=20",
     "pnpm": ">=9"
   },
+  "packageManager": "pnpm@9.0.0",
   "prepare": "husky install",
-  "bin": {
-    "iln": "packages/scripts/bin/iln.js"
-  },
   "pnpm": {
     "overrides": {
       "axios": ">=1.16.0"
     }
-  },
-  "packageManager": "yarn@4.16.0"
+  }
 }
-
-
