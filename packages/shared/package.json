@@ -1,28 +1,19 @@
 {
-  "name": "@iln/shared",
+  "name": "@invoice-liquidity-network/shared",
   "version": "0.1.0",
-  "description": "Shared ILN domain types for the SDK, frontend, and related packages.",
-  "license": "MIT",
-  "types": "./dist/index.d.ts",
-  "exports": {
-    ".": {
-      "types": "./dist/index.d.ts"
-    }
-  },
-  "files": [
-    "dist",
-    "README.md"
-  ],
-  "publishConfig": {
-    "access": "public"
-  },
+  "private": true,
+  "main": "src/index.ts",
+  "types": "src/index.ts",
   "scripts": {
-    "build": "tsc -p tsconfig.json",
-    "check": "tsc -p tsconfig.json --noEmit",
-    "test": "tsc -p tsconfig.json && tsd"
+    "dev": "echo shared dev",
+    "lint": "eslint .",
+    "build": "tsc -b",
+    "test": "echo shared test"
   },
   "devDependencies": {
-    "tsd": "^0.31.2",
-    "typescript": "^5.9.3"
+    "typescript": "^5.5.0"
+  },
+  "eslintConfig": {
+    "extends": "@invoice-liquidity-network/eslint-config"
   }
 }
