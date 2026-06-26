@@ -14,6 +14,11 @@ export * from "./federation";
 export * from "./governance";
 export * from "./errors";
 export * from "./offline";
+export { OfflineQueuePanel } from "./OfflineQueuePanel";
+export type {
+  OfflineQueueController,
+  OfflineQueuePanelProps,
+} from "./OfflineQueuePanel";
 export * from "./event-emitter";
 export * from "./recovery";
 export * from "./plugins";

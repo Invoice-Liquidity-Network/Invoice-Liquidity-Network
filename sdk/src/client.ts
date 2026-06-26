@@ -13,6 +13,11 @@ import { createLogger } from "./logger";
 import { track } from "./usage-analytics";
 import { Cache, type CacheOptions } from "./cache";
 import { Validators } from "./validators";
+import {
+  OfflineManager,
+  type OfflineQueueItem,
+  type OfflineState,
+} from "./offline";
 
 import type { Invoice, InvoiceState } from "@iln/shared";
 
@@ -35,7 +40,6 @@ import type {
 
 import { openSSE } from "./stream";
 import { ILNEventEmitter } from "./event-emitter";
-import type { InvoiceEventData, WalletEventData, ErrorEventData } from "./event-emitter";
 
 export type EventCallback = (event: ContractEvent) => void | Promise<void>;
 export type Unsubscribe = () => void;
@@ -62,6 +66,16 @@ const READ_ACCOUNT = "GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF";
 const POLL_ATTEMPTS = 20;
 const PROTOCOL_CONFIG_CACHE_MS = 5 * 60 * 1000;
 
+export type OfflineTransactionOperation =
+  | "submitInvoice"
+  | "fundInvoice"
+  | "markPaid"
+  | "claimDefault";
+
+export type OfflineTransactionResult<T> =
+  | { queued: false; result: T }
+  | { queued: true; item: OfflineQueueItem };
+
 type PreparedTransactionLike = { toXDR(): string };
 type BuiltTransaction = ReturnType<TransactionBuilder["build"]>;
 type TransactionOperation = Parameters<TransactionBuilder["addOperation"]>[0];
@@ -84,6 +98,7 @@ export class ILNSdk {
   private readonly analyticsNetwork: string;
   private readonly cache: Cache<unknown>;
   private readonly cacheEnabled: boolean;
+  private readonly offlineManager: OfflineManager;
 
   constructor(config: ILNSdkConfig) {
     this.contractId = config.contractId;
@@ -97,6 +112,8 @@ export class ILNSdk {
     const cacheConfig = config.cache ?? { ttl: 60000, storage: "memory", enabled: true };
     this.cache = new Cache(cacheConfig);
     this.cacheEnabled = cacheConfig.enabled ?? true;
+    this.offlineManager = new OfflineManager(config.offline);
+    this.offlineManager.onSubmit((item) => this.submitQueuedOfflineItem(item));
   }
 
   private async wrapRpcCall<T>(promise: Promise<T>, operationName: string): Promise<T> {
@@ -533,6 +550,12 @@ export class ILNSdk {
     }
   }
 
+  async submitInvoiceOrQueue(
+    params: SubmitInvoiceParams,
+  ): Promise<OfflineTransactionResult<bigint>> {
+    return this.runOrQueue("submitInvoice", params, () => this.submitInvoice(params));
+  }
+
   async fundInvoice(params: FundInvoiceParams): Promise<void> {
     Validators.assertValid(Validators.validateFunding(params), "fundInvoice");
     
@@ -573,6 +596,12 @@ export class ILNSdk {
     }
   }
 
+  async fundInvoiceOrQueue(
+    params: FundInvoiceParams,
+  ): Promise<OfflineTransactionResult<void>> {
+    return this.runOrQueue("fundInvoice", params, () => this.fundInvoice(params));
+  }
+
   async markPaid(params: MarkPaidParams): Promise<void> {
     Validators.assertValid(Validators.validatePayment(params), "markPaid");
     
@@ -607,6 +636,12 @@ export class ILNSdk {
     }
   }
 
+  async markPaidOrQueue(
+    params: MarkPaidParams,
+  ): Promise<OfflineTransactionResult<void>> {
+    return this.runOrQueue("markPaid", params, () => this.markPaid(params));
+  }
+
   async claimDefault(params: ClaimDefaultParams): Promise<void> {
     const signerAddress = await this.requireSignerAddress();
 
@@ -638,6 +673,88 @@ export class ILNSdk {
     } catch (err: any) {
       track("claimDefault", this.analyticsNetwork, false, err?.code ?? err?.name);
       throw err;
+    }
+  }
+
+  async claimDefaultOrQueue(
+    params: ClaimDefaultParams,
+  ): Promise<OfflineTransactionResult<void>> {
+    return this.runOrQueue("claimDefault", params, () => this.claimDefault(params));
+  }
+
+  queueOfflineTransaction(
+    operation: OfflineTransactionOperation,
+    params: unknown,
+  ): OfflineQueueItem {
+    return this.offlineManager.enqueue(operation, params);
+  }
+
+  getOfflineManager(): OfflineManager {
+    return this.offlineManager;
+  }
+
+  getOfflineState(): OfflineState {
+    return this.offlineManager.getState();
+  }
+
+  getOfflineQueue(): ReadonlyArray<OfflineQueueItem> {
+    return this.offlineManager.getQueue();
+  }
+
+  processOfflineQueue(): Promise<void> {
+    return this.offlineManager.processQueue();
+  }
+
+  retryOfflineQueueItem(id: string): Promise<void> {
+    return this.offlineManager.retryItem(id);
+  }
+
+  removeOfflineQueueItem(id: string): boolean {
+    return this.offlineManager.removeItem(id);
+  }
+
+  clearOfflineQueue(): void {
+    this.offlineManager.clearQueue();
+  }
+
+  setOfflineQueueOnline(online: boolean): void {
+    this.offlineManager.setOnline(online);
+  }
+
+  private async runOrQueue<T>(
+    operation: OfflineTransactionOperation,
+    params: unknown,
+    submit: () => Promise<T>,
+  ): Promise<OfflineTransactionResult<T>> {
+    if (!this.offlineManager.getIsOnline()) {
+      return {
+        queued: true,
+        item: this.offlineManager.enqueue(operation, params),
+      };
+    }
+
+    return {
+      queued: false,
+      result: await submit(),
+    };
+  }
+
+  private async submitQueuedOfflineItem(item: OfflineQueueItem): Promise<boolean> {
+    switch (item.operation as OfflineTransactionOperation) {
+      case "submitInvoice":
+        await this.submitInvoice(item.params as SubmitInvoiceParams);
+        return true;
+      case "fundInvoice":
+        await this.fundInvoice(item.params as FundInvoiceParams);
+        return true;
+      case "markPaid":
+        await this.markPaid(item.params as MarkPaidParams);
+        return true;
+      case "claimDefault":
+        await this.claimDefault(item.params as ClaimDefaultParams);
+        return true;
+      default:
+        throw new Error(`Unsupported offline operation: ${item.operation}`);
     }
   }
 
@@ -968,9 +1085,13 @@ export class ILNSdk {
         "discountRate",
       ),
       status: this.parseStatus(nativeInvoice.status),
-      funder: nativeInvoice.funder == null ? null : this.toStringValue(nativeInvoice.funder, "funder"),
+      funder:
+        nativeInvoice.funder === null || nativeInvoice.funder === undefined
+          ? null
+          : this.toStringValue(nativeInvoice.funder, "funder"),
       fundedAt:
-        nativeInvoice.funded_at == null && nativeInvoice.fundedAt == null
+        (nativeInvoice.funded_at === null || nativeInvoice.funded_at === undefined) &&
+        (nativeInvoice.fundedAt === null || nativeInvoice.fundedAt === undefined)
           ? null
           : this.toNumberValue(nativeInvoice.funded_at ?? nativeInvoice.fundedAt, "fundedAt"),
     };

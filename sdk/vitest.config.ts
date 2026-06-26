@@ -5,6 +5,7 @@ export default mergeConfig(base, {
   test: {
     include: [
       "src/**/*.test.ts",
+      "src/**/*.test.tsx",
       "__tests__/**/*.test.ts",
       "tests/**/*.test.ts",
       "../packages/sdk/tests/**/*.test.ts",
