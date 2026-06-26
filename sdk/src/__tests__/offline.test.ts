@@ -1,59 +1,94 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { OfflineManager, type OfflineConfig, type OfflineQueueItem } from "../offline";
+import {
+  OfflineManager,
+  createMemoryOfflineStorage,
+  type OfflineStorage,
+} from "../offline";
 
 describe("OfflineManager", () => {
   let manager: OfflineManager;
+  let storage: OfflineStorage;
 
   beforeEach(() => {
+    storage = createMemoryOfflineStorage();
     manager = new OfflineManager({
       maxRetries: 2,
       retryDelayMs: 100,
       maxQueueSize: 5,
+      storage,
+      storageKey: "test_queue",
     });
   });
 
   afterEach(() => {
     manager.destroy();
+    vi.useRealTimers();
   });
 
   describe("constructor", () => {
-    it("should create an instance with default config", () => {
-      const m = new OfflineManager();
-      expect(m).toBeDefined();
+    it("creates an instance with default config", () => {
+      const m = new OfflineManager({ storage: createMemoryOfflineStorage() });
       expect(m.getState().isOnline).toBe(true);
       expect(m.getState().queueSize).toBe(0);
+      m.destroy();
     });
 
-    it("should create an instance with custom config", () => {
-      const m = new OfflineManager({
-        maxRetries: 5,
-        retryDelayMs: 1000,
+    it("loads persisted queue items from storage", () => {
+      const firstManager = new OfflineManager({
+        storage,
+        storageKey: "persistent_queue",
       });
-      expect(m).toBeDefined();
+
+      firstManager.enqueue("submitInvoice", {
+        amount: 1000n,
+        invoiceId: 42n,
+      });
+      firstManager.destroy();
+
+      const secondManager = new OfflineManager({
+        storage,
+        storageKey: "persistent_queue",
+      });
+
+      const [item] = secondManager.getQueue();
+      expect(secondManager.getState().queueSize).toBe(1);
+      expect(item.params).toEqual({ amount: 1000n, invoiceId: 42n });
+      secondManager.destroy();
+    });
+
+    it("ignores invalid persisted queue payloads", () => {
+      storage.setItem("bad_queue", JSON.stringify({ nope: true }));
+      const m = new OfflineManager({ storage, storageKey: "bad_queue" });
+      expect(m.getQueue()).toEqual([]);
+      m.destroy();
     });
   });
 
   describe("enqueue", () => {
-    it("should add an item to the queue", () => {
+    it("adds an item to the queue", () => {
       const item = manager.enqueue("submitInvoice", { amount: 100 });
-      expect(item).toBeDefined();
       expect(item.id).toMatch(/^offline_/);
       expect(item.operation).toBe("submitInvoice");
       expect(item.params).toEqual({ amount: 100 });
       expect(item.status).toBe("pending");
-      expect(manager.getState().queueSize).toBe(1);
+      expect(manager.getState()).toMatchObject({
+        queueSize: 1,
+        pendingCount: 1,
+        failedCount: 0,
+      });
     });
 
-    it("should throw when queue is full", () => {
-      for (let i = 0; i < 5; i++) {
+    it("throws when queue is full", () => {
+      for (let i = 0; i < 5; i += 1) {
         manager.enqueue("op", { i });
       }
+
       expect(() => manager.enqueue("op", {})).toThrow("Queue is full");
     });
   });
 
   describe("processQueue", () => {
-    it("should process pending items when online", async () => {
+    it("processes pending items when online", async () => {
       const submitFn = vi.fn().mockResolvedValue(true);
       manager.onSubmit(submitFn);
 
@@ -64,9 +99,10 @@ describe("OfflineManager", () => {
 
       expect(submitFn).toHaveBeenCalledTimes(2);
       expect(manager.getState().queueSize).toBe(0);
+      expect(manager.getState().lastSyncTime).toEqual(expect.any(Number));
     });
 
-    it("should not process when offline", async () => {
+    it("does not process when offline", async () => {
       const submitFn = vi.fn().mockResolvedValue(true);
       manager.onSubmit(submitFn);
       manager.setOnline(false);
@@ -78,72 +114,98 @@ describe("OfflineManager", () => {
       expect(manager.getState().queueSize).toBe(1);
     });
 
-    it("should retry failed submissions", async () => {
-      const submitFn = vi.fn()
-        .mockRejectedValueOnce(new Error("Network error"))
-        .mockResolvedValue(true);
-
+    it("auto-submits queued items when the SDK comes back online", async () => {
+      const submitFn = vi.fn().mockResolvedValue(true);
       manager.onSubmit(submitFn);
+      manager.setOnline(false);
       manager.enqueue("op1", {});
 
-      await manager.processQueue();
+      manager.setOnline(true);
+      await Promise.resolve();
+      await Promise.resolve();
 
-      // Should have retried once
       expect(submitFn).toHaveBeenCalledTimes(1);
-      expect(manager.getState().queueSize).toBe(1);
+      expect(manager.getState().queueSize).toBe(0);
     });
 
-    it("should mark item as failed after max retries", async () => {
-      const submitFn = vi.fn().mockRejectedValue(new Error("Always fail"));
-      manager.onSubmit(submitFn);
+    it("keeps failed submissions pending until max retries is reached", async () => {
+      const submitFn = vi
+        .fn()
+        .mockRejectedValueOnce(new Error("Network error"))
+        .mockResolvedValueOnce(true);
 
+      manager.onSubmit(submitFn);
       manager.enqueue("op1", {});
+
       await manager.processQueue();
 
-      // Should have retried and failed
       expect(submitFn).toHaveBeenCalledTimes(1);
-      expect(manager.getState().failedCount).toBe(1);
+      expect(manager.getState().pendingCount).toBe(1);
+
+      await manager.processQueue();
+
+      expect(submitFn).toHaveBeenCalledTimes(2);
+      expect(manager.getState().queueSize).toBe(0);
+    });
+
+    it("marks an item as failed after max retries", async () => {
+      const failingManager = new OfflineManager({
+        maxRetries: 1,
+        storage,
+        storageKey: "fail_queue",
+      });
+      const submitFn = vi.fn().mockRejectedValue(new Error("Always fail"));
+      failingManager.onSubmit(submitFn);
+
+      failingManager.enqueue("op1", {});
+      await failingManager.processQueue();
+
+      expect(submitFn).toHaveBeenCalledTimes(1);
+      expect(failingManager.getState().failedCount).toBe(1);
+      expect(failingManager.getQueue()[0].error).toContain("Always fail");
+      failingManager.destroy();
     });
   });
 
   describe("retryItem", () => {
-    it("should retry a failed item", async () => {
-      const submitFn = vi.fn().mockResolvedValue(true);
-      manager.onSubmit(submitFn);
+    it("retries a failed item and removes it when submission succeeds", async () => {
+      const retryManager = new OfflineManager({
+        maxRetries: 1,
+        storage,
+        storageKey: "retry_queue",
+      });
+      const submitFn = vi
+        .fn()
+        .mockRejectedValueOnce(new Error("Network error"))
+        .mockResolvedValueOnce(true);
+      retryManager.onSubmit(submitFn);
 
-      const item = manager.enqueue("op1", {});
-      item.status = "failed";
-      item.retries = 3;
+      const item = retryManager.enqueue("op1", {});
+      await retryManager.processQueue();
+      await retryManager.retryItem(item.id);
 
-      await manager.retryItem(item.id);
-
-      expect(item.status).toBe("pending");
-      expect(item.retries).toBe(0);
+      expect(submitFn).toHaveBeenCalledTimes(2);
+      expect(retryManager.getState().queueSize).toBe(0);
+      retryManager.destroy();
     });
 
-    it("should throw for non-existent item", async () => {
+    it("throws for non-existent items", async () => {
       await expect(manager.retryItem("nonexistent")).rejects.toThrow("not found");
     });
   });
 
-  describe("removeItem", () => {
-    it("should remove an item from the queue", () => {
+  describe("queue management", () => {
+    it("removes an item from the queue", () => {
       const item = manager.enqueue("op1", {});
-      expect(manager.getState().queueSize).toBe(1);
-
-      const removed = manager.removeItem(item.id);
-      expect(removed).toBe(true);
+      expect(manager.removeItem(item.id)).toBe(true);
       expect(manager.getState().queueSize).toBe(0);
     });
 
-    it("should return false for non-existent item", () => {
-      const removed = manager.removeItem("nonexistent");
-      expect(removed).toBe(false);
+    it("returns false when removing a non-existent item", () => {
+      expect(manager.removeItem("nonexistent")).toBe(false);
     });
-  });
 
-  describe("clearQueue", () => {
-    it("should clear all items", () => {
+    it("clears all items", () => {
       manager.enqueue("op1", {});
       manager.enqueue("op2", {});
       expect(manager.getState().queueSize).toBe(2);
@@ -151,22 +213,18 @@ describe("OfflineManager", () => {
       manager.clearQueue();
       expect(manager.getState().queueSize).toBe(0);
     });
-  });
 
-  describe("getQueue", () => {
-    it("should return a copy of the queue", () => {
+    it("returns a copy of the queue array", () => {
       manager.enqueue("op1", {});
       const queue = manager.getQueue();
-      expect(queue).toHaveLength(1);
+      (queue as unknown[]).push({ id: "fake" });
 
-      // Modifying the copy shouldn't affect the original
-      (queue as any).push({ id: "fake" });
       expect(manager.getQueue()).toHaveLength(1);
     });
   });
 
   describe("state management", () => {
-    it("should track online status", () => {
+    it("tracks online status", () => {
       expect(manager.getIsOnline()).toBe(true);
 
       manager.setOnline(false);
@@ -177,15 +235,17 @@ describe("OfflineManager", () => {
       expect(manager.getIsOnline()).toBe(true);
     });
 
-    it("should notify listeners on state change", () => {
+    it("notifies listeners on state change", () => {
       const listener = vi.fn();
       manager.onStateChange(listener);
 
       manager.enqueue("op1", {});
-      expect(listener).toHaveBeenCalled();
+      expect(listener).toHaveBeenCalledWith(
+        expect.objectContaining({ queueSize: 1 }),
+      );
     });
 
-    it("should unsubscribe listeners", () => {
+    it("unsubscribes listeners", () => {
       const listener = vi.fn();
       const unsubscribe = manager.onStateChange(listener);
 
@@ -199,13 +259,13 @@ describe("OfflineManager", () => {
   });
 
   describe("exportData", () => {
-    it("should export queue data", () => {
+    it("exports queue data", () => {
       manager.enqueue("op1", { data: "test" });
       const data = manager.exportData();
 
-      expect(data).toBeDefined();
       expect(data.queue).toHaveLength(1);
       expect(data.queue[0].operation).toBe("op1");
+      expect(data.state.queueSize).toBe(1);
     });
   });
 });

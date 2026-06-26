@@ -1,3 +1,5 @@
+import type { OfflineConfig } from "./offline";
+
 export type {
   ContractEvent,
   ContractStats,
@@ -92,6 +94,7 @@ export interface ILNSdkConfig {
     simulationMs?: number;
   };
   cache?: CacheConfig;
+  offline?: OfflineConfig;
 }
 
 export interface NetworkConfig {
@@ -216,26 +219,6 @@ export interface CircuitBreakerState {
   failures: number;
   lastFailureTime: number | null;
   state: "closed" | "open" | "half-open";
-}
-
-export interface OfflineConfig {
-  maxQueueSize: number;
-  retryIntervalMs: number;
-  maxRetries: number;
-}
-
-export interface OfflineQueueItem {
-  id: string;
-  operation: string;
-  params: unknown;
-  timestamp: number;
-  retries: number;
-}
-
-export interface OfflineState {
-  isOnline: boolean;
-  queueSize: number;
-  lastSyncTime: number | null;
 }
 
 export interface ValidationResult {

@@ -17,6 +17,7 @@ export interface OfflineQueueItem {
   operation: string;
   params: unknown;
   timestamp: number;
+  updatedAt: number;
   retries: number;
   maxRetries: number;
   status: "pending" | "submitting" | "failed" | "completed";
@@ -46,7 +47,9 @@ export interface OfflineState {
   isOnline: boolean;
   queueSize: number;
   pendingCount: number;
+  submittingCount: number;
   failedCount: number;
+  lastSyncTime: number | null;
 }
 
 export type StateChangeCallback = (state: OfflineState) => void;
@@ -61,15 +64,91 @@ const DEFAULT_CONFIG: Required<OfflineConfig> = {
   retryDelayMs: 5000,
   maxQueueSize: 100,
   storageKey: "iln_offline_queue",
-  storage: typeof localStorage !== "undefined" ? localStorage : createMemoryStorage(),
+  storage: getDefaultStorage(),
 };
 
-function createMemoryStorage(): OfflineStorage {
+export function createMemoryOfflineStorage(): OfflineStorage {
   const store = new Map<string, string>();
   return {
     getItem: (key) => store.get(key) ?? null,
     setItem: (key, value) => store.set(key, value),
     removeItem: (key) => store.delete(key),
+  };
+}
+
+function getDefaultStorage(): OfflineStorage {
+  return typeof localStorage !== "undefined" ? localStorage : createMemoryOfflineStorage();
+}
+
+function detectOnline(): boolean {
+  if (typeof navigator !== "undefined" && typeof navigator.onLine === "boolean") {
+    return navigator.onLine;
+  }
+
+  return true;
+}
+
+function stringifyQueue(queue: OfflineQueueItem[]): string {
+  return JSON.stringify(queue, (_key, value) => {
+    if (typeof value === "bigint") {
+      return { __ilnBigInt: value.toString() };
+    }
+
+    return value;
+  });
+}
+
+function parseQueue(value: string): OfflineQueueItem[] {
+  const parsed = JSON.parse(value, (_key, item) => {
+    if (
+      item &&
+      typeof item === "object" &&
+      typeof item.__ilnBigInt === "string" &&
+      Object.keys(item).length === 1
+    ) {
+      return BigInt(item.__ilnBigInt);
+    }
+
+    return item;
+  });
+
+  if (!Array.isArray(parsed)) {
+    return [];
+  }
+
+  return parsed
+    .map(normalizeQueueItem)
+    .filter((item): item is OfflineQueueItem => item !== null);
+}
+
+function normalizeQueueItem(value: unknown): OfflineQueueItem | null {
+  if (!value || typeof value !== "object") {
+    return null;
+  }
+
+  const item = value as Partial<OfflineQueueItem>;
+  if (
+    typeof item.id !== "string" ||
+    typeof item.operation !== "string" ||
+    typeof item.timestamp !== "number"
+  ) {
+    return null;
+  }
+
+  const status = item.status === "failed" || item.status === "completed"
+    ? item.status
+    : "pending";
+
+  return {
+    id: item.id,
+    operation: item.operation,
+    params: item.params,
+    timestamp: item.timestamp,
+    updatedAt: typeof item.updatedAt === "number" ? item.updatedAt : item.timestamp,
+    retries: typeof item.retries === "number" ? item.retries : 0,
+    maxRetries: typeof item.maxRetries === "number" ? item.maxRetries : DEFAULT_CONFIG.maxRetries,
+    status,
+    error: typeof item.error === "string" ? item.error : undefined,
   };
 }
 
@@ -80,10 +159,12 @@ function createMemoryStorage(): OfflineStorage {
 export class OfflineManager {
   private queue: OfflineQueueItem[] = [];
   private config: Required<OfflineConfig>;
-  private isOnline: boolean = typeof navigator !== "undefined" ? navigator.onLine : true;
+  private isOnline: boolean = detectOnline();
+  private lastSyncTime: number | null = null;
   private listeners: Set<StateChangeCallback> = new Set();
   private submitCallback: SubmitCallback | null = null;
   private retryTimer: ReturnType<typeof setTimeout> | null = null;
+  private isProcessing = false;
 
   constructor(config: OfflineConfig = {}) {
     this.config = { ...DEFAULT_CONFIG, ...config };
@@ -116,7 +197,9 @@ export class OfflineManager {
       isOnline: this.isOnline,
       queueSize: this.queue.length,
       pendingCount: this.queue.filter((i) => i.status === "pending").length,
+      submittingCount: this.queue.filter((i) => i.status === "submitting").length,
       failedCount: this.queue.filter((i) => i.status === "failed").length,
+      lastSyncTime: this.lastSyncTime,
     };
   }
 
@@ -133,6 +216,7 @@ export class OfflineManager {
       operation,
       params,
       timestamp: Date.now(),
+      updatedAt: Date.now(),
       retries: 0,
       maxRetries: this.config.maxRetries,
       status: "pending",
@@ -142,7 +226,7 @@ export class OfflineManager {
     this.saveQueue();
     this.notifyListeners();
 
-    logger.debug(`Enqueued operation: ${operation} (id: ${item.id})`);
+    logger(`Enqueued operation: ${operation} (id: ${item.id})`);
     return item;
   }
 
@@ -150,38 +234,47 @@ export class OfflineManager {
    * Manually trigger processing of the queue.
    */
   async processQueue(): Promise<void> {
-    if (!this.isOnline || !this.submitCallback) {
+    if (!this.isOnline || !this.submitCallback || this.isProcessing) {
       return;
     }
 
-    const pending = this.queue.filter((i) => i.status === "pending");
+    this.isProcessing = true;
 
-    for (const item of pending) {
-      if (!this.isOnline) break;
+    try {
+      const pending = this.queue.filter((i) => i.status === "pending");
 
-      item.status = "submitting";
-      this.notifyListeners();
+      for (const item of pending) {
+        if (!this.isOnline) break;
 
-      try {
-        const success = await this.submitCallback(item);
-        if (success) {
-          item.status = "completed";
-          logger.debug(`Successfully submitted: ${item.operation} (id: ${item.id})`);
-        } else {
-          this.handleFailedSubmission(item, "Submission returned false");
+        item.status = "submitting";
+        item.updatedAt = Date.now();
+        this.saveQueue();
+        this.notifyListeners();
+
+        try {
+          const success = await this.submitCallback(item);
+          if (success) {
+            item.status = "completed";
+            item.updatedAt = Date.now();
+            this.lastSyncTime = item.updatedAt;
+            logger(`Successfully submitted: ${item.operation} (id: ${item.id})`);
+          } else {
+            this.handleFailedSubmission(item, "Submission returned false");
+          }
+        } catch (error) {
+          this.handleFailedSubmission(item, String(error));
         }
-      } catch (error) {
-        this.handleFailedSubmission(item, String(error));
+
+        this.saveQueue();
+        this.notifyListeners();
       }
 
+      this.queue = this.queue.filter((i) => i.status !== "completed");
       this.saveQueue();
       this.notifyListeners();
+    } finally {
+      this.isProcessing = false;
     }
-
-    // Clean up completed items
-    this.queue = this.queue.filter((i) => i.status !== "completed");
-    this.saveQueue();
-    this.notifyListeners();
   }
 
   /**
@@ -196,6 +289,7 @@ export class OfflineManager {
     item.status = "pending";
     item.retries = 0;
     item.error = undefined;
+    item.updatedAt = Date.now();
     this.saveQueue();
     this.notifyListeners();
 
@@ -220,6 +314,7 @@ export class OfflineManager {
    */
   clearQueue(): void {
     this.queue = [];
+    this.config.storage.removeItem(this.config.storageKey);
     this.saveQueue();
     this.notifyListeners();
   }
@@ -248,10 +343,10 @@ export class OfflineManager {
     this.notifyListeners();
 
     if (online) {
-      logger.info("SDK is back online, processing queue...");
+      logger("SDK is back online, processing queue...");
       this.processQueue();
     } else {
-      logger.info("SDK is offline, operations will be queued");
+      logger("SDK is offline, operations will be queued");
     }
   }
 
@@ -260,7 +355,7 @@ export class OfflineManager {
    */
   exportData(): { queue: OfflineQueueItem[]; state: OfflineState } {
     return {
-      queue: this.getQueue(),
+      queue: [...this.getQueue()],
       state: this.getState(),
     };
   }
@@ -299,13 +394,14 @@ export class OfflineManager {
   private handleFailedSubmission(item: OfflineQueueItem, error: string): void {
     item.retries++;
     item.error = error;
+    item.updatedAt = Date.now();
 
     if (item.retries >= item.maxRetries) {
       item.status = "failed";
-      logger.error(`Failed to submit ${item.operation} after ${item.retries} retries: ${error}`);
+      logger(`Failed to submit ${item.operation} after ${item.retries} retries: ${error}`);
     } else {
       item.status = "pending";
-      logger.warn(`Retry ${item.retries}/${item.maxRetries} for ${item.operation}: ${error}`);
+      logger(`Retry ${item.retries}/${item.maxRetries} for ${item.operation}: ${error}`);
 
       // Schedule retry
       if (this.retryTimer) clearTimeout(this.retryTimer);
@@ -323,20 +419,20 @@ export class OfflineManager {
     try {
       const stored = this.config.storage.getItem(this.config.storageKey);
       if (stored) {
-        this.queue = JSON.parse(stored);
-        logger.debug(`Loaded ${this.queue.length} items from storage`);
+        this.queue = parseQueue(stored);
+        logger(`Loaded ${this.queue.length} items from storage`);
       }
     } catch (error) {
-      logger.error(`Failed to load queue from storage: ${error}`);
+      logger(`Failed to load queue from storage: ${error}`);
       this.queue = [];
     }
   }
 
   private saveQueue(): void {
     try {
-      this.config.storage.setItem(this.config.storageKey, JSON.stringify(this.queue));
+      this.config.storage.setItem(this.config.storageKey, stringifyQueue(this.queue));
     } catch (error) {
-      logger.error(`Failed to save queue to storage: ${error}`);
+      logger(`Failed to save queue to storage: ${error}`);
     }
   }
 
@@ -346,7 +442,7 @@ export class OfflineManager {
       try {
         listener(state);
       } catch (error) {
-        logger.error(`Error in state change listener: ${error}`);
+        logger(`Error in state change listener: ${error}`);
       }
     }
   }

@@ -114,6 +114,42 @@ try {
 
 Read timeouts apply to read-only contract queries, write timeouts apply to account loading, transaction preparation, submission, and polling, and simulation timeouts apply to pre-submit simulations.
 
+## Offline Transaction Queue
+
+Use the `*OrQueue` write helpers when a browser app should keep transactions
+instead of failing immediately while offline. Queued items are persisted through
+the configured storage and submitted automatically when the SDK comes back
+online.
+
+```ts
+import { ILNSdk, ILN_TESTNET, createFreighterSigner } from "@invoice-liquidity/sdk";
+
+const sdk = new ILNSdk({
+  ...ILN_TESTNET,
+  signer: createFreighterSigner(),
+});
+
+const result = await sdk.submitInvoiceOrQueue({
+  freelancer: "G...",
+  payer: "G...",
+  amount: 25_000_000n,
+  dueDate: Math.floor(Date.now() / 1000) + 7 * 24 * 60 * 60,
+  discountRate: 300,
+});
+
+if (result.queued) {
+  console.log("Queued for reconnect:", result.item.id);
+}
+```
+
+The SDK also exports a small queue management panel:
+
+```tsx
+import { OfflineQueuePanel } from "@invoice-liquidity/sdk";
+
+<OfflineQueuePanel manager={sdk.getOfflineManager()} />;
+```
+
 ## Token Amounts
 
 SDK methods accept token amounts as `bigint` base units. USDC and EURC use 6 decimals, while XLM uses 7 decimals through the native SAC wrapper. See the [multi-token support guide](../docs/tokens/multi-token-support.md) for supported tokens, trustlines, testnet acquisition, and token-aware parsing examples.
@@ -142,6 +178,11 @@ claimDefault(params: {
   funder: string;
   invoiceId: bigint;
 }): Promise<void>;
+
+submitInvoiceOrQueue(params): Promise<{ queued: false; result: bigint } | { queued: true; item: OfflineQueueItem }>;
+fundInvoiceOrQueue(params): Promise<{ queued: false; result: void } | { queued: true; item: OfflineQueueItem }>;
+markPaidOrQueue(params): Promise<{ queued: false; result: void } | { queued: true; item: OfflineQueueItem }>;
+claimDefaultOrQueue(params): Promise<{ queued: false; result: void } | { queued: true; item: OfflineQueueItem }>;
 
 getInvoice(invoiceId: bigint): Promise<Invoice>;
 ```
