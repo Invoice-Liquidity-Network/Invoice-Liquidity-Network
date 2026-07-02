@@ -24,6 +24,23 @@ import {
 } from "./archive";
 import { getDashboardMetrics, recordRequest, recordError } from "./dashboard";
 import { BackupManager } from "./backup";
+import {
+  SYNC_EXPORT_LIMIT,
+  countInvoicesForExport,
+  countEventsForExport,
+  queryInvoicesForExport,
+  queryEventsForExport,
+  invoicesToCsv,
+  eventsToCsv,
+  createExportJob,
+  getExportJob,
+  getExportContent,
+  processExportJob,
+  type ExportFilter,
+  type EventExportFilter,
+  type ExportFormat,
+  type ExportType,
+} from "./export";
 
 /**
  * Build and return the Express application.
@@ -333,6 +350,190 @@ export function createApp(): express.Application {
         error: err instanceof Error ? err.message : "Restore failed",
       });
     }
+  });
+
+  // ── Export endpoints ───────────────────────────────────────────────────────
+
+  // GET /export/invoices?format=csv|json&from=ISO&to=ISO&status=...&freelancer=...&payer=...&funder=...
+  router.get("/export/invoices", (req: Request, res: Response) => {
+    const format = (req.query.format === "csv" ? "csv" : "json") as ExportFormat;
+    const filter: ExportFilter = {
+      status: typeof req.query.status === "string" ? req.query.status : undefined,
+      freelancer: typeof req.query.freelancer === "string" ? req.query.freelancer : undefined,
+      payer: typeof req.query.payer === "string" ? req.query.payer : undefined,
+      funder: typeof req.query.funder === "string" ? req.query.funder : undefined,
+      from: typeof req.query.from === "string" ? req.query.from : undefined,
+      to: typeof req.query.to === "string" ? req.query.to : undefined,
+    };
+
+    if (filter.from && isNaN(new Date(filter.from).getTime())) {
+      res.status(400).json({ error: "Invalid 'from' date — expected ISO 8601 format" });
+      return;
+    }
+    if (filter.to && isNaN(new Date(filter.to).getTime())) {
+      res.status(400).json({ error: "Invalid 'to' date — expected ISO 8601 format" });
+      return;
+    }
+
+    const count = countInvoicesForExport(filter);
+    if (count > SYNC_EXPORT_LIMIT) {
+      res.status(413).json({
+        error: `Result set too large (${count} rows). Use POST /export/jobs for async export.`,
+        count,
+        limit: SYNC_EXPORT_LIMIT,
+      });
+      return;
+    }
+
+    const invoices = queryInvoicesForExport(filter);
+    if (format === "csv") {
+      res.setHeader("Content-Type", "text/csv; charset=utf-8");
+      res.setHeader("Content-Disposition", 'attachment; filename="invoices.csv"');
+      res.send(invoicesToCsv(invoices));
+    } else {
+      res.setHeader("Content-Disposition", 'attachment; filename="invoices.json"');
+      res.json(invoices);
+    }
+  });
+
+  // GET /export/events?format=csv|json&from=ISO&to=ISO&invoiceId=...
+  router.get("/export/events", (req: Request, res: Response) => {
+    const format = (req.query.format === "csv" ? "csv" : "json") as ExportFormat;
+    const rawInvoiceId =
+      typeof req.query.invoiceId === "string" ? parseInt(req.query.invoiceId, 10) : undefined;
+    const filter: EventExportFilter = {
+      invoiceId: rawInvoiceId !== undefined && !isNaN(rawInvoiceId) ? rawInvoiceId : undefined,
+      from: typeof req.query.from === "string" ? req.query.from : undefined,
+      to: typeof req.query.to === "string" ? req.query.to : undefined,
+    };
+
+    if (filter.from && isNaN(new Date(filter.from).getTime())) {
+      res.status(400).json({ error: "Invalid 'from' date — expected ISO 8601 format" });
+      return;
+    }
+    if (filter.to && isNaN(new Date(filter.to).getTime())) {
+      res.status(400).json({ error: "Invalid 'to' date — expected ISO 8601 format" });
+      return;
+    }
+
+    const count = countEventsForExport(filter);
+    if (count > SYNC_EXPORT_LIMIT) {
+      res.status(413).json({
+        error: `Result set too large (${count} rows). Use POST /export/jobs for async export.`,
+        count,
+        limit: SYNC_EXPORT_LIMIT,
+      });
+      return;
+    }
+
+    const events = queryEventsForExport(filter);
+    if (format === "csv") {
+      res.setHeader("Content-Type", "text/csv; charset=utf-8");
+      res.setHeader("Content-Disposition", 'attachment; filename="events.csv"');
+      res.send(eventsToCsv(events));
+    } else {
+      res.setHeader("Content-Disposition", 'attachment; filename="events.json"');
+      res.json(events);
+    }
+  });
+
+  // POST /export/jobs — create an async export job
+  // Body: { type: "invoices"|"events", format: "csv"|"json", from?, to?, status?, freelancer?, payer?, funder?, invoiceId? }
+  router.post("/export/jobs", (req: Request, res: Response) => {
+    const { type, format, from, to, status, freelancer, payer, funder, invoiceId } = req.body ?? {};
+
+    if (type !== "invoices" && type !== "events") {
+      res.status(400).json({ error: "type must be 'invoices' or 'events'" });
+      return;
+    }
+    if (format !== "csv" && format !== "json") {
+      res.status(400).json({ error: "format must be 'csv' or 'json'" });
+      return;
+    }
+    if (from && isNaN(new Date(from).getTime())) {
+      res.status(400).json({ error: "Invalid 'from' date — expected ISO 8601 format" });
+      return;
+    }
+    if (to && isNaN(new Date(to).getTime())) {
+      res.status(400).json({ error: "Invalid 'to' date — expected ISO 8601 format" });
+      return;
+    }
+
+    const filter =
+      type === "invoices"
+        ? ({ status, freelancer, payer, funder, from, to } as ExportFilter)
+        : ({
+            invoiceId: typeof invoiceId === "number" ? invoiceId : undefined,
+            from,
+            to,
+          } as EventExportFilter);
+
+    const job = createExportJob(type as ExportType, format as ExportFormat, filter);
+
+    // Start processing in the background after the response is sent.
+    setImmediate(() => void processExportJob(job.jobId));
+
+    res.status(202).json({
+      jobId: job.jobId,
+      status: job.status,
+      type: job.type,
+      format: job.format,
+      createdAt: job.createdAt,
+      downloadUrl: `/v1/export/download/${job.jobId}`,
+    });
+  });
+
+  // GET /export/jobs/:jobId — poll job status
+  router.get("/export/jobs/:jobId", (req: Request, res: Response) => {
+    const job = getExportJob(req.params.jobId);
+    if (!job) {
+      res.status(404).json({ error: "Export job not found" });
+      return;
+    }
+    res.json({
+      jobId: job.jobId,
+      type: job.type,
+      format: job.format,
+      status: job.status,
+      createdAt: job.createdAt,
+      completedAt: job.completedAt ?? null,
+      rowCount: job.rowCount ?? null,
+      error: job.error ?? null,
+      downloadUrl:
+        job.status === "done" ? `/v1/export/download/${job.jobId}` : null,
+    });
+  });
+
+  // GET /export/download/:jobId — stream the completed export
+  router.get("/export/download/:jobId", (req: Request, res: Response) => {
+    const job = getExportJob(req.params.jobId);
+    if (!job) {
+      res.status(404).json({ error: "Export job not found" });
+      return;
+    }
+    if (job.status === "pending" || job.status === "processing") {
+      res.status(202).json({ error: "Export not ready yet", status: job.status });
+      return;
+    }
+    if (job.status === "failed") {
+      res.status(500).json({ error: job.error ?? "Export failed" });
+      return;
+    }
+
+    const content = getExportContent(req.params.jobId);
+    if (content === undefined) {
+      res.status(500).json({ error: "Export content unavailable" });
+      return;
+    }
+
+    const filename = `${job.type}.${job.format}`;
+    if (job.format === "csv") {
+      res.setHeader("Content-Type", "text/csv; charset=utf-8");
+    } else {
+      res.setHeader("Content-Type", "application/json; charset=utf-8");
+    }
+    res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+    res.send(content);
   });
 
   // Catch-all 404 inside the router so a missing /v1/* route doesn't fall

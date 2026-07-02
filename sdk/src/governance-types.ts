@@ -119,6 +119,37 @@ export interface ListProposalsParams {
 }
 
 /**
+ * Parameters for computing voting results for a proposal.
+ */
+export interface GetVotingResultsParams {
+  /** The proposal whose votes to tally. */
+  proposal: GovernanceProposal;
+  /** Total token supply used to compute the quorum threshold. */
+  totalSupply: bigint;
+  /**
+   * Minimum quorum in basis points (e.g. 1000 = 10%).
+   * Defaults to `GOVERNANCE_DEFAULT_MIN_QUORUM_BPS` when omitted.
+   */
+  minQuorumBps?: number;
+}
+
+/**
+ * Result of tallying votes for a governance proposal.
+ */
+export interface VotingResult {
+  proposalId: bigint;
+  votesFor: bigint;
+  votesAgainst: bigint;
+  totalVotes: bigint;
+  /** Minimum total-vote count required for quorum (derived from totalSupply and minQuorumBps). */
+  quorumThreshold: bigint;
+  quorumMet: boolean;
+  majorityFor: boolean;
+  /** True when both quorum is met and the majority voted for. */
+  passed: boolean;
+}
+
+/**
  * Configuration for the GovernanceClient.
  */
 import type { RpcServerLike } from "./types";

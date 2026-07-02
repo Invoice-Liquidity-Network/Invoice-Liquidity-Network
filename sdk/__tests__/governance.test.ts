@@ -9,6 +9,11 @@ import {
 import {
   GovernanceClient,
   GOVERNANCE_TESTNET,
+  GOVERNANCE_DEFAULT_MIN_QUORUM_BPS,
+  GOVERNANCE_VOTING_PERIOD_SECS,
+  GOVERNANCE_DEFAULT_MIN_PROPOSAL_BALANCE,
+  GOVERNANCE_MAX_DELEGATION_DEPTH,
+  GOVERNANCE_BPS_DENOMINATOR,
   ProposalActionKind,
   ProposalStatus,
   parseGovernanceProposalSimulation,
@@ -336,5 +341,147 @@ describe("governance encoding helpers", () => {
         proposedValue: 100n,
       }),
     ).rejects.toThrow("Expected 32-byte hash but received 16 bytes.");
+  });
+});
+
+describe("governance constants", () => {
+  it("exports the correct default min quorum bps", () => {
+    expect(GOVERNANCE_DEFAULT_MIN_QUORUM_BPS).toBe(1_000);
+  });
+
+  it("exports the correct bps denominator", () => {
+    expect(GOVERNANCE_BPS_DENOMINATOR).toBe(10_000);
+  });
+
+  it("exports the correct voting period in seconds (3 days)", () => {
+    expect(GOVERNANCE_VOTING_PERIOD_SECS).toBe(259_200);
+  });
+
+  it("exports the correct default min proposal balance", () => {
+    expect(GOVERNANCE_DEFAULT_MIN_PROPOSAL_BALANCE).toBe(1_000n);
+  });
+
+  it("exports the correct max delegation depth", () => {
+    expect(GOVERNANCE_MAX_DELEGATION_DEPTH).toBe(10);
+  });
+});
+
+describe("GovernanceClient – read-only config queries", () => {
+  it("builds getMinQuorumBps read transaction with correct method", () => {
+    const server = createMockServer();
+    const client = createClient(server);
+
+    const transaction = client.getMinQuorumBps();
+    const call = extractContractCall(transaction);
+
+    expect(call.contractId).toBe(CONTRACT_ID);
+    expect(call.functionName).toBe(GovernanceContractMethod.GetMinQuorumBps);
+    expect(call.args).toHaveLength(0);
+    expect(server.getAccount).not.toHaveBeenCalled();
+  });
+
+  it("builds getExecutionDelay read transaction with correct method", () => {
+    const server = createMockServer();
+    const client = createClient(server);
+
+    const transaction = client.getExecutionDelay();
+    const call = extractContractCall(transaction);
+
+    expect(call.contractId).toBe(CONTRACT_ID);
+    expect(call.functionName).toBe(GovernanceContractMethod.GetExecutionDelay);
+    expect(call.args).toHaveLength(0);
+    expect(server.getAccount).not.toHaveBeenCalled();
+  });
+});
+
+describe("GovernanceClient – tallyVotes", () => {
+  function makeProposal(
+    votesFor: bigint,
+    votesAgainst: bigint,
+    overrides: Partial<ReturnType<typeof sampleProposalNative>> = {},
+  ) {
+    const proposer = Keypair.random().publicKey();
+    return parseGovernanceProposalSimulation(
+      {
+        result: {
+          retval: nativeToScVal(
+            sampleProposalNative({ proposer, votes_for: votesFor, votes_against: votesAgainst, ...overrides }),
+          ),
+        },
+      },
+      GovernanceContractMethod.GetProposal,
+    );
+  }
+
+  it("returns passed=true when quorum and majority are both met", () => {
+    const client = createClient(createMockServer());
+    const proposal = makeProposal(600n, 100n);
+
+    const result = client.tallyVotes({ proposal, totalSupply: 1_000n });
+
+    expect(result.proposalId).toBe(1n);
+    expect(result.votesFor).toBe(600n);
+    expect(result.votesAgainst).toBe(100n);
+    expect(result.totalVotes).toBe(700n);
+    // quorumThreshold = 1000 * 1000 / 10000 = 100
+    expect(result.quorumThreshold).toBe(100n);
+    expect(result.quorumMet).toBe(true);
+    expect(result.majorityFor).toBe(true);
+    expect(result.passed).toBe(true);
+  });
+
+  it("returns passed=false when quorum is not met", () => {
+    const client = createClient(createMockServer());
+    const proposal = makeProposal(5n, 0n);
+
+    const result = client.tallyVotes({ proposal, totalSupply: 10_000n });
+
+    // quorumThreshold = 10000 * 1000 / 10000 = 1000; totalVotes = 5 < 1000
+    expect(result.quorumMet).toBe(false);
+    expect(result.passed).toBe(false);
+  });
+
+  it("returns passed=false when majority votes against", () => {
+    const client = createClient(createMockServer());
+    const proposal = makeProposal(200n, 800n);
+
+    const result = client.tallyVotes({ proposal, totalSupply: 1_000n });
+
+    expect(result.quorumMet).toBe(true);
+    expect(result.majorityFor).toBe(false);
+    expect(result.passed).toBe(false);
+  });
+
+  it("respects a custom minQuorumBps override", () => {
+    const client = createClient(createMockServer());
+    const proposal = makeProposal(300n, 0n);
+
+    // With 50% quorum (5000 bps) and totalSupply 1000, threshold = 500 > 300 votes.
+    const result = client.tallyVotes({ proposal, totalSupply: 1_000n, minQuorumBps: 5_000 });
+
+    expect(result.quorumThreshold).toBe(500n);
+    expect(result.quorumMet).toBe(false);
+    expect(result.passed).toBe(false);
+  });
+
+  it("handles zero totalSupply by setting quorumThreshold to 0 (always met)", () => {
+    const client = createClient(createMockServer());
+    const proposal = makeProposal(1n, 0n);
+
+    const result = client.tallyVotes({ proposal, totalSupply: 0n });
+
+    expect(result.quorumThreshold).toBe(0n);
+    expect(result.quorumMet).toBe(true);
+    expect(result.passed).toBe(true);
+  });
+
+  it("returns majorityFor=false on tied votes", () => {
+    const client = createClient(createMockServer());
+    const proposal = makeProposal(500n, 500n);
+
+    const result = client.tallyVotes({ proposal, totalSupply: 10_000n });
+
+    expect(result.majorityFor).toBe(false);
+    expect(result.passed).toBe(false);
   });
 });
