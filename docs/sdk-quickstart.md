@@ -10,6 +10,14 @@ Get the ILN SDK installed, your wallet connected, and your first invoice submitt
 
 ---
 
+## Requirements
+
+- **Node.js 20.x or 22.x** (active LTS). The SDK is tested against both versions
+  in CI on every change; other versions may work but are not part of the
+  guaranteed support matrix.
+
+---
+
 ## 1. Install the SDK
 
 ```bash
