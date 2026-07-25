@@ -9,7 +9,6 @@ export default defineConfig([
     sourcemap: true,
     clean: true,
     target: "es2020",
-    jsx: "react",
     external: ["react", "react-native", "@stellar/stellar-sdk"],
     outExtension({ format }) {
       return {

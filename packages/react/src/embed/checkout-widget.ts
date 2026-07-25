@@ -1,6 +1,6 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
-import { CheckoutWidget, CheckoutWidgetProps } from "../CheckoutWidget";
+import { CheckoutWidget, CheckoutWidgetProps } from "../components/CheckoutWidget";
 
 /**
  * Custom element <iln-checkout-widget> to embed the CheckoutWidget.

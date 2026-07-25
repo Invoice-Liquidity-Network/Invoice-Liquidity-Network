@@ -19,15 +19,6 @@ export * from "./offline";
 export * from "./event-emitter";
 export * from "./recovery";
 export * from "./plugins";
-export { InvoiceDashboard } from "./InvoiceDashboard";
-export type {
-  InvoiceDashboardProps,
-  LiveInvoiceEvent,
-  InvoiceEventType,
-  DashboardMetrics,
-  MetricKey,
-  DashboardTheme,
-} from "./InvoiceDashboard";
 export * from "./cache";
 export * from "./validators";
 export * from "./react-native";

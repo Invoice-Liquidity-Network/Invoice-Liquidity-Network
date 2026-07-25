@@ -1,7 +1,6 @@
 import React, { useState } from "react";
-import { ILNSdk } from "./client";
-import { createFreighterSigner, ILN_TESTNET } from "./signers";
-import type { ILNSdkConfig } from "./types";
+import { ILNSdk, createFreighterSigner, ILN_TESTNET } from "@iln/sdk";
+import type { ILNSdkConfig } from "@iln/sdk";
 
 export interface CheckoutWidgetProps {
   /** The invoice ID to fund (the checkout order). */
