@@ -7,7 +7,7 @@ import { ILNClient } from "./client";
 import { loadConfig, initConfig, readRawConfig, writeRawConfig } from "./config";
 import { parseDueDate } from "./dates";
 import { LocalDevEnvironment } from "./dev-environment";
-import { formatUnknownError } from "./errors";
+import { formatUnknownError, formatILNError, isStructuredError } from "./errors";
 import { decodeScValXdr, formatDecodedScVal } from "./xdr";
 import {
   createUi,
@@ -1270,7 +1270,26 @@ export async function runCli(
   } catch (error: any) {
     const isJson = program.opts().json;
     if (isJson) {
-      stdout.write(JSON.stringify({ success: false, error: formatUnknownError(error) }, null, 2) + "\n");
+      if (isStructuredError(error)) {
+        stdout.write(
+          JSON.stringify(
+            {
+              success: false,
+              error: error.message,
+              code: error.code,
+              remediation: error.remediation,
+              docsUrl: error.docsUrl,
+            },
+            null,
+            2,
+          ) + "\n",
+        );
+      } else {
+        stdout.write(JSON.stringify({ success: false, error: formatUnknownError(error) }, null, 2) + "\n");
+      }
+    } else if (isStructuredError(error)) {
+      const hyperlinks = Boolean((stderr as NodeJS.WriteStream).isTTY);
+      stderr.write(formatILNError(error, { hyperlinks }) + "\n");
     } else {
       ui.error(formatUnknownError(error));
     }
