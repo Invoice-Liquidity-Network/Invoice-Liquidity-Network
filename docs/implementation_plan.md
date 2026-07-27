@@ -7,12 +7,12 @@
 
 ### Scripts & Tooling
 
-#### [MODIFY] [check-compatibility.ts](file:///C:/Users/%D0%9C%D0%B0%D0%BA%D1%81%D0%B8%D0%BC/Documents/antigravity/valiant-hopper/iln-repo/scripts/check-compatibility.ts)
+#### [MODIFY] [check-compatibility.ts](../scripts/check-compatibility.ts)
 - Export `readContractVersion`, `readJsonVersion`, `parseCompatibilityMatrix`, and `validateCompatibility`.
 - Allow optional custom root/doc parameters for deterministic fixture testing.
 - Guard main execution block so importing the module does not trigger process exit during tests.
 
-#### [NEW] [check-compatibility.test.js](file:///C:/Users/%D0%9C%D0%B0%D0%BA%D1%81%D0%B8%D0%BC/Documents/antigravity/valiant-hopper/iln-repo/scripts/__tests__/check-compatibility.test.js)
+#### [NEW] [check-compatibility.test.js](../scripts/__tests__/check-compatibility.test.js)
 - Test `readContractVersion` with valid Cargo.toml content and error path on missing version.
 - Test `readJsonVersion` with valid package.json and error path on missing version field.
 - Test `parseCompatibilityMatrix` with valid Markdown table, missing markers, and custom matrix rows.
