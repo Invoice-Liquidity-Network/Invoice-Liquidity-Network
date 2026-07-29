@@ -1,5 +1,11 @@
 import express, { Request, Response, Router, RequestHandler } from "express";
 import swaggerUi from "swagger-ui-express";
+import { registry } from "./metrics";
+import {
+  httpRequestsTotal,
+  httpRequestDuration,
+  httpErrorsTotal,
+} from "./metrics";
 import {
   getDb,
   getFreelancerStats,
@@ -98,10 +104,20 @@ export function createApp(): express.Application {
   const trackMetrics: RequestHandler = (req, res, next) => {
     const start = Date.now();
     res.on("finish", () => {
-      const duration = Date.now() - start;
-      recordRequest(duration);
+      const durationSec = (Date.now() - start) / 1000;
+      const route = req.route?.path ?? req.path;
+      const status = res.statusCode.toString();
+      const method = req.method;
+
+      recordRequest(Date.now() - start);
       if (res.statusCode >= 400) {
         recordError(`${res.statusCode}`, `${req.method} ${req.path} returned ${res.statusCode}`);
+      }
+
+      httpRequestsTotal.inc({ method, route, status });
+      httpRequestDuration.observe({ method, route, status }, durationSec);
+      if (res.statusCode >= 500) {
+        httpErrorsTotal.inc({ method, route, status });
       }
     });
     next();
@@ -111,8 +127,20 @@ export function createApp(): express.Application {
   const router = Router();
 
   // GET /health
-  router.get("/health", (_req: Request, res: Response) => {
+  router.get("/health", async (_req: Request, res: Response) => {
     let dbStatus: "ok" | "error" = "ok";
+    try {
+      const db = getDb();
+      db.prepare("SELECT 1").get();
+    } catch {
+      dbStatus = "error";
+    }
+    const status = dbStatus === "ok" ? 200 : 503;
+    res.status(status).json({ status: dbStatus, timestamp: Date.now() });
+  });
+
+  // GET /metrics - Prometheus metrics endpoint
+  router.get("/metrics", async (_req: Request, res: Response) => {
     try {
       res.setHeader("Content-Type", registry.contentType);
       const body = await registry.metrics();
@@ -178,24 +206,28 @@ export function createApp(): express.Application {
 
   // ── Backup endpoints ──────────────────────────────────────────────────────
 
+  // POST /backup — trigger a new backup
   app.post("/backup", async (_req: Request, res: Response) => {
     try {
       const manifest = await backupManager.runBackup();
       if (manifest) {
         res.json({ success: true, backup: manifest });
-      } try {                                          // ⚠️ line 74 — this looks broken
-      invoicesUpsertedTotal.inc();
-    } catch {}
-    pubsub.publish(INVOICE_UPDATED, { invoiceUpdated: invoice, trigger...
-    pubsub.publish(EVENT_STREAM, { eventStream: ilnEvent });
-    if (eventType === "submitted") {
-      pubSub.publish("INVOICE_CREATED", invoice);
-    } else {
-      pubSub.publish("INVOICE_UPDATED", invoice);
+      } else {
+        res.status(500).json({ success: false, error: "Backup failed" });
+      }
+    } catch (err) {
+      res.status(500).json({
+        success: false,
+        error: err instanceof Error ? err.message : "Backup failed",
+      });
     }
+  });
+
+  // GET /backup — list all backups
+  app.get("/backup", (_req: Request, res: Response) => {
     const backups = backupManager.listBackups();
     res.json({ backups, total: backups.length });
-});
+  });
 
   // GET /backup/latest — get the latest backup manifest
   app.get("/backup/latest", (_req: Request, res: Response) => {
