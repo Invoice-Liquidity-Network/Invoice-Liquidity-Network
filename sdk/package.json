@@ -49,7 +49,7 @@
     "@iln/shared": "workspace:*",
     "@stellar/freighter-api": "^6.0.1",
     "@stellar/stellar-sdk": "^15.0.1",
-    "debug": "^5.1.0"
+    "debug": "^4.4.3"
   },
   "devDependencies": {
     "@iln/eslint-config": "workspace:*",

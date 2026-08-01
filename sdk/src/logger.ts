@@ -191,20 +191,4 @@ export function addTransport(transport: Transport): void {
  */
 export function setLogLevel(level: LogLevel): void {
   currentLogLevel = level;
- * Create a debug logger for the SDK.
- * Logging is enabled when `ILN_DEBUG=1` is set in the environment.
- *
- * @param namespace - The logger namespace (e.g. "client", "signers").
- * @returns A debug.Debugger instance (noop when debugging is disabled).
- *
- * @example
- * ```ts
- * const logger = createLogger("client");
- * if (logger.enabled) {
- *   logger("Submitting invoice", { params });
- * }
- * ```
- */
-export function createLogger(namespace: string): debug.Debugger {
-  return isDebugEnabled ? debug(`iln:sdk:${namespace}`) : createNoopDebugger();
 }

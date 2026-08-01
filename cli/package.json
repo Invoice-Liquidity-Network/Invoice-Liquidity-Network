@@ -29,7 +29,7 @@
     "test:integration": "vitest run tests/integration.test.ts"
   },
   "dependencies": {
-    "@invoice-liquidity/sdk": "workspace:*",
+    "@iln/sdk": "workspace:*",
     "@stellar/stellar-sdk": "^15.0.1",
     "commander": "^14.0.3",
     "picocolors": "^1.1.1",

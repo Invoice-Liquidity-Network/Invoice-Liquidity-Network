@@ -46,7 +46,7 @@ import {
 import type { Ui } from "./format";
 import type { ResolvedConfig, RpcServerLike } from "./types";
 
-import { checkCompatibility } from "@invoice-liquidity/sdk";
+import { checkCompatibility } from "@iln/sdk";
 import { runInteractive } from "./interactive";
 import { VersionManager } from "./version";
 import { runTutorial } from "./tutorial";
