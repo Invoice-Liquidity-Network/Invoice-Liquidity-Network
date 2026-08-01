@@ -1,11 +1,12 @@
 /**
  * Enumeration of all possible invoice states in the ILN protocol.
  *
- * - **Pending**: Invoice submitted, awaiting funding.
- * - **Funded**: Liquidity provider has funded the invoice.
- * - **Paid**: Payer has settled the invoice.
- * - **Defaulted**: Invoice went unpaid past the grace period.
- * - **Disputed**: Invoice is under dispute.
+ * This is an SDK-specific enum with utility helpers (`isPending`, `isTerminal`,
+ * etc.) and display colors. It intentionally differs from @iln/shared's
+ * InvoiceStatus (a string literal union) — prefer this enum for SDK consumers
+ * that need runtime enum values and helper functions.
+ *
+ * NOTE: Keep the member set aligned with @iln/shared's InvoiceStatus.
  */
 export enum InvoiceStatus {
   Pending = "Pending",

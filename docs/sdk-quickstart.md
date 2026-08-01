@@ -2,6 +2,20 @@
 
 Get the ILN SDK installed, your wallet connected, and your first invoice submitted in minutes.
 
+> This guide covers `@iln/sdk` (`sdk/`), the stable SDK recommended for
+> integrators. There is also an experimental, not-yet-feature-complete
+> `@iln/sdk-next` (`packages/sdk`) — see
+> [`sdk-next-migration.md`](./sdk-next-migration.md) if you're deciding
+> which one to build against.
+
+---
+
+## Requirements
+
+- **Node.js 20.x or 22.x** (active LTS). The SDK is tested against both versions
+  in CI on every change; other versions may work but are not part of the
+  guaranteed support matrix.
+
 ---
 
 ## 1. Install the SDK

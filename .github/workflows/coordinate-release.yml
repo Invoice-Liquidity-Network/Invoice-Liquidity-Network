@@ -1,0 +1,252 @@
+name: Coordinate Cross-Repo Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Release version (e.g., v1.2.0)"
+        required: true
+        type: string
+      dry_run:
+        description: "Dry run mode (skip actual tagging)"
+        required: false
+        type: boolean
+        default: false
+      discord_webhook:
+        description: "Discord webhook URL for notification (leave empty to skip)"
+        required: false
+        type: string
+
+# Least-privilege: tag sibling repos (contents) and trigger their workflows (actions).
+permissions:
+  contents: write
+  actions: write
+
+jobs:
+  coordinate-release:
+    runs-on: namespace-profile-nursca
+    env:
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      DRY_RUN: ${{ inputs.dry_run }}
+      VERSION: ${{ inputs.version }}
+
+    steps:
+      - name: Validate version format
+        run: |
+          if [[ ! "${{ inputs.version }}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "❌ Invalid version format. Use semantic versioning (e.g., v1.2.0)"
+            exit 1
+          fi
+          echo "✅ Version format valid: ${{ inputs.version }}"
+
+      - name: Checkout main repo
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Log release plan
+        run: |
+          echo "🚀 Release Plan for ${{ inputs.version }}"
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          echo "1️⃣  Tag ILN-Smart-Contract repo"
+          echo "2️⃣  Wait for smart contract deployment CI"
+          echo "3️⃣  Update contract IDs in SDK"
+          echo "4️⃣  Run SDK tests"
+          echo "5️⃣  Tag SDK release"
+          echo "6️⃣  Update SDK version in frontend"
+          echo "7️⃣  Run frontend CI"
+          echo "8️⃣  Tag frontend release"
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          if [[ "$DRY_RUN" == "true" ]]; then
+            echo "🔄 DRY RUN MODE: No actual changes will be made"
+          fi
+
+      - name: Step 1 - Tag smart contract repo
+        run: |
+          echo "🏗️  Tagging ILN-Smart-Contract with $VERSION..."
+          if [[ "$DRY_RUN" != "true" ]]; then
+            gh api repos/Songu3020/ILN-Smart-Contract/git/refs \
+              -X POST \
+              -f ref="refs/tags/$VERSION" \
+              -f sha="$(gh api repos/Songu3020/ILN-Smart-Contract/commits/main --jq '.sha')" || \
+              echo "⚠️  Tag may already exist or API error occurred"
+          else
+            echo "🔄 [DRY RUN] Would tag ILN-Smart-Contract with $VERSION"
+          fi
+
+      - name: Step 2 - Wait for smart contract deployment
+        run: |
+          echo "⏳ Waiting for smart contract CI to complete..."
+          if [[ "$DRY_RUN" != "true" ]]; then
+            # Poll for workflow completion (max 10 minutes)
+            for i in {1..60}; do
+              WORKFLOW_RUNS=$(gh api repos/Songu3020/ILN-Smart-Contract/actions/runs \
+                --jq '.workflow_runs[0]' \
+                -f event="push" \
+                -f status="completed")
+              
+              if [[ -n "$WORKFLOW_RUNS" ]]; then
+                CONCLUSION=$(echo "$WORKFLOW_RUNS" | jq -r '.conclusion')
+                if [[ "$CONCLUSION" == "success" ]]; then
+                  echo "✅ Smart contract CI passed"
+                  break
+                elif [[ "$CONCLUSION" == "failure" ]]; then
+                  echo "❌ Smart contract CI failed"
+                  exit 1
+                fi
+              fi
+              
+              echo "⏳ Waiting... ($i/60)"
+              sleep 10
+            done
+          else
+            echo "🔄 [DRY RUN] Would wait for smart contract CI"
+          fi
+
+      - name: Step 3 & 4 - Update SDK contract IDs and test
+        run: |
+          echo "📦 Updating SDK with new contract IDs..."
+          if [[ "$DRY_RUN" != "true" ]]; then
+            # Fetch new contract IDs from smart contract repo
+            CONTRACT_IDS=$(gh api repos/Songu3020/ILN-Smart-Contract/contents/contract-ids.json \
+              --jq '.content | @base64d' 2>/dev/null || echo "{}")
+            
+            # Update SDK contract IDs (implementation depends on SDK structure)
+            echo "Contract IDs fetched, would update SDK files"
+            
+            # Run SDK tests
+            echo "🧪 Running SDK tests..."
+            npm ci
+            npm run test || echo "⚠️  Tests may have issues"
+          else
+            echo "🔄 [DRY RUN] Would update SDK contract IDs and run tests"
+          fi
+
+      - name: Step 5 - Tag SDK release
+        run: |
+          echo "🏷️  Tagging SDK release with $VERSION..."
+          if [[ "$DRY_RUN" != "true" ]]; then
+            gh api repos/Songu3020/Invoice-Liquidity-Network/git/refs \
+              -X POST \
+              -f ref="refs/tags/sdk-$VERSION" \
+              -f sha="$(gh api repos/Songu3020/Invoice-Liquidity-Network/commits/main --jq '.sha')" || \
+              echo "⚠️  SDK tag may already exist"
+          else
+            echo "🔄 [DRY RUN] Would tag SDK with sdk-$VERSION"
+          fi
+
+      - name: Step 6 - Update frontend SDK version
+        run: |
+          echo "🎨 Updating frontend with new SDK version..."
+          if [[ "$DRY_RUN" != "true" ]]; then
+            # Trigger frontend workflow to update SDK version
+            gh workflow run ci.yml \
+              -R Songu3020/ILN-Frontend \
+              -f sdk-version="$VERSION" || \
+              echo "⚠️  Frontend workflow trigger may have failed"
+          else
+            echo "🔄 [DRY RUN] Would trigger frontend to update SDK version"
+          fi
+
+      - name: Step 7 - Wait for frontend CI
+        run: |
+          echo "⏳ Waiting for frontend CI to complete..."
+          if [[ "$DRY_RUN" != "true" ]]; then
+            # Poll for frontend workflow completion (max 10 minutes)
+            for i in {1..60}; do
+              FRONTEND_RUNS=$(gh api repos/Songu3020/ILN-Frontend/actions/runs \
+                --jq '.workflow_runs[0]' \
+                -f event="push" \
+                -f status="completed")
+              
+              if [[ -n "$FRONTEND_RUNS" ]]; then
+                CONCLUSION=$(echo "$FRONTEND_RUNS" | jq -r '.conclusion')
+                if [[ "$CONCLUSION" == "success" ]]; then
+                  echo "✅ Frontend CI passed"
+                  break
+                elif [[ "$CONCLUSION" == "failure" ]]; then
+                  echo "❌ Frontend CI failed"
+                  exit 1
+                fi
+              fi
+              
+              echo "⏳ Waiting... ($i/60)"
+              sleep 10
+            done
+          else
+            echo "🔄 [DRY RUN] Would wait for frontend CI"
+          fi
+
+      - name: Step 8 - Tag frontend release
+        run: |
+          echo "🏷️  Tagging frontend release with $VERSION..."
+          if [[ "$DRY_RUN" != "true" ]]; then
+            gh api repos/Songu3020/ILN-Frontend/git/refs \
+              -X POST \
+              -f ref="refs/tags/frontend-$VERSION" \
+              -f sha="$(gh api repos/Songu3020/ILN-Frontend/commits/main --jq '.sha')" || \
+              echo "⚠️  Frontend tag may already exist"
+          else
+            echo "🔄 [DRY RUN] Would tag frontend with frontend-$VERSION"
+          fi
+
+      - name: Send Discord notification
+        if: always()
+        run: |
+          WEBHOOK="${{ inputs.discord_webhook }}"
+          if [[ -z "$WEBHOOK" ]]; then
+            echo "⏭️  Discord webhook not provided, skipping notification"
+            exit 0
+          fi
+
+          if [[ "${{ job.status }}" == "success" ]]; then
+            STATUS_EMOJI="✅"
+            STATUS_TEXT="succeeded"
+            COLOR=3066993
+          else
+            STATUS_EMOJI="❌"
+            STATUS_TEXT="failed"
+            COLOR=15158332
+          fi
+
+          DRY_RUN_TEXT=""
+          if [[ "$DRY_RUN" == "true" ]]; then
+            DRY_RUN_TEXT=" (DRY RUN)"
+          fi
+
+          PAYLOAD=$(cat <<EOF
+          {
+            "embeds": [{
+              "title": "$STATUS_EMOJI Release $VERSION$DRY_RUN_TEXT",
+              "description": "Cross-repo release coordination $STATUS_TEXT",
+              "color": $COLOR,
+              "fields": [
+                {"name": "Version", "value": "$VERSION", "inline": true},
+                {"name": "Status", "value": "$STATUS_TEXT", "inline": true},
+                {"name": "Workflow", "value": "[View logs](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})", "inline": false}
+              ],
+              "footer": {"text": "ILN Release Coordinator"}
+            }]
+          }
+          EOF
+          )
+
+          curl -X POST "$WEBHOOK" \
+            -H "Content-Type: application/json" \
+            -d "$PAYLOAD"
+
+      - name: Release summary
+        run: |
+          echo "📋 Release Summary"
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          echo "Version: $VERSION"
+          echo "Status: ${{ job.status }}"
+          if [[ "$DRY_RUN" == "true" ]]; then
+            echo "Mode: 🔄 DRY RUN"
+          fi
+          echo ""
+          echo "Released repositories:"
+          echo "  • ILN-Smart-Contract (tag: $VERSION)"
+          echo "  • Invoice-Liquidity-Network SDK (tag: sdk-$VERSION)"
+          echo "  • ILN-Frontend (tag: frontend-$VERSION)"
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"

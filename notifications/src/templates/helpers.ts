@@ -31,8 +31,26 @@ export function escapeHtml(str: string): string {
     .replace(/'/g, "&#39;");
 }
 
-/** Shared email wrapper: responsive, inbox-safe HTML shell. */
-export function emailShell(title: string, bodyHtml: string): string {
+/** Shared email wrapper: responsive, inbox-safe HTML shell.
+ *
+ * @param title       Email `<title>` and visible heading text.
+ * @param bodyHtml    Pre-rendered body section.
+ * @param options Optional shell options. Pass `unsubscribeUrl` to make the
+ *   footer's "Unsubscribe" link point at a tokenized, address-specific
+ *   preferences endpoint so the link always works and takes effect immediately.
+ *   When omitted, the link falls back to the public marketing URL.
+ */
+export function emailShell(
+  title: string,
+  bodyHtml: string,
+  options: { unsubscribeUrl?: string } = {},
+): string {
+  const { unsubscribeUrl } = options;
+  const unsubHref = unsubscribeUrl ?? "https://iln.finance/unsubscribe";
+  // The visible label is always "Unsubscribe" for consistency with established
+  // email conventions (and to keep the existing snapshot tests passing). Only
+  // the destination URL changes when a tokenized link is supplied.
+  const unsubLabel = "Unsubscribe";
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -112,7 +130,7 @@ export function emailShell(title: string, bodyHtml: string): string {
         <p>
           <a href="https://iln.finance">Dashboard</a> &bull;
           <a href="https://docs.iln.finance">Docs</a> &bull;
-          <a href="https://iln.finance/unsubscribe">Unsubscribe</a>
+          <a href="${escapeHtml(unsubHref)}">${escapeHtml(unsubLabel)}</a>
         </p>
       </div>
     </div>

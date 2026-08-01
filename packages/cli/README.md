@@ -1,5 +1,11 @@
 # @iln/cli
 
+> **Experimental — not the canonical CLI.** [`cli/`](../../cli) (published as
+> `@invoice-liquidity/cli`) is the documented, actively maintained CLI for the
+> Invoice Liquidity Network — see the [relationship doc](../../docs/cli-vs-cli-next.md)
+> for the full comparison and rationale. Install `@invoice-liquidity/cli` unless
+> you specifically need one of this package's `network`/`reputation` commands.
+
 Command-line interface for the Invoice Liquidity Network.
 
 ## Installation

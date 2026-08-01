@@ -1,0 +1,14 @@
+{
+  "name": "@iln/sdk-integration-tests",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "dist/index.js",
+  "scripts": {
+    "test": "vitest"
+  },
+  "devDependencies": {
+    "vitest": "^4.1.5",
+    "typescript": "^5.2.2"
+  }
+}

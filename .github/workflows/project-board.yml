@@ -6,6 +6,8 @@ on:
   pull_request:
     types: [closed]
 
+# Least-privilege: move issues on the project board (falls back to PROJECT_PAT
+# when GITHUB_TOKEN lacks org-project access).
 permissions:
   issues: write
 
@@ -13,7 +15,7 @@ jobs:
   move-blocked:
     name: Move blocked issue to Blocked view
     if: github.event_name == 'issues' && github.event.label.name == 'blocked'
-    runs-on: ubuntu-latest
+    runs-on: namespace-profile-nursca
     steps:
       - uses: actions/github-script@v7
         env:

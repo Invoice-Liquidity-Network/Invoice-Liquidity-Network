@@ -8,9 +8,17 @@ on:
     paths:
       - 'packages/sdk/**'
 
+# Least-privilege: read code to build the SDK and run browser compatibility tests.
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   browser-tests:
-    runs-on: ubuntu-latest
+    runs-on: namespace-profile-nursca
     defaults:
       run:
         working-directory: packages/sdk
@@ -18,20 +26,14 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-          cache: 'npm'
-          cache-dependency-path: packages/sdk/package-lock.json
-
-      - name: Install dependencies
-        run: npm ci
+      - name: Setup pnpm with store cache
+        uses: ./.github/actions/setup-pnpm
 
       - name: Build browser bundle
-        run: npm run build:browser
+        run: pnpm run build:browser
 
       - name: Install Playwright browsers
-        run: npx playwright install --with-deps chromium firefox webkit
+        run: pnpm exec playwright install --with-deps chromium firefox webkit
 
       - name: Run browser compatibility tests
-        run: npm run test:browser
+        run: pnpm run test:browser

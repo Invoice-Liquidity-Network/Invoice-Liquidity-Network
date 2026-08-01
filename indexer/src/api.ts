@@ -114,133 +114,12 @@ export function createApp(): express.Application {
   router.get("/health", (_req: Request, res: Response) => {
     let dbStatus: "ok" | "error" = "ok";
     try {
-      getDb().prepare("SELECT 1").get();
-    } catch {
-      dbStatus = "error";
+      res.setHeader("Content-Type", registry.contentType);
+      const body = await registry.metrics();
+      res.send(body);
+    } catch (err) {
+      res.status(500).send("Error collecting metrics");
     }
-
-    const lastSyncMs = getCursorUpdatedAt();
-    const uptime = Date.now() - startTime;
-    const status = dbStatus === "ok" ? "ok" : "degraded";
-
-    res.json({
-      status,
-      db: dbStatus,
-      lastSync: lastSyncMs !== null ? new Date(lastSyncMs).toISOString() : null,
-      uptime,
-    });
-  });
-
-  // GET /invoices
-  // Supported query parameters (all optional, ANDed together):
-  //   ?status=Pending|Funded|Paid|Defaulted
-  //   ?freelancer=G...
-  //   ?payer=G...
-  //   ?funder=G...
-  //   ?limit=10 (default 100 max) & ?cursor=opaque
-  router.get("/invoices", async (req: Request, res: Response) => {
-    const { status, freelancer, payer, funder, limit: rawLimit, cursor } = req.query;
-
-    const s = typeof status === "string" ? status : "";
-    const fl = typeof freelancer === "string" ? freelancer : "";
-    const pa = typeof payer === "string" ? payer : "";
-    const fu = typeof funder === "string" ? funder : "";
-    const limit = typeof rawLimit === "string" ? Math.min(parseInt(rawLimit, 10) || 100, 100) : 100;
-    const cacheKey = `invoices:${s}:${fl}:${pa}:${fu}:limit=${limit}:cursor=${cursor ?? ""}`;
-
-    const cached = await cacheGet(cacheKey);
-    if (cached) {
-      res.json(JSON.parse(cached));
-      return;
-    }
-
-    const { invoices, hasMore, nextCursor } = queryInvoicesPaginated(
-      {
-        status: s || undefined,
-        freelancer: fl || undefined,
-        payer: pa || undefined,
-        funder: fu || undefined,
-      },
-      limit,
-      typeof cursor === "string" ? cursor : undefined,
-    );
-
-    const result = { invoices, hasMore, nextCursor };
-    await cacheSet(cacheKey, JSON.stringify(result));
-    res.json(result);
-  });
-
-  router.get("/stats", (_req: Request, res: Response) => {
-    res.json(getProtocolStats());
-  });
-
-  router.get("/lps/top", (req: Request, res: Response) => {
-    const rawLimit =
-      typeof req.query.limit === "string" ? Number(req.query.limit) : 10;
-    const limit =
-      Number.isFinite(rawLimit) && rawLimit > 0 ? Math.min(rawLimit, 100) : 10;
-    const period =
-      typeof req.query.period === "string" ? req.query.period : "all";
-
-    if (!["all", "week", "month"].includes(period)) {
-      res
-        .status(400)
-        .json({ error: "Invalid period - expected all, week, or month" });
-      return;
-    }
-
-    res.json(getTopLPs(limit, period));
-  });
-
-  router.get("/lps/:address/stats", (req: Request, res: Response) => {
-    res.json(getLPStats(req.params.address));
-  });
-
-  router.get("/freelancers/:address/stats", (req: Request, res: Response) => {
-    res.json(getFreelancerStats(req.params.address));
-  });
-
-  router.get("/history/:address", (req: Request, res: Response) => {
-    const role =
-      typeof req.query.role === "string" ? req.query.role : "freelancer";
-
-    if (role !== "freelancer" && role !== "payer" && role !== "funder") {
-      res.status(400).json({
-        error: "Invalid role - expected freelancer, payer, or funder",
-      });
-      return;
-    }
-
-    res.json(getInvoiceHistory(req.params.address, role));
-  });
-
-  // GET /invoice/:id
-  router.get("/invoice/:id", async (req: Request, res: Response) => {
-    const id = parseInt(req.params.id, 10);
-
-    if (isNaN(id) || id <= 0) {
-      res
-        .status(400)
-        .json({ error: "Invalid invoice ID - must be a positive integer" });
-      return;
-    }
-
-    const cacheKey = `invoice:${id}`;
-    const cached = await cacheGet(cacheKey);
-    if (cached) {
-      res.json(JSON.parse(cached));
-      return;
-    }
-
-    const invoice = getInvoiceById(id);
-    if (!invoice) {
-      res.status(404).json({ error: `Invoice #${id} not found` });
-      return;
-    }
-
-    const result = { invoice };
-    await cacheSet(cacheKey, JSON.stringify(result));
-    res.json(result);
   });
 
   // GET /dashboard
@@ -299,28 +178,24 @@ export function createApp(): express.Application {
 
   // ── Backup endpoints ──────────────────────────────────────────────────────
 
-  // POST /backup — trigger a manual backup
   app.post("/backup", async (_req: Request, res: Response) => {
     try {
       const manifest = await backupManager.runBackup();
       if (manifest) {
         res.json({ success: true, backup: manifest });
-      } else {
-        res.status(500).json({ success: false, error: "Backup failed" });
-      }
-    } catch (err) {
-      res.status(500).json({
-        success: false,
-        error: err instanceof Error ? err.message : "Unknown error",
-      });
+      } try {                                          // ⚠️ line 74 — this looks broken
+      invoicesUpsertedTotal.inc();
+    } catch {}
+    pubsub.publish(INVOICE_UPDATED, { invoiceUpdated: invoice, trigger...
+    pubsub.publish(EVENT_STREAM, { eventStream: ilnEvent });
+    if (eventType === "submitted") {
+      pubSub.publish("INVOICE_CREATED", invoice);
+    } else {
+      pubSub.publish("INVOICE_UPDATED", invoice);
     }
-  });
-
-  // GET /backup — list all available backups
-  app.get("/backup", (_req: Request, res: Response) => {
     const backups = backupManager.listBackups();
     res.json({ backups, total: backups.length });
-  });
+});
 
   // GET /backup/latest — get the latest backup manifest
   app.get("/backup/latest", (_req: Request, res: Response) => {

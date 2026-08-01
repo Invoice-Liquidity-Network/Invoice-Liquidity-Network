@@ -50,6 +50,23 @@
         }
       },
       "additionalProperties": false
+    },
+    "aliases": {
+      "type": "object",
+      "description": "Custom CLI aliases, e.g. { \"sub\": \"submit\" }",
+      "additionalProperties": {
+        "type": "string"
+      },
+      "default": {}
+    },
+    "requiredVersion": {
+      "type": "string",
+      "description": "Pin the CLI to a specific version. Throws if current version doesn't match."
+    },
+    "autoUpdate": {
+      "type": "boolean",
+      "description": "Whether to automatically check for updates on startup.",
+      "default": true
     }
   },
   "additionalProperties": false

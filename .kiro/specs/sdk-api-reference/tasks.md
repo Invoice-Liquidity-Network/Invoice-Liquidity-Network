@@ -209,7 +209,7 @@ Implement an automated documentation pipeline that extracts JSDoc comments and T
     - Condition for job summary: `if: failure() && github.event_name != 'pull_request'` writing to `$GITHUB_STEP_SUMMARY`
     - _Requirements: 5.4_
 
-- [~] 13. Final checkpoint — Ensure all tests pass
+- [ ] 13. Final checkpoint — Ensure all tests pass
   - Ensure all tests pass, ask the user if questions arise.
 
 ## Notes

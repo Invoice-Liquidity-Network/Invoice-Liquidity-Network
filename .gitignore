@@ -1,48 +1,99 @@
-# Node modules
+# =============================================================================
+# Dependencies
+# =============================================================================
+
 node_modules/
 
-# Rust target directory
-target/
+# =============================================================================
+# Build outputs
+# =============================================================================
 
-# Local settings
+dist/
+build/
+target/
+.next/
+*.tsbuildinfo
+*.tsbuildinfo.json
+
+# =============================================================================
+# Turbo & package manager caches
+# =============================================================================
+
+.turbo/
+.yarn/
+yarn.lock
+
+# =============================================================================
+# Foreign lockfiles — this is a pnpm-only workspace.
+# npm and yarn must not be used; their lockfiles must never be committed.
+# The only lockfile that belongs here is the root pnpm-lock.yaml.
+# CI also enforces this via scripts/check-no-foreign-lockfiles.mjs.
+# =============================================================================
+
+package-lock.json
+
+# =============================================================================
+# Environment & secrets
+# =============================================================================
+
+.env
+.secrets.baseline
+.security/
+
+# =============================================================================
+# Local tool settings
+# =============================================================================
+
 .soroban
 .stellar
 
-# Environment files
-.env
-
+# =============================================================================
 # IDE files
+# =============================================================================
+
 .vscode/
 .idea/
 
+# =============================================================================
 # OS files
+# =============================================================================
+
 .DS_Store
 Thumbs.db
 
+# =============================================================================
 # Logs
+# =============================================================================
+
 *.log
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 notifications/*.txt
-.security/
+
+# =============================================================================
+# Test & coverage artifacts
+# =============================================================================
+
+coverage/
+*.tgz
+tests/load/results/
+
+# =============================================================================
+# Docker
+# =============================================================================
+
+.docker-output/
+
+# =============================================================================
+# Scratch files
+#
+# One-off markdown/txt files created during local debugging.  These are
+# gitignored to avoid accidental commits of temporary notes; related
+# cleanup is also handled by Issues #16/#20.
+# =============================================================================
 
 issue.md
 pr.md
 fix.md
-# Build outputs
-dist/
-build/
-
-# Turbo cache
-.turbo/
-
-# Yarn
-.yarn/
-yarn.lock
-
-# Load test results
-tests/load/results/
-
-# Docker output directory
-.docker-output/
+TODO.md

@@ -9,7 +9,7 @@
     "lint": "eslint . --ext .ts"
   },
   "dependencies": {
-    "@iln/indexer": "file:../../packages/indexer",
+    "@iln/indexer": "^0.1.0",
     "@stellar/stellar-sdk": "^15.0.1",
     "commander": "^14.0.3",
     "json2csv": "^6.0.0-alpha.2"
@@ -19,9 +19,9 @@
     "node": ">=20"
   },
   "devDependencies": {
-    "@iln/eslint-config": "workspace:*",
+    "@iln/eslint-config": "^1.0.0",
     "@types/json2csv": "^5.0.7",
-    "@types/node": "^24.7.2",
+    "@types/node": "^20.0.0",
     "ts-node": "^10.9.2",
     "typescript": "^5.9.3"
   }

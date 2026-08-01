@@ -13,6 +13,8 @@ export interface DisputeTemplateVars {
   /** Role of the recipient */
   recipientRole: "freelancer" | "lp";
   dashboardUrl?: string;
+  /** Optional tokenized one-click unsubscribe URL. */
+  unsubscribeUrl?: string;
 }
 
 /**
@@ -26,7 +28,7 @@ export function buildDisputeSubject(event: InvoiceEvent): string {
  * Render the full HTML email body for an invoice-defaulted event.
  */
 export function renderDisputeEmail(vars: DisputeTemplateVars): string {
-  const { event, recipientRole, dashboardUrl } = vars;
+  const { event, recipientRole, dashboardUrl, unsubscribeUrl } = vars;
 
   const isFreelancer = recipientRole === "freelancer";
   const roleLabel = isFreelancer ? "Freelancer" : "Liquidity Provider";
@@ -109,5 +111,5 @@ export function renderDisputeEmail(vars: DisputeTemplateVars): string {
       </div>
     </div>`;
 
-  return emailShell(`Invoice #${invoiceId} Defaulted`, body);
+  return emailShell(`Invoice #${invoiceId} Defaulted`, body, { unsubscribeUrl });
 }

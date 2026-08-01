@@ -1,5 +1,7 @@
 # Testnet Account Seeder
 
+For general CLI documentation and other commands, see [README.md](./README.md).
+
 ## Overview
 
 The testnet account seeder (`iln dev seed`) automates the setup of development accounts on Stellar testnet. It creates three funded accounts with USDC and EURC trustlines configured, eliminating the need for manual account creation and trustline setup.

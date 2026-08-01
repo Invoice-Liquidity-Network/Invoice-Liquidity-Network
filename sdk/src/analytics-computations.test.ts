@@ -5,7 +5,7 @@ import {
   calculatePortfolioAllocation,
   calculateHistoricalPerformance,
   compareMetrics,
-} from '../src/analytics-computations';
+} from './analytics-computations';
 
 describe('calculateYieldProjection', () => {
   it('calculates yield for a standard invoice', () => {

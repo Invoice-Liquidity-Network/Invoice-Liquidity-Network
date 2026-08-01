@@ -415,11 +415,43 @@ function parseArgs(argv: string[]): DeployOptions {
   };
 }
 
+/**
+ * Prompt the user to confirm a non-testnet deployment by typing the network name.
+ * Exits the process with code 1 if confirmation is not given.
+ * Skips the prompt if --yes or --ci is passed, or if --dry-run is active.
+ */
+export async function confirmNetwork(network: string, dryRun: boolean, argv: string[]): Promise<void> {
+  if (network === "testnet" || dryRun || argv.includes("--yes") || argv.includes("--ci")) {
+    return;
+  }
+
+  const readline = await import("readline");
+  const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+
+  return new Promise((resolve) => {
+    rl.question(
+      `\n⚠️  WARNING: You are about to deploy to "${network}".\n   Type "${network}" to confirm, or press Ctrl-C to abort:\n> `,
+      (answer: string) => {
+        rl.close();
+        if (answer.trim() !== network) {
+          console.error("Aborted: network name did not match.");
+          process.exit(1);
+        }
+        resolve();
+      },
+    );
+  });
+}
+
 const isMainModule = import.meta.url === `file://${process.argv[1]}`;
 if (isMainModule) {
-  runDeployment(parseArgs(process.argv.slice(2))).then((summary) => {
-    if (summary.status === "failed" || summary.status === "rolled_back") {
-      process.exitCode = 1;
-    }
+  const argv = process.argv.slice(2);
+  const options = parseArgs(argv);
+  confirmNetwork(options.network, options.dryRun, argv).then(() => {
+    runDeployment(options).then((summary) => {
+      if (summary.status === "failed" || summary.status === "rolled_back") {
+        process.exitCode = 1;
+      }
+    });
   });
 }

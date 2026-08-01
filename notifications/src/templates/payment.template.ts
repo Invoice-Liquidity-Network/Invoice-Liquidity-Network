@@ -12,6 +12,8 @@ export interface PaymentTemplateVars {
   /** Role of the recipient */
   recipientRole: "freelancer" | "lp";
   dashboardUrl?: string;
+  /** Optional tokenized one-click unsubscribe URL. */
+  unsubscribeUrl?: string;
 }
 
 /**
@@ -25,7 +27,7 @@ export function buildPaymentSubject(event: InvoiceEvent): string {
  * Render the full HTML email body for an invoice-paid event.
  */
 export function renderPaymentEmail(vars: PaymentTemplateVars): string {
-  const { event, recipientRole, dashboardUrl } = vars;
+  const { event, recipientRole, dashboardUrl, unsubscribeUrl } = vars;
 
   const isFreelancer = recipientRole === "freelancer";
   const roleLabel = isFreelancer ? "Freelancer" : "Liquidity Provider";
@@ -103,5 +105,5 @@ export function renderPaymentEmail(vars: PaymentTemplateVars): string {
       </div>
     </div>`;
 
-  return emailShell(`Invoice #${invoiceId} Settled`, body);
+  return emailShell(`Invoice #${invoiceId} Settled`, body, { unsubscribeUrl });
 }

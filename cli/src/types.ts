@@ -22,6 +22,14 @@ export interface FileConfig {
   tokenId?: string;
 }
 
+/**
+ * Invoice as consumed by the CLI.
+ *
+ * This is a CLI-specific projection of @iln/shared's Invoice. It omits
+ * contract-only fields (token, submitterReputation, referralCode, auction
+ * fields) and uses `status: string` (not the full InvoiceStatus union) for
+ * forward-compatibility with future on-chain statuses.
+ */
 export interface Invoice {
   amount: bigint;
   amountFunded: bigint;

@@ -1,6 +1,11 @@
 // !! AUTO-GENERATED — do not edit by hand.
 // Re-generate with: pnpm generate:types
 // Source: ILN-Smart-Contract/target/spec.json
+//
+// NOTE: This file intentionally duplicates some type names from @iln/shared.
+// It is auto-generated from the contract spec and must not be hand-edited.
+// The types here may be a subset or older version of @iln/shared — consumers
+// should prefer @iln/shared for the canonical definitions.
 
 /** Status of an invoice in its lifecycle. */
 export enum InvoiceStatus {

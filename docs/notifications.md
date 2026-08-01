@@ -4,6 +4,29 @@
 
 The notification system ensures users and integrators are promptly informed about important events, such as invoice status changes, approvals, payments, and governance actions. This reduces manual checking, improves workflow efficiency, and enables automated responses via webhooks.
 
+## Delivery channels
+
+### Implemented today
+
+`SubscriptionChannel` and `MultiChannelDelivery` implement exactly four lowercase channel names:
+
+| Channel | Required destination | Adapter payload |
+| --- | --- | --- |
+| `email` | `email` | `subject` and `message` |
+| `webhook` | `webhookUrl` | `trigger`, `actor`, complete `invoice`, `subject`, `message`, `eventId`, and `eventType` |
+| `sms` | `phone` | `subject` plus invoice ID and status as text |
+| `websocket` | `stellarAddress` | `trigger`, `invoiceId`, `status`, `subject`, `message`, `actor`, and `eventId` |
+
+Primary channels run concurrently. Only when every primary attempt fails does the fallback chain run sequentially until one succeeds. A missing adapter produces `no_adapter`; a missing destination produces `skipped`.
+
+The persisted subscription and `NotificationService` path currently accepts only `email` and `webhook`. SMS and WebSocket are implemented by the injectable dispatcher but are not persisted user preferences. The React `NotificationCenter` is an in-app event-stream consumer, not another `SubscriptionChannel`. There is currently no frontend `useNotifications` hook or email-reminder preference, so that integration remains planned work and must use these exact channel names and the shared `NotificationPayload` shape.
+
+### Planned, not implemented
+
+- Frontend opt-in email reminder controls and a `useNotifications` integration.
+- Persisted SMS and WebSocket preferences.
+- Browser/mobile push; `push` is not a valid channel today.
+
 ## User Guide: Setting Up Email Alerts
 
 To receive email alerts:
@@ -25,33 +48,31 @@ Webhook notifications will POST a JSON payload to your URL for each event.
 
 ## Webhook Payload Format
 
-Each event type has a specific JSON schema. Example payloads:
+The webhook adapter sends the shared `NotificationPayload` fields. For example:
 
-### Invoice Approved
 ```json
 {
-  "event": "invoice.approved",
-  "invoiceId": "inv_12345",
-  "amount": "1000.00",
-  "currency": "USD",
-  "approvedBy": "user_abc",
-  "timestamp": "2026-04-29T12:34:56Z"
+  "trigger": "invoice_paid",
+  "actor": "payer",
+  "invoice": {
+    "id": 12345,
+    "freelancer": "G...",
+    "payer": "G...",
+    "amount": "10000000",
+    "due_date": 1780000000,
+    "discount_rate": 250,
+    "status": "Paid",
+    "funder": "G...",
+    "funded_at": 1779000000,
+    "created_at": 1778000000,
+    "updated_at": 1779500000
+  },
+  "subject": "Invoice paid",
+  "message": "Invoice #12345 has been paid.",
+  "eventId": "evt_123",
+  "eventType": "paid"
 }
 ```
-
-### Payment Received
-```json
-{
-  "event": "payment.received",
-  "invoiceId": "inv_12345",
-  "amount": "1000.00",
-  "currency": "USD",
-  "payer": "user_xyz",
-  "timestamp": "2026-04-29T13:00:00Z"
-}
-```
-
-*Add additional event types as needed.*
 
 ## Developer Guide: Self-Hosting the Notification Service
 

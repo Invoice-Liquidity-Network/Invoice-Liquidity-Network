@@ -12,11 +12,14 @@ import {
 } from "./db";
 import { fetchInvoice } from "./rpc";
 import { deliverNotification } from "./delivery";
+import { digestScheduler, DigestScheduler } from "./digest";
+import { preferencesService } from "./preferences";
 import type {
   Invoice,
   ILNEventType,
   NotificationTrigger,
   Subscription,
+  InvoiceEvent,
 } from "./types";
 import { CONFIG } from "./config";
 
@@ -258,6 +261,32 @@ async function dispatchNotifications(
 ): Promise<void> {
   const targets = getNotificationTargets(trigger, invoice);
   for (const target of targets) {
+    // Check user's digest preference — if daily or weekly, buffer instead of immediate send.
+    const prefs = preferencesService.get(target.recipient);
+    if (DigestScheduler.isDigestFrequency(prefs.frequency)) {
+      const invoiceEvent: InvoiceEvent = {
+        eventId: eventId ?? `digest-${invoice.id}-${Date.now()}`,
+        invoiceId: invoice.id,
+        type: triggerToEventType(trigger) ?? trigger,
+        amount: invoice.amount,
+        freelancer: invoice.freelancer,
+        payer: invoice.payer,
+        dueDate: invoice.due_date,
+        discountRate: invoice.discount_rate,
+        funder: invoice.funder,
+      };
+      digestScheduler.register({
+        stellarAddress: target.recipient,
+        email: target.recipient, // would use real email from user profile in production
+        frequency: prefs.frequency,
+        sendHour: 8,
+        sendDayOfWeek: 1,
+        unsubscribeToken: `${target.recipient}-unsub`,
+      });
+      digestScheduler.buffer(target.recipient, invoiceEvent);
+      continue;
+    }
+
     const subscriptions = getSubscriptionsByAddress(target.recipient);
     const matchingSubscriptions = subscriptions.filter((subscription) =>
       subscription.triggers.includes(trigger),

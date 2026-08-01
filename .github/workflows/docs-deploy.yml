@@ -1,28 +1,74 @@
-
-```yaml
 name: Deploy Docs
 
+# Issue #746: build failures must block PRs, not just post-merge deploys.
+# We trigger on every PR that touches either `packages/docs/**` (the GitHub
+# Pages subtree) OR the top-level `docs/**` workspace (the secondary Nextra
+# site with its own docs/package.json). The workflow also still runs on
+# push-to-main so the Pages deployment still happens. Deploy jobs are gated
+# below so PRs only run the `build` job — they never publish.
 on:
   push:
     branches: [main]
     paths:
       - 'packages/docs/**'
+      - 'docs/**'
+      - '.github/workflows/docs-deploy.yml'
+
+  pull_request:
+    paths:
+      - 'packages/docs/**'
+      - 'docs/**'
       - '.github/workflows/docs-deploy.yml'
 
   workflow_dispatch:
 
+# Least-privilege: deploy to GitHub Pages via OIDC.
+# issues: write needed for PR failure comments (see Comment PR on build failure step).
 permissions:
   contents: read
   pages: write
   id-token: write
+  issues: write
 
 concurrency:
   group: 'pages'
   cancel-in-progress: false
 
 jobs:
+  # Check that every _meta.json in docs/ is in sync with the file tree before
+  # attempting to build. This catches orphaned nav entries (pointing at deleted
+  # pages) and undiscoverable pages (exist but not in the sidebar) on every PR.
+  check-meta-nav:
+    name: Validate docs _meta.json navigation
+    runs-on: namespace-profile-nursca
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Check _meta.json vs file tree
+        run: node scripts/check-meta-nav.mjs
+
+      - name: Comment PR on failure
+        if: failure() && github.event_name == 'pull_request'
+        continue-on-error: true
+        uses: actions/github-script@v7
+        with:
+          script: |
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: '🚨 **Docs navigation out of sync!** A `_meta.json` file has an orphaned entry (points at a deleted page) or a page exists that is missing from `_meta.json`. Run `node scripts/check-meta-nav.mjs` locally to see the full diff and fix the relevant `_meta.json`.'
+            })
+
   build:
-    runs-on: ubuntu-latest
+    needs: check-meta-nav
+    runs-on: namespace-profile-nursca
     defaults:
       run:
         working-directory: packages/docs
@@ -45,18 +91,43 @@ jobs:
         run: npm run build
 
       - name: Setup Pages
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         uses: actions/configure-pages@v5
 
       - name: Upload artifact
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         uses: actions/upload-pages-artifact@v3
         with:
           path: packages/docs/dist
+
+      # Issue #746: the deploy job is gated to skip on PR, so a PR-failure
+      # comment has to live on the build job (which always runs). When the
+      # build fails on a PR, this step posts a heads-up so the maintainer
+      # doesn't have to dig through the GitHub Actions logs.
+      - name: Comment PR on build failure
+        if: failure() && github.event_name == 'pull_request' && !github.event.pull_request.head.repo.fork
+        continue-on-error: true
+        uses: actions/github-script@v7
+        with:
+          script: |
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: '🚨 **Docs build failed!** The docs site (`docs/` or `packages/docs/`) did not compile. Please run `cd packages/docs && npm run test` (which runs `next build` + the internal link checker) locally and fix the errors before merging. See #742 and #746 for context.'
+            })
 
   deploy:
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
-    runs-on: ubuntu-latest
+    # Issue #746: only deploy on push-to-main. Pull requests run the `build`
+    # job (which fails the workflow if docs are broken) but skip the actual
+    # publish so a PR can never accidentally publish to GitHub Pages. The
+    # build step's failure-comment lives on the `build` job (above) because
+    # this one is skipped on PRs.
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: namespace-profile-nursca
     needs: build
     steps:
       - name: Deploy to GitHub Pages

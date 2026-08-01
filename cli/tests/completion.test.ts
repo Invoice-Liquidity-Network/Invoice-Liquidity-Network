@@ -1,5 +1,9 @@
 import { describe, it, expect } from "vitest";
 import { generateBashCompletion, generateZshCompletion } from "../src/completion";
+import { execSync } from "child_process";
+import { writeFileSync, unlinkSync } from "fs";
+import { tmpdir } from "os";
+import { join } from "path";
 
 describe("Shell Completion", () => {
   describe("generateBashCompletion", () => {
@@ -106,6 +110,83 @@ describe("Shell Completion", () => {
       expect(script).toContain("new-user active-lp disputed");
       expect(script).toContain("--token");
       expect(script).toContain("USDC EURC");
+    });
+  });
+
+  describe("Syntax Validation", () => {
+    it("bash completion script has valid syntax", () => {
+      const script = generateBashCompletion();
+      const tmpFile = join(tmpdir(), `iln-completion-bash-${Date.now()}.sh`);
+
+      try {
+        writeFileSync(tmpFile, script);
+
+        // Validate bash syntax (bash -n checks syntax without executing)
+        // If syntax is invalid, execSync will throw
+        const result = execSync(`bash -n "${tmpFile}" 2>&1`, {
+          encoding: "utf-8",
+        });
+
+        // No output from bash -n means syntax is valid
+        expect(result.trim()).toBe("");
+      } finally {
+        try {
+          unlinkSync(tmpFile);
+        } catch {
+          // Ignore cleanup errors
+        }
+      }
+    });
+
+    it("zsh completion script has valid syntax", () => {
+      const script = generateZshCompletion();
+      const tmpFile = join(tmpdir(), `iln-completion-zsh-${Date.now()}.zsh`);
+
+      try {
+        writeFileSync(tmpFile, script);
+
+        // Try to validate zsh syntax (zsh may not be available on CI)
+        try {
+          const result = execSync(`zsh -n "${tmpFile}" 2>&1`, {
+            encoding: "utf-8",
+          });
+
+          // No output from zsh -n means syntax is valid
+          expect(result.trim()).toBe("");
+        } catch (error: any) {
+          // If zsh is not installed, skip this check but log a warning
+          if (
+            error.message.includes("not found") ||
+            error.status === 127
+          ) {
+            console.warn("zsh not available for syntax validation");
+          } else {
+            // Re-throw if it's a syntax error
+            throw error;
+          }
+        }
+      } finally {
+        try {
+          unlinkSync(tmpFile);
+        } catch {
+          // Ignore cleanup errors
+        }
+      }
+    });
+  });
+
+  describe("Supported Shells", () => {
+    it("completion command documents supported shells", () => {
+      // This test verifies that the completion functionality supports
+      // bash and zsh. If more shells are added, update this test and
+      // the completion.ts file
+      const bash = generateBashCompletion();
+      const zsh = generateZshCompletion();
+
+      expect(bash).toBeDefined();
+      expect(zsh).toBeDefined();
+      expect(bash.length).toBeGreaterThan(0);
+      expect(zsh.length).toBeGreaterThan(0);
     });
   });
 });

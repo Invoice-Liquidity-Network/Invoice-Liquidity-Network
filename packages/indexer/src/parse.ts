@@ -1,4 +1,4 @@
-import { ContractEvent } from "./types";
+import { ParsedHorizonEvent } from "./types";
 
 /**
  * Raw Horizon transaction operation record shape (minimal subset we need).
@@ -51,13 +51,13 @@ function tryDecodeXdr(xdrBase64: string): unknown {
 
 /**
  * parseContractEvent converts a raw Horizon event record into a typed
- * ContractEvent. This is a thin adapter that mirrors the SDK's
+ * ParsedHorizonEvent. This is a thin adapter that mirrors the SDK's
  * parseContractEvent helper so the indexer can be tested without a live SDK.
  *
  * In a real integration this should import and delegate to:
  *   import { parseContractEvent } from "@iln/sdk";
  */
-export function parseContractEvent(raw: RawHorizonEvent): ContractEvent {
+export function parseContractEvent(raw: RawHorizonEvent): ParsedHorizonEvent {
   return {
     contractId: raw.contract_id ?? "",
     type: raw.type ?? "unknown",

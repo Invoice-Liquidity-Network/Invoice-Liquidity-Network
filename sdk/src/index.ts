@@ -19,18 +19,13 @@ export * from "./offline";
 export * from "./event-emitter";
 export * from "./recovery";
 export * from "./plugins";
-export { InvoiceDashboard } from "./InvoiceDashboard";
-export type {
-  InvoiceDashboardProps,
-  LiveInvoiceEvent,
-  InvoiceEventType,
-  DashboardMetrics,
-  MetricKey,
-  DashboardTheme,
-} from "./InvoiceDashboard";
+export { BUILTIN_ANALYTICS_PLUGINS } from "./analytics-plugins/builtins";
 export * from "./cache";
 export * from "./validators";
 export * from "./react-native";
+export * from "./insurance-types";
+export { InsurancePoolClient } from "./insurance-contract";
+export type { InsuranceClientConfig } from "./insurance-contract";
 
 export const SDK_VERSION = "0.1.0";
 

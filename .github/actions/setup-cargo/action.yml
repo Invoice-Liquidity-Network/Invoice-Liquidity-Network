@@ -1,0 +1,28 @@
+name: Setup Cargo with caching
+description: Setup Cargo registry, git dependencies, and target build cache with actions/cache@v4
+
+inputs:
+  cache-prefix:
+    description: Cache key prefix
+    required: false
+    default: cargo
+  target-path:
+    description: Path to target directory
+    required: false
+    default: target/
+
+runs:
+  using: composite
+  steps:
+    - name: Cache Cargo registry and target
+      uses: actions/cache@v4
+      with:
+        path: |
+          ~/.cargo/bin/
+          ~/.cargo/registry/index/
+          ~/.cargo/registry/cache/
+          ~/.cargo/git/db/
+          ${{ inputs.target-path }}
+        key: ${{ runner.os }}-${{ inputs.cache-prefix }}-${{ hashFiles('**/Cargo.lock') }}
+        restore-keys: |
+          ${{ runner.os }}-${{ inputs.cache-prefix }}-

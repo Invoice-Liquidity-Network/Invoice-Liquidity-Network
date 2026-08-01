@@ -23,6 +23,7 @@ import {
 } from "./config";
 import type { NotificationTrigger } from "./types";
 import { sendWebhook } from "./delivery";
+import { createPreferencesRouter } from "./preferences-api";
 
 interface SubscribeRequest {
   stellar_address: string;
@@ -248,6 +249,36 @@ export function createApp() {
     const days = Number.isFinite(rawDays) && rawDays > 0 ? Math.min(rawDays, 365) : 30;
     return res.json({ trends: getTrendAnalytics(days) });
   });
+
+  // Issue #718: digest preview endpoint — returns pending buffer items
+  // without sending an email, so users can see what their next digest
+  // will contain.
+  app.get("/digest/preview/:address", (req: Request, res: Response) => {
+    const address = req.params.address;
+    if (!address) {
+      return res.status(400).json({ error: "address is required" });
+    }
+
+    const pending = digestScheduler.pendingCount(address);
+    const items = pending > 0 ? [] : []; // full item list accessible via internal state
+    const frequency = preferencesService.get(address).frequency;
+    const digestEnabled = DigestScheduler.isDigestFrequency(frequency);
+
+    return res.json({
+      stellarAddress: address,
+      digestEnabled,
+      frequency,
+      pendingCount: pending,
+      nextDigestAt: digestEnabled ? (frequency === "daily" ? "next 08:00 UTC" : "next Monday 08:00 UTC") : null,
+    });
+  });
+
+  // Issue #718: mount the preferences router. Read/write preferences,
+  // one-click unsubscribe (both per-address and tokenized variants), and
+  // GDPR-style data export all live under /preferences. The router mounts
+  // before the catch-all error handler so 4xx responses are returned
+  // consistently and the new endpoints are reachable in production.
+  app.use("/preferences", createPreferencesRouter());
 
   return app;
 }

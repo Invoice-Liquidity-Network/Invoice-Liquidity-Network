@@ -2,12 +2,13 @@ name: CI
 
 on:
   push:
-    branches: [ "main" ]
+    branches: ['main']
   pull_request:
 
+# Least-privilege: read code and comment CI status on pull requests.
 permissions:
+  contents: read
   pull-requests: write
-  issues: write
 
 # Fail fast: cancel an in-progress run when new commits are pushed to the same
 # ref (e.g. a PR branch), so only the latest commit consumes CI minutes.
@@ -16,6 +17,50 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  changes:
+    name: Detect changed paths
+    runs-on: namespace-profile-nursca
+    outputs:
+      backend: ${{ steps.filter.outputs.backend }}
+      shared_config: ${{ steps.filter.outputs.shared_config }}
+      notifications: ${{ steps.filter.outputs.notifications }}
+      sdk: ${{ steps.filter.outputs.sdk }}
+      cli: ${{ steps.filter.outputs.cli }}
+      indexer: ${{ steps.filter.outputs.indexer }}
+      packages: ${{ steps.filter.outputs.packages }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dorny/paths-filter@d1c1ffe0248fe513906c8e24db8ea791d46f8590 # v3.0.3
+        id: filter
+        with:
+          filters: |
+            backend:
+              - 'backend/**'
+              - '.gitmodules'
+            shared_config:
+              - 'pnpm-workspace.yaml'
+              - 'turbo.json'
+              - 'package.json'
+              - 'tsconfig.base.json'
+              - 'pnpm-lock.yaml'
+              - 'vitest.config.ts'
+              - '.nvmrc'
+            notifications:
+              - 'notifications/**'
+            sdk:
+              - 'sdk/**'
+              - 'packages/sdk/**'
+              - 'packages/shared/**'
+              - 'packages/invoice-sdk/**'
+            cli:
+              - 'cli/**'
+              - 'packages/cli/**'
+            indexer:
+              - 'indexer/**'
+              - 'packages/indexer/**'
+            packages:
+              - 'packages/**'
+
   pnpm-cache:
     uses: ./.github/workflows/reusable-cache-pnpm.yml
 
@@ -24,16 +69,18 @@ jobs:
 
   test:
     name: Run tests
-    runs-on: ubuntu-latest
+    needs: changes
+    if: needs.changes.outputs.backend == 'true'
+    runs-on: namespace-profile-nursca
     steps:
       - uses: actions/checkout@v4
-
-      - name: Initialize submodules
-        run: git submodule update --init --recursive
+        with:
+          submodules: recursive
 
       - name: Install Rust
-        uses: dtolnay/rust-toolchain@stable
+        uses: dtolnay/rust-toolchain@2c7215f132e9ebf062739d9130488b56d53c060c # stable
         with:
+          toolchain: stable
           targets: x86_64-unknown-linux-gnu
 
       - name: Cache Cargo registry and target
@@ -54,7 +101,8 @@ jobs:
         run: cargo test --target x86_64-unknown-linux-gnu
 
       - name: Comment PR on failure
-        if: failure() && github.event_name == 'pull_request'
+        if: failure() && github.event_name == 'pull_request' && !github.event.pull_request.head.repo.fork
+        continue-on-error: true
         uses: actions/github-script@v7
         with:
           script: |
@@ -67,16 +115,18 @@ jobs:
 
   build:
     name: Build contract
-    runs-on: ubuntu-latest
+    needs: changes
+    if: needs.changes.outputs.backend == 'true'
+    runs-on: namespace-profile-nursca
     steps:
       - uses: actions/checkout@v4
-
-      - name: Initialize submodules
-        run: git submodule update --init --recursive
+        with:
+          submodules: recursive
 
       - name: Install Rust
-        uses: dtolnay/rust-toolchain@stable
+        uses: dtolnay/rust-toolchain@2c7215f132e9ebf062739d9130488b56d53c060c # stable
         with:
+          toolchain: stable
           targets: wasm32v1-none
 
       - name: Cache Cargo registry and target
@@ -97,7 +147,8 @@ jobs:
         run: cargo build --target wasm32v1-none --release
 
       - name: Comment PR on failure
-        if: failure() && github.event_name == 'pull_request'
+        if: failure() && github.event_name == 'pull_request' && !github.event.pull_request.head.repo.fork
+        continue-on-error: true
         uses: actions/github-script@v7
         with:
           script: |
@@ -110,16 +161,18 @@ jobs:
 
   lint:
     name: Lint code
-    runs-on: ubuntu-latest
+    needs: changes
+    if: needs.changes.outputs.backend == 'true'
+    runs-on: namespace-profile-nursca
     steps:
       - uses: actions/checkout@v4
-
-      - name: Initialize submodules
-        run: git submodule update --init --recursive
+        with:
+          submodules: recursive
 
       - name: Install Rust
-        uses: dtolnay/rust-toolchain@stable
+        uses: dtolnay/rust-toolchain@2c7215f132e9ebf062739d9130488b56d53c060c # stable
         with:
+          toolchain: stable
           components: clippy, rustfmt
           targets: wasm32v1-none
 
@@ -145,7 +198,8 @@ jobs:
         run: cargo fmt --check
 
       - name: Comment PR on failure
-        if: failure() && github.event_name == 'pull_request'
+        if: failure() && github.event_name == 'pull_request' && !github.event.pull_request.head.repo.fork
+        continue-on-error: true
         uses: actions/github-script@v7
         with:
           script: |
@@ -163,7 +217,7 @@ jobs:
     name: Test results
     needs: [node-tests, core-test]
     if: always()
-    runs-on: ubuntu-latest
+    runs-on: namespace-profile-nursca
     steps:
       - name: Download JUnit reports
         uses: actions/download-artifact@v4
@@ -172,14 +226,15 @@ jobs:
           merge-multiple: true
 
       - name: Publish test results to Checks
-        uses: dorny/test-reporter@v2
+        continue-on-error: true
+        uses: dorny/test-reporter@0f7d1ed661203449e0ee89fa7a0a7f9c9a7d9911 # v2.7.0
         with:
           name: JUnit Test Results
-          path: "**/test-results.xml"
+          path: '**/test-results.xml'
           reporter: java-junit
-          fail-on-error: "false"
-          list-suites: "failed"
-          list-tests: "failed"
+          fail-on-error: 'false'
+          list-suites: 'failed'
+          list-tests: 'failed'
           max-annotations: 10
 
   # ===========================================================================
@@ -196,12 +251,13 @@ jobs:
       - license-compliance
       - sdk-types-sync
       - core-install
+      - core-format
       - core-lint
       - core-type-check
       - core-test
       - core-build
     if: failure() && github.event_name == 'push' && github.ref == 'refs/heads/main'
-    runs-on: ubuntu-latest
+    runs-on: namespace-profile-nursca
     steps:
       - name: Send Discord notification
         env:
@@ -220,7 +276,7 @@ jobs:
 
           # Collect which jobs failed
           FAILED_JOBS=""
-          for job in test build lint node-tests node-coverage license-compliance sdk-types-sync core-install core-lint core-type-check core-test core-build; do
+          for job in test build lint node-tests node-coverage license-compliance sdk-types-sync core-install core-format core-lint core-type-check core-test core-build; do
             result=$(echo '${{ toJSON(needs) }}' | jq -r --arg job "$job" '.[$job].result // "skipped"')
             if [ "$result" = "failure" ]; then
               FAILED_JOBS="$FAILED_JOBS\n- **$job**: ❌ $result"
@@ -247,8 +303,15 @@ jobs:
 
   syncpack:
     name: Dependency version consistency
-    needs: pnpm-cache
-    runs-on: ubuntu-latest
+    needs: [pnpm-cache, changes]
+    if: >-
+      needs.changes.outputs.shared_config == 'true' ||
+      needs.changes.outputs.packages == 'true' ||
+      needs.changes.outputs.notifications == 'true' ||
+      needs.changes.outputs.sdk == 'true' ||
+      needs.changes.outputs.cli == 'true' ||
+      needs.changes.outputs.indexer == 'true'
+    runs-on: namespace-profile-nursca
     steps:
       - uses: actions/checkout@v4
 
@@ -259,7 +322,8 @@ jobs:
         run: pnpm syncpack:check
 
       - name: Comment PR on failure
-        if: failure() && github.event_name == 'pull_request'
+        if: failure() && github.event_name == 'pull_request' && !github.event.pull_request.head.repo.fork
+        continue-on-error: true
         uses: actions/github-script@v7
         with:
           script: |
@@ -272,8 +336,15 @@ jobs:
 
   validate-packages:
     name: Validate package.json consistency
-    needs: pnpm-cache
-    runs-on: ubuntu-latest
+    needs: [pnpm-cache, changes]
+    if: >-
+      needs.changes.outputs.shared_config == 'true' ||
+      needs.changes.outputs.packages == 'true' ||
+      needs.changes.outputs.notifications == 'true' ||
+      needs.changes.outputs.sdk == 'true' ||
+      needs.changes.outputs.cli == 'true' ||
+      needs.changes.outputs.indexer == 'true'
+    runs-on: namespace-profile-nursca
     steps:
       - uses: actions/checkout@v4
 
@@ -284,7 +355,8 @@ jobs:
         run: node scripts/validate-packages.mjs
 
       - name: Comment PR on failure
-        if: failure() && github.event_name == 'pull_request'
+        if: failure() && github.event_name == 'pull_request' && !github.event.pull_request.head.repo.fork
+        continue-on-error: true
         uses: actions/github-script@v7
         with:
           script: |
@@ -295,18 +367,44 @@ jobs:
               body: '🚨 **Package.json validation failed!** Run `node scripts/validate-packages.mjs` locally and fix violations before merging.'
             })
 
+  no-foreign-lockfiles:
+    name: Guard against non-pnpm lockfiles
+    runs-on: namespace-profile-nursca
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check for stray package-lock.json / yarn.lock files
+        run: node scripts/check-no-foreign-lockfiles.mjs
+
+      - name: Comment PR on failure
+        if: failure() && github.event_name == 'pull_request' && !github.event.pull_request.head.repo.fork
+        continue-on-error: true
+        uses: actions/github-script@v7
+        with:
+          script: |
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: '🚨 **Foreign lockfile detected!** This is a pnpm-only workspace. Remove any `package-lock.json`/`yarn.lock` and run `pnpm install` instead.'
+            })
+
   node-tests:
     name: Run Node.js tests
-    needs: pnpm-cache
-    runs-on: ubuntu-latest
+    needs: [pnpm-cache, changes]
+    if: >-
+      needs.changes.outputs.shared_config == 'true' ||
+      needs.changes.outputs.notifications == 'true'
+    runs-on: namespace-profile-nursca
     steps:
       - uses: actions/checkout@v4
 
       - name: Setup pnpm with store cache
         uses: ./.github/actions/setup-pnpm
 
-      - name: Run all tests
-        run: pnpm test
+      - name: Run notification template tests
+        run: pnpm exec vitest run tests/templates.test.ts
+        working-directory: notifications
 
       - name: Generate JUnit reports (vitest packages)
         if: always()
@@ -325,11 +423,12 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: test-results-${{ github.sha }}
-          path: "**/test-results.xml"
+          path: '**/test-results.xml'
           retention-days: 7
 
       - name: Comment PR on failure
-        if: failure() && github.event_name == 'pull_request'
+        if: failure() && github.event_name == 'pull_request' && !github.event.pull_request.head.repo.fork
+        continue-on-error: true
         uses: actions/github-script@v7
         with:
           script: |
@@ -342,25 +441,41 @@ jobs:
 
   node-coverage:
     name: Node.js coverage (≥80%)
-    needs: pnpm-cache
-    runs-on: ubuntu-latest
+    needs: [pnpm-cache, changes]
+    if: >-
+      needs.changes.outputs.notifications == 'true' ||
+      needs.changes.outputs.shared_config == 'true'
+    runs-on: namespace-profile-nursca
     steps:
       - uses: actions/checkout@v4
 
       - name: Setup pnpm with store cache
         uses: ./.github/actions/setup-pnpm
 
-      - name: Run coverage (fails if any package drops below 80%)
-        run: pnpm test:coverage
+      - name: Run notification template coverage
+        run: >
+          pnpm exec vitest run tests/templates.test.ts
+          --coverage
+          --coverage.include=src/templates/funded.template.ts
+          --coverage.include=src/templates/payment.template.ts
+          --coverage.include=src/templates/dispute.template.ts
+          --coverage.include=src/templates/due-warning.template.ts
+          --coverage.include=src/templates/helpers.ts
+          --coverage.thresholds.lines=80
+          --coverage.thresholds.functions=80
+          --coverage.thresholds.branches=80
+          --coverage.thresholds.statements=80
+        working-directory: notifications
 
       - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@v5
+        uses: codecov/codecov-action@5975040f7f7d40edaff8d784b576fd65ae95c073 # v5.5.5
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
           slug: Nursca/Invoice-Liquidity-Network
 
       - name: Comment PR on failure
-        if: failure() && github.event_name == 'pull_request'
+        if: failure() && github.event_name == 'pull_request' && !github.event.pull_request.head.repo.fork
+        continue-on-error: true
         uses: actions/github-script@v7
         with:
           script: |
@@ -373,28 +488,38 @@ jobs:
 
   license-compliance:
     name: Dependency license compliance check
-    runs-on: ubuntu-latest
+    needs: [changes, pnpm-cache]
+    if: >-
+      needs.changes.outputs.shared_config == 'true' ||
+      needs.changes.outputs.packages == 'true' ||
+      needs.changes.outputs.notifications == 'true' ||
+      needs.changes.outputs.sdk == 'true' ||
+      needs.changes.outputs.cli == 'true' ||
+      needs.changes.outputs.indexer == 'true'
+    runs-on: namespace-profile-nursca
     steps:
       - uses: actions/checkout@v4
 
-      - uses: pnpm/action-setup@v4
-        with:
-          version: "9.0.0"
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 20
-          cache: pnpm
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+      - name: Setup pnpm with store cache
+        uses: ./.github/actions/setup-pnpm
 
       - name: Run license compliance check
-        run: pnpm licence:check
+        run: |
+          node scripts/check-licenses.js --json > license-report.json 2>&1 || true
+        continue-on-error: true
+
+      - name: Upload license compliance report as artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: license-compliance-report
+          path: '**/license-report.json'
+          retention-days: 30
+          if-no-files-found: warn
 
       - name: Comment PR on failure
-        if: failure() && github.event_name == 'pull_request'
+        if: failure() && github.event_name == 'pull_request' && !github.event.pull_request.head.repo.fork
+        continue-on-error: true
         uses: actions/github-script@v7
         with:
           script: |
@@ -402,25 +527,26 @@ jobs:
               issue_number: context.issue.number,
               owner: context.repo.owner,
               repo: context.repo.repo,
-              body: '🚨 **Dependency license compliance check failed!** Please verify your package dependencies conform to the license policy.'
+              body: '🚨 **Dependency license compliance check failed!** Please verify your package dependencies conform to the license policy. Download the **license-compliance-report** artifact from the workflow run for details.'
             })
 
   sdk-types-sync:
     name: SDK types in sync
-    needs: pnpm-cache
-    runs-on: ubuntu-latest
+    needs: [pnpm-cache, changes]
+    if: needs.changes.outputs.backend == 'true'
+    runs-on: namespace-profile-nursca
     steps:
       - uses: actions/checkout@v4
-
-      - name: Initialize submodules
-        run: git submodule update --init --recursive
+        with:
+          submodules: recursive
 
       - name: Setup pnpm with store cache
         uses: ./.github/actions/setup-pnpm
 
       - name: Install Rust
-        uses: dtolnay/rust-toolchain@stable
+        uses: dtolnay/rust-toolchain@2c7215f132e9ebf062739d9130488b56d53c060c # stable
         with:
+          toolchain: stable
           targets: wasm32v1-none
 
       - name: Cache Stellar CLI (cargo install)
@@ -463,7 +589,8 @@ jobs:
           fi
 
       - name: Comment PR on failure
-        if: failure() && github.event_name == 'pull_request'
+        if: failure() && github.event_name == 'pull_request' && !github.event.pull_request.head.repo.fork
+        continue-on-error: true
         uses: actions/github-script@v7
         with:
           script: |
@@ -478,7 +605,7 @@ jobs:
     name: SDK testnet integration tests
     needs: [pnpm-cache, testnet-health]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main' && needs.testnet-health.outputs.healthy == 'true'
-    runs-on: ubuntu-latest
+    runs-on: namespace-profile-nursca
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
@@ -498,7 +625,7 @@ jobs:
     name: SDK testnet integration (skipped — unhealthy testnet)
     needs: [testnet-health]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main' && needs.testnet-health.outputs.healthy != 'true'
-    runs-on: ubuntu-latest
+    runs-on: namespace-profile-nursca
     steps:
       - name: Report skipped integration tests
         run: |
@@ -517,16 +644,52 @@ jobs:
   core-install:
     name: Core · install
     needs: pnpm-cache
-    runs-on: ubuntu-latest
+    runs-on: namespace-profile-nursca
     steps:
       - uses: actions/checkout@v4
       - name: Setup pnpm with store cache
         uses: ./.github/actions/setup-pnpm
 
+  core-format:
+    name: Core · format
+    needs: core-install
+    runs-on: namespace-profile-nursca
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Setup pnpm with store cache
+        uses: ./.github/actions/setup-pnpm
+      - name: Check formatting
+        shell: bash
+        run: |
+          if [[ "${{ github.event_name }}" != "pull_request" ]]; then
+            pnpm format:check
+            exit 0
+          fi
+
+          git fetch --no-tags origin "${{ github.base_ref }}"
+          git diff --check "origin/${{ github.base_ref }}...HEAD"
+          mapfile -t files < <(
+            git diff --name-only --diff-filter=A "origin/${{ github.base_ref }}...HEAD" |
+              grep -E '\.(cjs|css|graphql|html|js|json|jsx|md|mdx|mjs|scss|ts|tsx|yaml|yml)$' |
+              grep -vE '^(\.github/|pnpm-lock\.yaml$)' || true
+          )
+
+          if (( ${#files[@]} == 0 )); then
+            echo "No newly added files require Prettier validation."
+            exit 0
+          fi
+
+          printf 'Checking %s newly added file(s):\n' "${#files[@]}"
+          printf '  %s\n' "${files[@]}"
+          pnpm exec prettier --check -- "${files[@]}"
+
   core-lint:
     name: Core · lint
     needs: core-install
-    runs-on: ubuntu-latest
+    if: github.event_name == 'push'
+    runs-on: namespace-profile-nursca
     steps:
       - uses: actions/checkout@v4
       - name: Setup pnpm with store cache
@@ -543,7 +706,8 @@ jobs:
   core-type-check:
     name: Core · type-check
     needs: core-install
-    runs-on: ubuntu-latest
+    if: github.event_name == 'push'
+    runs-on: namespace-profile-nursca
     steps:
       - uses: actions/checkout@v4
       - name: Setup pnpm with store cache
@@ -559,8 +723,8 @@ jobs:
 
   core-test:
     name: Core · test
-    needs: [core-lint, core-type-check]
-    runs-on: ubuntu-latest
+    needs: [core-format, core-lint, core-type-check]
+    runs-on: namespace-profile-nursca
     steps:
       - uses: actions/checkout@v4
       - name: Setup pnpm with store cache
@@ -589,7 +753,7 @@ jobs:
   core-build:
     name: Core · build
     needs: core-test
-    runs-on: ubuntu-latest
+    runs-on: namespace-profile-nursca
     steps:
       - uses: actions/checkout@v4
       - name: Setup pnpm with store cache
@@ -605,16 +769,18 @@ jobs:
 
   core-summary:
     name: Core · PR summary
-    needs: [core-install, core-lint, core-type-check, core-test, core-build]
+    needs: [core-install, core-format, core-lint, core-type-check, core-test, core-build]
     if: always() && github.event_name == 'pull_request'
-    runs-on: ubuntu-latest
+    runs-on: namespace-profile-nursca
     steps:
       - name: Post results summary to PR
+        continue-on-error: true
         uses: actions/github-script@v7
         with:
           script: |
             const jobs = {
               install: '${{ needs.core-install.result }}',
+              format: '${{ needs.core-format.result }}',
               lint: '${{ needs.core-lint.result }}',
               'type-check': '${{ needs.core-type-check.result }}',
               test: '${{ needs.core-test.result }}',

@@ -1,0 +1,572 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`notification template snapshots (#577) > captures email and SMS templates 1`] = `
+{
+  "disputeEmail": "<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+  <title>Invoice #42 Defaulted</title>
+  <!--[if mso]>
+  <noscript>
+    <xml>
+      <o:OfficeDocumentSettings>
+        <o:PixelsPerInch>96</o:PixelsPerInch>
+      </o:OfficeDocumentSettings>
+    </xml>
+  </noscript>
+  <![endif]-->
+  <style>
+    /* Reset */
+    body, table, td, a { -webkit-text-size-adjust: 100%; -ms-text-size-adjust: 100%; }
+    table, td { mso-table-lspace: 0pt; mso-table-rspace: 0pt; }
+    img { border: 0; height: auto; line-height: 100%; outline: none; text-decoration: none; }
+    body { margin: 0; padding: 0; background-color: #f4f6f9; font-family: Arial, Helvetica, sans-serif; }
+
+    /* Layout */
+    .wrapper { width: 100%; table-layout: fixed; background-color: #f4f6f9; padding: 32px 0; }
+    .main { background-color: #ffffff; max-width: 600px; margin: 0 auto; border-radius: 8px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.08); overflow: hidden; }
+
+    /* Header */
+    .header { background-color: #1a56db; padding: 28px 32px; text-align: center; }
+    .header h1 { margin: 0; color: #ffffff; font-size: 22px; font-weight: 700; letter-spacing: -0.3px; }
+    .header p  { margin: 6px 0 0; color: #bfdbfe; font-size: 13px; }
+
+    /* Body */
+    .body-content { padding: 32px; color: #374151; font-size: 15px; line-height: 1.6; }
+    .body-content h2 { margin: 0 0 16px; font-size: 18px; color: #111827; }
+
+    /* Invoice card */
+    .invoice-card { background-color: #f9fafb; border: 1px solid #e5e7eb; border-radius: 6px;
+                    padding: 20px 24px; margin: 24px 0; }
+    .invoice-card table { width: 100%; border-collapse: collapse; }
+    .invoice-card td  { padding: 6px 0; font-size: 14px; color: #374151; }
+    .invoice-card td.label { font-weight: 600; color: #6b7280; width: 40%; }
+
+    /* Status badge */
+    .badge { display: inline-block; padding: 3px 10px; border-radius: 9999px;
+             font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; }
+    .badge-funded  { background-color: #d1fae5; color: #065f46; }
+    .badge-paid    { background-color: #dbeafe; color: #1e40af; }
+    .badge-default { background-color: #fee2e2; color: #991b1b; }
+    .badge-warning { background-color: #fef3c7; color: #92400e; }
+
+    /* CTA button */
+    .btn-wrap { text-align: center; margin: 28px 0; }
+    .btn { display: inline-block; background-color: #1a56db; color: #ffffff !important;
+           text-decoration: none; padding: 12px 28px; border-radius: 6px;
+           font-size: 15px; font-weight: 600; }
+
+    /* Footer */
+    .footer { background-color: #f9fafb; border-top: 1px solid #e5e7eb; padding: 20px 32px;
+              text-align: center; font-size: 12px; color: #9ca3af; }
+    .footer a { color: #6b7280; text-decoration: underline; }
+
+    /* Responsive */
+    @media only screen and (max-width: 620px) {
+      .main    { border-radius: 0; }
+      .header, .body-content, .footer { padding: 20px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="wrapper">
+    <div class="main">
+      
+    <div class="header" style="background-color: #dc2626;">
+      <h1>Invoice Defaulted</h1>
+      <p>Invoice Liquidity Network</p>
+    </div>
+    <div class="body-content">
+      <h2>Invoice #42 has defaulted.</h2>
+      <p>
+        Liquidity Provider, we regret to inform you that
+        <strong>Invoice #42</strong> was not settled by the due date
+        and has been marked as <strong>Defaulted</strong>.
+      </p>
+
+      <div class="invoice-card">
+        <table>
+          <tr>
+            <td class="label">Invoice ID</td>
+            <td>#42</td>
+          </tr>
+          <tr>
+            <td class="label">Status</td>
+            <td><span class="badge badge-default">Defaulted</span></td>
+          </tr>
+          <tr>
+            <td class="label">Amount</td>
+            <td>100 XLM</td>
+          </tr>
+          <tr>
+            <td class="label">Due Date</td>
+            <td>Tue, 01 Jan 2030 00:00:00 GMT</td>
+          </tr>
+          <tr>
+            <td class="label">Freelancer</td>
+            <td>GFREEL…000001</td>
+          </tr>
+          <tr>
+            <td class="label">Payer</td>
+            <td>GPAYER…000001</td>
+          </tr>
+          <tr>
+                   <td class="label">Funded By</td>
+                   <td>GFUNDE…000001</td>
+                 </tr>
+        </table>
+      </div>
+
+      <p>
+        The default recovery process has been initiated. The insurance pool will handle your claim automatically. Visit the dashboard to review your recovery status.
+      </p>
+
+      <p style="font-size:13px; color:#6b7280;">
+        If you believe this is an error or have questions, please contact
+        <a href="mailto:support@iln.finance">support@iln.finance</a>.
+      </p>
+
+      <div class="btn-wrap">
+        <a href="https://iln.finance/invoices/42" class="btn" style="background-color:#dc2626;">
+          View Invoice
+        </a>
+      </div>
+    </div>
+      <div class="footer">
+        <p>Invoice Liquidity Network &mdash; Stellar-based invoice financing</p>
+        <p>
+          <a href="https://iln.finance">Dashboard</a> &bull;
+          <a href="https://docs.iln.finance">Docs</a> &bull;
+          <a href="https://iln.finance/unsubscribe">Unsubscribe</a>
+        </p>
+      </div>
+    </div>
+  </div>
+</body>
+</html>",
+  "dueWarningEmail": "<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+  <title>Invoice #42 Due in 48 Hours</title>
+  <!--[if mso]>
+  <noscript>
+    <xml>
+      <o:OfficeDocumentSettings>
+        <o:PixelsPerInch>96</o:PixelsPerInch>
+      </o:OfficeDocumentSettings>
+    </xml>
+  </noscript>
+  <![endif]-->
+  <style>
+    /* Reset */
+    body, table, td, a { -webkit-text-size-adjust: 100%; -ms-text-size-adjust: 100%; }
+    table, td { mso-table-lspace: 0pt; mso-table-rspace: 0pt; }
+    img { border: 0; height: auto; line-height: 100%; outline: none; text-decoration: none; }
+    body { margin: 0; padding: 0; background-color: #f4f6f9; font-family: Arial, Helvetica, sans-serif; }
+
+    /* Layout */
+    .wrapper { width: 100%; table-layout: fixed; background-color: #f4f6f9; padding: 32px 0; }
+    .main { background-color: #ffffff; max-width: 600px; margin: 0 auto; border-radius: 8px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.08); overflow: hidden; }
+
+    /* Header */
+    .header { background-color: #1a56db; padding: 28px 32px; text-align: center; }
+    .header h1 { margin: 0; color: #ffffff; font-size: 22px; font-weight: 700; letter-spacing: -0.3px; }
+    .header p  { margin: 6px 0 0; color: #bfdbfe; font-size: 13px; }
+
+    /* Body */
+    .body-content { padding: 32px; color: #374151; font-size: 15px; line-height: 1.6; }
+    .body-content h2 { margin: 0 0 16px; font-size: 18px; color: #111827; }
+
+    /* Invoice card */
+    .invoice-card { background-color: #f9fafb; border: 1px solid #e5e7eb; border-radius: 6px;
+                    padding: 20px 24px; margin: 24px 0; }
+    .invoice-card table { width: 100%; border-collapse: collapse; }
+    .invoice-card td  { padding: 6px 0; font-size: 14px; color: #374151; }
+    .invoice-card td.label { font-weight: 600; color: #6b7280; width: 40%; }
+
+    /* Status badge */
+    .badge { display: inline-block; padding: 3px 10px; border-radius: 9999px;
+             font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; }
+    .badge-funded  { background-color: #d1fae5; color: #065f46; }
+    .badge-paid    { background-color: #dbeafe; color: #1e40af; }
+    .badge-default { background-color: #fee2e2; color: #991b1b; }
+    .badge-warning { background-color: #fef3c7; color: #92400e; }
+
+    /* CTA button */
+    .btn-wrap { text-align: center; margin: 28px 0; }
+    .btn { display: inline-block; background-color: #1a56db; color: #ffffff !important;
+           text-decoration: none; padding: 12px 28px; border-radius: 6px;
+           font-size: 15px; font-weight: 600; }
+
+    /* Footer */
+    .footer { background-color: #f9fafb; border-top: 1px solid #e5e7eb; padding: 20px 32px;
+              text-align: center; font-size: 12px; color: #9ca3af; }
+    .footer a { color: #6b7280; text-decoration: underline; }
+
+    /* Responsive */
+    @media only screen and (max-width: 620px) {
+      .main    { border-radius: 0; }
+      .header, .body-content, .footer { padding: 20px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="wrapper">
+    <div class="main">
+      
+    <div class="header" style="background-color: #d97706;">
+      <h1>Invoice Due Soon</h1>
+      <p>Invoice Liquidity Network</p>
+    </div>
+    <div class="body-content">
+      <h2>Invoice #42 is due in 48 hours.</h2>
+      <p>
+        This is a reminder that <strong>Invoice #42</strong> is due
+        within the next 48 hours. Please ensure the payer has made arrangements to settle
+        the balance on time.
+      </p>
+
+      <div class="invoice-card">
+        <table>
+          <tr>
+            <td class="label">Invoice ID</td>
+            <td>#42</td>
+          </tr>
+          <tr>
+            <td class="label">Status</td>
+            <td><span class="badge badge-warning">Due Soon</span></td>
+          </tr>
+          <tr>
+            <td class="label">Amount</td>
+            <td>100 XLM</td>
+          </tr>
+          <tr>
+            <td class="label">Due Date</td>
+            <td>Tue, 01 Jan 2030 00:00:00 GMT</td>
+          </tr>
+          <tr>
+            <td class="label">Freelancer</td>
+            <td>GFREEL…000001</td>
+          </tr>
+          <tr>
+            <td class="label">Payer</td>
+            <td>GPAYER…000001</td>
+          </tr>
+        </table>
+      </div>
+
+      <p>
+        If the invoice is not settled by the due date it may enter the default process,
+        which could affect reputation scores and insurance coverage.
+      </p>
+
+      <div class="btn-wrap">
+        <a href="https://iln.finance/invoices/42" class="btn" style="background-color:#d97706;">
+          View Invoice
+        </a>
+      </div>
+    </div>
+      <div class="footer">
+        <p>Invoice Liquidity Network &mdash; Stellar-based invoice financing</p>
+        <p>
+          <a href="https://iln.finance">Dashboard</a> &bull;
+          <a href="https://docs.iln.finance">Docs</a> &bull;
+          <a href="https://iln.finance/unsubscribe">Unsubscribe</a>
+        </p>
+      </div>
+    </div>
+  </div>
+</body>
+</html>",
+  "fundedEmail": "<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+  <title>Invoice #42 Funded</title>
+  <!--[if mso]>
+  <noscript>
+    <xml>
+      <o:OfficeDocumentSettings>
+        <o:PixelsPerInch>96</o:PixelsPerInch>
+      </o:OfficeDocumentSettings>
+    </xml>
+  </noscript>
+  <![endif]-->
+  <style>
+    /* Reset */
+    body, table, td, a { -webkit-text-size-adjust: 100%; -ms-text-size-adjust: 100%; }
+    table, td { mso-table-lspace: 0pt; mso-table-rspace: 0pt; }
+    img { border: 0; height: auto; line-height: 100%; outline: none; text-decoration: none; }
+    body { margin: 0; padding: 0; background-color: #f4f6f9; font-family: Arial, Helvetica, sans-serif; }
+
+    /* Layout */
+    .wrapper { width: 100%; table-layout: fixed; background-color: #f4f6f9; padding: 32px 0; }
+    .main { background-color: #ffffff; max-width: 600px; margin: 0 auto; border-radius: 8px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.08); overflow: hidden; }
+
+    /* Header */
+    .header { background-color: #1a56db; padding: 28px 32px; text-align: center; }
+    .header h1 { margin: 0; color: #ffffff; font-size: 22px; font-weight: 700; letter-spacing: -0.3px; }
+    .header p  { margin: 6px 0 0; color: #bfdbfe; font-size: 13px; }
+
+    /* Body */
+    .body-content { padding: 32px; color: #374151; font-size: 15px; line-height: 1.6; }
+    .body-content h2 { margin: 0 0 16px; font-size: 18px; color: #111827; }
+
+    /* Invoice card */
+    .invoice-card { background-color: #f9fafb; border: 1px solid #e5e7eb; border-radius: 6px;
+                    padding: 20px 24px; margin: 24px 0; }
+    .invoice-card table { width: 100%; border-collapse: collapse; }
+    .invoice-card td  { padding: 6px 0; font-size: 14px; color: #374151; }
+    .invoice-card td.label { font-weight: 600; color: #6b7280; width: 40%; }
+
+    /* Status badge */
+    .badge { display: inline-block; padding: 3px 10px; border-radius: 9999px;
+             font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; }
+    .badge-funded  { background-color: #d1fae5; color: #065f46; }
+    .badge-paid    { background-color: #dbeafe; color: #1e40af; }
+    .badge-default { background-color: #fee2e2; color: #991b1b; }
+    .badge-warning { background-color: #fef3c7; color: #92400e; }
+
+    /* CTA button */
+    .btn-wrap { text-align: center; margin: 28px 0; }
+    .btn { display: inline-block; background-color: #1a56db; color: #ffffff !important;
+           text-decoration: none; padding: 12px 28px; border-radius: 6px;
+           font-size: 15px; font-weight: 600; }
+
+    /* Footer */
+    .footer { background-color: #f9fafb; border-top: 1px solid #e5e7eb; padding: 20px 32px;
+              text-align: center; font-size: 12px; color: #9ca3af; }
+    .footer a { color: #6b7280; text-decoration: underline; }
+
+    /* Responsive */
+    @media only screen and (max-width: 620px) {
+      .main    { border-radius: 0; }
+      .header, .body-content, .footer { padding: 20px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="wrapper">
+    <div class="main">
+      
+    <div class="header">
+      <h1>Invoice Funded</h1>
+      <p>Invoice Liquidity Network</p>
+    </div>
+    <div class="body-content">
+      <h2>Great news — your invoice has been funded!</h2>
+      <p>
+        A liquidity provider has funded
+        <strong>Invoice #42</strong>.
+        The discounted amount will be released according to the contract terms.
+      </p>
+
+      <div class="invoice-card">
+        <table>
+          <tr>
+            <td class="label">Invoice ID</td>
+            <td>#42</td>
+          </tr>
+          <tr>
+            <td class="label">Status</td>
+            <td><span class="badge badge-funded">Funded</span></td>
+          </tr>
+          <tr>
+            <td class="label">Amount</td>
+            <td>100 XLM</td>
+          </tr>
+          <tr>
+            <td class="label">Due Date</td>
+            <td>Tue, 01 Jan 2030 00:00:00 GMT</td>
+          </tr>
+          <tr>
+            <td class="label">Freelancer</td>
+            <td>GFREEL…000001</td>
+          </tr>
+          <tr>
+            <td class="label">Payer</td>
+            <td>GPAYER…000001</td>
+          </tr>
+          <tr>
+            <td class="label">Funded By</td>
+            <td>GFUNDE…000001</td>
+          </tr>
+        </table>
+      </div>
+
+      <p>
+        You can view the full details and track payment progress in your dashboard.
+      </p>
+
+      <div class="btn-wrap">
+        <a href="https://iln.finance/invoices/42" class="btn">View Invoice</a>
+      </div>
+    </div>
+      <div class="footer">
+        <p>Invoice Liquidity Network &mdash; Stellar-based invoice financing</p>
+        <p>
+          <a href="https://iln.finance">Dashboard</a> &bull;
+          <a href="https://docs.iln.finance">Docs</a> &bull;
+          <a href="https://iln.finance/unsubscribe">Unsubscribe</a>
+        </p>
+      </div>
+    </div>
+  </div>
+</body>
+</html>",
+  "paymentEmail": "<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+  <title>Invoice #42 Settled</title>
+  <!--[if mso]>
+  <noscript>
+    <xml>
+      <o:OfficeDocumentSettings>
+        <o:PixelsPerInch>96</o:PixelsPerInch>
+      </o:OfficeDocumentSettings>
+    </xml>
+  </noscript>
+  <![endif]-->
+  <style>
+    /* Reset */
+    body, table, td, a { -webkit-text-size-adjust: 100%; -ms-text-size-adjust: 100%; }
+    table, td { mso-table-lspace: 0pt; mso-table-rspace: 0pt; }
+    img { border: 0; height: auto; line-height: 100%; outline: none; text-decoration: none; }
+    body { margin: 0; padding: 0; background-color: #f4f6f9; font-family: Arial, Helvetica, sans-serif; }
+
+    /* Layout */
+    .wrapper { width: 100%; table-layout: fixed; background-color: #f4f6f9; padding: 32px 0; }
+    .main { background-color: #ffffff; max-width: 600px; margin: 0 auto; border-radius: 8px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.08); overflow: hidden; }
+
+    /* Header */
+    .header { background-color: #1a56db; padding: 28px 32px; text-align: center; }
+    .header h1 { margin: 0; color: #ffffff; font-size: 22px; font-weight: 700; letter-spacing: -0.3px; }
+    .header p  { margin: 6px 0 0; color: #bfdbfe; font-size: 13px; }
+
+    /* Body */
+    .body-content { padding: 32px; color: #374151; font-size: 15px; line-height: 1.6; }
+    .body-content h2 { margin: 0 0 16px; font-size: 18px; color: #111827; }
+
+    /* Invoice card */
+    .invoice-card { background-color: #f9fafb; border: 1px solid #e5e7eb; border-radius: 6px;
+                    padding: 20px 24px; margin: 24px 0; }
+    .invoice-card table { width: 100%; border-collapse: collapse; }
+    .invoice-card td  { padding: 6px 0; font-size: 14px; color: #374151; }
+    .invoice-card td.label { font-weight: 600; color: #6b7280; width: 40%; }
+
+    /* Status badge */
+    .badge { display: inline-block; padding: 3px 10px; border-radius: 9999px;
+             font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; }
+    .badge-funded  { background-color: #d1fae5; color: #065f46; }
+    .badge-paid    { background-color: #dbeafe; color: #1e40af; }
+    .badge-default { background-color: #fee2e2; color: #991b1b; }
+    .badge-warning { background-color: #fef3c7; color: #92400e; }
+
+    /* CTA button */
+    .btn-wrap { text-align: center; margin: 28px 0; }
+    .btn { display: inline-block; background-color: #1a56db; color: #ffffff !important;
+           text-decoration: none; padding: 12px 28px; border-radius: 6px;
+           font-size: 15px; font-weight: 600; }
+
+    /* Footer */
+    .footer { background-color: #f9fafb; border-top: 1px solid #e5e7eb; padding: 20px 32px;
+              text-align: center; font-size: 12px; color: #9ca3af; }
+    .footer a { color: #6b7280; text-decoration: underline; }
+
+    /* Responsive */
+    @media only screen and (max-width: 620px) {
+      .main    { border-radius: 0; }
+      .header, .body-content, .footer { padding: 20px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="wrapper">
+    <div class="main">
+      
+    <div class="header">
+      <h1>Payment Received</h1>
+      <p>Invoice Liquidity Network</p>
+    </div>
+    <div class="body-content">
+      <h2>The invoice you funded has been settled.</h2>
+      <p>
+        Liquidity Provider, <strong>Invoice #42</strong> has been
+        fully settled by the payer. All parties have been notified.
+      </p>
+
+      <div class="invoice-card">
+        <table>
+          <tr>
+            <td class="label">Invoice ID</td>
+            <td>#42</td>
+          </tr>
+          <tr>
+            <td class="label">Status</td>
+            <td><span class="badge badge-paid">Paid</span></td>
+          </tr>
+          <tr>
+            <td class="label">Amount</td>
+            <td>100 XLM</td>
+          </tr>
+          <tr>
+            <td class="label">Due Date</td>
+            <td>Tue, 01 Jan 2030 00:00:00 GMT</td>
+          </tr>
+          <tr>
+            <td class="label">Freelancer</td>
+            <td>GFREEL…000001</td>
+          </tr>
+          <tr>
+            <td class="label">Payer</td>
+            <td>GPAYER…000001</td>
+          </tr>
+          <tr>
+                   <td class="label">Funded By</td>
+                   <td>GFUNDE…000001</td>
+                 </tr>
+        </table>
+      </div>
+
+      <p>
+        Your yield has been credited. View your portfolio for the updated yield summary.
+      </p>
+
+      <div class="btn-wrap">
+        <a href="https://iln.finance/invoices/42" class="btn">View Invoice</a>
+      </div>
+    </div>
+      <div class="footer">
+        <p>Invoice Liquidity Network &mdash; Stellar-based invoice financing</p>
+        <p>
+          <a href="https://iln.finance">Dashboard</a> &bull;
+          <a href="https://docs.iln.finance">Docs</a> &bull;
+          <a href="https://iln.finance/unsubscribe">Unsubscribe</a>
+        </p>
+      </div>
+    </div>
+  </div>
+</body>
+</html>",
+  "sms": "Invoice #42 has been funded – funds on the way
+Invoice #42
+Status: funded
+Amount: 1000000000
+Due: 2030-01-01T00:00:00.000Z",
+}
+`;

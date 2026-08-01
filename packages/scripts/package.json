@@ -1,24 +1,29 @@
 {
   "name": "@iln/scripts",
   "version": "0.1.0",
-  "private": true,
-  "description": "Shared developer scripts for the ILN monorepo",
+  "description": "Internal monorepo development and configuration tools (not for public installation)",
   "bin": {
-    "iln": "bin/iln.js"
+    "iln-dev": "bin/iln.js"
+  },
+  "publishConfig": {
+    "access": "public"
   },
   "license": "MIT",
   "engines": {
     "node": ">=20"
   },
   "scripts": {
-    "start": "node bin/iln.js"
+    "start": "node bin/iln.js",
+    "release": "ts-node src/release.ts"
   },
   "dependencies": {
     "commander": "^14.0.3",
+    "semver": "^7.6.0",
     "ts-node": "^10.9.2"
   },
   "devDependencies": {
-    "@types/node": "^24.7.2",
+    "@types/node": "^20.0.0",
+    "@types/semver": "^7.5.0",
     "typescript": "^5.9.3"
   }
 }

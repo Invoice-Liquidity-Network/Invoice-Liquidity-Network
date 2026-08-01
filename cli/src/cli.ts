@@ -4,10 +4,10 @@ import { Command } from "commander";
 
 import { parseDisplayAmount } from "./amounts";
 import { ILNClient } from "./client";
-import { loadConfig, initConfig } from "./config";
+import { loadConfig, initConfig, readRawConfig, writeRawConfig } from "./config";
 import { parseDueDate } from "./dates";
 import { LocalDevEnvironment } from "./dev-environment";
-import { formatUnknownError } from "./errors";
+import { formatUnknownError, formatILNError, isStructuredError } from "./errors";
 import { decodeScValXdr, formatDecodedScVal } from "./xdr";
 import {
   createUi,
@@ -22,6 +22,8 @@ import {
   formatProtocolConfigJson,
   helpExample,
   helpSection,
+  formatJsonSuccess,
+  formatJsonError,
 } from "./format";
 import { generateManPage } from "./man";
 import { registerInspectCommand } from "./inspect";
@@ -50,6 +52,11 @@ import { checkCompatibility } from "@iln/sdk";
 import { runInteractive } from "./interactive";
 import { VersionManager } from "./version";
 import { runTutorial } from "./tutorial";
+import {
+  withSpinner,
+  createTransactionProgress,
+  type ProgressOptions,
+} from "./progress";
 
 export interface CliDependencies {
   createClient(config: ResolvedConfig): ILNClient;
@@ -57,12 +64,13 @@ export interface CliDependencies {
   loadConfig(options?: { cwd?: string; env?: NodeJS.ProcessEnv }): ResolvedConfig;
   stderr: NodeJS.WritableStream;
   stdout: NodeJS.WritableStream;
+  __returnProgramForDocs?: boolean;
 }
 
 export async function runCli(
   argv: string[],
   dependencies: Partial<CliDependencies> = {},
-): Promise<number> {
+): Promise<number | any> {
   const stdout = dependencies.stdout ?? process.stdout;
   const stderr = dependencies.stderr ?? process.stderr;
   const ui = createUi(stdout, stderr);
@@ -78,6 +86,24 @@ export async function runCli(
   const createDevEnvironment =
     dependencies.createDevEnvironment ??
     ((devUi: Ui) => new LocalDevEnvironment({ ui: devUi }));
+
+  // Step 1: Load custom aliases from config
+  let customAliases: Record<string, string> = {};
+  try {
+    const { rawConfig } = readRawConfig(process.cwd());
+    customAliases = rawConfig.aliases || {};
+  } catch {
+    // Ignore if config doesn't exist or is invalid
+  }
+
+  // Step 2: Resolve aliases in argv
+  const resolvedArgv = [...argv];
+  if (resolvedArgv.length > 0) {
+    const firstArg = resolvedArgv[0];
+    if (customAliases[firstArg]) {
+      resolvedArgv[0] = customAliases[firstArg];
+    }
+  }
 
   const program = new Command();
 
@@ -153,8 +179,8 @@ export async function runCli(
 
       try {
         const config = load();
-        const opts = program.opts() as { quiet?: boolean };
-        if (!opts.quiet) {
+        const opts = program.opts() as { json?: boolean; quiet?: boolean };
+        if (!opts.quiet && !opts.json) {
           ui.info(`Using ${describeConfig(config)}`);
         }
 
@@ -169,7 +195,7 @@ export async function runCli(
         }
 
         // 2. Update Check
-        if (config.autoUpdate && !opts.quiet) {
+        if (config.autoUpdate && !opts.quiet && !opts.json) {
           // Fire and forget update check to not block startup significantly
           void versionManager.notifyUpdateIfAvailable();
         }
@@ -180,6 +206,7 @@ export async function runCli(
 
   program
     .command("submit")
+    .alias("s")
     .description("Submit a new invoice from the configured signer account.")
     .option("--payer <address>", "payer Stellar address")
     .option("--amount <amount>", "invoice amount in display units, for example 100 or 12.5")
@@ -261,24 +288,32 @@ export async function runCli(
       assertStellarAddress(payer, "payer");
       assertContractId(tokenId, "token");
 
-      const { invoiceId, txHash } = await client.submitInvoice({
-        amount: parseDisplayAmount(amount),
-        discountRate: parseBasisPoints(rate),
-        dueDate: parseDueDate(due),
-        payer,
-        tokenId,
-      });
+      const progress = cliProgressOptions(program, stdout);
+      const tx = createTransactionProgress("Submitting invoice", progress);
+      let submitResult: { invoiceId: bigint; txHash: string };
+      try {
+        submitResult = await client.submitInvoice({
+          amount: parseDisplayAmount(amount),
+          discountRate: parseBasisPoints(rate),
+          dueDate: parseDueDate(due),
+          payer,
+          tokenId,
+        });
+        tx.succeed(`Invoice ${submitResult.invoiceId.toString()} submitted (tx ${submitResult.txHash})`);
+      } catch (err) {
+        tx.fail("Invoice submission failed");
+        throw err;
+      }
 
       const globalOpts = program.opts() as { json?: boolean };
       if (globalOpts.json) {
-        stdout.write(JSON.stringify({ success: true, invoiceId: invoiceId.toString(), txHash }, null, 2) + "\n");
-      } else {
-        ui.success(`Submitted invoice ${invoiceId.toString()} in transaction ${txHash}.`);
+        stdout.write(formatJsonSuccess({ invoiceId: submitResult.invoiceId.toString(), txHash: submitResult.txHash }) + "\n");
       }
     });
 
   program
     .command("fund")
+    .alias("f")
     .description("Fund an invoice using the configured signer account.")
     .option("--id <invoiceId>", "invoice ID")
     .option("--amount <amount>", "amount to fund in display units; defaults to the remaining balance")
@@ -318,21 +353,29 @@ export async function runCli(
         throw new Error("Missing required argument: --id. Provide it via option or pipe to stdin.");
       }
       const client = createClient(load());
-      const result = await client.fundInvoice(
-        parseInvoiceId(invoiceId),
-        options.amount ? parseDisplayAmount(options.amount) : undefined,
-      );
+      const progress = cliProgressOptions(program, stdout);
+      const tx = createTransactionProgress("Funding invoice", progress);
+      let fundResult: { hash: string };
+      try {
+        fundResult = await client.fundInvoice(
+          parseInvoiceId(invoiceId),
+          options.amount ? parseDisplayAmount(options.amount) : undefined,
+        );
+        tx.succeed(`Invoice ${invoiceId} funded (tx ${fundResult.hash})`);
+      } catch (err) {
+        tx.fail("Invoice funding failed");
+        throw err;
+      }
 
       const globalOpts = program.opts() as { json?: boolean };
       if (globalOpts.json) {
-        stdout.write(JSON.stringify({ success: true, invoiceId: invoiceId, txHash: result.hash }, null, 2) + "\n");
-      } else {
-        ui.success(`Funded invoice ${invoiceId} in transaction ${result.hash}.`);
+        stdout.write(formatJsonSuccess({ invoiceId: invoiceId.toString(), txHash: fundResult.hash }) + "\n");
       }
     });
 
   program
     .command("pay")
+    .alias("p")
     .description("Mark an invoice as paid using the configured signer account.")
     .option("--id <invoiceId>", "invoice ID")
     .option("--yes", "skip interactive prompts and use defaults")
@@ -374,13 +417,20 @@ export async function runCli(
         throw new Error("Missing required argument: --id. Provide it via option or pipe to stdin.");
       }
       const client = createClient(load());
-      const result = await client.markPaid(parseInvoiceId(invoiceId));
+      const progress = cliProgressOptions(program, stdout);
+      const tx = createTransactionProgress("Marking invoice paid", progress);
+      let payResult: { hash: string };
+      try {
+        payResult = await client.markPaid(parseInvoiceId(invoiceId));
+        tx.succeed(`Invoice ${invoiceId} marked paid (tx ${payResult.hash})`);
+      } catch (err) {
+        tx.fail("Mark-paid failed");
+        throw err;
+      }
 
       const globalOpts = program.opts() as { json?: boolean };
       if (globalOpts.json) {
-        stdout.write(JSON.stringify({ success: true, invoiceId: invoiceId, txHash: result.hash }, null, 2) + "\n");
-      } else {
-        ui.success(`Marked invoice ${invoiceId} as paid in transaction ${result.hash}.`);
+        stdout.write(formatJsonSuccess({ invoiceId: invoiceId.toString(), txHash: payResult.hash }) + "\n");
       }
     });
 
@@ -425,9 +475,15 @@ export async function runCli(
       }
 
       const client = createClient(load());
-      const invoice = await client.getInvoice(parseInvoiceId(invoiceId));
+      const progress = cliProgressOptions(program, stdout);
+      const invoice = await withSpinner(
+        "Fetching invoice…",
+        () => client.getInvoice(parseInvoiceId(invoiceId)),
+        progress,
+        `Fetched invoice ${invoiceId}`,
+      );
       const opts = program.opts() as { json?: boolean };
-      ui.info(opts.json ? formatInvoiceDetailsJson(invoice) : formatInvoiceDetails(invoice));
+      ui.info(opts.json ? formatJsonSuccess(JSON.parse(formatInvoiceDetailsJson(invoice))) : formatInvoiceDetails(invoice));
     });
 
   program
@@ -472,9 +528,15 @@ export async function runCli(
 
       assertStellarAddress(address, "address");
       const client = createClient(load());
-      const invoices = await client.listInvoicesByAddress(address);
+      const progress = cliProgressOptions(program, stdout);
+      const invoices = await withSpinner(
+        "Fetching invoices…",
+        () => client.listInvoicesByAddress(address),
+        progress,
+        "Invoices loaded",
+      );
       const opts = program.opts() as { json?: boolean };
-      ui.info(opts.json ? formatInvoiceListJson(invoices) : formatInvoiceList(invoices));
+      ui.info(opts.json ? formatJsonSuccess(JSON.parse(formatInvoiceListJson(invoices))) : formatInvoiceList(invoices));
     });
 
   program
@@ -551,7 +613,13 @@ export async function runCli(
         }
 
         const client = createClient(load());
-        let invoices = await client.listInvoicesByAddress(address);
+        const progress = cliProgressOptions(program, stdout);
+        let invoices = await withSpinner(
+          "Fetching invoice history…",
+          () => client.listInvoicesByAddress(address),
+          progress,
+          "History loaded",
+        );
 
         if (options.id !== undefined) {
           const targetId = parseInvoiceId(options.id);
@@ -574,7 +642,7 @@ export async function runCli(
         const globalOpts = program.opts() as { json?: boolean };
         const output =
           options.format === "json" || globalOpts.json
-            ? formatHistoryJson(invoices)
+            ? formatJsonSuccess(JSON.parse(formatHistoryJson(invoices)))
             : formatHistoryTable(invoices);
 
         ui.info(output);
@@ -607,14 +675,20 @@ export async function runCli(
       const client = createClient(config);
 
       const globalOpts = program.opts() as { json?: boolean };
-      
-      let checkError: Error | null = null;
-      const result = await checkCompatibility(async (method: string) => {
-        if (method === "get_version") {
-          return client.getVersion();
-        }
-        throw new Error(`Unsupported compatibility check invoke method: ${method}`);
-      });
+
+      const progress = cliProgressOptions(program, stdout);
+      const result = await withSpinner(
+        "Checking contract compatibility…",
+        () =>
+          checkCompatibility(async (method: string) => {
+            if (method === "get_version") {
+              return client.getVersion();
+            }
+            throw new Error(`Unsupported compatibility check invoke method: ${method}`);
+          }),
+        progress,
+        "Compatibility check complete",
+      );
 
       if (globalOpts.json) {
         stdout.write(JSON.stringify(result, null, 2) + "\n");
@@ -624,7 +698,6 @@ export async function runCli(
         return;
       }
 
-      ui.info("Checking contract compatibility...");
       ui.info(`SDK Version:      ${result.sdkVersion}`);
       ui.info(`Contract Version: ${result.contractVersion}`);
 
@@ -656,9 +729,15 @@ export async function runCli(
     )
     .action(async () => {
       const client = createClient(load());
-      const config = await client.getProtocolConfig();
+      const progress = cliProgressOptions(program, stdout);
+      const config = await withSpinner(
+        "Fetching protocol configuration…",
+        () => client.getProtocolConfig(),
+        progress,
+        "Protocol config loaded",
+      );
       const globalOpts = program.opts() as { json?: boolean };
-      ui.info(globalOpts.json ? formatProtocolConfigJson(config) : formatProtocolConfig(config));
+      ui.info(globalOpts.json ? formatJsonSuccess(JSON.parse(formatProtocolConfigJson(config))) : formatProtocolConfig(config));
     });
 
   // Config file management
@@ -682,10 +761,15 @@ export async function runCli(
     .description("Show the resolved configuration that would be used for the current directory.")
     .action(() => {
       const config = load();
-      ui.info(describeConfig(config));
-      ui.info(`  keypairPath  ${config.keypairPath}`);
-      if (config.tokenId) {
-        ui.info(`  tokenId      ${config.tokenId}`);
+      const globalOpts = program.opts() as { json?: boolean };
+      if (globalOpts.json) {
+        ui.info(formatJsonSuccess(config));
+      } else {
+        ui.info(describeConfig(config));
+        ui.info(`  keypairPath  ${config.keypairPath}`);
+        if (config.tokenId) {
+          ui.info(`  tokenId      ${config.tokenId}`);
+        }
       }
     });
 
@@ -854,8 +938,9 @@ export async function runCli(
   devCommand
     .command("status")
     .description("Show local node, contract, and account environment status.")
-    .action(async () => {
-      await createDevEnvironment(ui).status();
+    .option("--json", "output machine-readable JSON")
+    .action(async (options: { json?: boolean }) => {
+      await createDevEnvironment(ui).status({ json: options.json });
     });
 
   devCommand
@@ -906,7 +991,8 @@ export async function runCli(
     .argument("[version]", "version to show changelog for")
     .action(async (version?: string) => {
       await versionManager.showChangelog(version);
-  // Wallet management commands
+    });
+    // Wallet management commands
   const walletCommand = program
     .command("wallet")
     .description("Manage Stellar keypairs for use with ILN.");
@@ -983,10 +1069,20 @@ export async function runCli(
         helpExample("iln wallet import     Import an existing secret key"),
       ].join("\n"),
     )
-    .action(() => {
+    .option("--json", "output machine-readable JSON")
+    .action((options: { json?: boolean }) => {
       const wallets = listWallets();
       if (wallets.length === 0) {
-        ui.info("No wallets found. Use 'iln wallet create' or 'iln wallet import' to add one.");
+        if (options.json) {
+          ui.info(formatJsonSuccess([]));
+        } else {
+          ui.info("No wallets found. Use 'iln wallet create' or 'iln wallet import' to add one.");
+        }
+        return;
+      }
+
+      if (options.json) {
+        ui.info(formatJsonSuccess(wallets));
         return;
       }
 
@@ -1027,8 +1123,12 @@ export async function runCli(
         throw new Error(`Wallet '${options.name}' not found.`);
       }
 
-      ui.info(`Funding wallet '${options.name}' (${wallet.publicKey})...`);
-      await fundWalletFromFriendbot(wallet.publicKey, options.friendbot);
+      const progress = cliProgressOptions(program, stdout);
+      await withSpinner(
+        `Funding wallet '${options.name}'…`,
+        () => fundWalletFromFriendbot(wallet.publicKey, options.friendbot),
+        progress,
+      );
       ui.success(`Successfully funded wallet '${options.name}'`);
     });
 
@@ -1111,13 +1211,102 @@ export async function runCli(
       stdout.write(generateManPage(program, commandName));
     });
 
+  // Alias management commands
+  const aliasCommand = program
+    .command("alias")
+    .description("Manage CLI command aliases");
+
+  aliasCommand
+    .command("list")
+    .description("List all configured aliases")
+    .option("--json", "output machine-readable JSON")
+    .action((options: { json?: boolean }) => {
+      if (options.json) {
+        ui.info(formatJsonSuccess({
+          builtin: { s: "submit", f: "fund", p: "pay" },
+          custom: customAliases
+        }));
+        return;
+      }
+      ui.info("Built-in aliases:");
+      ui.info("  s → submit");
+      ui.info("  f → fund");
+      ui.info("  p → pay");
+      ui.info("");
+      ui.info("Custom aliases:");
+      if (Object.keys(customAliases).length === 0) {
+        ui.info("  (none)");
+      } else {
+        for (const [alias, command] of Object.entries(customAliases)) {
+          ui.info(`  ${alias} → ${command}`);
+        }
+      }
+    });
+
+  aliasCommand
+    .command("add")
+    .description("Add a new custom alias")
+    .argument("<alias>", "Alias name")
+    .argument("<command>", "Command to alias")
+    .action((alias: string, command: string) => {
+      const cwd = process.cwd();
+      const { rawConfig } = readRawConfig(cwd);
+      if (!rawConfig.aliases) {
+        rawConfig.aliases = {};
+      }
+      rawConfig.aliases[alias] = command;
+      const filePath = writeRawConfig(cwd, rawConfig);
+      ui.success(`Added alias: ${alias} → ${command}`);
+      ui.info(`Saved to ${filePath}`);
+    });
+
+  aliasCommand
+    .command("remove")
+    .alias("rm")
+    .description("Remove a custom alias")
+    .argument("<alias>", "Alias name to remove")
+    .action((alias: string) => {
+      const cwd = process.cwd();
+      const { rawConfig } = readRawConfig(cwd);
+      if (rawConfig.aliases && rawConfig.aliases[alias]) {
+        delete rawConfig.aliases[alias];
+        const filePath = writeRawConfig(cwd, rawConfig);
+        ui.success(`Removed alias: ${alias}`);
+        ui.info(`Saved to ${filePath}`);
+      } else {
+        ui.error(`Alias not found: ${alias}`);
+      }
+    });
+
   try {
-    await program.parseAsync(argv, { from: "user" });
+    if (dependencies.__returnProgramForDocs) {
+      return program;
+    }
+    await program.parseAsync(resolvedArgv, { from: "user" });
     return 0;
   } catch (error: any) {
     const isJson = program.opts().json;
     if (isJson) {
-      stdout.write(JSON.stringify({ success: false, error: formatUnknownError(error) }, null, 2) + "\n");
+      if (isStructuredError(error)) {
+        stdout.write(
+          JSON.stringify(
+            {
+              success: false,
+              error: error.message,
+              code: error.code,
+              remediation: error.remediation,
+              docsUrl: error.docsUrl,
+            },
+            null,
+            2,
+          ) + "\n",
+        );
+      } else {
+        stdout.write(JSON.stringify({ success: false, error: formatUnknownError(error) }, null, 2) + "\n");
+      }
+    } else if (isStructuredError(error)) {
+      const hyperlinks = Boolean((stderr as NodeJS.WriteStream).isTTY);
+      stderr.write(formatILNError(error, { hyperlinks }) + "\n");
     } else {
       ui.error(formatUnknownError(error));
     }
@@ -1177,6 +1366,17 @@ async function resolveIdFromStdin(optionId?: string): Promise<string | undefined
     // Treat as raw text ID
   }
   return stdinVal;
+}
+
+function cliProgressOptions(
+  program: Command,
+  stdout: NodeJS.WritableStream,
+): ProgressOptions {
+  const opts = program.opts() as { quiet?: boolean; json?: boolean };
+  if (opts.quiet || opts.json) {
+    return { output: stdout, enabled: false };
+  }
+  return { output: stdout };
 }
 
 function parseInvoiceId(value: string): bigint {

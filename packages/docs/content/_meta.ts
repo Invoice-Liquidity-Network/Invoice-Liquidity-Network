@@ -19,6 +19,10 @@ export default {
     title: 'Frontend Guide',
     type: 'page'
   },
+  'cli-reference': {
+    title: 'CLI Reference',
+    type: 'page'
+  },
   governance: {
     title: 'Governance',
     type: 'page'
@@ -29,6 +33,10 @@ export default {
   },
   tutorials: {
     title: 'Tutorials',
+    type: 'page'
+  },
+  'analytics-plugin-guide': {
+    title: 'Analytics Plugin Guide',
     type: 'page'
   }
 }

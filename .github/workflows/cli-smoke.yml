@@ -1,0 +1,102 @@
+name: CLI Install Smoke Test
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'packages/cli/**'
+      - 'sdk/**'
+      - 'packages/shared/**'
+      - '.github/workflows/cli-smoke.yml'
+  pull_request:
+    paths:
+      - 'packages/cli/**'
+      - 'sdk/**'
+      - 'packages/shared/**'
+      - '.github/workflows/cli-smoke.yml'
+  workflow_dispatch:
+
+# Least-privilege: only needs to read the repo to build, pack, and install the CLI.
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  cli-smoke:
+    name: CLI install smoke (${{ matrix.os }})
+    # Runs on GitHub-hosted runners (not the self-hosted namespace profile) so the
+    # matrix can cover all three operating systems.
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    # One bash script per step, identical across OSes (Git Bash ships on windows-latest).
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@a15d269cd4658e1107c09f1fabf4cbd7bd1f308a # v4.4.0
+        with:
+          version: 9
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install workspace dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build the CLI and its workspace dependencies
+        # `...` builds @iln/cli plus everything it depends on (@iln/sdk, @iln/shared).
+        run: pnpm --filter "@iln/cli..." build
+
+      - name: Pack the CLI and its unpublished workspace dependencies
+        # The CLI depends on @iln/sdk -> @iln/shared, neither of which is published to
+        # npm. `pnpm pack` rewrites the `workspace:*` specifiers to the real versions, so
+        # installing all three tarballs together lets npm resolve the internal graph
+        # locally while fetching the published deps (commander, @stellar/*, ...) normally.
+        run: |
+          set -euo pipefail
+          TARBALLS="$RUNNER_TEMP/iln-tarballs"
+          mkdir -p "$TARBALLS"
+          ( cd packages/shared && pnpm pack --pack-destination "$TARBALLS" )
+          ( cd sdk            && pnpm pack --pack-destination "$TARBALLS" )
+          ( cd packages/cli   && pnpm pack --pack-destination "$TARBALLS" )
+          echo "Packed tarballs:"
+          ls -la "$TARBALLS"
+
+      - name: Install the CLI globally in a clean environment
+        run: |
+          set -euo pipefail
+          TARBALLS="$RUNNER_TEMP/iln-tarballs"
+          # Install all internal tarballs in a single command so npm satisfies the
+          # @iln/* dependencies from the sibling tarballs instead of the registry.
+          npm install -g "$TARBALLS"/*.tgz
+          echo "Global packages:"
+          npm ls -g --depth=0 || true
+
+      - name: Smoke test - iln --version
+        run: |
+          set -euo pipefail
+          echo "which iln: $(command -v iln || echo 'NOT FOUND')"
+          iln --version
+          iln --version | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+' \
+            && echo "OK: --version printed a semver" \
+            || { echo "FAIL: --version did not print a semver"; exit 1; }
+
+      - name: Smoke test - iln --help
+        run: |
+          set -euo pipefail
+          iln --help
+          iln --help | grep -qi "Invoice Liquidity Network" \
+            && echo "OK: --help printed the CLI description" \
+            || { echo "FAIL: --help output missing expected text"; exit 1; }

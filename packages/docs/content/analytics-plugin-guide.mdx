@@ -1,0 +1,223 @@
+# Analytics Plugin Development Guide
+
+Build custom analytics widgets and metrics for the ILN analytics dashboard using the SDK's analytics plugin API.
+
+## Plugin Architecture
+
+Every analytics plugin implements the `AnalyticsPlugin` interface:
+
+```typescript
+interface AnalyticsPlugin {
+  id: string;
+  name: string;
+  version: string;
+  description?: string;
+  author?: string;
+  icon?: string;
+  metrics: MetricDefinition[];
+  widgets: WidgetDefinition[];
+  install?(context: AnalyticsPluginContext): void | Promise<void>;
+  destroy?(): void | Promise<void>;
+}
+```
+
+Plugins define two kinds of assets:
+
+- **Metrics** — Computed values (numbers, percentages, currency amounts) that can be displayed inline or used by widgets.
+- **Widgets** — Self-contained visualizations (charts, tables, heatmaps, metric cards) rendered on the dashboard.
+
+## Quick Start
+
+### 1. Create your plugin file
+
+```typescript
+// my-plugin.ts
+import type {
+  AnalyticsPlugin,
+  AnalyticsPluginContext,
+  WidgetRenderResult,
+} from "@iln/sdk";
+
+export const MY_PLUGIN: AnalyticsPlugin = {
+  id: "my-custom-plugin",
+  name: "My Custom Plugin",
+  version: "1.0.0",
+  description: "Tracks custom metrics",
+  author: "Your Name",
+  icon: "📊",
+  metrics: [
+    {
+      id: "custom-metric",
+      name: "Custom Metric",
+      description: "Description of what this measures",
+      type: "number",
+      compute: async (ctx: AnalyticsPluginContext) => {
+        const stats = await ctx.sdk.getProtocolStats();
+        return stats.totalInvoices;
+      },
+    },
+  ],
+  widgets: [
+    {
+      id: "custom-widget",
+      name: "Custom Widget",
+      description: "Displays custom data",
+      type: "metric",
+      size: "small",
+      refreshIntervalMs: 30000,
+      render: async (
+        ctx: AnalyticsPluginContext,
+      ): Promise<WidgetRenderResult> => {
+        const stats = await ctx.sdk.getProtocolStats();
+        return {
+          type: "metric",
+          data: {
+            totalInvoices: stats.totalInvoices,
+          },
+        };
+      },
+    },
+  ],
+};
+```
+
+### 2. Test your plugin locally
+
+```typescript
+// my-plugin.test.ts
+import { describe, it, expect } from "vitest";
+import type { AnalyticsPluginContext } from "@iln/sdk";
+import { AnalyticsSDK } from "@iln/sdk";
+import { MY_PLUGIN } from "./my-plugin";
+
+function createMockContext(): AnalyticsPluginContext {
+  return {
+    sdk: new AnalyticsSDK("http://localhost:3001"),
+    logger: () => {},
+    config: {},
+    cache: new Map(),
+    fetchFromCache: () => undefined,
+    setCache: () => {},
+  };
+}
+
+describe("MyPlugin", () => {
+  it("computes custom metric", async () => {
+    const ctx = createMockContext();
+    const metric = MY_PLUGIN.metrics[0];
+    const result = await metric.compute(ctx);
+    expect(typeof result).toBe("number");
+  });
+
+  it("renders custom widget", async () => {
+    const ctx = createMockContext();
+    const widget = MY_PLUGIN.widgets[0];
+    const result = await widget.render(ctx);
+    expect(result.type).toBe("metric");
+    expect(result.data).toHaveProperty("totalInvoices");
+  });
+});
+```
+
+## Plugin Context
+
+The `AnalyticsPluginContext` provides everything a plugin needs:
+
+| Property | Type | Description |
+|---|---|---|
+| `sdk` | `AnalyticsSDK` | Pre-configured analytics client for fetching protocol data |
+| `logger` | `(msg, data?) => void` | Structured logger scoped to your plugin |
+| `config` | `Record<string, unknown>` | User-provided configuration passed at load time |
+| `cache` | `Map` | In-memory cache (per-plugin, lost on page refresh) |
+| `fetchFromCache` | `<T>(key) => T \| undefined` | Read from plugin cache |
+| `setCache` | `<T>(key, data, ttlMs) => void` | Write to plugin cache with TTL |
+
+## Widget Types
+
+The dashboard renders these widget types:
+
+| Type | Description | Suitable For |
+|---|---|---|
+| `metric` | Grid of labeled numeric values | KPIs, summaries |
+| `chart` | Bar chart with optional series comparison | Time series, rankings |
+| `table` | Sortable data table | Leaderboards, lists |
+| `heatmap` | Color-intensity grid cells | Distributions, patterns |
+| `custom` | Raw JSON display (fallback) | Debugging, custom rendering |
+
+### Widget Sizes
+
+| Size | Grid Span | Recommended Content |
+|---|---|---|
+| `small` | 2 cols (compact) | 2-4 metric values |
+| `medium` | 3 cols | Charts with single series |
+| `large` | 4 cols | Charts with comparisons, tables |
+| `full` | 6 cols (full width) | Complex visualizations |
+
+### WidgetRenderResult
+
+Your widget's `render` function must return:
+
+```typescript
+interface WidgetRenderResult {
+  type: WidgetType;
+  data: unknown;
+  labels?: string[];       // X-axis or row labels
+  series?: Array<{         // Chart series data
+    name: string;
+    values: number[];
+  }>;
+  metadata?: Record<string, unknown>;  // Extra info for consumers
+}
+```
+
+## Widget Lifecycle
+
+1. **Registration** — `install()` is called when the plugin is loaded. Use it to initialize connections or validate config.
+2. **Rendering** — `widget.render()` is called on mount and every `refreshIntervalMs` milliseconds.
+3. **Caching** — Use `setCache`/`fetchFromCache` to avoid redundant API calls.
+4. **Cleanup** — `destroy()` is called when the plugin is unloaded. Cancel any pending timers or subscriptions here.
+
+## Built-in Plugins
+
+The SDK ships with four built-in plugins as reference implementations:
+
+| Plugin | ID | Widgets |
+|---|---|---|
+| **Yield Tracker** | `iln-yield-tracker` | Yield Curve History, Yield Summary |
+| **Volume Monitor** | `iln-volume-monitor` | Volume Overview, Volume Metrics |
+| **Payer Analysis** | `iln-payer-analysis` | Payer Reliability, Payer Activity Heatmap |
+| **LP Performance** | `iln-lp-performance` | LP Rankings, LP Performance Summary, LP Benchmark |
+
+These are located at `sdk/src/analytics-plugins/builtins.ts` and serve as models for your own plugins.
+
+## Publishing & Distribution
+
+1. Package your plugin as a npm module with `@iln/sdk` as a peer dependency.
+2. Export the plugin object as a named export.
+3. Add the `iln-analytics-plugin` keyword to `package.json`.
+4. Community plugins can be submitted to the ILN Plugin Registry (coming soon).
+
+## Best Practices
+
+- **Cache aggressively** — Use `setCache` with appropriate TTLs to minimize API calls.
+- **Handle errors gracefully** — Your `compute` and `render` functions are wrapped in try/catch; thrown errors won't crash the dashboard.
+- **Keep metrics lightweight** — Metrics may be polled frequently. Avoid expensive computation.
+- **Use the SDK logger** — Prefix logs with context using `ctx.logger` instead of `console.log`.
+- **Follow semver** — Version your plugin so users can track updates.
+- **Test against mock data** — Provide a `createMockContext()` helper as shown above.
+
+## TypeScript Types Reference
+
+Full type definitions are exported from `@iln/sdk`:
+
+```typescript
+import type {
+  AnalyticsPlugin,
+  AnalyticsPluginContext,
+  MetricDefinition,
+  WidgetDefinition,
+  WidgetRenderResult,
+  WidgetType,
+  WidgetSize,
+} from "@iln/sdk";
+```

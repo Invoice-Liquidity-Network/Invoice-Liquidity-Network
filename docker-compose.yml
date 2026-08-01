@@ -1,12 +1,36 @@
 version: '3.8'
 
+# Local development environment for Invoice Liquidity Network.
+#
+# This file manages three services that together form the local dev stack:
+#
+#   stellar-node      — standalone Stellar Quickstart node with Soroban RPC
+#   contract-deployer — builds context: ./contract-deployer; deploys the
+#                       Soroban contract once the node is healthy and writes
+#                       the contract ID to .docker-output/contract-id.txt
+#   account-seeder    — builds context: ./account-seeder; creates funded test
+#                       accounts and mock assets after the deployer completes
+#
+# For CI and E2E tests, `docker compose up --build` starts all three in the
+# correct dependency order via health checks.
+#
+# The scripts/ directory contains additional helper scripts that are invoked
+# directly (not through Docker) during local Make-based development:
+#
+#   scripts/dev-setup.sh    — installs Rust, WASM target, and Stellar CLI
+#   scripts/deploy.ts       — deploys the contract to testnet/mainnet
+#   scripts/seed.sh         — seeds local network with test identities and invoices
+#   scripts/fund-wallets.sh — funds testnet wallets via Friendbot (testnet only)
+#
+# See docs/local-development.md for the full workflow.
+
 services:
   stellar-node:
     image: stellar/quickstart:testing
     command: --standalone --enable-soroban-rpc
     ports:
-      - "8000:8000"
-      - "11626:11626"
+      - "8000:8000"   # Horizon + Friendbot + Soroban RPC
+      - "11626:11626" # Stellar Core peer port
     healthcheck:
       test: ["CMD-SHELL", "curl -s http://localhost:8000/friendbot | grep -q '\"status\": 400'"]
       interval: 5s
@@ -15,7 +39,32 @@ services:
     volumes:
       - stellar-data:/opt/stellar
 
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+
+  indexer:
+    image: node:20-alpine
+    working_dir: /workspace
+    command: sh -lc "corepack enable && pnpm install --frozen-lockfile && pnpm dev -w iln-indexer"
+    depends_on:
+      stellar-node:
+        condition: service_healthy
+    volumes:
+      - .:/workspace
+    environment:
+      PORT: 3001
+      DB_PATH: /workspace/indexer.db
+      RPC_URL: http://stellar-node:8000/soroban/rpc
+      REDIS_URL: redis://redis:6379
+    ports:
+      - "3001:3001"
+
   contract-deployer:
+    # Dockerised deployer — builds and deploys the Soroban contract to the
+    # local node. Used by CI and `docker compose up`. For local Make-based
+    # development, `make deploy-local` performs the equivalent steps directly.
     build:
       context: ./contract-deployer
     depends_on:
@@ -25,7 +74,34 @@ services:
       - .:/workspace
     working_dir: /workspace
 
+  oracle-service:
+    image: node:20-alpine
+    working_dir: /workspace
+    command: sh -lc "corepack enable && pnpm install --frozen-lockfile && pnpm oracle:dev"
+    depends_on:
+      stellar-node:
+        condition: service_healthy
+      indexer:
+        condition: service_started
+      redis:
+        condition: service_started
+    volumes:
+      - .:/workspace
+    environment:
+      ORACLE_PORT: 3010
+      INDEXER_BASE_URL: http://indexer:3001
+      REDIS_URL: redis://redis:6379
+      ORACLE_CACHE_TTL_SECONDS: 300
+      ORACLE_REQUEST_TIMEOUT_MS: 3500
+      ORACLE_MAX_ORACLE_AGE_MS: 300000
+    ports:
+      - "3010:3010"
+
   account-seeder:
+    # Dockerised account seeder — creates funded test accounts, mock USDC/EURC
+    # assets, and output files in .docker-output/. For local Make-based
+    # development, `make seed` (which runs scripts/seed.sh) performs the
+    # equivalent steps directly against the node started by `make deploy-local`.
     build:
       context: ./account-seeder
     depends_on:

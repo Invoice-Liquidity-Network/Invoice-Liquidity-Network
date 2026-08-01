@@ -21,34 +21,37 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "lint": "eslint src --ext .ts,.tsx",
-    "typecheck": "tsc --noEmit"
+    "type-check": "tsc --noEmit"
   },
   "engines": {
     "node": ">=20"
   },
   "peerDependencies": {
-    "@iln/sdk": "workspace:*",
-    "@tanstack/react-query": "^5.0.0",
-    "react": "^18.0.0 || ^19.0.0"
+    "@iln/sdk": "0.1.0",
+    "@tanstack/react-query": "^5.62.0",
+    "react": "^19.0.0"
   },
   "devDependencies": {
     "@rollup/plugin-commonjs": "^28.0.0",
     "@rollup/plugin-node-resolve": "^15.3.0",
     "@rollup/plugin-typescript": "^12.1.0",
     "@tanstack/react-query": "^5.62.0",
+    "@testing-library/jest-dom": "^6.6.3",
     "@testing-library/react": "^16.1.0",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
     "@vitejs/plugin-react": "^4.3.0",
+    "jest-axe": "^4.1.0",
     "jsdom": "^25.0.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
+    "recharts": "^2.15.3",
     "rollup": "^4.28.0",
     "rollup-plugin-dts": "^6.1.0",
     "rollup-plugin-peer-deps-external": "^2.2.4",
     "tslib": "^2.8.0",
     "typescript": "^5.7.0",
-    "vitest": "^2.1.0"
+    "vitest": "^4.1.5"
   },
   "keywords": [
     "stellar",

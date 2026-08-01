@@ -6,17 +6,23 @@ const path = require('path');
 
 const repoRoot = path.resolve(__dirname, '..');
 const reportDir = path.join(repoRoot, '.security');
-const severity = process.env.SECURITY_AUDIT_LEVEL || 'high';
 
-const npmAuditRoots = [
-  'cli',
-  'sdk',
-  'indexer',
-  'notifications',
-  'packages/indexer',
-  'packages/mock-backend',
-  'packages/sdk'
-].filter((dir) => fs.existsSync(path.join(repoRoot, dir, 'package-lock.json')));
+function getSeverity() {
+  return process.env.SECURITY_AUDIT_LEVEL || 'high';
+}
+
+function getNpmAuditRoots(root) {
+  const base = root || repoRoot;
+  return [
+    'cli',
+    'sdk',
+    'indexer',
+    'notifications',
+    'packages/indexer',
+    'packages/mock-backend',
+    'packages/sdk'
+  ].filter((dir) => fs.existsSync(path.join(base, dir, 'package-lock.json')));
+}
 
 function usage() {
   console.log(`Usage: node scripts/dependency-audit.js <audit|snyk|licenses|scan|report> [--fix]
@@ -40,8 +46,11 @@ function toReportName(label) {
 }
 
 function runCommand(command, args, options = {}) {
-  const result = spawnSync(command, args, {
-    cwd: options.cwd || repoRoot,
+  const spawn = options._spawnSync || spawnSync;
+  const cwd = options.cwd || repoRoot;
+
+  const result = spawn(command, args, {
+    cwd,
     encoding: 'utf8',
     shell: process.platform === 'win32'
   });
@@ -53,6 +62,7 @@ function runCommand(command, args, options = {}) {
   }
 
   if (options.reportPath) {
+    fs.mkdirSync(path.dirname(options.reportPath), { recursive: true });
     fs.writeFileSync(options.reportPath, output || `Command exited with status ${result.status}\n`);
   } else if (output) {
     process.stdout.write(output);
@@ -73,12 +83,16 @@ function runCommand(command, args, options = {}) {
   };
 }
 
-function ensureReportDir() {
-  fs.mkdirSync(reportDir, { recursive: true });
+function ensureReportDir(dir) {
+  fs.mkdirSync(dir || reportDir, { recursive: true });
 }
 
-function runNpmAudit({ fix = false, report = false } = {}) {
-  if (npmAuditRoots.length === 0) {
+function runNpmAudit({ fix = false, report = false, _deps = {} } = {}) {
+  const severity = _deps.severity || getSeverity();
+  const roots = _deps.npmAuditRoots != null ? _deps.npmAuditRoots : getNpmAuditRoots(_deps.repoRoot);
+  const run = _deps.runCommand || runCommand;
+
+  if (roots.length === 0) {
     console.log('No package-lock.json files found for npm audit.');
     return true;
   }
@@ -86,8 +100,8 @@ function runNpmAudit({ fix = false, report = false } = {}) {
   let ok = true;
   const summary = [];
 
-  for (const relativeDir of npmAuditRoots) {
-    const cwd = path.join(repoRoot, relativeDir);
+  for (const relativeDir of roots) {
+    const cwd = path.join(_deps.repoRoot || repoRoot, relativeDir);
     const label = relativeDir;
     const args = fix
       ? ['audit', 'fix', '--omit=dev']
@@ -98,16 +112,17 @@ function runNpmAudit({ fix = false, report = false } = {}) {
     }
 
     console.log(`\nRunning npm ${args.join(' ')} in ${label}`);
+    const reportDirPath = _deps.reportDir || reportDir;
     const reportPath = report && !fix
-      ? path.join(reportDir, `npm-audit-${toReportName(label)}.json`)
+      ? path.join(reportDirPath, `npm-audit-${toReportName(label)}.json`)
       : undefined;
-    const result = runCommand('npm', args, { cwd, reportPath });
+    const result = run('npm', args, { cwd, reportPath, _spawnSync: _deps._spawnSync });
 
     summary.push({
       project: label,
       command: `npm ${args.join(' ')}`,
       status: result.status,
-      report: reportPath ? path.relative(repoRoot, reportPath) : undefined
+      report: reportPath ? path.relative(_deps.repoRoot || repoRoot, reportPath) : undefined
     });
 
     if (!result.ok) {
@@ -117,8 +132,9 @@ function runNpmAudit({ fix = false, report = false } = {}) {
   }
 
   if (report) {
+    const reportDirPath = _deps.reportDir || reportDir;
     fs.writeFileSync(
-      path.join(reportDir, 'npm-audit-summary.json'),
+      path.join(reportDirPath, 'npm-audit-summary.json'),
       `${JSON.stringify(summary, null, 2)}\n`
     );
   }
@@ -126,8 +142,12 @@ function runNpmAudit({ fix = false, report = false } = {}) {
   return ok;
 }
 
-function runPnpmAudit({ report = false } = {}) {
-  if (!fs.existsSync(path.join(repoRoot, 'pnpm-lock.yaml'))) {
+function runPnpmAudit({ report = false, _deps = {} } = {}) {
+  const severity = _deps.severity || getSeverity();
+  const run = _deps.runCommand || runCommand;
+  const base = _deps.repoRoot || repoRoot;
+
+  if (!fs.existsSync(path.join(base, 'pnpm-lock.yaml'))) {
     return true;
   }
 
@@ -138,8 +158,10 @@ function runPnpmAudit({ report = false } = {}) {
   }
 
   console.log('\nRunning pnpm workspace audit');
-  const result = runCommand('pnpm', args, {
-    reportPath: report ? path.join(reportDir, 'pnpm-audit-workspace.json') : undefined
+  const reportDirPath = _deps.reportDir || reportDir;
+  const result = run('pnpm', args, {
+    reportPath: report ? path.join(reportDirPath, 'pnpm-audit-workspace.json') : undefined,
+    _spawnSync: _deps._spawnSync
   });
 
   if (!result.ok) {
@@ -149,7 +171,9 @@ function runPnpmAudit({ report = false } = {}) {
   return result.ok;
 }
 
-function runSnyk({ report = false } = {}) {
+function runSnyk({ report = false, _deps = {} } = {}) {
+  const severity = _deps.severity || getSeverity();
+  const run = _deps.runCommand || runCommand;
   const args = ['--yes', 'snyk', 'test', '--all-projects', `--severity-threshold=${severity}`];
 
   if (report) {
@@ -157,8 +181,10 @@ function runSnyk({ report = false } = {}) {
   }
 
   console.log('\nRunning Snyk dependency scan');
-  const result = runCommand('npx', args, {
-    reportPath: report ? path.join(reportDir, 'snyk-report.json') : undefined
+  const reportDirPath = _deps.reportDir || reportDir;
+  const result = run('npx', args, {
+    reportPath: report ? path.join(reportDirPath, 'snyk-report.json') : undefined,
+    _spawnSync: _deps._spawnSync
   });
 
   if (!result.ok) {
@@ -168,10 +194,13 @@ function runSnyk({ report = false } = {}) {
   return result.ok;
 }
 
-function runLicenses({ report = false } = {}) {
+function runLicenses({ report = false, _deps = {} } = {}) {
+  const run = _deps.runCommand || runCommand;
   console.log('\nRunning license compliance check');
-  const result = runCommand('node', ['scripts/check-licenses.js'], {
-    reportPath: report ? path.join(reportDir, 'license-report.txt') : undefined
+  const reportDirPath = _deps.reportDir || reportDir;
+  const result = run('node', ['scripts/check-licenses.js'], {
+    reportPath: report ? path.join(reportDirPath, 'license-report.txt') : undefined,
+    _spawnSync: _deps._spawnSync
   });
 
   if (!result.ok) {
@@ -181,16 +210,16 @@ function runLicenses({ report = false } = {}) {
   return result.ok;
 }
 
-function runScan({ report = false } = {}) {
+function runScan({ report = false, _deps = {} } = {}) {
   if (report) {
-    ensureReportDir();
+    ensureReportDir(_deps.reportDir || reportDir);
   }
 
-  const pnpmAuditOk = runPnpmAudit({ report });
-  const npmAuditOk = runNpmAudit({ report });
+  const pnpmAuditOk = runPnpmAudit({ report, _deps });
+  const npmAuditOk = runNpmAudit({ report, _deps });
   const auditOk = pnpmAuditOk && npmAuditOk;
-  const licensesOk = runLicenses({ report });
-  const snykOk = runSnyk({ report });
+  const licensesOk = runLicenses({ report, _deps });
+  const snykOk = runSnyk({ report, _deps });
 
   return auditOk && licensesOk && snykOk;
 }
@@ -237,4 +266,22 @@ function main() {
   process.exit(ok ? 0 : 1);
 }
 
-main();
+if (require.main === module) {
+  main();
+}
+
+module.exports = {
+  toReportName,
+  runCommand,
+  ensureReportDir,
+  runNpmAudit,
+  runPnpmAudit,
+  runSnyk,
+  runLicenses,
+  runScan,
+  usage,
+  getSeverity,
+  getNpmAuditRoots,
+  repoRoot,
+  reportDir
+};

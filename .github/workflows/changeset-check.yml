@@ -16,10 +16,19 @@ on:
       - 'packages/**'
       - 'sdk/**'
 
+# Least-privilege: read code and post the "changeset required" comment on PRs.
+permissions:
+  contents: read
+  pull-requests: write
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   changeset-check:
     name: Require changeset for package changes
-    runs-on: ubuntu-latest
+    runs-on: namespace-profile-nursca
 
     steps:
       - name: Checkout
@@ -27,18 +36,8 @@ jobs:
         with:
           fetch-depth: 0
 
-      - uses: pnpm/action-setup@v4
-        with:
-          version: "9.0.0"
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 20
-          cache: pnpm
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+      - name: Setup pnpm with store cache
+        uses: ./.github/actions/setup-pnpm
 
       - name: Check for changeset
         run: |
@@ -70,8 +69,20 @@ jobs:
 
           echo "✅ Changeset found: $CHANGESET"
 
+      - name: Flag dependents of changed packages
+        # Advisory only — never fails the build. Runs even if the changeset
+        # requirement above failed, since that's exactly when knowing which
+        # downstream packages might also need one is most useful.
+        # packages/shared (and other widely-depended-on internal packages)
+        # can affect several downstream workspaces; this surfaces them as an
+        # explicit reviewer checklist item instead of relying on someone
+        # remembering the dependency graph. See CONTRIBUTING.md#changeset-workflow.
+        if: always()
+        continue-on-error: true
+        run: node scripts/check-changeset-dependents.mjs
+
       - name: Comment PR on failure
-        if: failure() && github.event_name == 'pull_request'
+        if: failure() && github.event_name == 'pull_request' && !github.event.pull_request.head.repo.fork
         uses: actions/github-script@v7
         with:
           script: |

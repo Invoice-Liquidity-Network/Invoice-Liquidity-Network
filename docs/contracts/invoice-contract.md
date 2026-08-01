@@ -1295,7 +1295,7 @@ await client.executeProposal({
 
 ## Cross-References
 
-- **Event Schema**: [Event Documentation](../event-schema.md)
+- **Event Schema**: [Event Documentation](./README.md#event-schema)
 - **Governance Integration**: [Governance Contract Reference](./governance-contract.md)
 - **Reputation System**: [Reputation Contract Reference](./reputation-contract.md)
 - **Integration Guide**: [Integration & SDK Usage](../integration-guide.md)

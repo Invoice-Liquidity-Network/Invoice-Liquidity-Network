@@ -1,0 +1,162 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`GraphQL schema snapshot > modular schema (graphql/schema.ts) should match snapshot 1`] = `
+"type Invoice {
+  id: Int!
+  freelancer: String!
+  payer: String!
+  amount: String!
+  dueDate: Int!
+  discountRate: Int!
+  status: InvoiceStatus!
+  funder: String
+  fundedAt: Int
+  createdAt: Int!
+  updatedAt: Int!
+}
+
+enum InvoiceStatus {
+  Pending
+  Funded
+  Paid
+  Defaulted
+}
+
+enum ILNEventType {
+  submitted
+  funded
+  paid
+  defaulted
+}
+
+type ILNEvent {
+  eventId: String!
+  eventType: ILNEventType!
+  invoiceId: Int!
+  ledger: Int!
+  ledgerClosedAt: String!
+  createdAt: Int!
+}
+
+type InvoicePage {
+  invoices: [Invoice!]!
+  hasMore: Boolean!
+  nextCursor: String
+}
+
+type ProtocolStats {
+  totalInvoices: Int!
+  totalVolume: String!
+  totalYield: String!
+  defaultRate: Float!
+}
+
+type Query {
+  invoice(id: Int!): Invoice
+  invoices(status: InvoiceStatus, freelancer: String, payer: String, funder: String, limit: Int, cursor: String): InvoicePage!
+  stats: ProtocolStats!
+}
+
+type Subscription {
+  invoiceUpdated(id: Int, status: InvoiceStatus, freelancer: String, payer: String, funder: String): Invoice!
+  eventStream(invoiceId: Int, eventType: ILNEventType): ILNEvent!
+}"
+`;
+
+exports[`GraphQL schema snapshot > monolithic schema (graphql.ts) should match snapshot 1`] = `
+"enum InvoiceStatus {
+  Pending
+  Funded
+  Paid
+  Defaulted
+}
+
+type Invoice {
+  id: Int!
+  freelancer: String!
+  payer: String!
+  amount: String!
+  dueDate: Int!
+  discountRate: Int!
+  status: InvoiceStatus!
+  funder: String
+  fundedAt: Int
+  createdAt: Int!
+  updatedAt: Int!
+}
+
+type InvoiceEdge {
+  node: Invoice!
+  cursor: String!
+}
+
+type PageInfo {
+  hasNextPage: Boolean!
+  endCursor: String
+}
+
+type InvoiceConnection {
+  edges: [InvoiceEdge!]!
+  pageInfo: PageInfo!
+}
+
+type Event {
+  eventId: String!
+  eventType: String!
+  invoiceId: Int!
+  ledger: Int!
+  ledgerClosedAt: String!
+  createdAt: Int!
+}
+
+type ProtocolStats {
+  totalInvoices: Int!
+  totalVolume: String!
+  totalYield: String!
+  defaultRate: Float!
+}
+
+type LPStats {
+  deployed: String!
+  yield: String!
+  invoiceCount: Int!
+  defaultRate: Float!
+}
+
+type FreelancerStats {
+  submitted: Int!
+  funded: Int!
+  totalReceived: String!
+  avgDiscount: Float!
+}
+
+type LPStat {
+  address: String!
+  yield: String!
+  invoiceCount: Int!
+}
+
+type HealthStatus {
+  status: String!
+  db: String!
+  lastSync: String
+  uptime: Int!
+}
+
+type Query {
+  health: HealthStatus!
+  invoice(id: Int!): Invoice
+  invoices(status: InvoiceStatus, freelancer: String, payer: String, funder: String, first: Int, after: String): InvoiceConnection!
+  events(invoiceId: Int): [Event!]!
+  protocolStats: ProtocolStats!
+  lpStats(address: String!): LPStats!
+  freelancerStats(address: String!): FreelancerStats!
+  topLPs(limit: Int, period: String): [LPStat!]!
+  history(address: String!, role: String): [Invoice!]!
+}
+
+type Subscription {
+  invoiceCreated: Invoice!
+  invoiceUpdated: Invoice!
+}"
+`;

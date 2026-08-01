@@ -11,7 +11,15 @@
  * never hard-code a scale factor.
  */
 
-/** A canonical, fully-described token recognised by the protocol. */
+/**
+ * A canonical, fully-described token recognised by the protocol.
+ *
+ * Intentionally differs from @iln/shared's Token: this SDK version is a
+ * UI/display-oriented representation with `logo` (asset path), literal union
+ * `symbol` (`'USDC' | 'EURC' | 'XLM'`), and constrained `decimals` (`6 | 7`).
+ * The shared version is a contract-level type with `name`, `issuer`, `listed`,
+ * and unconstrained `symbol`/`decimals` fields.
+ */
 export interface Token {
   /** Stellar Asset Contract (SAC) address, `C...` for issued assets. */
   address: string;

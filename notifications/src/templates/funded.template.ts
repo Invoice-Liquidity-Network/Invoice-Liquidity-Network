@@ -14,6 +14,9 @@ export interface FundedTemplateVars {
   recipientRole: "freelancer" | "payer";
   /** Optional dashboard link for the invoice */
   dashboardUrl?: string;
+  /** Optional tokenized one-click unsubscribe URL. Falls back to the
+   *  public marketing URL when omitted. */
+  unsubscribeUrl?: string;
 }
 
 /**
@@ -27,7 +30,7 @@ export function buildFundedSubject(event: InvoiceEvent): string {
  * Render the full HTML email body for an invoice-funded event.
  */
 export function renderFundedEmail(vars: FundedTemplateVars): string {
-  const { event, recipientRole, dashboardUrl } = vars;
+  const { event, recipientRole, dashboardUrl, unsubscribeUrl } = vars;
 
   const isFreelancer = recipientRole === "freelancer";
   const greeting = isFreelancer
@@ -101,5 +104,5 @@ export function renderFundedEmail(vars: FundedTemplateVars): string {
       </div>
     </div>`;
 
-  return emailShell(`Invoice #${invoiceId} Funded`, body);
+  return emailShell(`Invoice #${invoiceId} Funded`, body, { unsubscribeUrl });
 }

@@ -2,9 +2,17 @@ name: E2E Integration
 
 on: [push, pull_request]
 
+# Least-privilege: read code to run the E2E smoke test.
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   e2e-tests:
-    runs-on: ubuntu-latest
+    runs-on: namespace-profile-nursca
     if: vars.RUN_E2E == 'true'
     steps:
       - uses: actions/checkout@v4

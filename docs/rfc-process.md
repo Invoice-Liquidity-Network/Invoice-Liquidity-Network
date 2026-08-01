@@ -57,6 +57,6 @@ An accepted RFC becomes the source of truth for the implementation. The implemen
 
 ## RFC index
 
-| Number | Title | Status |
-|--------|-------|--------|
-| [0001](./0001-dutch-auction-funding.md) | Dutch Auction Funding | Draft |
+| Number | Title | Status | Tracking issues |
+|--------|-------|--------|-----------------|
+| [0001](../rfcs/0001-dutch-auction-funding.md) | Dutch Auction Funding | Accepted | #6, #7, #8, #10 |

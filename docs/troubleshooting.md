@@ -2,6 +2,9 @@
 
 This guide covers common issues and their solutions when working with the Invoice Liquidity Network SDK, CLI, and smart contracts.
 
+For programmatic error handling and remediation steps, see [ILN SDK Error Codes](errors.md).
+
+
 ## Connection Issues
 
 ### RPC Server Unreachable

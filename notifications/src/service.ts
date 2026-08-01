@@ -16,6 +16,18 @@ import {
   renderDueWarningEmail,
 } from "./templates";
 
+// ─── NOTE ─────────────────────────────────────────────────────────────────────
+// This file contains an injectable NotificationService used by
+// notifications/tests/delivery.test.ts and notifications/tests/triggers.test.ts.
+//
+// It is NOT currently wired into the production path (src/index.ts). Production
+// delivery uses src/delivery.ts + src/processor.ts with direct Resend calls.
+//
+// Consolidating this injectable layer with the production path is tracked as a
+// follow-up to issue #662. Until then, this file must not be deleted — the test
+// suite depends on it.
+// ──────────────────────────────────────────────────────────────────────────────
+
 // ─── Dependency interfaces (injectable for testing) ────────────────────────────
 
 export interface EmailClient {

@@ -1,4 +1,11 @@
-# @iln/sdk
+# @iln/sdk-next
+
+> This is an **experimental, modular/browser-first rewrite** of the SDK and
+> has not reached feature parity with `@iln/sdk` (`sdk/`) — it is missing
+> governance, analytics, offline, plugins, and React/React Native support.
+> Use [`@iln/sdk`](../../sdk) for integrations today. See
+> [`docs/sdk-next-migration.md`](../../docs/sdk-next-migration.md) for the
+> full comparison and current status.
 
 Typed TypeScript SDK for the Invoice Liquidity Network — works in Node.js and modern browsers.
 
@@ -73,3 +80,21 @@ npm test
 npx playwright install
 npm run test:browser
 ```
+
+## Testing the packed npm output locally
+
+To try the package as it will actually be published (rather than via a workspace
+symlink), pack it and install the tarball into a scratch project instead of
+committing a `.tgz` to the repo:
+
+```bash
+# From packages/sdk
+npm run build
+npm pack --pack-destination /tmp
+
+# In a separate scratch project
+npm install /tmp/iln-sdk-<version>.tgz
+```
+
+Packed tarballs are build output — delete them after use and don't commit them;
+`*.tgz` is gitignored for this reason.

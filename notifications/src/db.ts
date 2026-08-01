@@ -108,6 +108,15 @@ function runMigrations(db: SQLiteDatabase): void {
     CREATE INDEX IF NOT EXISTS idx_events_invoice_id   ON events(invoice_id);
     CREATE INDEX IF NOT EXISTS idx_subscriptions_address ON subscriptions(stellar_address);
     CREATE INDEX IF NOT EXISTS idx_sent_notifications_invoice ON sent_notifications(invoice_id);
+
+    -- Issue #741 compliance: ensure one-click unsubscribe tokens are
+    -- single-use. The nonce is recorded here on successful verify; a
+    -- replay attempts an INSERT OR IGNORE that returns `changes = 0`
+    -- and is rejected with HTTP 409.
+    CREATE TABLE IF NOT EXISTS redeemed_unsubscribe_tokens (
+      nonce       TEXT    PRIMARY KEY,
+      redeemed_at INTEGER NOT NULL
+    );
   `);
 }
 

@@ -2,6 +2,7 @@ import { Command } from 'commander';
 import fs from 'fs';
 import path from 'path';
 import { spawnSync } from 'child_process';
+import { runRelease } from './release';
 
 type ILNConfig = Record<string, any>;
 
@@ -137,6 +138,22 @@ program
       await runGetContractIds();
     } catch (e) {
       console.error('Error during get-contract-ids:', e);
+      process.exit(1);
+    }
+  });
+
+program
+  .command('release <bumpType>')
+  .description('Automate release of @iln/scripts: bump version, update changelog, git commit & tag, push to remote')
+  .action(async (bumpType) => {
+    try {
+      if (!['major', 'minor', 'patch'].includes(bumpType)) {
+        console.error('Error: bumpType must be one of: major, minor, patch');
+        process.exit(1);
+      }
+      await runRelease(bumpType as any);
+    } catch (e) {
+      console.error('Error during release:', e);
       process.exit(1);
     }
   });

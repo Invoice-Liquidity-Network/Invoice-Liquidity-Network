@@ -1,13 +1,13 @@
 import { ILNEventIndexer } from "../src/indexer";
 import { TimeoutError } from "../src/errors";
-import { ContractEvent } from "../src/types";
+import { ParsedHorizonEvent } from "../src/types";
 import { RawHorizonEvent } from "../src/parse";
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
 function makeRawEvent(overrides: Partial<RawHorizonEvent> = {}): RawHorizonEvent {
   return {
-    type: "InvoiceCreated",
+    type: "InvoiceSubmitted",
     contract_id: "CTEST_CONTRACT",
     topics: ["invoice-001", "addr-seller"],
     value: "dGVzdA==", // base64 "test"
@@ -225,7 +225,7 @@ describe("ILNEventIndexer", () => {
         body: stream,
       });
 
-      const received: ContractEvent[] = [];
+      const received: ParsedHorizonEvent[] = [];
       const indexer = new ILNEventIndexer(CONTRACT_ID, {}, fetchMock);
 
       const sub = indexer.subscribe((event) => {
@@ -273,13 +273,13 @@ describe("ILNEventIndexer", () => {
   // ── parseContractEvent ───────────────────────────────────────────────────
 
   describe("parseContractEvent (unit)", () => {
-    it("maps raw Horizon event fields to ContractEvent shape", async () => {
+    it("maps raw Horizon event fields to ParsedHorizonEvent shape", async () => {
       const { parseContractEvent } = await import("../src/parse");
       const raw = makeRawEvent();
       const parsed = parseContractEvent(raw);
 
       expect(parsed.contractId).toBe("CTEST_CONTRACT");
-      expect(parsed.type).toBe("InvoiceCreated");
+      expect(parsed.type).toBe("InvoiceSubmitted");
       expect(parsed.txHash).toBe("abc123");
       expect(parsed.ledger).toBe(1000);
       expect(parsed.pagingToken).toBe("1000-0");

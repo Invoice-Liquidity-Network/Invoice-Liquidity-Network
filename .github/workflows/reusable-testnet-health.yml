@@ -24,10 +24,13 @@ on:
         description: "true when Horizon responds with a valid stellar.json document"
         value: ${{ jobs.health.outputs.healthy }}
 
+# Least-privilege: no repo contents are accessed; the job only makes HTTP probes.
+permissions: {}
+
 jobs:
   health:
     name: Horizon testnet health
-    runs-on: ubuntu-latest
+    runs-on: namespace-profile-nursca
     outputs:
       healthy: ${{ steps.check.outputs.healthy }}
     steps:
@@ -58,6 +61,7 @@ jobs:
           done
 
           echo "healthy=${healthy}" >> "$GITHUB_OUTPUT"
+          # Output the flag so dependent jobs can skip gracefully instead of failing
           if [ "${healthy}" = "true" ]; then
             echo "Horizon testnet is healthy"
           else

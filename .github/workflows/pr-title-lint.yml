@@ -4,20 +4,25 @@ on:
   pull_request:
     types: [opened, edited, reopened, synchronize]
 
+# Least-privilege: the PR title is read from the event payload; only read access
+# to the checkout is needed.
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   lint:
-    runs-on: ubuntu-latest
+    runs-on: namespace-profile-nursca
     steps:
       - uses: actions/checkout@v4
-      - name: Setup Node
-        uses: actions/setup-node@v4
+      - name: Setup pnpm with store cache
+        uses: ./.github/actions/setup-pnpm
         with:
-          node-version: 18
-      - name: Install commitlint
-        run: |
-          npm init -y
-          npm install --no-audit --no-fund @commitlint/cli @commitlint/config-conventional
+          install-args: --frozen-lockfile --ignore-scripts
       - name: Lint PR title
         run: |
           echo "${{ github.event.pull_request.title }}" > pr_title
-          npx commitlint --config commitlint.config.js --edit pr_title
+          pnpm exec commitlint --config commitlint.config.js --edit pr_title

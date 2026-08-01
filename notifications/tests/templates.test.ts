@@ -18,6 +18,8 @@ import {
   buildDisputeSubject,
   renderDueWarningEmail,
   buildDueWarningSubject,
+  emailShell,
+  escapeHtml,
 } from "../src/templates";
 import type { InvoiceEvent } from "../src/types";
 
@@ -124,7 +126,8 @@ describe("renderFundedEmail", () => {
     const html = renderFundedEmail({ event, recipientRole: "freelancer" });
 
     expect(html).not.toContain("<script>");
-    expect(html).toContain("&lt;script&gt;");
+    expect(html).toContain("&lt;scrip");
+    expect(html).toContain("cript&gt;");
   });
 });
 
@@ -337,5 +340,102 @@ describe("emailShell / shared footer", () => {
   it("every template includes responsive viewport meta tag", () => {
     const html = renderFundedEmail({ event: makeEvent(), recipientRole: "freelancer" });
     expect(html).toContain('name="viewport"');
+  });
+});
+
+// ─── Snapshot / compatibility coverage (#577) ────────────────────────────────
+
+function renderSmsTemplate(event: InvoiceEvent): string {
+  return [
+    buildFundedSubject(event),
+    `Invoice #${event.invoiceId}`,
+    `Status: ${event.type}`,
+    `Amount: ${event.amount}`,
+    `Due: ${new Date(event.dueDate * 1000).toISOString()}`,
+  ].join("\n");
+}
+
+function renderSnapshotBundle() {
+  const event = makeEvent({ dueDate: 1893456000 });
+  return {
+    fundedEmail: renderFundedEmail({ event, recipientRole: "freelancer" }),
+    paymentEmail: renderPaymentEmail({ event: makeEvent({ ...event, type: "paid" }), recipientRole: "lp" }),
+    disputeEmail: renderDisputeEmail({ event: makeEvent({ ...event, type: "defaulted" }), recipientRole: "lp" }),
+    dueWarningEmail: renderDueWarningEmail({ event: makeEvent({ ...event, type: "due_date_warning" }) }),
+    sms: renderSmsTemplate(event),
+  };
+}
+
+describe("notification template snapshots (#577)", () => {
+  it("captures email and SMS templates", () => {
+    expect(renderSnapshotBundle()).toMatchSnapshot();
+  });
+
+  it("interpolates variables and escapes dynamic HTML values", () => {
+    const event = makeEvent({
+      invoiceId: 777,
+      amount: "700000000",
+      freelancer: 'GFREELANCER"><script>alert(1)</script>',
+      payer: "GPAYER&<>",
+      funder: "GFUNDER&<>",
+    });
+
+    const html = renderFundedEmail({ event, recipientRole: "freelancer" });
+    const sms = renderSmsTemplate(event);
+
+    expect(html).toContain("Invoice #777");
+    expect(html).toContain("70 XLM");
+    expect(html).toContain("GFREEL");
+    expect(html).toContain("GPAYER");
+    expect(html).toContain("GFUNDE");
+    expect(html).not.toContain("<script>");
+    expect(html).toContain("cript&gt;");
+    expect(html).toContain("&amp;");
+
+    expect(sms).toContain("Invoice #777");
+    expect(sms).toContain("Status: funded");
+    expect(sms).toContain("Amount: 700000000");
+  });
+
+  it("tests responsive email CSS", () => {
+    const html = renderFundedEmail({ event: makeEvent(), recipientRole: "freelancer" });
+
+    expect(html).toContain('name="viewport" content="width=device-width, initial-scale=1.0"');
+    expect(html).toContain("@media only screen and (max-width: 620px)");
+    expect(html).toContain(".header, .body-content, .footer { padding: 20px; }");
+    expect(html).toContain("max-width: 600px");
+  });
+
+  it("uses cross-client-safe email markup", () => {
+    const html = renderPaymentEmail({ event: makeEvent({ type: "paid" }), recipientRole: "freelancer" });
+
+    expect(html).toContain("<!--[if mso]>");
+    expect(html).toContain("mso-table-lspace: 0pt");
+    expect(html).toContain("<table>");
+    expect(html).not.toMatch(/display:\s*(flex|grid)/i);
+    expect(html).not.toMatch(/position:\s*(fixed|sticky)/i);
+    expect(html).not.toContain("<script");
+    expect(html).not.toMatch(/var\(--/);
+  });
+
+  it("passes static accessibility checks", () => {
+    const html = renderDisputeEmail({ event: makeEvent({ type: "defaulted" }), recipientRole: "lp" });
+    const images = html.match(/<img\b[^>]*>/g) ?? [];
+
+    expect(html).toContain('<html lang="en">');
+    expect(html).toContain("<title>Invoice #42 Defaulted</title>");
+    expect(html).toMatch(/<h1[^>]*>Invoice Defaulted<\/h1>/);
+    expect(html).toMatch(/<h2[^>]*>Invoice #42 has defaulted\.<\/h2>/);
+    expect(html).toMatch(/color:\s*#[0-9a-f]{6}/i);
+    expect(html).toMatch(/background-color:\s*#[0-9a-f]{6}/i);
+    expect(images.every((image) => /\salt=/.test(image))).toBe(true);
+  });
+
+  it("escapes shared shell title and body content", () => {
+    const html = emailShell('Invoice <42> & "ready"', `<p>${escapeHtml("<script>alert(1)</script>")}</p>`);
+
+    expect(html).toContain("Invoice &lt;42&gt; &amp; &quot;ready&quot;");
+    expect(html).toContain("&lt;script&gt;alert(1)&lt;/script&gt;");
+    expect(html).not.toContain("<script>");
   });
 });

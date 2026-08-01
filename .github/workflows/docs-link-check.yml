@@ -1,0 +1,57 @@
+name: Docs Link Check
+
+# Checks internal and external links across both documentation trees (docs/
+# and packages/docs/content) so a broken Markdown link surfaces in CI instead
+# of going unnoticed the way a broken code import never would.
+
+on:
+  pull_request:
+    paths:
+      - 'docs/**'
+      - 'packages/docs/content/**'
+      - '.github/markdown-link-check.json'
+      - '.github/workflows/docs-link-check.yml'
+  push:
+    branches:
+      - main
+    paths:
+      - 'docs/**'
+      - 'packages/docs/content/**'
+      - '.github/markdown-link-check.json'
+  schedule:
+    # Catch external link rot (moved or removed third-party pages) even on
+    # weeks with no doc changes.
+    - cron: '0 6 * * 1'
+  workflow_dispatch:
+
+# Least-privilege: only reads repo content to check links.
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  link-check:
+    name: Check documentation links
+    runs-on: namespace-profile-nursca
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Check links in docs/
+        uses: gaurav-nelson/github-action-markdown-link-check@5c5dfc0ac2e225883c0e5f03a85311ec2830d368 # v1
+        with:
+          use-quiet-mode: 'yes'
+          config-file: '.github/markdown-link-check.json'
+          folder-path: 'docs'
+          file-extension: '.md'
+
+      - name: Check links in packages/docs/content/
+        uses: gaurav-nelson/github-action-markdown-link-check@5c5dfc0ac2e225883c0e5f03a85311ec2830d368 # v1
+        with:
+          use-quiet-mode: 'yes'
+          config-file: '.github/markdown-link-check.json'
+          folder-path: 'packages/docs/content'
+          file-extension: '.mdx'

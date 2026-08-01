@@ -6,63 +6,156 @@ on:
   pull_request:
     branches: [ "main" ]
 
+# Least-privilege: read code to run tests and upload coverage to Codecov.
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
-  coverage:
-    name: Run tests and collect coverage
-    runs-on: ubuntu-latest
-    
+  changes:
+    name: Detect changed paths
+    runs-on: namespace-profile-nursca
+    outputs:
+      backend: ${{ steps.filter.outputs.backend }}
+      notifications: ${{ steps.filter.outputs.notifications }}
+      shared_config: ${{ steps.filter.outputs.shared_config }}
+      sdk: ${{ steps.filter.outputs.sdk }}
+      cli: ${{ steps.filter.outputs.cli }}
+      indexer: ${{ steps.filter.outputs.indexer }}
+      packages: ${{ steps.filter.outputs.packages }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dorny/paths-filter@d1c1ffe0248fe513906c8e24db8ea791d46f8590 # v3.0.3
+        id: filter
+        with:
+          filters: |
+            backend:
+              - 'backend/**'
+              - '.gitmodules'
+            notifications:
+              - 'notifications/**'
+            sdk:
+              - 'sdk/**'
+              - 'packages/sdk/**'
+              - 'packages/shared/**'
+            cli:
+              - 'cli/**'
+              - 'packages/cli/**'
+            indexer:
+              - 'indexer/**'
+              - 'packages/indexer/**'
+            packages:
+              - 'packages/**'
+            shared_config:
+              - 'pnpm-workspace.yaml'
+              - 'turbo.json'
+              - 'package.json'
+              - 'pnpm-lock.yaml'
+
+  rust-coverage:
+    name: Rust coverage (backend)
+    needs: changes
+    if: needs.changes.outputs.backend == 'true'
+    runs-on: namespace-profile-nursca
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          submodules: recursive
 
-      - name: Initialize submodules
-        run: git submodule update --init --recursive
-      
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 20
-          
       - name: Setup Rust
-        uses: dtolnay/rust-toolchain@stable
+        uses: dtolnay/rust-toolchain@2c7215f132e9ebf062739d9130488b56d53c060c # stable
         with:
+          toolchain: stable
           components: llvm-tools-preview
-          
+
       - name: Install cargo-llvm-cov
-        uses: taiki-e/install-action@cargo-llvm-cov
-          
+        uses: taiki-e/install-action@3d7d7cd5ac7f994c1892ae0c06165095b9139094 # v2.85.1
+        with:
+          tool: cargo-llvm-cov
+
       - name: Run Rust Coverage
         working-directory: backend
         run: cargo llvm-cov --all-features --workspace --fail-under-lines 80 --lcov --output-path ../rust-lcov.info
-        
-      - name: Install SDK Dependencies
-        working-directory: sdk
-        run: npm ci
-        
-      - name: Run SDK Coverage
-        working-directory: sdk
-        run: npm run test:coverage -- --coverage.thresholds.lines=80
 
-      - name: Install Frontend Dependencies
-        working-directory: frontend
-        run: npm ci
-
-      - name: Run Frontend Coverage
-        working-directory: frontend
-        run: npm run test -- --coverage --coverage.thresholds.lines=80
-
-      - name: Install Notifications Dependencies
-        working-directory: notifications
-        run: npm ci
-
-      - name: Run Notifications Coverage
-        working-directory: notifications
-        run: npm run test -- --coverage --coverage.thresholds.lines=80
-        
-      - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@v5
+      - name: Upload Rust coverage to Codecov
+        uses: codecov/codecov-action@5975040f7f7d40edaff8d784b576fd65ae95c073 # v5.5.5
         with:
-          files: rust-lcov.info,sdk/coverage/lcov.info,frontend/coverage/lcov.info,notifications/coverage/lcov.info
-          fail_ci_if_error: true
           token: ${{ secrets.CODECOV_TOKEN }}
           slug: Nursca/Invoice-Liquidity-Network
+          files: rust-lcov.info
+          flags: backend
+          name: rust-backend
+
+  notifications-coverage:
+    name: Node.js coverage (notifications)
+    needs: [changes, pnpm-cache]
+    if: needs.changes.outputs.notifications == 'true' || needs.changes.outputs.shared_config == 'true'
+    runs-on: namespace-profile-nursca
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup pnpm with store cache
+        uses: ./.github/actions/setup-pnpm
+
+      - name: Install dependencies
+        working-directory: notifications
+        run: pnpm install --frozen-lockfile
+
+      - name: Run notification template coverage
+        working-directory: notifications
+        run: >
+          pnpm exec vitest run tests/templates.test.ts
+          --coverage
+          --coverage.include=src/templates/funded.template.ts
+          --coverage.include=src/templates/payment.template.ts
+          --coverage.include=src/templates/dispute.template.ts
+          --coverage.include=src/templates/due-warning.template.ts
+          --coverage.include=src/templates/helpers.ts
+          --coverage.thresholds.lines=80
+          --coverage.thresholds.functions=80
+          --coverage.thresholds.branches=80
+          --coverage.thresholds.statements=80
+
+      - name: Upload notifications coverage to Codecov
+        uses: codecov/codecov-action@5975040f7f7d40edaff8d784b576fd65ae95c073 # v5.5.5
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          slug: Nursca/Invoice-Liquidity-Network
+          directory: notifications
+          flags: notifications
+          name: notifications
+
+  sdk-coverage:
+    name: Node.js coverage (SDK)
+    needs: [changes, pnpm-cache]
+    if: needs.changes.outputs.sdk == 'true' || needs.changes.outputs.shared_config == 'true'
+    runs-on: namespace-profile-nursca
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup pnpm with store cache
+        uses: ./.github/actions/setup-pnpm
+
+      - name: Install dependencies
+        working-directory: ./sdk
+        run: pnpm install --frozen-lockfile
+
+      - name: Run SDK test with coverage
+        working-directory: ./sdk
+        run: pnpm test -- --coverage
+
+      - name: Upload SDK coverage to Codecov
+        uses: codecov/codecov-action@5975040f7f7d40edaff8d784b576fd65ae95c073 # v5.5.5
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          slug: Nursca/Invoice-Liquidity-Network
+          directory: sdk
+          flags: sdk
+          name: sdk
+
+  pnpm-cache:
+    uses: ./.github/workflows/reusable-cache-pnpm.yml

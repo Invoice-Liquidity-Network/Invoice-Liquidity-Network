@@ -757,5 +757,5 @@ iln_contract.require_auth();  // Must be called by ILN contract
 - **Invoice Liquidity Contract**: [Invoice Contract Reference](./invoice-contract.md)
 - **Reputation Contract**: [Reputation Contract Reference](./reputation-contract.md)
 - **Integration Guide**: [Integration & SDK Usage](../integration-guide.md)
-- **Event Schema**: [Event Documentation](../event-schema.md)
+- **Event Schema**: [Event Documentation](./README.md#event-schema)
 - **Smart Contract Source**: [GitHub - ILN Governance](https://github.com/Invoice-Liquidity-Network/ILN-Smart-Contract/tree/main/contracts/iln_governance)

@@ -4,11 +4,11 @@ export default defineConfig([
   {
     entry: ["src/index.ts"],
     format: ["esm", "cjs"],
-    dts: true,
+    dts: process.env.SKIP_DTS !== "true",
+    minify: true,
     sourcemap: true,
     clean: true,
     target: "es2020",
-    jsx: "react",
     external: ["react", "react-native", "@stellar/stellar-sdk"],
     outExtension({ format }) {
       return {
@@ -19,7 +19,8 @@ export default defineConfig([
   {
     entry: ["src/react-native/index.ts"],
     format: ["esm"],
-    dts: true,
+    dts: process.env.SKIP_DTS !== "true",
+    minify: true,
     sourcemap: true,
     clean: true,
     target: "esnext",

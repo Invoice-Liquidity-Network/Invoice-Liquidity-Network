@@ -40,10 +40,14 @@ on:
         description: Whether the pnpm store cache was restored on a full key match
         value: ${{ jobs.cache.outputs.cache-hit }}
 
+# Least-privilege: only checkout is needed to warm the pnpm store cache.
+permissions:
+  contents: read
+
 jobs:
   cache:
     name: pnpm store cache
-    runs-on: ubuntu-latest
+    runs-on: namespace-profile-nursca
     outputs:
       cache-hit: ${{ steps.setup-pnpm.outputs.cache-hit }}
     steps:

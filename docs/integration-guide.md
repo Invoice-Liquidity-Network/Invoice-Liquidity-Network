@@ -7,11 +7,11 @@ This guide explains how third-party developers (accounting tools, ERP systems, D
 ## Table of Contents
 1. [Authentication Patterns](#1-authentication-patterns)
 2. [Querying Invoice State](#2-querying-invoice-state)
-3. [Listening to Contract Events ([Horizon](glossary.md#horizon) Streaming)](#3-listening-to-contract-events-horizon-streaming)
+3. [Listening to Contract Events (Horizon Streaming)](#3-listening-to-contract-events-horizon-streaming)
 4. [Submitting Invoices Programmatically](#4-submitting-invoices-programmatically)
 5. [Building a Custom LP Dashboard](#5-building-a-custom-lp-dashboard)
 6. [Handling Multi-Token Precision](#6-handling-multi-token-precision)
-7. [[Horizon](glossary.md#horizon) API Rate Limits & Best Practices](#7-horizon-api-rate-limits--best-practices)
+7. [Horizon API Rate Limits & Best Practices](#7-horizon-api-rate-limits--best-practices)
 
 ---
 
@@ -85,9 +85,9 @@ stellar contract invoke \
 
 ---
 
-## 3. Listening to Contract Events ([Horizon](glossary.md#horizon) Streaming)
+## 3. Listening to Contract Events (Horizon Streaming)
 
-Instead of polling, third-party applications should subscribe to [Soroban](glossary.md#soroban) events using the Horizon streaming API or the RPC server `/events` endpoint.
+Instead of polling, third-party applications should subscribe to [Soroban](glossary.md#soroban) events using the [Horizon](glossary.md#horizon) streaming API or the RPC server `/events` endpoint.
 
 ### Horizon SSE Event Stream Example (TypeScript)
 
@@ -287,9 +287,9 @@ console.log(toBaseUnits("100.50", "XLM"));  // 1005000000n
 
 ---
 
-## 7. [Horizon](glossary.md#horizon) API Rate Limits & Best Practices
+## 7. Horizon API Rate Limits & Best Practices
 
-Public Horizon endpoints enforce rate limits to maintain network stability.
+Public [Horizon](glossary.md#horizon) endpoints enforce rate limits to maintain network stability.
 
 ### Key Guidelines
 

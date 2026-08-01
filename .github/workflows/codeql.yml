@@ -8,10 +8,19 @@ on:
   schedule:
     - cron: '0 2 * * 0' # Weekly scan at 2 AM on Sunday
 
+# Least-privilege default; the analyze jobs additionally request
+# security-events: write to upload results.
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
-  analyze:
-    name: Analyze
-    runs-on: ubuntu-latest
+  analyze-ts:
+    name: Analyze (${{ matrix.language }})
+    runs-on: namespace-profile-nursca
     permissions:
       security-events: write
       actions: read
@@ -27,11 +36,59 @@ jobs:
       uses: actions/checkout@v4
 
     - name: Initialize CodeQL
-      uses: github/codeql-action/init@v3
+      uses: github/codeql-action/init@f081e69141f6ea0aa740920b0c7012cd81a4fbe6 # v3.37.3
       with:
         languages: ${{ matrix.language }}
+        config: |
+          paths:
+            - sdk
+            - cli
+            - indexer
+            - notifications
+            - frontend
+            - docs
+            - packages
+            - examples
+            - scripts
+            - workers
+            - contract-deployer
+            - account-seeder
+            - tests
+          paths-ignore:
+            - backend
+            - "**/*.md"
+            - "**/node_modules/**"
+            - "**/dist/**"
+            - "**/coverage/**"
 
     - name: Perform CodeQL Analysis
-      uses: github/codeql-action/analyze@v3
+      uses: github/codeql-action/analyze@f081e69141f6ea0aa740920b0c7012cd81a4fbe6 # v3.37.3
       with:
         category: "/language:${{matrix.language}}"
+
+  analyze-rust:
+    name: Analyze (rust)
+    runs-on: namespace-profile-nursca
+    permissions:
+      security-events: write
+      actions: read
+      contents: read
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      with:
+        submodules: recursive
+
+    - name: Initialize CodeQL
+      uses: github/codeql-action/init@f081e69141f6ea0aa740920b0c7012cd81a4fbe6 # v3.37.3
+      with:
+        languages: rust
+        config: |
+          paths:
+            - backend
+
+    - name: Perform CodeQL Analysis
+      uses: github/codeql-action/analyze@f081e69141f6ea0aa740920b0c7012cd81a4fbe6 # v3.37.3
+      with:
+        category: "/language:rust"

@@ -10,6 +10,8 @@ import type { InvoiceEvent } from "../types";
 export interface DueWarningTemplateVars {
   event: InvoiceEvent;
   dashboardUrl?: string;
+  /** Optional tokenized one-click unsubscribe URL. */
+  unsubscribeUrl?: string;
 }
 
 /**
@@ -23,7 +25,7 @@ export function buildDueWarningSubject(event: InvoiceEvent): string {
  * Render the full HTML email body for a due-date warning.
  */
 export function renderDueWarningEmail(vars: DueWarningTemplateVars): string {
-  const { event, dashboardUrl } = vars;
+  const { event, dashboardUrl, unsubscribeUrl } = vars;
 
   const formattedAmount = escapeHtml(formatAmount(event.amount));
   const formattedDue = escapeHtml(formatDate(event.dueDate));
@@ -86,5 +88,5 @@ export function renderDueWarningEmail(vars: DueWarningTemplateVars): string {
       </div>
     </div>`;
 
-  return emailShell(`Invoice #${invoiceId} Due in 48 Hours`, body);
+  return emailShell(`Invoice #${invoiceId} Due in 48 Hours`, body, { unsubscribeUrl });
 }

@@ -16,7 +16,7 @@ import type { Invoice, ILNEvent } from "./types";
 
 // ─── GraphQL schema ───────────────────────────────────────────────────────────
 
-const typeDefs = /* GraphQL */ `
+export const typeDefs = /* GraphQL */ `
   enum InvoiceStatus {
     Pending
     Funded

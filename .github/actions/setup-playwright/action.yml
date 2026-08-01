@@ -1,0 +1,19 @@
+name: Setup Playwright browser cache
+description: Cache Playwright browser binaries with actions/cache@v4
+
+inputs:
+  lockfile-path:
+    description: Lockfile path for cache key hashing
+    required: false
+    default: package-lock.json
+
+runs:
+  using: composite
+  steps:
+    - name: Cache Playwright browsers
+      uses: actions/cache@v4
+      with:
+        path: ~/.cache/ms-playwright
+        key: ${{ runner.os }}-playwright-${{ hashFiles(inputs.lockfile-path, '**/package.json') }}
+        restore-keys: |
+          ${{ runner.os }}-playwright-

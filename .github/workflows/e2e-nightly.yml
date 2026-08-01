@@ -4,9 +4,17 @@ on:
   schedule:
     - cron: '0 0 * * *'
 
+# Least-privilege: read code to run the nightly E2E suite.
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
   e2e-tests:
-    runs-on: ubuntu-latest
+    runs-on: namespace-profile-nursca
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
@@ -17,14 +25,8 @@ jobs:
       - name: Start Local Stellar Node
         run: docker compose up -d stellar-node
 
-      - name: Setup Node
-        uses: actions/setup-node@v4
-        with:
-          node-version: 20
-
-      - uses: pnpm/action-setup@v4
-        with:
-          version: "9.0.0"
+      - name: Setup pnpm with store cache
+        uses: ./.github/actions/setup-pnpm
 
       - name: Wait for Stellar RPC
         run: |

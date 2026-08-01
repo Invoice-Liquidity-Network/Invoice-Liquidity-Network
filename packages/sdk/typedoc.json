@@ -6,7 +6,6 @@
   "out": "../../packages/docs/content/sdk-reference/generated",
   "plugin": ["typedoc-plugin-markdown"],
   "fileExtension": ".mdx",
-  "hideBreadcrumbs": true,
   "hidePageHeader": false,
   "parametersFormat": "table",
   "propertiesFormat": "table",

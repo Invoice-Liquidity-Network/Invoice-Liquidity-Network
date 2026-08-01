@@ -3,7 +3,7 @@ import { registerCommands } from "./commands";
 
 export async function run(argv: string[] = process.argv) {
   const program = new Command();
-  
+
   program
     .name("iln")
     .description("Invoice Liquidity Network CLI")

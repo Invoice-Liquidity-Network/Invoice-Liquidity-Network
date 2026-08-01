@@ -6,14 +6,15 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "test": "echo \"no tests\""
+    "//": "Issue #742: replaced the placeholder \"echo \\\"no tests\\\"\" with a real check that runs the production Next.js build (catches MDX/compile errors) followed by an internal markdown link audit. CI invokes this script via the `docs-build` job in .github/workflows/ci.yml.",
+    "test": "npm run build && node ./scripts/internal-link-check.mjs"
   },
   "dependencies": {
-    "next": "^14.0.0",
-    "nextra": "^2.13.0",
-    "nextra-theme-docs": "^2.13.0",
-    "react": "^18.2.0",
-    "react-dom": "^18.2.0",
+    "next": "^15.0.0",
+    "nextra": "^3.0.0",
+    "nextra-theme-docs": "^3.0.0",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
     "@docsearch/react": "^3.5.2",
     "@docsearch/css": "^3.5.2"
   },
@@ -23,7 +24,7 @@
   },
   "devDependencies": {
     "typescript": "^5.9.3",
-    "@types/react": "^18.2.0",
-    "@types/node": "^24.7.2"
+    "@types/react": "^19.0.0",
+    "@types/node": "^20.0.0"
   }
 }

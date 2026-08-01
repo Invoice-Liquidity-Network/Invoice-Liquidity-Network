@@ -1,5 +1,11 @@
 # `@iln/sdk`
 
+> This is the **stable, recommended SDK** for integrators. `packages/sdk`
+> (`@iln/sdk-next`) is an experimental, modular/browser-first rewrite that
+> hasn't reached feature parity yet — see
+> [`docs/sdk-next-migration.md`](../docs/sdk-next-migration.md) for the full
+> comparison and current status.
+
 [![npm version](https://img.shields.io/npm/v/@iln/sdk)](https://www.npmjs.com/package/@iln/sdk)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![CI](https://github.com/Invoice-Liquidity-Network/Invoice-Liquidity-Network/actions/workflows/ci.yml/badge.svg)](https://github.com/Invoice-Liquidity-Network/Invoice-Liquidity-Network/actions/workflows/ci.yml)
@@ -9,6 +15,14 @@ Typed JavaScript and TypeScript SDK for the Invoice Liquidity Network Soroban co
 New to ILN terminology? See the protocol [glossary](../docs/glossary.md) for Stellar, invoice factoring, and security terms used by the SDK.
 
 By participating in this project, you agree to abide by our [Code of Conduct](../CODE_OF_CONDUCT.md).
+
+## Supported Node.js versions
+
+The SDK supports **Node.js 20.x and 22.x** (active LTS lines) — matching the
+`"engines": { "node": ">=20" }` field in `package.json`. Every push and pull
+request runs the SDK test suite against Node.js 20 and 22 via the `sdk-node-matrix`
+job in [`.github/workflows/ci.yml`](../.github/workflows/ci.yml). Newer Node.js
+versions are expected to work but are not part of the guaranteed compatibility matrix.
 
 ## Quick Start
 

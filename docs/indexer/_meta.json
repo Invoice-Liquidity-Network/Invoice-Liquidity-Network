@@ -1,0 +1,8 @@
+{
+  "architecture": "Architecture",
+  "backup-archive": "Backup & Archive",
+  "configuration": "Configuration",
+  "deployment": "Deployment",
+  "api-reference": "API Reference",
+  "troubleshooting": "Troubleshooting"
+}

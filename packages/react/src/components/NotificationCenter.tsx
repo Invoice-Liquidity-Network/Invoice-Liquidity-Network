@@ -66,14 +66,19 @@ export const NotificationCenter: React.FC = () => {
 
   return (
     <div className="notification-center">
-      <button onClick={() => setIsOpen(!isOpen)}>
+      <button
+        onClick={() => setIsOpen(!isOpen)}
+        aria-expanded={isOpen}
+        aria-controls="notification-panel"
+        aria-label={`Notifications (${notifications.filter((n) => !n.read).length} unread)`}
+      >
         Notifications ({notifications.filter((n) => !n.read).length})
       </button>
 
       {isOpen && (
-        <div className="notification-panel">
-          <div className="preferences">
-            <h4>Preferences</h4>
+        <div className="notification-panel" id="notification-panel" role="region" aria-label="Notifications">
+          <div className="preferences" role="group" aria-label="Notification preferences">
+            <h4 id="pref-heading">Preferences</h4>
             <label>
               <input
                 type="checkbox"
@@ -100,9 +105,9 @@ export const NotificationCenter: React.FC = () => {
             </label>
           </div>
 
-          <div className="notifications-list">
+          <div className="notifications-list" role="list" aria-label="Notification list">
             {Object.keys(groupedNotifications).map((category) => (
-              <div key={category} className="notification-group">
+              <div key={category} className="notification-group" role="group" aria-label={`${category} notifications`}>
                 <h4>{category}</h4>
                 {groupedNotifications[category]
                   .filter((n) => preferences[n.type as keyof NotificationPreferences] ?? true)
@@ -110,11 +115,17 @@ export const NotificationCenter: React.FC = () => {
                     <div
                       key={notif.id}
                       className={`notification-item ${notif.read ? 'read' : 'unread'}`}
+                      role="listitem"
                     >
                       <p>{notif.message}</p>
                       <small>{new Date(notif.timestamp).toLocaleString()}</small>
                       {!notif.read && (
-                        <button onClick={() => markAsRead(notif.id)}>Mark as read</button>
+                        <button
+                          onClick={() => markAsRead(notif.id)}
+                          aria-label={`Mark notification ${notif.id} as read`}
+                        >
+                          Mark as read
+                        </button>
                       )}
                     </div>
                   ))}

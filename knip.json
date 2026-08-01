@@ -1,5 +1,4 @@
 {
-  "$schema": "https://unpkg.com/knip@6/schema.json",
   "workspaces": {
     ".": {
       "entry": [
@@ -12,10 +11,11 @@
         "husky"
       ]
     },
-    "sdk": {
+    "packages/sdk": {
       "entry": [
         "index.ts",
-        "__tests__/**/*.test.ts"
+        "__tests__/**/*.test.ts",
+        "src/index.browser.ts"
       ],
       "project": [
         "src/**/*.ts",
@@ -23,7 +23,18 @@
       ],
       "ignoreDependencies": [
         "@commitlint/cli",
-        "@commitlint/config-conventional"
+        "@commitlint/config-conventional",
+        "@playwright/test",
+        "jest",
+        "ts-jest",
+        "tsup",
+        "tsx",
+        "vite",
+        "vite-plugin-wasm"
+      ],
+      "ignoreExports": [
+        "src/crypto-browser.ts",
+        "src/index.browser.ts"
       ]
     },
     "cli": {
@@ -49,6 +60,10 @@
       ]
     },
     "notifications": {
+      "entry": [
+        "src/index.ts",
+        "src/service.ts"
+      ],
       "project": [
         "src/**/*.ts"
       ],

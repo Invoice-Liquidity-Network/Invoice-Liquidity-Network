@@ -11,7 +11,7 @@
   "dependencies": {
     "@invoice-liquidity/sdk": "file:../../sdk",
     "@stellar/stellar-sdk": "^12.0.0",
-    "axios": "^1.7.0",
+    "axios": "^1.16.0",
     "commander": "^11.1.0"
   },
   "license": "MIT",

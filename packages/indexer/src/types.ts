@@ -1,7 +1,11 @@
 /**
  * Represents a parsed contract event from a Horizon transaction record.
+ *
+ * NOTE: This is the indexer's raw-parsed representation. Do not confuse with
+ * @iln/shared's `ContractEvent` which is a typed discriminated union of
+ * contract-emitted events. If you need the shared types, import from @iln/shared.
  */
-export interface ContractEvent {
+export interface ParsedHorizonEvent {
   /** The contract that emitted this event */
   contractId: string;
   /** Raw event type string (e.g. "InvoiceCreated", "InvoiceFunded") */
@@ -36,21 +40,29 @@ export interface IndexerOptions {
 
 /**
  * Known ILN contract event types.
+ *
+ * Uses the canonical names from the Soroban contract. The deprecated names
+ * ("InvoiceCreated", "InvoiceRepaid") are intentionally excluded — use
+ * "InvoiceSubmitted" and "InvoicePaid" instead. The `| string` union member
+ * preserves forward-compatibility for unknown future event types.
  */
 export type ILNEventType =
-  | "InvoiceCreated"
+  | "InvoiceSubmitted"
   | "InvoiceFunded"
-  | "InvoiceRepaid"
+  | "InvoicePaid"
   | "InvoiceDefaulted"
-  | "LiquidityAdded"
-  | "LiquidityRemoved"
+  | "ProposalCreated"
+  | "VoteCast"
+  | "ProposalExecuted"
+  | "TokenAdded"
+  | "TokenRemoved"
   | "ReputationUpdated"
   | string; // allow arbitrary strings for forward-compat
 
 /**
  * Callback signature for streaming subscriptions.
  */
-export type EventCallback = (event: ContractEvent) => void | Promise<void>;
+export type EventCallback = (event: ParsedHorizonEvent) => void | Promise<void>;
 
 /**
  * Handle returned from subscribe() — call .close() to stop the stream.

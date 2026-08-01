@@ -13,8 +13,32 @@ import { createLogger } from "./logger";
 import { track } from "./usage-analytics";
 import { Cache, type CacheOptions } from "./cache";
 import { Validators } from "./validators";
+import {
+  encodeProposalAction,
+  toAddressScVal,
+  toBytesN32ScVal,
+  toOptionalProposalStatusScVal,
+} from "./governance-utils";
 
 import type { Invoice, InvoiceState } from "@iln/shared";
+
+import {
+  GovernanceContractMethod,
+  type CastVoteParams,
+  type CreateProposalParams,
+  type DelegateVotesParams,
+  type ExecuteProposalParams,
+  type GetProposalParams,
+  type GovernanceProposal,
+  type ListProposalsParams,
+  type ProposalStatus,
+  type UndelegateVotesParams,
+  type VetoProposalParams,
+} from "./governance";
+import {
+  parseGovernanceProposal,
+  parseGovernanceProposalListSimulation,
+} from "./governance-parser";
 
 import type {
   BatchFundParams,
@@ -1018,13 +1042,246 @@ export class ILNSdk {
    * const proposal = await sdk.getProposal(1n);
    * ```
    */
-  async getProposal(id: bigint): Promise<unknown> {
+  async getProposal(id: bigint): Promise<GovernanceProposal> {
     const transaction = this.buildReadTransaction("get_proposal", [
       nativeToScVal(id, { type: "u64" }),
     ]);
     const simulation = await this.simulateReadTransaction("get_proposal", transaction);
     const result = this.extractSimulationRetval(simulation, "get_proposal");
-    return scValToNative(result);
+    return parseGovernanceProposal(scValToNative(result));
+  }
+
+  /**
+   * List parsed governance proposals with optional filters.
+   */
+  async listProposals(params: ListProposalsParams = {}): Promise<GovernanceProposal[]> {
+    return this.listGovernanceProposals(params);
+  }
+
+  /**
+   * Fetch a governance proposal by its ID.
+   */
+  async fetchGovernanceProposal(params: GetProposalParams): Promise<GovernanceProposal> {
+    const transaction = this.buildReadTransaction(GovernanceContractMethod.GetProposal, [
+      nativeToScVal(params.proposalId, { type: "u64" }),
+    ]);
+    const simulation = await this.simulateReadTransaction(
+      GovernanceContractMethod.GetProposal,
+      transaction,
+    );
+    const result = this.extractSimulationRetval(simulation, GovernanceContractMethod.GetProposal);
+    return parseGovernanceProposal(scValToNative(result));
+  }
+
+  /**
+   * List governance proposals with optional pagination and filtering.
+   */
+  async listGovernanceProposals(params: ListProposalsParams = {}): Promise<GovernanceProposal[]> {
+    const page = params.page ?? 0;
+    const pageSize = params.pageSize ?? 20;
+    const transaction = this.buildReadTransaction(GovernanceContractMethod.ListProposals, [
+      toOptionalProposalStatusScVal(params.status),
+      nativeToScVal(page, { type: "u32" }),
+      nativeToScVal(pageSize, { type: "u32" }),
+    ]);
+    const simulation = await this.simulateReadTransaction(
+      GovernanceContractMethod.ListProposals,
+      transaction,
+    );
+    return parseGovernanceProposalListSimulation(
+      simulation,
+      GovernanceContractMethod.ListProposals,
+    );
+  }
+
+  /**
+   * Fetch the current governance execution delay, expressed in ledgers.
+   */
+  async getExecutionDelay(): Promise<number> {
+    const transaction = this.buildReadTransaction(GovernanceContractMethod.GetExecutionDelay, []);
+    const simulation = await this.simulateReadTransaction(
+      GovernanceContractMethod.GetExecutionDelay,
+      transaction,
+    );
+    return this.extractNumberResult(simulation, GovernanceContractMethod.GetExecutionDelay);
+  }
+
+  /**
+   * Fetch the most recent ledger sequence when the RPC server exposes it.
+   */
+  async getLatestLedger(): Promise<number | null> {
+    const server = this.server as RpcServerLike & {
+      getLatestLedger?: () => Promise<unknown>;
+    };
+
+    if (!server.getLatestLedger) {
+      return null;
+    }
+
+    const ledger = await this.wrapRpcCall(
+      withTimeout("getLatestLedger", this.requestTimeouts.readMs, server.getLatestLedger()),
+      "getLatestLedger",
+    );
+
+    if (typeof ledger === "number") {
+      return ledger;
+    }
+    if (typeof ledger === "bigint") {
+      return Number(ledger);
+    }
+    if (typeof ledger === "string") {
+      const parsed = Number(ledger);
+      return Number.isFinite(parsed) ? parsed : null;
+    }
+    if (ledger && typeof ledger === "object") {
+      const data = ledger as Record<string, unknown>;
+      const candidate =
+        data.sequence ??
+        data.sequenceNumber ??
+        data.ledgerSequence ??
+        data.ledger ??
+        data.latestLedger;
+      if (typeof candidate === "number") {
+        return candidate;
+      }
+      if (typeof candidate === "bigint") {
+        return Number(candidate);
+      }
+      if (typeof candidate === "string") {
+        const parsed = Number(candidate);
+        return Number.isFinite(parsed) ? parsed : null;
+      }
+    }
+
+    return null;
+  }
+
+  /**
+   * Create a new governance proposal and submit it on-chain.
+   */
+  async createProposal(params: CreateProposalParams): Promise<bigint> {
+    const transaction = await this.buildWriteTransaction(
+      params.proposer,
+      GovernanceContractMethod.CreateProposal,
+      [
+        toAddressScVal(params.proposer),
+        encodeProposalAction(params.action),
+        toBytesN32ScVal(params.descriptionHash),
+        nativeToScVal(params.proposedValue, { type: "i128" }),
+      ],
+    );
+
+    const simulation = await this.simulateWriteTransaction(
+      GovernanceContractMethod.CreateProposal,
+      transaction,
+    );
+    const proposalId = this.extractBigIntResult(
+      simulation,
+      GovernanceContractMethod.CreateProposal,
+    );
+    const preparedTransaction = await this.prepareTransaction(transaction);
+    await this.signAndSend(preparedTransaction, params.proposer, GovernanceContractMethod.CreateProposal);
+    return proposalId;
+  }
+
+  /**
+   * Cast a vote on a governance proposal.
+   */
+  async castVote(params: CastVoteParams): Promise<void> {
+    const transaction = await this.buildWriteTransaction(
+      params.voter,
+      GovernanceContractMethod.CastVote,
+      [
+        this.toAddress(params.voter),
+        nativeToScVal(params.proposalId, { type: "u64" }),
+        nativeToScVal(params.support, { type: "bool" }),
+      ],
+    );
+
+    await this.simulateWriteTransaction(GovernanceContractMethod.CastVote, transaction);
+    const preparedTransaction = await this.prepareTransaction(transaction);
+    await this.signAndSend(preparedTransaction, params.voter, GovernanceContractMethod.CastVote);
+  }
+
+  /**
+   * Delegate voting power to another account.
+   */
+  async delegateVotes(params: DelegateVotesParams): Promise<void> {
+    const transaction = await this.buildWriteTransaction(
+      params.delegator,
+      GovernanceContractMethod.DelegateVotes,
+      [this.toAddress(params.delegator), this.toAddress(params.delegate)],
+    );
+
+    await this.simulateWriteTransaction(GovernanceContractMethod.DelegateVotes, transaction);
+    const preparedTransaction = await this.prepareTransaction(transaction);
+    await this.signAndSend(preparedTransaction, params.delegator, GovernanceContractMethod.DelegateVotes);
+  }
+
+  /**
+   * Revoke voting delegation from the delegator's account.
+   */
+  async undelegateVotes(params: UndelegateVotesParams): Promise<void> {
+    const transaction = await this.buildWriteTransaction(
+      params.delegator,
+      GovernanceContractMethod.UndelegateVotes,
+      [this.toAddress(params.delegator)],
+    );
+
+    await this.simulateWriteTransaction(GovernanceContractMethod.UndelegateVotes, transaction);
+    const preparedTransaction = await this.prepareTransaction(transaction);
+    await this.signAndSend(preparedTransaction, params.delegator, GovernanceContractMethod.UndelegateVotes);
+  }
+
+  /**
+   * Execute a passed proposal after its timelock expires.
+   */
+  async executeProposal(params: ExecuteProposalParams): Promise<void> {
+    const proposal = await this.fetchGovernanceProposal({ proposalId: params.proposalId });
+    if (proposal.status !== ProposalStatus.Passed) {
+      throw new ValidationError(
+        `Proposal ${String(params.proposalId)} is not executable until it has passed.`,
+      );
+    }
+
+    const latestLedger = await this.getLatestLedger();
+    if (latestLedger != null && latestLedger < proposal.etaLedger) {
+      const remaining = proposal.etaLedger - latestLedger;
+      throw new ValidationError(
+        `Proposal ${String(params.proposalId)} is still timelocked for ${remaining} ledger(s).`,
+      );
+    }
+
+    const transaction = await this.buildWriteTransaction(
+      params.source,
+      GovernanceContractMethod.ExecuteProposal,
+      [
+        nativeToScVal(params.proposalId, { type: "u64" }),
+        nativeToScVal(params.totalSupply, { type: "i128" }),
+      ],
+    );
+
+    await this.simulateWriteTransaction(GovernanceContractMethod.ExecuteProposal, transaction);
+    const preparedTransaction = await this.prepareTransaction(transaction);
+    await this.signAndSend(preparedTransaction, params.source, GovernanceContractMethod.ExecuteProposal);
+  }
+
+  /**
+   * Veto a proposal as an admin.
+   */
+  async vetoProposal(params: VetoProposalParams): Promise<void> {
+    const transaction = await this.buildWriteTransaction(
+      params.admin,
+      GovernanceContractMethod.VetoProposal,
+      [
+        nativeToScVal(params.proposalId, { type: "u64" }),
+        toBytesN32ScVal(params.reasonHash),
+      ],
+    );
+
+    await this.simulateWriteTransaction(GovernanceContractMethod.VetoProposal, transaction);
+    const preparedTransaction = await this.prepareTransaction(transaction);
+    await this.signAndSend(preparedTransaction, params.admin, GovernanceContractMethod.VetoProposal);
   }
 
   /**
@@ -1079,6 +1336,12 @@ export class ILNSdk {
     const result = this.extractSimulationRetval(simulation, "get_storage");
     const native = scValToNative(result);
     return typeof native === "string" ? native : String(native);
+  }
+
+  private extractNumberResult(simulation: unknown, method: string): number {
+    const result = this.extractSimulationRetval(simulation, method);
+    const native = this.unwrapContractResult(scValToNative(result), method);
+    return this.toNumberValue(native, method);
   }
 
   private buildReadTransaction(method: string, args: xdr.ScVal[]): BuiltTransaction {

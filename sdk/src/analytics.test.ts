@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, type Mocked } from 'vitest';
 import axios from 'axios';
-import { AnalyticsSDK } from '../src/analytics';
+import { AnalyticsSDK } from './analytics';
 
 vi.mock('axios');
 const mockedAxios = axios as Mocked<typeof axios>;

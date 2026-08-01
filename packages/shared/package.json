@@ -18,7 +18,7 @@
   },
   "scripts": {
     "build": "tsc -p tsconfig.json",
-    "check": "tsc -p tsconfig.json --noEmit",
+    "type-check": "tsc -p tsconfig.json --noEmit",
     "test": "tsc -p tsconfig.json && tsd"
   },
   "engines": {

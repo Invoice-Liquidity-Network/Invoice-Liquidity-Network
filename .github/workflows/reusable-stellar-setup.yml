@@ -51,17 +51,23 @@ on:
         description: Network alias configured for subsequent CLI commands
         value: ${{ jobs.setup.outputs.network }}
 
+# Least-privilege: only checkout/read access is needed to set up the Stellar CLI.
+permissions:
+  contents: read
+
 jobs:
   setup:
     name: Stellar CLI and testnet identity
-    runs-on: ubuntu-latest
+    runs-on: namespace-profile-nursca
     outputs:
       identity-name: ${{ steps.identity.outputs.identity-name }}
       public-key: ${{ steps.identity.outputs.public-key }}
       network: ${{ steps.network.outputs.network }}
     steps:
       - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
+        uses: dtolnay/rust-toolchain@2c7215f132e9ebf062739d9130488b56d53c060c # stable
+        with:
+          toolchain: stable
 
       - name: Cache Stellar CLI (cargo install)
         uses: actions/cache@v4

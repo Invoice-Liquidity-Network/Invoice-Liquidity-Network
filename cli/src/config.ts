@@ -76,6 +76,8 @@ export const ConfigSchema = z.object({
   requiredVersion: z.string().optional(),
   /** Whether to automatically check for updates on startup. Defaults to true. */
   autoUpdate: z.boolean().optional().default(true),
+  /** Custom CLI aliases, e.g. { "sub": "submit" } */
+  aliases: z.record(z.string()).optional().default({}),
 });
 
 export type ILNConfigFile = z.infer<typeof ConfigSchema>;
@@ -259,6 +261,7 @@ export function initConfig(cwd: string): string {
     "deployer": {
       "keypairPath": "~/.stellar/testnet.key",
     },
+    "aliases": {},
   };
 
   writeFileSync(targetPath, JSON.stringify(template, null, 2) + "\n");
@@ -298,6 +301,39 @@ export function scaffoldConfig(cwd: string): string {
 // ─── Internal helpers ─────────────────────────────────────────────────────────
 
 /** Locate and parse the first matching config file. */
+/**
+ * Read raw config file (for modification)
+ */
+export function readRawConfig(cwd: string): { rawConfig: any; filePath: string | null } {
+  return readConfigFile(cwd);
+}
+
+/**
+ * Write raw config to file (only supports JSON for now)
+ */
+export function writeRawConfig(cwd: string, rawConfig: any): string {
+  let targetPath = null;
+  for (const candidate of CONFIG_FILE_CANDIDATES) {
+    const candidatePath = path.join(cwd, candidate);
+    if (existsSync(candidatePath)) {
+      targetPath = candidatePath;
+      break;
+    }
+  }
+
+  if (!targetPath) {
+    targetPath = path.join(cwd, ".ilnrc.json");
+  }
+
+  const ext = path.extname(targetPath).toLowerCase();
+  if (ext !== ".json") {
+    throw new Error("Only JSON config files are supported for writing aliases.");
+  }
+
+  writeFileSync(targetPath, JSON.stringify(rawConfig, null, 2) + "\n");
+  return targetPath;
+}
+
 function readConfigFile(cwd: string): { rawConfig: unknown; filePath: string | null } {
   for (const candidate of CONFIG_FILE_CANDIDATES) {
     const filePath = path.join(cwd, candidate);

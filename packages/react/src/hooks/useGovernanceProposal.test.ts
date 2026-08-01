@@ -40,4 +40,28 @@ describe('useGovernanceProposal', () => {
     expect(result.current.isLoading).toBe(false);
     expect(mockClient.getProposal).not.toHaveBeenCalled();
   });
+
+  it('derives timelock countdown from the latest ledger', async () => {
+    const mockClient = createMockILNClient({
+      getProposal: vi.fn().mockResolvedValue({
+        ...mockProposal,
+        status: 'Passed',
+        etaLedger: 120,
+      }),
+      getLatestLedger: vi.fn().mockResolvedValue(110),
+    });
+
+    const { result } = renderHook(() => useGovernanceProposal(1), {
+      wrapper: ({ children }) => <TestWrapper client={mockClient}>{children}</TestWrapper>,
+    });
+
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+
+    expect(result.current.proposalStatus).toBe('Passed');
+    expect(result.current.executionEtaLedger).toBe(120);
+    expect(result.current.currentLedger).toBe(110);
+    expect(result.current.timelockRemainingLedgers).toBe(10);
+    expect(result.current.timeUntilExecutionMs).toBe(50_000);
+    expect(result.current.canExecute).toBe(false);
+  });
 });

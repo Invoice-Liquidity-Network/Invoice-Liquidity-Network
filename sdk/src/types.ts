@@ -148,6 +148,7 @@ export interface RpcServerLike {
   prepareTransaction(transaction: unknown): Promise<{ toXDR(): string }>;
   sendTransaction(transaction: unknown): Promise<unknown>;
   pollTransaction(hash: string, options?: { attempts?: number }): Promise<unknown>;
+  getLatestLedger?(): Promise<unknown>;
 }
 
 /**
@@ -572,6 +573,58 @@ export interface GovernanceParamTypes {
   maxDiscountRate: number;
   protocolFeeBps: number;
   minPayerReputation: number;
+}
+
+export interface ILNClient {
+  getInvoice(id: number | bigint): Promise<Invoice>;
+  getInvoicesByIssuer(issuer: string): Promise<Invoice[]>;
+  getInvoicesByStatus(status: string): Promise<Invoice[]>;
+  getReputationScore(address: string): Promise<ReputationScore>;
+  getLPPortfolio(address: string): Promise<LPPortfolio>;
+  getContractStats(): Promise<ContractStats>;
+  getProposal(id: number | bigint): Promise<GovernanceProposal>;
+  getTokenBalances(address: string): Promise<TokenBalance[]>;
+  submitInvoice(params: Record<string, unknown>): Promise<unknown>;
+  fundInvoice(params: Record<string, unknown>): Promise<void>;
+  markPaid(params: Record<string, unknown>): Promise<void>;
+  createProposal(params: Record<string, unknown>): Promise<unknown>;
+  vote(params: Record<string, unknown>): Promise<void>;
+  connectWallet(): Promise<string>;
+  getLPCoverage?(address: string): Promise<import("./insurance-types").LPCoverage | null>;
+  getPoolBalance?(): Promise<import("./insurance-types").PoolBalance>;
+  getClaim?(claimId: bigint): Promise<import("./insurance-types").InsuranceClaim>;
+  listClaims?(statusFilter?: import("./insurance-types").ClaimStatus, page?: number, pageSize?: number): Promise<import("./insurance-types").InsuranceClaim[]>;
+  enroll?(params: import("./insurance-types").EnrollParams): Promise<void>;
+  depositPremium?(params: import("./insurance-types").DepositPremiumParams): Promise<void>;
+  submitClaim?(params: import("./insurance-types").SubmitClaimParams): Promise<bigint>;
+  reviewClaim?(params: import("./insurance-types").ReviewClaimParams): Promise<void>;
+}
+
+export interface TokenBalance {
+  token: string;
+  contractId: string;
+  balance: bigint;
+}
+
+export interface LPPortfolio {
+  address: string;
+  totalInvested: bigint;
+  totalYield: bigint;
+  activePositions: number;
+  completedPositions: number;
+  defaultedPositions: number;
+  avgReturn: number;
+}
+
+export interface Proposal {
+  id: number;
+  proposer: string;
+  parameter: string;
+  newValue: number;
+  votesFor: bigint;
+  votesAgainst: bigint;
+  deadline: number;
+  executed: boolean;
 }
 
 export function parseGovernanceProposal(data: unknown): GovernanceProposal {

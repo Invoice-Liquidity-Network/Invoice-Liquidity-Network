@@ -42,6 +42,14 @@ function formatStatus(status: string): string {
   }
 }
 
+export function formatJsonSuccess(data: any): string {
+  return JSON.stringify({ success: true, data }, null, 2);
+}
+
+export function formatJsonError(error: string): string {
+  return JSON.stringify({ success: false, error }, null, 2);
+}
+
 export function formatInvoiceDetailsJson(invoice: Invoice): string {
   return JSON.stringify(
     {

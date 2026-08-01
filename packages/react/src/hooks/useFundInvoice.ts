@@ -4,6 +4,12 @@ import { useILNClient } from '../context';
 export interface FundInvoiceParams {
   invoiceId: number;
   funder: string;
+  /**
+   * Displayed Dutch-auction discount at the moment the LP chooses to fund.
+   * Current contracts compute the canonical rate inside fund_invoice; clients
+   * that support slippage checks can use this as the LP's expected rate.
+   */
+  expectedDiscountBps?: number;
 }
 
 export interface UseFundInvoiceResult {

@@ -1,19 +1,93 @@
 {
   "index": "Home",
-  "glossary": "Glossary",
-  "troubleshooting": "Troubleshooting",
-  "analytics": "Analytics",
+  "changelog": "Changelog",
+  "-- Getting Started --": {
+    "type": "separator",
+    "title": "Getting Started"
+  },
+  "stellar-primer": "Stellar Primer",
+  "protocol-overview": "Protocol Overview",
+  "protocol-economics": "Protocol Economics",
+  "integration-guide": "Integration Guide",
   "local-development": "Local Development",
-  "mainnet-launch-checklist": "Mainnet Launch Checklist",
-  "notifications": "Notifications",
+  "-- Tutorials --": {
+    "type": "separator",
+    "title": "Tutorials"
+  },
+  "tutorials": "Tutorials",
+  "-- SDK --": {
+    "type": "separator",
+    "title": "SDK"
+  },
+  "sdk-quickstart": "SDK Quickstart",
   "sdk-api-reference": "SDK API Reference",
+  "sdk-trust-model": "SDK Trust Model",
+  "sdk-e2e": "SDK End-to-End Testing",
   "sdk-migration-guide": "SDK Migration Guide",
+  "sdk-next-migration": "SDK vs SDK-next",
+  "cli-vs-cli-next": "CLI vs CLI-next",
+  "-- Smart Contracts --": {
+    "type": "separator",
+    "title": "Smart Contracts"
+  },
+  "contracts": "Contract Reference",
+  "architecture": "Architecture",
+  "-- Indexer --": {
+    "type": "separator",
+    "title": "Indexer"
+  },
+  "indexer": "Indexer",
+  "indexer-data-model": "Indexer Data Model",
+  "-- Tokens & DeFi --": {
+    "type": "separator",
+    "title": "Tokens & DeFi"
+  },
+  "tokens": "Token Support",
+  "defi-integrations": "DeFi Integrations",
+  "api-collection": "API Collection",
+  "api-versioning-migration": "API Versioning & Migration",
+  "-- Notifications --": {
+    "type": "separator",
+    "title": "Notifications"
+  },
+  "notifications": "Notifications",
+  "-- Governance & Reputation --": {
+    "type": "separator",
+    "title": "Governance & Reputation"
+  },
+  "governance-guide": "Governance Guide",
+  "reputation": "Reputation System",
+  "-- Operations --": {
+    "type": "separator",
+    "title": "Operations"
+  },
+  "mainnet-launch-checklist": "Mainnet Launch Checklist",
+  "deployment": "Deployment",
+  "release-process": "Release Process",
+  "scripts": "Scripts Reference",
   "ci-cd": "CI/CD",
-  "tokens": "Tokens",
+  "analytics": "Analytics",
   "mutation-testing": "Mutation Testing",
+  "-- Contributing --": {
+    "type": "separator",
+    "title": "Contributing"
+  },
+  "rfc-process": "RFC Process",
   "cross-repo-sync": "Cross-Repo Sync",
+  "cross-repo-dependencies": "Cross-Repo Dependencies",
   "branch-protection": "Branch Protection",
   "project-board": "Project Board",
+  "-- Reference --": {
+    "type": "separator",
+    "title": "Reference"
+  },
+  "glossary": "Glossary",
+  "errors": "SDK Errors",
+  "troubleshooting": "Troubleshooting",
+  "threat-model": "Threat Model",
   "security": "Security",
-  "security-guide": "Security Guide"
+  "security-guide": "Security Guide",
+  "privacy": "Privacy & Data Retention",
+  "next.config": "Next Config",
+  "theme.config": "Theme Config"
 }

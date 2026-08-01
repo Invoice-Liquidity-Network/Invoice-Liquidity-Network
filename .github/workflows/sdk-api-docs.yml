@@ -12,6 +12,10 @@ permissions:
   contents: write
   pull-requests: write
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   pnpm-cache:
     uses: ./.github/workflows/reusable-cache-pnpm.yml
@@ -19,7 +23,7 @@ jobs:
   sdk-api-docs:
     name: sdk-api-docs
     needs: [pnpm-cache]
-    runs-on: ubuntu-latest
+    runs-on: namespace-profile-nursca
     steps:
       - name: Checkout
         uses: actions/checkout@v4

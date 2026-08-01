@@ -4,9 +4,13 @@ on:
   issues:
     types: [labeled]
 
+# Least-privilege default; the sync job requests issues + contents read explicitly.
+permissions:
+  contents: read
+
 jobs:
   sync-issues:
-    runs-on: ubuntu-latest
+    runs-on: namespace-profile-nursca
     permissions:
       issues: read
       contents: read
@@ -22,6 +26,23 @@ jobs:
             const sourceRepo = context.repo;
             const targetRepo = 'ILN-Smart-Contract';
             const sourceLink = `https://github.com/${sourceRepo.owner}/${sourceRepo.repo}/issues/${sourceIssue.number}`;
+
+            // Idempotency: search for existing synced issue before creating
+            const existingIssues = await github.rest.issues.listForRepo({
+              owner: sourceRepo.owner,
+              repo: targetRepo,
+              state: 'all',
+              per_page: 100,
+            });
+
+            const alreadySynced = existingIssues.data.some(issue =>
+              issue.body && issue.body.includes(sourceLink)
+            );
+
+            if (alreadySynced) {
+              console.log(`⏭️ Issue already synced to ${targetRepo}, skipping creation`);
+              return;
+            }
 
             const issueBody = `> 🔗 **This is a synced issue from the main ILN repo.** Original: [#${sourceIssue.number}](${sourceLink})\n\n${context.payload.issue.body}`;
 
@@ -50,6 +71,23 @@ jobs:
             const sourceRepo = context.repo;
             const targetRepo = 'ILN-Frontend';
             const sourceLink = `https://github.com/${sourceRepo.owner}/${sourceRepo.repo}/issues/${sourceIssue.number}`;
+
+            // Idempotency: search for existing synced issue before creating
+            const existingIssues = await github.rest.issues.listForRepo({
+              owner: sourceRepo.owner,
+              repo: targetRepo,
+              state: 'all',
+              per_page: 100,
+            });
+
+            const alreadySynced = existingIssues.data.some(issue =>
+              issue.body && issue.body.includes(sourceLink)
+            );
+
+            if (alreadySynced) {
+              console.log(`⏭️ Issue already synced to ${targetRepo}, skipping creation`);
+              return;
+            }
 
             const issueBody = `> 🔗 **This is a synced issue from the main ILN repo.** Original: [#${sourceIssue.number}](${sourceLink})\n\n${context.payload.issue.body}`;
 
@@ -80,6 +118,25 @@ jobs:
 
             if (syncLabels.length === 0) return;
 
+            const marker = '<!-- sync-links-marker -->';
+
+            // Idempotency: check if sync comment already exists
+            const comments = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              per_page: 100,
+            });
+
+            const existingSyncComment = comments.data.some(c =>
+              c.body && c.body.includes(marker)
+            );
+
+            if (existingSyncComment) {
+              console.log('⏭️ Sync comment already exists, skipping');
+              return;
+            }
+
             const syncComments = [];
             const sourceRepo = context.repo.owner;
 
@@ -91,7 +148,7 @@ jobs:
               syncComments.push(`- 🖥️ [ILN-Frontend](https://github.com/${sourceRepo}/ILN-Frontend/issues) (Next.js dApp)`);
             }
 
-            const commentBody = `## 🔄 Cross-Repo Sync\n\nThis issue has been synced to:\n\n${syncComments.join('\n')}`;
+            const commentBody = `${marker}\n## 🔄 Cross-Repo Sync\n\nThis issue has been synced to:\n\n${syncComments.join('\n')}`;
 
             await github.rest.issues.createComment({
               owner: context.repo.owner,

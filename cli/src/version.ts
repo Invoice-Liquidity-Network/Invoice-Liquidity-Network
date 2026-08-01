@@ -3,6 +3,7 @@ import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import pc from "picocolors";
 import type { Ui } from "./format";
+import { createSpinner } from "./progress";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -124,9 +125,10 @@ export class VersionManager {
     }
 
     this.ui.info(`Updating ILN CLI to ${pc.green(target)}...`);
-    
-    // Simulate network delay
-    await new Promise(r => setTimeout(r, 1500));
+
+    const spinner = createSpinner("Downloading update…");
+    await new Promise((r) => setTimeout(r, 1500));
+    spinner.stop();
 
     this.ui.success(`Successfully updated to version ${target}!`);
     this.ui.info(pc.dim("Note: In a production environment, this would run 'npm install -g @invoice-liquidity/cli'"));

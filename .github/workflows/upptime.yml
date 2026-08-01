@@ -8,6 +8,12 @@ on:
     - cron: "*/5 * * * *"
   workflow_dispatch:
 
+# Exclude from cancellation: scheduled uptime checks and push-triggered
+# status page updates should never be interrupted mid-run.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
 permissions:
   contents: write
   issues: write
@@ -17,41 +23,40 @@ permissions:
 jobs:
   summary:
     name: Summary
-    runs-on: ubuntu-latest
+    runs-on: namespace-profile-nursca
     steps:
       - uses: actions/checkout@v4
-      - uses: upptime/uptime-monitor@master
-        with:
+      - uses: upptime/uptime-monitor@c540f23fc12982bc1df4624aa428b818f2020bdd # master
+        env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   response-time:
     name: Response Time
-    runs-on: ubuntu-latest
+    runs-on: namespace-profile-nursca
     steps:
       - uses: actions/checkout@v4
-      - uses: upptime/uptime-monitor@master
+      - uses: upptime/uptime-monitor@c540f23fc12982bc1df4624aa428b818f2020bdd # master
         env:
-          NOTIFICATION_SLACK: ${{ secrets.NOTIFICATION_SLACK }}
-        with:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TYPE: response-time
+          NOTIFICATION_SLACK: ${{ secrets.NOTIFICATION_SLACK }}
 
   graphs:
     name: Graphs
-    runs-on: ubuntu-latest
+    runs-on: namespace-profile-nursca
     steps:
       - uses: actions/checkout@v4
-      - uses: upptime/uptime-monitor@master
-        with:
+      - uses: upptime/uptime-monitor@c540f23fc12982bc1df4624aa428b818f2020bdd # master
+        env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TYPE: graphs
 
   static-site:
     name: Static Site
-    runs-on: ubuntu-latest
+    runs-on: namespace-profile-nursca
     steps:
       - uses: actions/checkout@v4
-      - uses: upptime/uptime-monitor@master
-        with:
+      - uses: upptime/uptime-monitor@c540f23fc12982bc1df4624aa428b818f2020bdd # master
+        env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TYPE: static-site

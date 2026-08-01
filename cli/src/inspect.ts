@@ -2,6 +2,7 @@ import { Command } from "commander";
 import type { ILNClient } from "../../sdk/src/client";
 import type { ResolvedConfig } from "./config";
 import type { Ui } from "./format"; // use any if not exported
+import { formatJsonSuccess } from "./format";
 
 
 export function registerInspectCommand(
@@ -68,8 +69,9 @@ export function registerInspectCommand(
     });
 
   function outputResult(data: unknown, format: string) {
-    if (format === "json") {
-      ui.info(JSON.stringify(data, null, 2));
+    const globalOpts = program.opts() as { json?: boolean };
+    if (format === "json" || globalOpts.json) {
+      ui.info(formatJsonSuccess(data));
     } else {
       // Placeholder for future table format
       ui.info(String(data));

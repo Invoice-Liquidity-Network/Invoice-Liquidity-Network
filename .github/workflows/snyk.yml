@@ -8,30 +8,34 @@ on:
   schedule:
     - cron: '0 3 * * 0' # Weekly scan at 3 AM on Sunday
 
+# Least-privilege: read code to run the Snyk vulnerability scan.
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   snyk:
     name: Snyk Vulnerability Scanner
-    runs-on: ubuntu-latest
+    runs-on: namespace-profile-nursca
+    env:
+      SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
     steps:
       - uses: actions/checkout@v4
 
-      - uses: pnpm/action-setup@v4
-        with:
-          version: "9.0.0"
+      - name: Setup pnpm with store cache
+        uses: ./.github/actions/setup-pnpm
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 20
-          cache: pnpm
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+      - name: Skip Snyk when token is unavailable
+        if: env.SNYK_TOKEN == ''
+        run: echo "SNYK_TOKEN is not available for this run; skipping Snyk scan."
 
       - name: Setup Snyk CLI
-        uses: snyk/actions/setup@master
+        if: env.SNYK_TOKEN != ''
+        uses: snyk/actions/setup@8e119fbb6c251787721d34ba683ed48eba792766 # master
 
       - name: Snyk test
+        if: env.SNYK_TOKEN != ''
         run: snyk test --all-projects --severity-threshold=high
-        env:
-          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}

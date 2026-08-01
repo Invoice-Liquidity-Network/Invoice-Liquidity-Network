@@ -16,6 +16,7 @@ import pc from "picocolors";
 import { parseDisplayAmount } from "./amounts";
 import { parseDueDate } from "./dates";
 import { formatInvoiceDetails, formatInvoiceList } from "./format";
+import { createSpinner } from "./progress";
 import type { ILNClient } from "./client";
 import type { Ui } from "./format";
 import type { ResolvedConfig } from "./types";
@@ -65,7 +66,7 @@ export async function runInteractive(deps: InteractiveDependencies): Promise<voi
       if (choice === "exit") break;
 
       try {
-        await dispatchAction(choice, { ask, client, config, ui });
+        await dispatchAction(choice, { ask, client, config, ui, output: deps.output });
       } catch (err) {
         ui.error(err instanceof Error ? err.message : String(err));
         const retry = await ask(
@@ -117,6 +118,11 @@ interface ActionDeps {
   client: ILNClient;
   config: ResolvedConfig;
   ui: Ui;
+  output?: NodeJS.WritableStream;
+}
+
+function spinnerOptions(deps: ActionDeps) {
+  return { output: deps.output ?? process.stdout };
 }
 
 async function dispatchAction(choice: MenuChoice, deps: ActionDeps): Promise<void> {
@@ -131,7 +137,8 @@ async function dispatchAction(choice: MenuChoice, deps: ActionDeps): Promise<voi
 
 // ─── Submit invoice ───────────────────────────────────────────────────────────
 
-async function submitInvoice({ ask, client, config, ui }: ActionDeps): Promise<void> {
+async function submitInvoice(deps: ActionDeps): Promise<void> {
+  const { ask, client, config, ui } = deps;
   ui.info(pc.bold("\n── Submit Invoice ──"));
 
   const payer = await askValidated(ask, ui, "Payer Stellar address: ", validateStellarAddress);
@@ -158,7 +165,7 @@ async function submitInvoice({ ask, client, config, ui }: ActionDeps): Promise<v
     return;
   }
 
-  const spinner = startSpinner(ui, "Submitting transaction…");
+  const spinner = createSpinner("Submitting transaction…", spinnerOptions(deps));
   try {
     const { invoiceId, txHash } = await client.submitInvoice({
       amount: parseDisplayAmount(amount),
@@ -167,17 +174,19 @@ async function submitInvoice({ ask, client, config, ui }: ActionDeps): Promise<v
       payer,
       tokenId,
     });
-    spinner.stop();
-    ui.success(`Invoice ${pc.bold(invoiceId.toString())} submitted in tx ${pc.cyan(txHash)}`);
+    spinner.succeed(
+      `Invoice ${pc.bold(invoiceId.toString())} submitted in tx ${pc.cyan(txHash)}`,
+    );
   } catch (err) {
-    spinner.stop();
+    spinner.fail("Transaction submission failed");
     throw err;
   }
 }
 
 // ─── Fund invoice ─────────────────────────────────────────────────────────────
 
-async function fundInvoice({ ask, client, ui }: ActionDeps): Promise<void> {
+async function fundInvoice(deps: ActionDeps): Promise<void> {
+  const { ask, client, ui } = deps;
   ui.info(pc.bold("\n── Fund Invoice ──"));
 
   const id = await askValidated(ask, ui, "Invoice ID: ", validateInvoiceId);
@@ -192,21 +201,21 @@ async function fundInvoice({ ask, client, ui }: ActionDeps): Promise<void> {
     return;
   }
 
-  const spinner = startSpinner(ui, "Submitting transaction…");
+  const spinner = createSpinner("Submitting transaction…", spinnerOptions(deps));
   try {
     const amount = amountInput ? parseDisplayAmount(amountInput) : undefined;
     const result = await client.fundInvoice(BigInt(id), amount);
-    spinner.stop();
-    ui.success(`Invoice ${pc.bold(id)} funded in tx ${pc.cyan(result.hash)}`);
+    spinner.succeed(`Invoice ${pc.bold(id)} funded in tx ${pc.cyan(result.hash)}`);
   } catch (err) {
-    spinner.stop();
+    spinner.fail("Transaction submission failed");
     throw err;
   }
 }
 
 // ─── Mark paid ────────────────────────────────────────────────────────────────
 
-async function markPaid({ ask, client, ui }: ActionDeps): Promise<void> {
+async function markPaid(deps: ActionDeps): Promise<void> {
+  const { ask, client, ui } = deps;
   ui.info(pc.bold("\n── Mark Invoice as Paid ──"));
 
   const id = await askValidated(ask, ui, "Invoice ID: ", validateInvoiceId);
@@ -217,38 +226,39 @@ async function markPaid({ ask, client, ui }: ActionDeps): Promise<void> {
     return;
   }
 
-  const spinner = startSpinner(ui, "Submitting transaction…");
+  const spinner = createSpinner("Submitting transaction…", spinnerOptions(deps));
   try {
     const result = await client.markPaid(BigInt(id));
-    spinner.stop();
-    ui.success(`Invoice ${pc.bold(id)} marked as paid in tx ${pc.cyan(result.hash)}`);
+    spinner.succeed(`Invoice ${pc.bold(id)} marked as paid in tx ${pc.cyan(result.hash)}`);
   } catch (err) {
-    spinner.stop();
+    spinner.fail("Transaction submission failed");
     throw err;
   }
 }
 
 // ─── Check status ─────────────────────────────────────────────────────────────
 
-async function checkStatus({ ask, client, ui }: ActionDeps): Promise<void> {
+async function checkStatus(deps: ActionDeps): Promise<void> {
+  const { ask, client, ui } = deps;
   ui.info(pc.bold("\n── Invoice Status ──"));
 
   const id = await askValidated(ask, ui, "Invoice ID: ", validateInvoiceId);
 
-  const spinner = startSpinner(ui, "Fetching…");
+  const spinner = createSpinner("Fetching invoice…", spinnerOptions(deps));
   try {
     const invoice = await client.getInvoice(BigInt(id));
     spinner.stop();
     ui.info(formatInvoiceDetails(invoice));
   } catch (err) {
-    spinner.stop();
+    spinner.fail("Failed to fetch invoice");
     throw err;
   }
 }
 
 // ─── List invoices ────────────────────────────────────────────────────────────
 
-async function listInvoices({ ask, client, ui }: ActionDeps): Promise<void> {
+async function listInvoices(deps: ActionDeps): Promise<void> {
+  const { ask, client, ui } = deps;
   ui.info(pc.bold("\n── List Invoices ──"));
 
   const address = await askValidated(
@@ -258,13 +268,13 @@ async function listInvoices({ ask, client, ui }: ActionDeps): Promise<void> {
     validateStellarAddress,
   );
 
-  const spinner = startSpinner(ui, "Fetching…");
+  const spinner = createSpinner("Fetching invoices…", spinnerOptions(deps));
   try {
     const invoices = await client.listInvoicesByAddress(address);
     spinner.stop();
     ui.info(formatInvoiceList(invoices));
   } catch (err) {
-    spinner.stop();
+    spinner.fail("Failed to fetch invoices");
     throw err;
   }
 }
@@ -339,40 +349,4 @@ async function confirmAction(
   }
   const answer = (await ask(pc.bold("\nProceed? [Y/n] "))).trim().toLowerCase();
   return answer !== "n";
-}
-
-interface Spinner {
-  stop(): void;
-}
-
-/**
- * Print a simple animated progress indicator.
- * Returns a handle to stop it once the operation completes.
- */
-function startSpinner(ui: Ui, message: string): Spinner {
-  const frames = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
-  let frame = 0;
-  let active = true;
-
-  // Emit initial message immediately so tests can assert on it
-  ui.info(`${pc.cyan(frames[0])} ${message}`);
-
-  const interval = setInterval(() => {
-    if (!active) return;
-    frame = (frame + 1) % frames.length;
-    // Write a carriage-return to overwrite the previous spinner frame in TTY contexts.
-    // In non-TTY contexts (tests) we just print new lines; the test only checks that the
-    // spinner started, not the animation frames.
-    process.stdout.write(`\r${pc.cyan(frames[frame])} ${message}`);
-  }, 80);
-
-  return {
-    stop() {
-      if (!active) return;
-      active = false;
-      clearInterval(interval);
-      // Clear the spinner line
-      process.stdout.write("\r" + " ".repeat(message.length + 4) + "\r");
-    },
-  };
 }

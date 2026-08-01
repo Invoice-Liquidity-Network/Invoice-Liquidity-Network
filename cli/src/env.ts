@@ -79,11 +79,21 @@ export function registerEnvCommands(program: Command): void {
   envCommand
     .command("list")
     .description("List all configured environments")
-    .action(() => {
+    .option("--json", "output machine-readable JSON")
+    .action((options: { json?: boolean }) => {
       const config = loadEnvironmentConfig();
       
       if (Object.keys(config.environments).length === 0) {
-        console.log("No environments configured. Use 'iln env create' to add one.");
+        if (options.json) {
+          console.log(JSON.stringify({ success: true, data: { environments: {}, current: null } }, null, 2));
+        } else {
+          console.log("No environments configured. Use 'iln env create' to add one.");
+        }
+        return;
+      }
+
+      if (options.json) {
+        console.log(JSON.stringify({ success: true, data: config }, null, 2));
         return;
       }
 
@@ -213,16 +223,26 @@ export function registerEnvCommands(program: Command): void {
   envCommand
     .command("show <name>")
     .description("Show details of a specific environment")
-    .action((name: string) => {
+    .option("--json", "output machine-readable JSON")
+    .action((name: string, options: { json?: boolean }) => {
       const config = loadEnvironmentConfig();
 
       if (!config.environments[name]) {
-        console.error(`Error: Environment '${name}' not found.`);
+        if (options.json) {
+          console.error(JSON.stringify({ success: false, error: `Environment '${name}' not found.` }, null, 2));
+        } else {
+          console.error(`Error: Environment '${name}' not found.`);
+        }
         process.exit(1);
       }
 
       const env = config.environments[name];
       const isActive = config.current === name;
+
+      if (options.json) {
+        console.log(JSON.stringify({ success: true, data: { ...env, isActive } }, null, 2));
+        return;
+      }
 
       console.log(`\nEnvironment: ${name} ${isActive ? "(active)" : ""}`);
       console.log("========================================");

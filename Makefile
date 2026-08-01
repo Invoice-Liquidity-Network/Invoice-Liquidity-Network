@@ -26,9 +26,10 @@ deploy-local:
 	@echo "Contract deployed locally: $$(cat .local-contract-id)"
 
 seed:
+	# scripts/seed.sh seeds the local Stellar node with test identities and sample invoices.
+	# scripts/fund-wallets.sh is a separate testnet utility (not run here); invoke it manually:
+	#   ./scripts/fund-wallets.sh <ADDRESS1> <ADDRESS2> ...
 	@chmod +x scripts/seed.sh
-	@chmod +x scripts/fund-wallets.sh
-	@./scripts/fund-wallets.sh
 	@./scripts/seed.sh
 
 test:

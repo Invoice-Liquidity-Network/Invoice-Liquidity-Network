@@ -15,6 +15,10 @@ export enum ProposalActionKind {
 /**
  * A governance proposal action with its parameters.
  * Discriminated union on the `kind` field.
+ *
+ * Intentionally differs from @iln/shared's ProposalAction (which uses `type`
+ * and `value` fields). This SDK version uses explicit property names
+ * (`rate`, `tokenAddress`) for better ergonomics with TypeScript narrowing.
  */
 export type ProposalAction =
   | { kind: ProposalActionKind.UpdateFeeRate; rate: number }
@@ -24,6 +28,9 @@ export type ProposalAction =
 
 /**
  * Enumeration of governance proposal statuses.
+ *
+ * Intentionally a TypeScript enum (not a type alias) so SDK consumers get
+ * runtime values. Keep in sync with @iln/shared's ProposalStatus.
  */
 export enum ProposalStatus {
   Active = "Active",
@@ -35,6 +42,12 @@ export enum ProposalStatus {
 
 /**
  * A governance proposal as returned by the contract.
+ *
+ * Intentionally differs from @iln/shared's GovernanceProposal:
+ * - `descriptionHash` is `Buffer` (not `Uint8Array`) for Node.js compatibility
+ * - `action` uses the SDK's `ProposalAction` (not the shared type alias)
+ * - `votingEnd` (not `votingEndsAt`) for brevity
+ * - `etaLedger` is non-nullable (defaulted to 0 when unknown)
  */
 export interface GovernanceProposal {
   id: bigint;

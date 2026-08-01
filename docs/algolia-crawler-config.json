@@ -1,15 +1,49 @@
 {
+  "_comment": [
+    "Algolia crawler configuration for docs.iln.finance.",
+    "",
+    "CANONICAL SITE: packages/docs/ (Nextra 3, Next.js 15 App Router, output: export).",
+    "This config was audited against the actual deployed site structure in July 2026.",
+    "",
+    "TO APPLY: Go to https://crawler.algolia.com, create a new crawler,",
+    "paste this config, replace the placeholder credentials below, and run.",
+    "",
+    "CREDENTIALS: appId and apiKey must be replaced with real values.",
+    "Apply for DocSearch at https://docsearch.algolia.com/ using the URL",
+    "https://docs.iln.finance. Do not commit real credentials here.",
+    "",
+    "SITEMAP NOTE: packages/docs uses `output: export` (static HTML) without",
+    "a sitemap plugin, so no sitemap.xml is generated. The crawler discovers",
+    "pages via discoveryPatterns instead. Add next-sitemap to packages/docs",
+    "and restore the sitemaps entry when a sitemap is available.",
+    "",
+    "URL STRUCTURE (Nextra 3 App Router, contentDirBasePath: '/'):",
+    "  /                              → content/index.mdx",
+    "  /protocol-overview             → content/protocol-overview.mdx",
+    "  /smart-contracts               → content/smart-contracts/ (section)",
+    "  /smart-contracts/architecture  → content/smart-contracts/architecture.mdx",
+    "  /smart-contracts/invoice-lifecycle",
+    "  /sdk-reference/installation",
+    "  /sdk-reference/api-reference",
+    "  /api-reference/horizon",
+    "  /api-reference/soroban-rpc",
+    "  /api-reference/notifications",
+    "  /frontend-guide/integration",
+    "  /governance",
+    "  /tutorials/first-invoice",
+    "  /tutorials/lp-funding"
+  ],
   "appId": "YOUR_ALGOLIA_APP_ID",
-  "apiKey": "YOUR_ALGOLIA_API_KEY",
+  "apiKey": "YOUR_ALGOLIA_WRITE_API_KEY",
   "indexName": "iln-docs",
-  "startUrls": ["https://docs.iln.finance/"],
-  "sitemaps": ["https://docs.iln.finance/sitemap.xml"],
-  "rateLimit": 200,
-  "maxDepth": 10,
+  "startUrls": [
+    "https://docs.iln.finance/"
+  ],
+  "rateLimit": 8,
+  "maxDepth": 5,
   "exclusionPatterns": [
-    "/**/node_modules/**",
-    "/**/.next/**",
-    "/**/.git/**"
+    "https://docs.iln.finance/404",
+    "https://docs.iln.finance/500"
   ],
   "discoveryPatterns": [
     "https://docs.iln.finance/**"
@@ -17,13 +51,93 @@
   "actions": [
     {
       "indexName": "iln-docs",
-      "pathsToMatch": ["https://docs.iln.finance/**"],
-      "recordExtractor": "({$, url}) => {const title = $('h1').text() || $('title').text(); const description = $('meta[name=\"description\"]').attr('content') || $('meta[property=\"og:description\"]').attr('content') || ''; return [{objectID: url, title, description, url, content: $('article').text() || $('body').text()}]; }"
-    }
-  ],
-  "selectors": {
-    "default": {
-      "recordExtractor": "({ $, url }) => { return [{ objectID: url, title: $('h1').text() || $('title').text(), content: $('article').text() || $('body').text(), url }]; }"
+      "pathsToMatch": [
+        "https://docs.iln.finance/**"
+      ],
+      "recordExtractor": "({ $, url }) => {
+      // Nextra 3 (App Router) renders page content inside <main>.
+      // The article selector used by the legacy Nextra 2 config does not
+      // match because there is no <article> element in the Nextra 3 layout.
+        const contentEl = $('main .nextra-content, main article, main');
+        const content = contentEl.first().text().trim();
+
+        // Extract page title from h1 (Nextra renders the MDX title as h1),
+      // falling back to the <title> element.
+        const title = $('h1').first().text().trim()
+                   || $('title').text().replace(' | ILN Docs', '').trim();
+
+        // Extract the meta description injected by Next.js.
+        const description =
+          $('meta[name=\"description\"]').attr('content') ||
+          $('meta[property=\"og:description\"]').attr('content') ||
+          '';
+
+        // Derive section from the URL path for faceting in the search UI.
+        const pathname = new URL(url).pathname.replace(/\\/$/, '');
+        const segments = pathname.split('/').filter(Boolean);
+        const section = segments.length > 0 ? segments[
+            0
+          ] : 'home';
+
+        // Collect all h2/h3 anchors on the page for sub-section records.
+        const records = [];
+
+        // One top-level record for the full page.
+        records.push({
+          objectID: url,
+          type: 'page',
+          url,
+          title,
+          description,
+          section,
+          content: content.slice(0,
+            5000)
+          });
+
+        // One record per h2 heading for granular search results.
+        $('main h2').each((_, el) => {
+          const headingText = $(el).text().trim();
+          const anchor = $(el).attr('id') || '';
+          if (!headingText) return;
+          records.push({
+            objectID: anchor ? `${url
+              }#${anchor
+              }` : `${url
+              }#${headingText
+              }`,
+            type: 'heading',
+            url: anchor ? `${url
+              }#${anchor
+              }` : url,
+            title: headingText,
+            section,
+            hierarchy: { lvl0: title, lvl1: headingText
+              }
+            });
+          });
+
+        return records;
+        }"
+      }
+    ],
+    "initialIndexSettings": {
+      "iln-docs": {
+        "attributesForFaceting": [
+          "section",
+          "type"
+        ],
+        "searchableAttributes": [
+          "unordered(title)",
+          "unordered(description)",
+          "unordered(content)",
+          "unordered(hierarchy.lvl0)",
+          "unordered(hierarchy.lvl1)"
+        ],
+        "customRanking": [
+          "desc(type)"
+        ],
+        "distinct": true,
+        "attributeForDistinct": "url"
+      }
     }
   }
-}

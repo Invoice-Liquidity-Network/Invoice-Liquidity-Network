@@ -1,6 +1,6 @@
 export { ILNEventIndexer } from "./indexer";
 export type {
-  ContractEvent,
+  ParsedHorizonEvent,
   EventCallback,
   ILNEventType,
   IndexerOptions,

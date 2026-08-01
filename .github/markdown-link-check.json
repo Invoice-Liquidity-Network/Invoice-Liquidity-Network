@@ -1,0 +1,32 @@
+{
+  "ignorePatterns": [
+    {
+      "comment": "mailto: links have no HTTP status to check",
+      "pattern": "^mailto:"
+    },
+    {
+      "comment": "Absolute paths on a contributor's own machine, never resolvable for anyone else (see docs/pr-16-submission-form.md)",
+      "pattern": "^/Users/"
+    },
+    {
+      "comment": "GitHub Projects (v2) boards require an authenticated, JS-rendered request and 404 to a plain HTTP check even when the board exists and is public",
+      "pattern": "^https://github\\.com/orgs/[^/]+/projects/"
+    },
+    {
+      "comment": "Friendbot only responds to requests with an ?addr= query string; a bare fetch of the host is expected to 400",
+      "pattern": "^https://friendbot\\.stellar\\.org/?$"
+    },
+    {
+      "comment": "Soroban RPC is a JSON-RPC endpoint that only accepts POST; a bare GET is expected to 405",
+      "pattern": "^https://soroban-testnet\\.stellar\\.org/?$"
+    },
+    {
+      "comment": "docs.iln.finance is an internal staging domain not reachable from CI; ignore link check",
+      "pattern": "^https://docs\\.iln\\.finance"
+    }
+  ],
+  "aliveStatusCodes": [200, 206, 429],
+  "retryOn429": true,
+  "retryCount": 3,
+  "timeout": "20s"
+}

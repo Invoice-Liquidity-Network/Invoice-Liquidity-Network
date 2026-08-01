@@ -1,7 +1,7 @@
 import { HorizonClient, FetchFn } from "./horizon-client";
 import { parseContractEvent, RawHorizonEvent } from "./parse";
 import {
-  ContractEvent,
+  ParsedHorizonEvent,
   EventCallback,
   ILNEventType,
   IndexerOptions,
@@ -59,7 +59,7 @@ export class ILNEventIndexer {
    *
    * @param id  The invoice identifier (contract topic value)
    */
-  async getEventsForInvoice(id: string): Promise<ContractEvent[]> {
+  async getEventsForInvoice(id: string): Promise<ParsedHorizonEvent[]> {
     const all = await this._fetchAllContractEvents();
     return all.filter((e) => {
       // ILN events encode the invoice ID as the first topic
@@ -78,9 +78,9 @@ export class ILNEventIndexer {
   async getEventsForAddress(
     address: string,
     types?: ILNEventType[]
-  ): Promise<ContractEvent[]> {
+  ): Promise<ParsedHorizonEvent[]> {
     const startUrl = this.client.accountTransactionsUrl(address);
-    const events: ContractEvent[] = [];
+    const events: ParsedHorizonEvent[] = [];
 
     for await (const records of this.client.paginateAll(startUrl)) {
       for (const raw of records) {
@@ -99,7 +99,7 @@ export class ILNEventIndexer {
    *
    * @param timestamp  Unix epoch seconds (or ISO-8601 string)
    */
-  async getEventsSince(timestamp: number | string): Promise<ContractEvent[]> {
+  async getEventsSince(timestamp: number | string): Promise<ParsedHorizonEvent[]> {
     const cutoff =
       typeof timestamp === "number"
         ? new Date(timestamp * 1000)
@@ -158,9 +158,9 @@ export class ILNEventIndexer {
   /**
    * Fetch and parse every page of events for this.contractId.
    */
-  private async _fetchAllContractEvents(): Promise<ContractEvent[]> {
+  private async _fetchAllContractEvents(): Promise<ParsedHorizonEvent[]> {
     const startUrl = this.client.contractEventsUrl(this.contractId);
-    const events: ContractEvent[] = [];
+    const events: ParsedHorizonEvent[] = [];
 
     for await (const records of this.client.paginateAll(startUrl)) {
       for (const raw of records) {

@@ -1,0 +1,61 @@
+name: SDK Bundle Size
+
+on:
+  push:
+    paths:
+      - "sdk/src/**"
+      - "sdk/package.json"
+      - "sdk/tsup.config.ts"
+      - "sdk/.bundle-size.json"
+      - "packages/shared/src/**"
+  pull_request:
+    paths:
+      - "sdk/src/**"
+      - "sdk/package.json"
+      - "sdk/tsup.config.ts"
+      - "sdk/.bundle-size.json"
+      - "packages/shared/src/**"
+
+permissions:
+  pull-requests: write
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  pnpm-cache:
+    uses: ./.github/workflows/reusable-cache-pnpm.yml
+
+  bundle-size:
+    name: sdk-bundle-size
+    needs: [pnpm-cache]
+    runs-on: namespace-profile-nursca
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm with store cache
+        uses: ./.github/actions/setup-pnpm
+
+      - name: Build SDK
+        env:
+          SKIP_DTS: "true"
+        run: pnpm --filter @iln/sdk build
+
+      - name: Check bundle size
+        id: size-check
+        run: node scripts/check-bundle-size.js
+
+      - name: Comment PR on failure
+        if: failure() && github.event_name == 'pull_request'
+        continue-on-error: true
+        uses: actions/github-script@v7
+        with:
+          script: |
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: '🚨 **SDK bundle size exceeded budget!**\n\nIf this increase is intentional, update the limits in `sdk/.bundle-size.json` and explain why in the PR description.'
+            })

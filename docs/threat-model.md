@@ -294,10 +294,12 @@ Before merging, this document should be reviewed by at least two maintainers, wi
 
 ## References
 
+- [SECURITY.md](../SECURITY.md) — vulnerability disclosure policy and severity classification
+- [Security Guide](./security-guide.md) — best practices, audit information, and incident response
 - [Stellar XDR](https://developers.stellar.org/docs/learn/fundamentals/data-format/xdr)
 - [Horizon XDR fields](https://developers.stellar.org/docs/data/apis/horizon/api-reference/structure/xdr)
 - [Transactions and envelopes](https://developers.stellar.org/docs/learn/fundamentals/transactions/operations-and-transactions)
-- [Stellar RPC](https://developers.stellar.org/docs/data/rpc)
+- [Stellar RPC](https://developers.stellar.org/docs/data/apis/rpc)
 - [Horizon rate limiting](https://developers.stellar.org/docs/data/apis/horizon/api-reference/structure/rate-limiting)
 - [OWASP Content Security Policy Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/Content_Security_Policy_Cheat_Sheet.html)
 - [OWASP Clickjacking](https://owasp.org/www-community/attacks/Clickjacking)

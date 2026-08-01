@@ -1,0 +1,65 @@
+name: CLI Docs
+
+on:
+  push:
+    paths:
+      - 'cli/src/**'
+      - 'cli/scripts/**'
+  pull_request:
+    paths:
+      - 'cli/src/**'
+      - 'cli/scripts/**'
+
+# Least-privilege: commit regenerated CLI docs back to the branch on push.
+permissions:
+  contents: write
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  pnpm-cache:
+    uses: ./.github/workflows/reusable-cache-pnpm.yml
+
+  cli-docs:
+    name: cli-docs
+    needs: [pnpm-cache]
+    runs-on: namespace-profile-nursca
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup pnpm with store cache
+        uses: ./.github/actions/setup-pnpm
+
+      - name: Generate CLI docs
+        id: generate
+        run: pnpm --filter @invoice-liquidity/cli docs:generate
+
+      - name: Commit and push generated docs
+        if: success() && github.event_name != 'pull_request'
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add packages/docs/content/cli-reference.mdx
+          git diff --cached --quiet || git commit -m "chore(docs): regenerate CLI reference [skip ci]"
+          git push
+
+      - name: Check for undocumented or stale CLI docs
+        if: success() && github.event_name == 'pull_request'
+        run: |
+          git add packages/docs/content/cli-reference.mdx
+          if ! git diff --cached --quiet; then
+            echo "🚨 CLI reference is out of date!"
+            echo "Please run \`pnpm --filter @invoice-liquidity/cli docs:generate\` locally and commit the changes."
+            exit 1
+          fi
+
+      - name: Write failure to job summary
+        if: failure() && github.event_name == 'pull_request'
+        run: |
+          echo "## CLI Docs Generation Failed" >> $GITHUB_STEP_SUMMARY
+          echo "Stale or failing CLI documentation detected. Run \`pnpm --filter @invoice-liquidity/cli docs:generate\` locally." >> $GITHUB_STEP_SUMMARY

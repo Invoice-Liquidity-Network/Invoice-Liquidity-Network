@@ -15,6 +15,7 @@ import path from "node:path";
 
 import type { ResolvedConfig } from "./types";
 import type { Ui } from "./format";
+import { createProgressBar } from "./progress";
 
 export interface SeededAccount {
   name: "freelancer" | "payer" | "liquidity_provider";
@@ -86,11 +87,10 @@ export class TestnetAccountSeeder {
     this.ui.info(`Scenario: ${effectiveScenario} | Count: ${count}${tokenFilter ? ` | Token: ${tokenFilter}` : ""}`);
 
     const totalSteps = effectiveScenario === "new-user" ? 4 : 6;
-    let currentStep = 0;
+    const bar = createProgressBar(totalSteps, "Seeding testnet accounts", { enabled: false });
 
     const step = (msg: string) => {
-      currentStep++;
-      this.ui.info(`[${currentStep}/${totalSteps}] ${msg}`);
+      bar.increment(1, msg);
     };
 
     const existing = this.loadExistingAccounts();
@@ -117,7 +117,7 @@ export class TestnetAccountSeeder {
       await this.seedScenarioInvoices(accounts, effectiveScenario, count, tokenFilter);
     }
 
-    this.ui.success(`Seeding complete (${effectiveScenario}, ${count} record(s))`);
+    bar.succeed(`Seeding complete (${effectiveScenario}, ${count} record(s))`);
     this.printAccountsTable(accounts);
 
     return accounts;

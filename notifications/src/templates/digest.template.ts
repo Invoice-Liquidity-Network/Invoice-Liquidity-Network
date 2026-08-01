@@ -97,6 +97,9 @@ export function renderDigestEmail(vars: DigestTemplateVars): string {
   const periodText = frequency === "daily" ? "Daily" : "Weekly";
   const dashUrl = dashboardUrl ?? "https://iln.finance";
   const unsubUrl = `https://iln.finance/unsubscribe?token=${encodeURIComponent(unsubscribeToken)}`;
+  // The tokenized URL is also passed to the shell so the footer link is the
+  // same one-click endpoint the body link hits. They are functionally the same
+  // so users have two clearly-marked, working unsubscribe entry points.
   const recipient = escapeHtml(shortAddress(recipientAddress));
 
   const tableRows = items.length > 0
@@ -145,5 +148,5 @@ export function renderDigestEmail(vars: DigestTemplateVars): string {
       </p>
     </div>`;
 
-  return emailShell(`Your ${periodText} Invoice Digest`, body);
+  return emailShell(`Your ${periodText} Invoice Digest`, body, { unsubscribeUrl: unsubUrl });
 }

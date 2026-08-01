@@ -11,6 +11,7 @@ describe('package exports', () => {
     expect(exports.useFundInvoice).toBeDefined();
     expect(exports.useReputationScore).toBeDefined();
     expect(exports.useLPPortfolio).toBeDefined();
+    expect(exports.useLPRiskMetrics).toBeDefined();
     expect(exports.useContractStats).toBeDefined();
     expect(exports.useGovernanceProposal).toBeDefined();
     expect(exports.useTokenBalances).toBeDefined();
@@ -30,6 +31,7 @@ describe('package exports', () => {
     expect(exports.InvoiceList).toBeDefined();
     expect(exports.YieldDisplay).toBeDefined();
     expect(exports.PortfolioChart).toBeDefined();
+    expect(exports.LPRiskDashboard).toBeDefined();
   });
 
   it('exports all types', () => {

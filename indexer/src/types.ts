@@ -1,10 +1,30 @@
 // ─── Invoice ──────────────────────────────────────────────────────────────────
 
-export type InvoiceStatus = "Pending" | "Funded" | "Paid" | "Defaulted";
+/**
+ * All nine on-chain invoice states.
+ *
+ * Intentionally differs from @iln/shared's InvoiceStatus only in that this is
+ * a local copy kept in sync with the contract. If a new status is added to the
+ * contract, it must be added here as well.
+ */
+export type InvoiceStatus =
+  | "Pending"
+  | "PartiallyFunded"
+  | "Funded"
+  | "Paid"
+  | "Defaulted"
+  | "Appealed"
+  | "Disputed"
+  | "Expired"
+  | "Cancelled";
 
 /**
  * Invoice row as stored in SQLite.
- * `amount` is stored as a string because i128 can exceed JS Number.MAX_SAFE_INTEGER.
+ *
+ * This is a DB-specific projection of @iln/shared's Invoice, not a duplicate.
+ * Field names use snake_case to match the SQL schema, `amount` is a string
+ * (i128 exceeds JS Number.MAX_SAFE_INTEGER), and it omits contract-only fields
+ * like `token`, `amountFunded`, `submitterReputation`, etc.
  */
 export interface Invoice {
   id: number;

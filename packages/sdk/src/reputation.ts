@@ -1,5 +1,5 @@
 import {
-  SorobanRpc,
+  rpc as SorobanRpc,
   nativeToScVal,
   scValToNative,
   Keypair,
@@ -16,6 +16,12 @@ import {
  *
  * Returned by {@link ReputationClient.getReputation} and
  * {@link ReputationClient.getTopPayers}.
+ *
+ * Intentionally differs from @iln/shared's ReputationScore: this SDK version
+ * includes client-computed fields (`totalPaid`, `invoiceCount`, `lastActivity`,
+ * `rank`) that are derived from the contract data but not part of the on-chain
+ * struct. The shared version uses `invoicesSubmitted`/`invoicesPaid`/`invoicesDefaulted`
+ * and `lastActivityLedger` which are the raw contract fields.
  */
 export interface ReputationScore {
   /** Stellar public address (G...) or contract address (C...). */
