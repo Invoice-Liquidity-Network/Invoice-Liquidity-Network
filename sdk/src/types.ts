@@ -458,7 +458,7 @@ export interface EventHistoryEntry {
 }
 
 export interface NotificationTrigger {
-  type: "invoice_created" | "invoice_funded" | "invoice_paid" | "invoice_defaulted";
+  type: "invoice_created" | "invoice_submitted" | "invoice_funded" | "invoice_paid" | "invoice_defaulted" | "invoice_disputed";
   invoiceId?: bigint;
 }
 

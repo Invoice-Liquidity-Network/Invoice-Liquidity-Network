@@ -64,6 +64,41 @@ export class TemplateEngine {
   private initializeDefaultTemplates(): void {
     const now = Date.now();
 
+    // Invoice submitted template
+    this.templates.set("invoice_submitted", {
+      id: "invoice_submitted",
+      name: "Invoice Submitted Notification",
+      version: "1.0.0",
+      subject: "Invoice #{{invoiceId}} has been submitted",
+      body: `Invoice #{{invoiceId}} for {{amount}} has been submitted by {{freelancer}} to {{payer}}.
+      
+Amount: {{amount}}
+Discount Rate: {{discountRate}}%
+Due Date: {{dueDate}}
+
+View details on the ILN dashboard.`,
+      triggers: ["invoice_submitted"],
+      createdAt: now,
+      updatedAt: now,
+    });
+
+    // Invoice disputed template
+    this.templates.set("invoice_disputed", {
+      id: "invoice_disputed",
+      name: "Invoice Disputed Notification",
+      version: "1.0.0",
+      subject: "Invoice #{{invoiceId}} has been disputed",
+      body: `Invoice #{{invoiceId}} from {{freelancer}} has been disputed by the payer.
+
+Amount: {{amount}}
+Due Date: {{dueDate}}
+
+Please visit the ILN dashboard to review the dispute details.`,
+      triggers: ["invoice_disputed"],
+      createdAt: now,
+      updatedAt: now,
+    });
+
     // Invoice funded template
     this.templates.set("invoice_funded", {
       id: "invoice_funded",

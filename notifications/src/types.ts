@@ -1,9 +1,9 @@
 /**
- * All nine on-chain invoice states.
+ * All on-chain invoice states supported by the notifications service.
  *
- * Intentionally differs from @iln/shared's InvoiceStatus only in that this is
- * a local copy kept in sync with the contract. If a new status is added to the
- * contract, it must be added here as well.
+ * This keeps the notifications layer aligned with contract lifecycle updates
+ * while preserving the lifecycle event names used by the SDK and notification
+ * templates for submitted/disputed flows.
  */
 export type InvoiceStatus =
   | "Pending"
@@ -15,11 +15,13 @@ export type InvoiceStatus =
   | "Disputed"
   | "Expired"
   | "Cancelled";
-export type ILNEventType = "submitted" | "funded" | "paid" | "defaulted";
+export type ILNEventType = "submitted" | "funded" | "paid" | "defaulted" | "disputed";
 
 export type NotificationTrigger =
+  | "invoice_submitted"
   | "invoice_funded"
   | "invoice_paid"
+  | "invoice_disputed"
   | "invoice_defaulted"
   | "invoice_due_soon"
   | "invoice_overdue";

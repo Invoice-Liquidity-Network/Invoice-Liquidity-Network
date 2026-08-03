@@ -12,8 +12,10 @@ describe("TemplateEngine", () => {
     it("should initialize with default templates", () => {
       const templates = engine.listTemplates();
       expect(templates.length).toBeGreaterThan(0);
+      expect(templates.find(t => t.id === "invoice_submitted")).toBeDefined();
       expect(templates.find(t => t.id === "invoice_funded")).toBeDefined();
       expect(templates.find(t => t.id === "invoice_paid")).toBeDefined();
+      expect(templates.find(t => t.id === "invoice_disputed")).toBeDefined();
     });
   });
 

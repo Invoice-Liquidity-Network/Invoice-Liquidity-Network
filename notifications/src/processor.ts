@@ -28,13 +28,15 @@ const KNOWN_EVENT_TYPES = new Set<ILNEventType>([
   "funded",
   "paid",
   "defaulted",
+  "disputed",
 ]);
 
 const EVENT_TO_TRIGGER: Record<ILNEventType, NotificationTrigger | null> = {
-  submitted: null,
+  submitted: "invoice_submitted",
   funded: "invoice_funded",
   paid: "invoice_paid",
   defaulted: "invoice_defaulted",
+  disputed: "invoice_disputed",
 };
 
 export async function processEvent(
@@ -112,12 +114,27 @@ function getNotificationTargets(
   invoice: Invoice,
 ): Array<{ recipient: string; actor: "freelancer" | "lp" | "payer" }> {
   switch (trigger) {
+    case "invoice_submitted":
+      return [
+        { recipient: invoice.freelancer, actor: "freelancer" },
+        { recipient: invoice.payer, actor: "payer" },
+      ];
     case "invoice_funded":
       return [
         { recipient: invoice.freelancer, actor: "freelancer" },
         { recipient: invoice.payer, actor: "payer" },
       ];
     case "invoice_paid": {
+      const targets: Array<{
+        recipient: string;
+        actor: "freelancer" | "lp" | "payer";
+      }> = [{ recipient: invoice.freelancer, actor: "freelancer" }];
+      if (invoice.funder) {
+        targets.push({ recipient: invoice.funder, actor: "lp" });
+      }
+      return targets;
+    }
+    case "invoice_disputed": {
       const targets: Array<{
         recipient: string;
         actor: "freelancer" | "lp" | "payer";
@@ -151,6 +168,17 @@ function formatPayload(
   actor: "freelancer" | "lp" | "payer",
 ): { subject: string; message: string } {
   switch (trigger) {
+    case "invoice_submitted":
+      if (actor === "freelancer") {
+        return {
+          subject: `Invoice #${invoice.id} submitted successfully`,
+          message: `Your invoice #${invoice.id} has been submitted for ${invoice.amount} stroops.`,
+        };
+      }
+      return {
+        subject: `New invoice #${invoice.id} received`,
+        message: `You have received a new invoice #${invoice.id} from ${invoice.freelancer} for ${invoice.amount} stroops.`,
+      };
     case "invoice_funded":
       if (actor === "freelancer") {
         return {
@@ -172,6 +200,17 @@ function formatPayload(
       return {
         subject: `Invoice #${invoice.id} paid`,
         message: `Invoice #${invoice.id} has been marked as paid.`,
+      };
+    case "invoice_disputed":
+      if (actor === "lp") {
+        return {
+          subject: `Invoice #${invoice.id} disputed`,
+          message: `Invoice #${invoice.id} which you funded has been disputed by the payer.`,
+        };
+      }
+      return {
+        subject: `Invoice #${invoice.id} disputed`,
+        message: `Your invoice #${invoice.id} has been disputed by the payer.`,
       };
     case "invoice_defaulted":
       return {
@@ -200,8 +239,10 @@ function formatPayload(
 
 const TRIGGER_TO_EVENT_TYPE: Record<NotificationTrigger, ILNEventType | null> =
   {
+    invoice_submitted: "submitted",
     invoice_funded: "funded",
     invoice_paid: "paid",
+    invoice_disputed: "disputed",
     invoice_defaulted: "defaulted",
     invoice_due_soon: null,
     invoice_overdue: null,

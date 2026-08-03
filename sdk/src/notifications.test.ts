@@ -54,6 +54,30 @@ describe("NotificationsClient", () => {
     });
   });
 
+  it("subscribes with new triggers (submitted and disputed)", async () => {
+    fetchMock.mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ subscription: { id: 3, channel: "email" } }),
+    });
+
+    const sub = await client.subscribeEmail("G123", "test@test.com", [
+      NotificationTrigger.InvoiceSubmitted,
+      NotificationTrigger.InvoiceDisputed,
+    ]);
+    
+    expect(sub.id).toBe(3);
+    expect(fetchMock).toHaveBeenCalledWith("http://localhost:4001/subscribe", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        stellar_address: "G123",
+        channel: "email",
+        destination: "test@test.com",
+        triggers: ["invoice_submitted", "invoice_disputed"],
+      }),
+    });
+  });
+
   it("unsubscribes", async () => {
     fetchMock.mockResolvedValueOnce({ ok: true });
 

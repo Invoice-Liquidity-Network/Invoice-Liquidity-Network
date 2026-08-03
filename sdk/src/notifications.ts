@@ -3,8 +3,10 @@
  * Each trigger corresponds to an invoice lifecycle event.
  */
 export enum NotificationTrigger {
+  InvoiceSubmitted = "invoice_submitted",
   InvoiceFunded = "invoice_funded",
   InvoiceSettled = "invoice_paid",
+  InvoiceDisputed = "invoice_disputed",
   InvoiceDefaulted = "invoice_defaulted",
   DueDateWarning = "invoice_due_soon",
 }

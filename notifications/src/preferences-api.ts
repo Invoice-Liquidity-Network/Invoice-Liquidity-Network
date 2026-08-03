@@ -222,8 +222,10 @@ function exportWebhookLogsForAddress(
 const VALID_CHANNELS: SubscriptionChannel[] = ["email", "sms", "webhook", "websocket"];
 const VALID_FREQUENCIES: NotificationFrequency[] = ["realtime", "daily", "weekly"];
 const VALID_TRIGGERS: NotificationTrigger[] = [
+  "invoice_submitted",
   "invoice_funded",
   "invoice_paid",
+  "invoice_disputed",
   "invoice_defaulted",
   "invoice_due_soon",
   "invoice_overdue",

@@ -3,7 +3,7 @@ import { Writable } from "node:stream";
 
 import { describe, expect, it, vi, afterEach } from "vitest";
 
-import * as sdk from "@invoice-liquidity/sdk";
+import * as sdk from "@iln/sdk";
 import * as devSeedModule from "../src/dev-seed";
 import { runCli } from "../src/cli";
 import type { Invoice, ListedInvoice, ResolvedConfig } from "../src/types";

@@ -54,9 +54,9 @@ const WEBHOOK_MAX_RETRIES = 3;
 
 // Which event types each actor role should receive
 const ROLE_EVENT_ALLOWLIST: Record<ActorRole, string[]> = {
-  freelancer: ["funded", "paid", "defaulted", "due_date_warning"],
-  lp: ["funded", "paid", "defaulted"],
-  payer: ["funded", "paid"],
+  freelancer: ["submitted", "funded", "paid", "disputed", "defaulted", "due_date_warning"],
+  lp: ["funded", "paid", "disputed", "defaulted"],
+  payer: ["submitted", "funded", "paid"],
 };
 
 // ─── Service ─────────────────────────────────────────────────────────────────
@@ -144,10 +144,14 @@ export class NotificationService {
 
   private buildEmailSubject(event: InvoiceEvent): string {
     switch (event.type) {
+      case "submitted":
+        return `Invoice #${event.invoiceId} has been submitted`;
       case "funded":
         return buildFundedSubject(event);
       case "paid":
         return buildPaymentSubject(event);
+      case "disputed":
+        return `Invoice #${event.invoiceId} has been disputed`;
       case "defaulted":
         return buildDisputeSubject(event);
       case "due_date_warning":

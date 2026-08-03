@@ -73,7 +73,7 @@
   "bin": {
     "iln-dev": "packages/scripts/bin/iln.js"
   },
-  "packageManager": "pnpm@9.0.0",
+  "packageManager": "pnpm@9.15.4",
   "pnpm": {
     "overrides": {
       "axios": ">=1.16.0"

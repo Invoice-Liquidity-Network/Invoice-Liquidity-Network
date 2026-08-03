@@ -5,7 +5,7 @@ import { resolve } from "path";
 export default mergeConfig(base, {
   resolve: {
     alias: {
-      "@invoice-liquidity/sdk": resolve(__dirname, "../sdk/src/index.ts"),
+      "@iln/sdk": resolve(__dirname, "../sdk/src/index.ts"),
     },
   },
   test: {
