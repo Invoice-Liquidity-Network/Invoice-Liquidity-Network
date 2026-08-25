@@ -1,12 +1,44 @@
 {
-  "ignore": ["frontend/**", "backend/**", "oracle-service/**"],
-  "ignoreBinaries": ["playwright", "sqlite3", "sha256sum", "gsutil", "gitleaks", "less"],
+  // ---------------------------------------------------------------------------
+  // knip (dead-code) configuration — see `pnpm dead-code:check`.
+  //
+  // Every ignore / allowlist entry below is intentional and reviewed as part
+  // of Issue #852. Do not remove an entry without re-running knip and
+  // confirming the resulting finding is a real one to act on.
+  // ---------------------------------------------------------------------------
+  "ignore": [
+    // oracle-service is a standalone app (its own package manager / toolchain),
+    // not a member of this pnpm workspace, so knip would otherwise flag its
+    // entire surface. It is intentionally out of dead-code scope here.
+    "oracle-service/**"
+    // NOTE: `frontend/**` and `backend/**` were previously ignored here but
+    // knip reported them as matching zero files (they are not part of the
+    // analyzed workspaces), so the ignores were redundant and removed.
+  ],
+  "ignoreBinaries": [
+    // Used by e2e browser tests; invoked as a binary, not a Node import.
+    "playwright",
+    // Referenced via `execSync("sha256sum ...")` in indexer/src/backup.ts —
+    // knip cannot see it inside a string literal, so keep it ignored.
+    "sha256sum",
+    // Referenced via `execSync("gsutil cp ...")` in indexer/src/backup.ts.
+    "gsutil",
+    // Secret-scanning binary used in CI; not a Node dependency.
+    "gitleaks"
+    // NOTE: `sqlite3` and `less` were removed from this list — the only
+    // matches in the repo are the `better-sqlite3` npm package and the
+    // English word "less", neither of which is a binary invocation.
+  ],
   "rules": {
     "optionalPeerDependencies": "off",
     "duplicates": "off"
   },
   "ignoreIssues": {
+    // docs-version.ts intentionally re-exports a generated constant surface
+    // that is only consumed by the deployed docs build, not by TS source.
     "packages/docs/lib/docs-version.ts": ["exports"],
+    // logger.ts declares an enum whose members are used at runtime via
+    // string indexing, which knip cannot statically resolve.
     "sdk/src/logger.ts": ["enumMembers"]
   },
   "workspaces": {
