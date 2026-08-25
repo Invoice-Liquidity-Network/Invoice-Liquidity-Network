@@ -44,7 +44,9 @@
     "validate:packages": "node scripts/validate-packages.mjs",
     "validate:lockfiles": "node scripts/check-no-foreign-lockfiles.mjs",
     "validate:meta-nav": "node scripts/check-meta-nav.mjs",
-    "check:shared-types": "node scripts/check-no-duplicate-types.mjs"
+    "check:shared-types": "node scripts/check-no-duplicate-types.mjs",
+    "drift:check": "node scripts/check-monorepo-map-drift.mjs",
+    "test:drift": "node --test scripts/__tests__/check-monorepo-map-drift.test.mjs"
   },
   "devDependencies": {
     "@changesets/cli": "^2.31.0",

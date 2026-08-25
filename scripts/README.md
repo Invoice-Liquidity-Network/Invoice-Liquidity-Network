@@ -54,6 +54,7 @@ Tests mock `spawnSync` to avoid network access and verify argument construction,
 | `check-no-duplicate-types.mjs` | Detects duplicate TypeScript type definitions across packages. |
 | `check-no-foreign-lockfiles.mjs` | Ensures only pnpm lockfiles are present (no npm/yarn). |
 | `validate-packages.mjs` | Validates package.json fields across the monorepo. |
+| `check-monorepo-map-drift.mjs` | Cross-references `docs/monorepo-map.md` status against each package's `package.json` (name, `deprecated` notice, publish intent). Advisory; run `pnpm drift:check`. |
 | `mainnet-checklist-parser.js` | Parses the mainnet launch checklist markdown and updates issue statuses. |
 | `generate-types.ts` | Generates shared TypeScript types from contract specs. |
 | `deploy.ts` | Deployment orchestration for Soroban contracts. |
