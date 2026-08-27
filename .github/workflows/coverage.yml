@@ -158,3 +158,59 @@ jobs:
 
   pnpm-cache:
     uses: ./.github/workflows/reusable-cache-pnpm.yml
+
+  cli-coverage:
+    name: Node.js coverage (CLI)
+    needs: [changes, pnpm-cache]
+    if: needs.changes.outputs.cli == 'true' || needs.changes.outputs.shared_config == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup pnpm with store cache
+        uses: ./.github/actions/setup-pnpm
+
+      - name: Install dependencies
+        working-directory: ./cli
+        run: pnpm install --frozen-lockfile
+
+      - name: Run CLI test with coverage
+        working-directory: ./cli
+        run: pnpm test:coverage
+
+      - name: Upload CLI coverage to Codecov
+        uses: codecov/codecov-action@5975040f7f7d40edaff8d784b576fd65ae95c073 # v5.5.5
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          slug: Nursca/Invoice-Liquidity-Network
+          directory: cli
+          flags: cli
+          name: cli
+
+  indexer-coverage:
+    name: Node.js coverage (Indexer)
+    needs: [changes, pnpm-cache]
+    if: needs.changes.outputs.indexer == 'true' || needs.changes.outputs.shared_config == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup pnpm with store cache
+        uses: ./.github/actions/setup-pnpm
+
+      - name: Install dependencies
+        working-directory: ./indexer
+        run: pnpm install --frozen-lockfile
+
+      - name: Run Indexer test with coverage
+        working-directory: ./indexer
+        run: pnpm test:coverage
+
+      - name: Upload Indexer coverage to Codecov
+        uses: codecov/codecov-action@5975040f7f7d40edaff8d784b576fd65ae95c073 # v5.5.5
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          slug: Nursca/Invoice-Liquidity-Network
+          directory: indexer
+          flags: indexer
+          name: indexer
