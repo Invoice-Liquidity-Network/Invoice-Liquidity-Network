@@ -581,4 +581,107 @@ describe('circuit breaker', () => {
     expect(getCircuitBreakerState('bad-isolated@example.com')).toBe('open');
     expect(getCircuitBreakerState('good-isolated@example.com')).toBe('closed');
   });
+
+  it('permanently-failing destination stops consuming retries after circuit opens', async () => {
+    // Scenario: a webhook destination is permanently down (always returns 500).
+    // After the failure threshold is reached, the circuit opens and subsequent
+    // delivery attempts are skipped — retry volume for that destination drops
+    // to near-zero.
+    fetchMock.mockResolvedValue({ ok: false, status: 500 });
+    const failingSub = makeSubscription({
+      id: 3,
+      channel: 'webhook',
+      destination: 'https://permanently-down.example.com/hook',
+    });
+
+    // First batch: 3 attempts (maxWebhookRetry) exhaust retries, circuit opens
+    await sendWebhook(failingSub, makePayload());
+    await vi.runAllTimersAsync();
+
+    // Circuit is open — next delivery attempt should be skipped entirely
+    fetchMock.mockClear();
+    await sendWebhook(failingSub, makePayload());
+    await vi.runAllTimersAsync();
+
+    // fetch was NOT called — circuit breaker prevented the retry
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(getCircuitBreakerState('https://permanently-down.example.com/hook')).toBe('open');
+  });
+
+  it('other destinations continue normal delivery while one destination is circuit-broken', async () => {
+    // Simulate two webhook destinations: one permanently down, one healthy.
+    // The healthy destination should continue receiving deliveries normally.
+    const badUrl = 'https://down.example.com/hook';
+    const goodUrl = 'https://healthy.example.com/hook';
+
+    // Set up: bad always fails, good always succeeds
+    fetchMock.mockImplementation(async (url: string) => {
+      if (url === badUrl) {
+        return { ok: false, status: 500 };
+      }
+      return { ok: true, status: 200 };
+    });
+
+    const badSub = makeSubscription({ id: 10, channel: 'webhook', destination: badUrl });
+    const goodSub = makeSubscription({ id: 11, channel: 'webhook', destination: goodUrl });
+
+    // Trip the circuit for badUrl (3 attempts × 1 full retry cycle each)
+    for (let i = 0; i < 3; i++) {
+      await sendWebhook(badSub, makePayload());
+      await vi.runAllTimersAsync();
+    }
+    expect(getCircuitBreakerState(badUrl)).toBe('open');
+
+    // goodUrl should still work — independent circuit breaker
+    fetchMock.mockClear();
+    fetchMock.mockImplementation(async (url: string) => {
+      if (url === badUrl) return { ok: false, status: 500 };
+      return { ok: true, status: 200 };
+    });
+
+    await sendWebhook(goodSub, makePayload());
+    await vi.runAllTimersAsync();
+
+    // goodUrl got its delivery; badUrl was skipped
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(fetchMock).toHaveBeenCalledWith(goodUrl, expect.anything());
+    expect(getCircuitBreakerState(goodUrl)).toBe('closed');
+  });
+
+  it('circuit breaker records failure after all retries exhausted for webhook', async () => {
+    // Verifies that the circuit breaker failure count is recorded once per
+    // full retry exhaustion, not once per individual attempt.
+    fetchMock.mockResolvedValue({ ok: false, status: 500 });
+    const sub = makeSubscription({
+      id: 3,
+      channel: 'webhook',
+      destination: 'https://count.example.com/hook',
+    });
+
+    // First full retry cycle: 3 attempts, circuit records 1 failure
+    await sendWebhook(sub, makePayload());
+    await vi.runAllTimersAsync();
+    expect(getCircuitBreakerState('https://count.example.com/hook')).toBe('closed');
+
+    // Second full retry cycle: 3 more attempts, circuit records 2nd failure
+    await sendWebhook(sub, makePayload());
+    await vi.runAllTimersAsync();
+    expect(getCircuitBreakerState('https://count.example.com/hook')).toBe('closed');
+
+    // Third full retry cycle: 3 more attempts, circuit records 3rd failure
+    await sendWebhook(sub, makePayload());
+    await vi.runAllTimersAsync();
+    expect(getCircuitBreakerState('https://count.example.com/hook')).toBe('closed');
+
+    // Fourth full retry cycle: circuit reaches threshold (5) and opens
+    await sendWebhook(sub, makePayload());
+    await vi.runAllTimersAsync();
+    expect(getCircuitBreakerState('https://count.example.com/hook')).toBe('open');
+
+    // Subsequent attempts are skipped
+    fetchMock.mockClear();
+    await sendWebhook(sub, makePayload());
+    await vi.runAllTimersAsync();
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
 });
