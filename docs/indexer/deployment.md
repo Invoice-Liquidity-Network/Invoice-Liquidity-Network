@@ -164,10 +164,32 @@ railway link
 # Set environment variables
 railway variables set CONTRACT_ID=your_contract_id
 railway variables set RPC_URL=https://soroban-testnet.stellar.org
+railway variables set REDIS_URL=redis://your-redis:6379
 
 # Deploy
 railway up
 ```
+
+#### Railway Production Configuration
+
+The `railway.toml` is pre-configured for production workloads:
+
+| Setting | Value | Rationale |
+|---------|-------|-----------|
+| `restartPolicyMaxRetries` | 5 | Allows recovery from transient failures before marking the service as failed |
+| `restartPolicyMaxDelay` | 60 | Caps exponential backoff at 60 seconds between restarts |
+| `healthcheckPath` | `/health` | Checks both SQLite connectivity and sync freshness |
+| `healthcheckTimeout` | 10 seconds | Fails fast enough for Railway to trigger a restart |
+
+**Important**: Railway deployments are ephemeral — the SQLite database is lost on each deploy.
+For production use, mount a Railway Volume at the database path:
+
+```bash
+railway volume add -m /data
+railway variables set DB_PATH=/data/indexer.db
+```
+
+Without a volume, every deploy starts a fresh database and re-indexes from the configured `START_LEDGER`.
 
 ## Environment Variables
 

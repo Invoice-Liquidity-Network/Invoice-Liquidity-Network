@@ -5,5 +5,11 @@ buildCommand = "npm ci && npm run build"
 [deploy]
 startCommand = "npm start"
 healthcheckPath = "/health"
+healthcheckTimeout = 10
 restartPolicyType = "on_failure"
-restartPolicyMaxRetries = 3
+restartPolicyMaxRetries = 5
+restartPolicyMaxDelay = 60
+
+[variables]
+NODE_ENV = "production"
+PORT = "3001"
