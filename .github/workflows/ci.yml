@@ -369,17 +369,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Install pnpm
-        uses: pnpm/action-setup@v4
-        with:
-          version: 9
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version-file: .nvmrc
-          cache: pnpm
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+      - name: Setup pnpm with store cache
+        uses: ./.github/actions/setup-pnpm
       - name: Scan repository for secrets
         run: pnpm gitleaks:scan
 
@@ -479,7 +470,7 @@ jobs:
         run: pnpm --filter @iln/shared test
 
       - name: Comment PR on failure
-        if: failure() && github.event_name == 'pull_request'
+        if: failure() && github.event_name == 'pull_request' && !github.event.pull_request.head.repo.fork
         continue-on-error: true
         uses: actions/github-script@v7
         with:
