@@ -4,6 +4,7 @@
  */
 import type { ContractStats, GovernanceProposal, Invoice, ReputationScore } from '@iln/shared';
 import type { CacheConfig } from './cache';
+import type { BackoffOptions } from './backoff';
 
 // Note: GovernanceProposal and ProposalStatus are intentionally NOT
 // re-exported here — the SDK's public API surfaces the SDK-specific
@@ -195,6 +196,12 @@ export interface ILNSdkConfig {
    * Set to `{}` to use all defaults.
    */
   offline?: import('./offline').OfflineConfig;
+  /**
+   * Backoff/retry configuration for transient RPC failures.
+   * Set to `false` to disable automatic retries. When not provided,
+   * defaults to 3 retries with exponential backoff and jitter.
+   */
+  backoff?: BackoffOptions | false;
 }
 
 /**
