@@ -220,6 +220,72 @@ docker inspect iln-indexer | grep -A 10 "Env"
 docker run --rm -it iln-indexer /bin/sh
 ```
 
+### 7. Reorg Handling
+
+#### Stale data after a Stellar network reorganization
+
+**Cause**: The indexer processed ledgers that were later invalidated by a chain reorganization.
+
+**Symptoms**:
+- Invoices with stale or contradictory statuses
+- Events referencing ledger sequence numbers that no longer exist
+- `cursor` table pointing to a rolled-back ledger
+
+**Solution**:
+```bash
+# Check the current cursor position
+sqlite3 indexer.db "SELECT * FROM cursor;"
+
+# Check for events at suspect ledger sequences
+sqlite3 indexer.db "SELECT COUNT(*) FROM events WHERE ledger_sequence > <suspect_height>;"
+
+# If the indexer does not auto-detect the reorg, reset to a known-good ledger:
+sqlite3 indexer.db "UPDATE cursor SET ledger_sequence = <safe_ledger>;"
+
+# Restart the indexer to re-sync from the safe point
+pkill -f "node dist/index.js" && npm start
+```
+
+The indexer re-processes events from the cursor position. Duplicate events are
+skipped by the deduplication check, so a simple cursor reset is safe.
+
+### 8. Railway Deployment Issues
+
+#### Database lost after deploy
+
+**Cause**: Railway deploys create ephemeral containers; the SQLite file is not persisted by default.
+
+**Solution**:
+```bash
+# Add a Railway volume mounted at /data
+railway volume add -m /data
+
+# Set the database path to the mounted volume
+railway variables set DB_PATH=/data/indexer.db
+
+# Redeploy
+railway up
+```
+
+#### Service enters restart loop
+
+**Cause**: The health check at `/health` is failing repeatedly, exceeding `restartPolicyMaxRetries`.
+
+**Diagnosis**:
+```bash
+# Check Railway logs for the health check failures
+railway logs --follow
+
+# Look for common causes:
+# - Missing environment variables (CONTRACT_ID, RPC_URL)
+# - SQLite database not writable
+# - Port mismatch
+```
+
+**Solution**: Ensure all required environment variables are set and the
+database path is writable. The health endpoint returns `{ "status": "ok" }`
+when SQLite is accessible and sync is recent.
+
 ## Debugging
 
 ### Enable Verbose Logging
