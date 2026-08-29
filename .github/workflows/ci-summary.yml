@@ -1,0 +1,253 @@
+# =============================================================================
+# CI Summary — Consolidated PR Status Check (Issue #41 follow-up)
+#
+# Posts a single "CI Summary" PR comment that aggregates results from all
+# critical workflows. This is designed to eventually replace individual checks
+# as the sole required branch-protection gate.
+#
+# How it works:
+#   1. Triggered by `workflow_run` on completion of each critical workflow.
+#   2. Uses the GitHub API to inspect all workflow runs for the same commit SHA.
+#   3. Classifies each into build / test / lint / security / docs categories.
+#   4. Renders a markdown table with ✅/❌/⏭️/🔄 per workflow.
+#   5. Posts or updates a single PR comment (no spam on repeated pushes).
+#
+# The summary job itself NEVER fails the workflow — it is purely informational.
+# Branch-protection coordination to require only this check is a separate step
+# (see docs/branch-protection.md).
+# =============================================================================
+
+name: CI Summary
+
+on:
+  workflow_run:
+    workflows:
+      - CI
+      - Coverage
+      - CodeQL Analysis
+      - Dead Code Check
+      - PR title lint
+      - E2E Scope Rule Check
+    types: [completed]
+
+permissions:
+  contents: read
+  pull-requests: write
+
+# Cancel in-progress summaries for the same SHA — only the latest matters.
+concurrency:
+  group: ci-summary-${{ github.event.workflow_run.head_sha || github.sha }}
+  cancel-in-progress: true
+
+jobs:
+  summary:
+    name: ci-summary
+    runs-on: ubuntu-latest
+    if: always() &&
+      github.event.workflow_run.event == 'pull_request'
+    steps:
+      - name: Build and post CI summary
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            // ── 1. Determine the commit SHA and PR number ──────────────────────
+            const headSha = context.payload.workflow_run.head_sha;
+            const repoOwner = context.repo.owner;
+            const repoName  = context.repo.repo;
+
+            // Fetch the PR associated with this SHA
+            const { data: prs } = await github.rest.pulls.list({
+              owner: repoOwner,
+              repo: repoName,
+              head: `${repoOwner}:${context.payload.workflow_run.head_branch}`,
+              state: 'open',
+            });
+
+            if (!prs.length) {
+              console.log('No open PR found for this branch — skipping summary.');
+              return;
+            }
+
+            const pr = prs[0];
+            const prNumber = pr.number;
+
+            // ── 2. Fetch all workflow runs for this SHA ─────────────────────────
+            const { data: allRuns } = await github.rest.actions.listWorkflowRunsForRepo({
+              owner: repoOwner,
+              repo: repoName,
+              head_sha: headSha,
+              per_page: 100,
+            });
+
+            // ── 3. Define the critical workflow set and their categories ────────
+            const CRITICAL_WORKFLOWS = {
+              'CI':                     { category: 'build+test', display: 'CI (build, test, lint, security)' },
+              'Coverage':               { category: 'test',       display: 'Coverage' },
+              'CodeQL Analysis':        { category: 'security',   display: 'CodeQL Analysis' },
+              'Dead Code Check':        { category: 'lint',       display: 'Dead Code Check (knip)' },
+              'PR title lint':          { category: 'lint',       display: 'PR title lint' },
+              'E2E Scope Rule Check':   { category: 'lint',       display: 'E2E Scope Rule Check' },
+            };
+
+            // ── 4. Classify runs by workflow name ──────────────────────────────
+            const results = {};
+
+            for (const [name, meta] of Object.entries(CRITICAL_WORKFLOWS)) {
+              results[name] = { status: 'pending', display: meta.display, category: meta.category };
+            }
+
+            // Deduplicate: keep only the most recent run per workflow
+            const seen = {};
+            for (const run of allRuns.workflow_runs) {
+              const name = run.name;
+              if (CRITICAL_WORKFLOWS[name] && !seen[name]) {
+                seen[name] = run;
+              }
+            }
+
+            // Build category aggregation
+            const categories = { build: [], test: [], lint: [], security: [], docs: [] };
+
+            for (const [name, meta] of Object.entries(CRITICAL_WORKFLOWS)) {
+              const run = seen[name];
+              let status;
+              if (!run) {
+                status = 'skipped';
+              } else if (run.conclusion === 'success') {
+                status = 'success';
+              } else if (run.conclusion === 'skipped' || run.conclusion === 'neutral') {
+                status = 'skipped';
+              } else if (run.conclusion === 'failure') {
+                status = 'failure';
+              } else if (run.conclusion === 'cancelled') {
+                status = 'cancelled';
+              } else {
+                status = 'pending';
+              }
+
+              results[name].status = status;
+              const cat = meta.category === 'build+test' ? ['build', 'test'] : [meta.category];
+              for (const c of cat) {
+                categories[c].push({ name: meta.display, status });
+              }
+            }
+
+            // ── 5. Compute overall status ──────────────────────────────────────
+            const allStatuses = Object.values(results).map(r => r.status);
+            let overallStatus;
+            if (allStatuses.includes('failure')) {
+              overallStatus = 'failure';
+            } else if (allStatuses.includes('pending')) {
+              overallStatus = 'pending';
+            } else if (allStatuses.includes('cancelled')) {
+              overallStatus = 'cancelled';
+            } else {
+              overallStatus = 'success';
+            }
+
+            const overallIcon = {
+              success: '✅',
+              failure: '❌',
+              pending: '🔄',
+              cancelled: '⚠️',
+              skipped: '⏭️',
+            }[overallStatus];
+
+            // ── 6. Build the markdown table ────────────────────────────────────
+            const icon = (s) => ({
+              success: '✅',
+              failure: '❌',
+              skipped: '⏭️',
+              pending: '🔄',
+              cancelled: '⚠️',
+            }[s] || '❓');
+
+            const label = (s) => ({
+              success: 'passed',
+              failure: 'failed',
+              skipped: 'skipped',
+              pending: 'in progress',
+              cancelled: 'cancelled',
+            }[s] || s);
+
+            const categoryIcons = {
+              build: '🔨',
+              test: '🧪',
+              lint: '🧹',
+              security: '🔒',
+              docs: '📖',
+            };
+
+            const lines = [
+              `<!-- ci-summary -->`,
+              `### ${overallIcon} CI Summary — PR #${prNumber}`,
+              '',
+            ];
+
+            // Per-category breakdown
+            for (const [catName, items] of Object.entries(categories)) {
+              if (items.length === 0) continue;
+              lines.push(`**${categoryIcons[catName]} ${catName.charAt(0).toUpperCase() + catName.slice(1)}**`);
+              lines.push('');
+              lines.push('| Workflow | Status |');
+              lines.push('| --- | --- |');
+              for (const item of items) {
+                lines.push(`| ${item.name} | ${icon(item.status)} ${label(item.status)} |`);
+              }
+              lines.push('');
+            }
+
+            // Footer
+            const skippedCount = allStatuses.filter(s => s === 'skipped').length;
+            const failedNames = Object.entries(results)
+              .filter(([, r]) => r.status === 'failure')
+              .map(([name]) => name);
+
+            let footer = '';
+            if (overallStatus === 'success') {
+              footer = skippedCount > 0
+                ? `> ℹ️ ${skippedCount} workflow(s) skipped (did not match this PR's path filters). ✅ All critical checks passed.`
+                : `> ✅ All critical checks passed.`;
+            } else if (overallStatus === 'failure') {
+              footer = `> ❌ **Failed:** ${failedNames.join(', ')}. Check the [workflow logs](${context.serverUrl}/${repoOwner}/${repoName}/actions/runs/${context.payload.workflow_run.id}) for details.`;
+            } else if (overallStatus === 'pending') {
+              footer = `> 🔄 Checks are still running. This summary will update when all workflows complete.`;
+            } else if (overallStatus === 'cancelled') {
+              footer = `> ⚠️ One or more workflows were cancelled.`;
+            }
+
+            if (footer) {
+              lines.push(footer);
+            }
+
+            const body = lines.join('\n');
+
+            // ── 7. Post or update the PR comment ───────────────────────────────
+            const marker = '<!-- ci-summary -->';
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: repoOwner,
+              repo: repoName,
+              issue_number: prNumber,
+              per_page: 100,
+            });
+
+            const existing = comments.find(c => c.body && c.body.includes(marker));
+
+            if (existing) {
+              await github.rest.issues.updateComment({
+                owner: repoOwner,
+                repo: repoName,
+                comment_id: existing.id,
+                body: body,
+              });
+              console.log(`Updated existing CI summary comment (id: ${existing.id})`);
+            } else {
+              await github.rest.issues.createComment({
+                owner: repoOwner,
+                repo: repoName,
+                issue_number: prNumber,
+                body: body,
+              });
+              console.log('Created new CI summary comment');
+            }
