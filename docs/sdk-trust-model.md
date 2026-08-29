@@ -21,12 +21,25 @@ SDK (builds XDR, validates address format, enforces signer identity match)
   ▼
 Soroban RPC Node (simulates, prepares, and forwards the transaction)
   │
+  ├───────────────▶ Oracle Service (only on the fund_invoice() path when
+  │                 require_oracle_verification: true — off-chain payer
+  │                 verification; gates whether funding proceeds)
+  │
   ▼
 Stellar Network / Soroban Contract (cryptographically verifies signature, enforces rules)
   │  emits contract events
   ▼
 Indexer (read-only event mirror, eventually consistent)
+  │  read by dashboards, oracle-service history lookups, and…
+  ▼
+Notifications (read-only event consumer — email / webhook / SMS / WebSocket)
 ```
+
+The oracle-service hop is conditional: it only enters the trust chain for
+`fund_invoice()` calls made with `require_oracle_verification: true`. For every
+other flow (`submit_invoice`, `mark_paid`, `claim_default`, all reads) the chain
+is exactly the one documented above. Notifications is never on a write path — it
+observes the same contract events the indexer does and cannot influence them.
 
 **What breaks at each hop if that hop is compromised:**
 
@@ -35,8 +48,10 @@ Indexer (read-only event mirror, eventually consistent)
 | User's key (stolen or phished) | Attacker can submit, fund, pay, or claim default on behalf of the user |
 | SDK configuration (`rpcUrl`, `contractId`, `networkPassphrase`) | SDK may target a malicious contract or a different network |
 | Soroban RPC node | Simulation results can be forged; prepared XDR may differ from simulated XDR |
+| Oracle service (`oracle-service/`, `fund_invoice()` with `require_oracle_verification: true` only) | A compromised oracle can **falsely verify a fraudulent payer** — letting an LP fund an invoice the fraud heuristics should have blocked — or **falsely block a legitimate payer**, denying funding. It cannot move funds itself, forge a signature, or alter contract state; its only power is the pass/fail verdict the caller uses as a funding gate. A stale or offline oracle fails safe toward rejection (see [oracle-service.md](./oracle-service.md) §"Cache staleness" and the `unknown` vs `unverified` distinction). |
 | Network / contract | Protocol-level invariants are violated; out of scope for the SDK |
 | Indexer | Dashboards show stale or incorrect state; canonical state on-chain is unaffected |
+| Notifications (`notifications/`) | A compromised notification service can **send misleading, missing, or spoofed notifications** (e.g. a fake "invoice paid" email, or suppression of a real default alert). It **cannot move funds, change invoice state, or influence the contract, RPC node, or oracle** — this is the key distinction from the RPC and contract hops, which sit on the write path. Its blast radius is limited to what a recipient believes has happened; canonical state remains on-chain and independently verifiable via the SDK's read methods or a second indexer. Webhook payloads are HMAC-SHA256 signed with a per-subscription secret so a downstream receiver can still detect tampering — see [notifications.md](./notifications.md). |
 
 ---
 
@@ -83,6 +98,7 @@ The SDK provides its stated security properties only when all of the following a
   - Any off-chain evidence, price feeds, or external validation required by business logic is outside the SDK.
   - The SDK only packages the transaction and relies on the contract, off-chain oracle service (`oracle-service/`), and network to evaluate observable state.
   - For detailed trust boundaries and honest scoping regarding what the oracle verifies (on-chain payment behavior, default frequency, rapid succession fraud signals) versus what it does not verify (real-world corporate entity existence, legal KYB), refer to [docs/oracle-service.md](./oracle-service.md).
+  - The oracle-service hardening work — asymmetric cache TTL, explicit cache invalidation on new indexed activity, `unknown` vs `unverified` handling so a provider outage cannot silently degrade verdicts, rate limiting, and the Prometheus alert set (`OracleFraudFlagRateHigh`, `OracleAllVerificationsRejected`, `OracleNoVerifications`, …) — is documented in [docs/oracle-service.md](./oracle-service.md). Integrators relying on `require_oracle_verification: true` should read its "Cache staleness" and "Monitoring" sections, because the oracle's failure modes become part of your funding path's trust surface.
 
 - **Contract policy rules and token allowlists**
   - The SDK does not independently maintain the contract token allowlist or business rule enforcement.
@@ -347,4 +363,5 @@ The SDK's security posture is only as strong as the key management, RPC node, an
 - [threat-model.md](./threat-model.md) — Protocol-wide attack surface (frontend, API, indexer, governance)
 - [contracts/invoice-contract.md](./contracts/invoice-contract.md) — On-chain authorization and state machine
 - [security.md](./security.md) — Package provenance and SLSA Level 3 verification
+- [oracle-service.md](./oracle-service.md) — Oracle hop trust boundaries, cache-staleness hardening, and fraud-signal monitoring for the `require_oracle_verification` path
 - [notifications.md](./notifications.md) — Webhook HMAC signing and WebSocket subscription security
