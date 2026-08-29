@@ -551,7 +551,7 @@ export class RateLimitError extends ILNError {
  * Contract error code to error class mapping, derived from errors.rs patterns.
  * Maps numeric Soroban error codes to their string names and ILNError classes.
  */
-const CONTRACT_ERROR_MAP: Record<number, { name: string; Ctor: typeof ILNError }> = {
+const CONTRACT_ERROR_MAP: Record<number, { name: string; Ctor: new (...args: any[]) => ILNError }> = {
   1: { name: 'InvoiceNotFound', Ctor: InvoiceNotFoundError },
   2: { name: 'InvoiceAlreadyFunded', Ctor: InvoiceAlreadyFundedError },
   3: { name: 'InvoiceAlreadyPaid', Ctor: InvoiceAlreadyPaidError },
@@ -565,7 +565,7 @@ const CONTRACT_ERROR_MAP: Record<number, { name: string; Ctor: typeof ILNError }
 
 const CONTRACT_ERROR_PATTERNS: Array<{
   pattern: string;
-  Ctor: typeof ILNError;
+  Ctor: new (...args: any[]) => ILNError;
 }> = [
   { pattern: 'InvalidDiscountRate', Ctor: InvalidDiscountRateError },
   { pattern: 'TokenMismatch', Ctor: TokenMismatchError },
