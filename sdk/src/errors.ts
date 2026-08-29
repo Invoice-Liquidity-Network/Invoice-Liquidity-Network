@@ -237,6 +237,26 @@ export class SimulationError extends ILNError {
 }
 
 /**
+ * Thrown when the prepared transaction XDR differs from the simulated transaction,
+ * indicating the RPC node may have tampered with or forged the prepared XDR.
+ * This is a security safeguard against compromised RPC nodes per the trust model.
+ */
+export class SimulationPreparedXdrMismatchError extends ILNError {
+  constructor(
+    message = 'Prepared transaction differs from simulated transaction.',
+    remediation = 'The prepared XDR does not match the original simulated transaction. A compromised RPC node may be forging the prepared XDR. Verify your RPC endpoint integrity and consider using a different node.',
+    context?: Record<string, unknown>
+  ) {
+    super(message, 'SIMULATION_PREPARED_XDR_MISMATCH', remediation, {
+      docsUrl: withDocs('SIMULATION_PREPARED_XDR_MISMATCH'),
+      context,
+      retryable: false,
+    });
+    Object.setPrototypeOf(this, new.target.prototype);
+  }
+}
+
+/**
  * Parse a raw contract error into a typed ILNError with detailed debugging context.
  *
  * @param xdrError - The raw error value from the contract.

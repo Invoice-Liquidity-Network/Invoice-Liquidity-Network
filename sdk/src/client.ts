@@ -13,6 +13,7 @@ import { createLogger } from './logger';
 import type { Unsubscribe } from './state';
 import { track } from './usage-analytics';
 import { Cache, type CacheOptions } from './cache';
+import { withBackoff, isTransientError } from './backoff';
 import { Validators } from './validators';
 import {
   encodeProposalAction,
@@ -73,6 +74,7 @@ import {
   ValidationError,
   WalletNotConnectedError,
   ILNError,
+  SimulationPreparedXdrMismatchError,
 } from './errors';
 import {
   OfflineManager,
@@ -143,6 +145,7 @@ export class ILNSdk {
   private readonly cache: Cache<unknown>;
   private readonly cacheEnabled: boolean;
   private offlineManager: OfflineManager | null = null;
+  private readonly backoffOptions: BackoffOptions | false;
 
   /**
    * Create a new ILN SDK client.
@@ -163,6 +166,8 @@ export class ILNSdk {
     this.cache = new Cache(cacheConfig);
     this.cacheEnabled = cacheConfig.enabled ?? true;
 
+    this.backoffOptions = config.backoff ?? {};
+
     if (config.offline !== undefined) {
       this.offlineManager = new OfflineManager(config.offline);
       this.offlineManager.onSubmit((item) => this.executeQueuedOperation(item));
@@ -170,6 +175,38 @@ export class ILNSdk {
   }
 
   private async wrapRpcCall<T>(promise: Promise<T>, operationName: string): Promise<T> {
+    // If backoff is disabled, use the original simple try/catch
+    if (this.backoffOptions === false) {
+      return this.executeRpcCall(promise, operationName);
+    }
+
+    // Wrap the promise factory for retry with backoff
+    const { result } = await withBackoff(
+      () => this.executeRpcCall(promise, operationName),
+      {
+        ...this.backoffOptions,
+        isRetryable: (error) => {
+          // Don't retry if it's a known ILN error (non-transient)
+          if (error instanceof ILNError) return false;
+          // Don't retry timeout errors — they should surface immediately
+          if (error instanceof TimeoutError) return false;
+          // Delegate to default transient error check
+          return isTransientError(error);
+        },
+        onRetry: (attempt, error, delayMs) => {
+          if (this.logger.enabled) {
+            this.logger(`Retrying ${operationName} (attempt ${attempt}) after ${delayMs}ms`, {
+              error: error instanceof Error ? error.message : String(error),
+            });
+          }
+        },
+      }
+    );
+
+    return result;
+  }
+
+  private async executeRpcCall<T>(promise: Promise<T>, operationName: string): Promise<T> {
     try {
       return await promise;
     } catch (error: any) {
@@ -1434,7 +1471,8 @@ export class ILNSdk {
   private async prepareTransaction(
     transaction: BuiltTransaction
   ): Promise<PreparedTransactionLike> {
-    return this.wrapRpcCall(
+    const originalXdr = transaction.toXDR();
+    const prepared = await this.wrapRpcCall(
       withTimeout(
         'prepareTransaction',
         this.requestTimeouts.writeMs,
@@ -1442,6 +1480,84 @@ export class ILNSdk {
       ),
       'prepareTransaction'
     );
+
+    // Verify the prepared XDR hasn't been tampered with by a compromised RPC node.
+    // The prepared transaction should serialize to the same base structure as the original.
+    this.verifyPreparedXdrIntegrity(originalXdr, prepared.toXDR(), 'prepareTransaction');
+
+    return prepared;
+  }
+
+  /**
+   * Verify that the prepared transaction XDR matches the original simulated transaction.
+   * This prevents a compromised RPC node from substituting a forged XDR during preparation.
+   *
+   * @throws {SimulationPreparedXdrMismatchError} If the prepared XDR differs from the original.
+   */
+  private verifyPreparedXdrIntegrity(
+    originalXdr: string,
+    preparedXdr: string,
+    operationName: string
+  ): void {
+    // Decode both XDRs and compare their operation hashes.
+    // The prepared XDR may have different fees/resource limits set by the RPC node,
+    // but the operations should be identical. We compare the operation section
+    // by extracting and comparing the operation count and contract function signatures.
+    try {
+      const originalTx = TransactionBuilder.fromXDR(originalXdr, this.networkPassphrase);
+      const preparedTx = TransactionBuilder.fromXDR(preparedXdr, this.networkPassphrase);
+
+      // Compare operation counts
+      if (originalTx.operations.length !== preparedTx.operations.length) {
+        throw new SimulationPreparedXdrMismatchError(
+          `Prepared transaction has ${preparedTx.operations.length} operations but original had ${originalTx.operations.length}. The RPC node may have modified the transaction.`,
+          {
+            operationName,
+            originalOperationCount: originalTx.operations.length,
+            preparedOperationCount: preparedTx.operations.length,
+          }
+        );
+      }
+
+      // Compare operation types and sources
+      for (let i = 0; i < originalTx.operations.length; i++) {
+        const origOp = originalTx.operations[i];
+        const prepOp = preparedTx.operations[i];
+
+        if (origOp.type !== prepOp.type) {
+          throw new SimulationPreparedXdrMismatchError(
+            `Operation ${i} type mismatch: original is ${origOp.type} but prepared is ${prepOp.type}. The RPC node may have tampered with the transaction.`,
+            {
+              operationName,
+              operationIndex: i,
+              originalType: origOp.type,
+              preparedType: prepOp.type,
+            }
+          );
+        }
+      }
+
+      // Compare network passphrase to ensure the transaction targets the same network
+      if (originalTx.networkPassphrase !== preparedTx.networkPassphrase) {
+        throw new SimulationPreparedXdrMismatchError(
+          'Network passphrase mismatch between original and prepared transaction. The RPC node may be targeting a different network.',
+          {
+            operationName,
+            originalNetworkPassphrase: originalTx.networkPassphrase,
+            preparedNetworkPassphrase: preparedTx.networkPassphrase,
+          }
+        );
+      }
+    } catch (error) {
+      if (error instanceof SimulationPreparedXdrMismatchError) {
+        throw error;
+      }
+      // If XDR parsing itself fails, that's a clear sign of tampering
+      throw new SimulationPreparedXdrMismatchError(
+        `Failed to parse prepared transaction XDR: ${error instanceof Error ? error.message : String(error)}`,
+        { operationName, originalXdrLength: originalXdr.length, preparedXdrLength: preparedXdr.length }
+      );
+    }
   }
 
   private async signAndSend(

@@ -5,13 +5,22 @@
  * Queries the ILN indexer for pending invoices, filters by criteria,
  * sorts by yield descending, and funds the top N invoices.
  *
+ * Demonstrates SDK-level backoff/retry for RPC calls to prevent
+ * accidental self-DoS when hammering endpoints with retries.
+ *
  * Usage:
  *   SECRET_KEY=S... INDEXER_URL=https://... ts-node index.ts [--dry-run] [--top-n 5]
  */
 
 import axios from 'axios';
 import { Command } from 'commander';
-import { ILNSdk, createKeypairSigner, ILN_TESTNET } from '@invoice-liquidity/sdk';
+import {
+  ILNSdk,
+  createKeypairSigner,
+  ILN_TESTNET,
+  withBackoff,
+  isTransientError,
+} from '@invoice-liquidity/sdk';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -78,10 +87,34 @@ function log(msg: string): void {
 // ─── Core logic ───────────────────────────────────────────────────────────────
 
 async function fetchPendingInvoices(indexerUrl: string): Promise<IndexerInvoice[]> {
-  const { data } = await axios.get<{ invoices: IndexerInvoice[] }>(
-    `${indexerUrl}/invoices?status=Pending`
+  const { result } = await withBackoff(
+    async () => {
+      const { data } = await axios.get<{ invoices: IndexerInvoice[] }>(
+        `${indexerUrl}/invoices?status=Pending`
+      );
+      return data.invoices;
+    },
+    {
+      maxRetries: 3,
+      baseDelayMs: 1_000,
+      maxDelayMs: 10_000,
+      isRetryable: (error) => {
+        if (axios.isAxiosError(error)) {
+          const status = error.response?.status;
+          if (status === 429 || (status !== undefined && status >= 500)) return true;
+        }
+        return isTransientError(error);
+      },
+      onRetry: (attempt, error, delayMs) => {
+        log(
+          `Retrying indexer fetch (attempt ${attempt}) after ${delayMs}ms: ${
+            error instanceof Error ? error.message : String(error)
+          }`
+        );
+      },
+    }
   );
-  return data.invoices;
+  return result;
 }
 
 function filterInvoices(invoices: IndexerInvoice[], criteria: LPCriteria): IndexerInvoice[] {
@@ -132,6 +165,14 @@ async function run(criteria: LPCriteria, dryRun: boolean): Promise<void> {
       rpcUrl: ILN_TESTNET.rpcUrl,
       networkPassphrase: ILN_TESTNET.networkPassphrase,
       signer,
+      // SDK-level backoff prevents accidental self-DoS from retry loops.
+      // Retries up to 3 times with exponential backoff and jitter.
+      backoff: {
+        maxRetries: 3,
+        baseDelayMs: 500,
+        maxDelayMs: 10_000,
+        jitter: 0.25,
+      },
     });
     log(`Funding as: ${funderAddress}`);
   }
