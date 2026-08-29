@@ -180,6 +180,20 @@ The `railway.toml` is pre-configured for production workloads:
 | `restartPolicyMaxDelay` | 60 | Caps exponential backoff at 60 seconds between restarts |
 | `healthcheckPath` | `/health` | Checks both SQLite connectivity and sync freshness |
 | `healthcheckTimeout` | 10 seconds | Fails fast enough for Railway to trigger a restart |
+| `numReplicas` | 1 | Enforces single-instance deployment — SQLite single-writer constraint prevents horizontal scaling |
+
+##### Health Check Behavior
+
+The `/health` endpoint returns:
+- `status: "ok"` — SQLite is accessible and the service is operational.
+- `status: "degraded"` — SQLite connectivity failed but the process is running.
+
+Railway marks the deployment as failed when the health check returns a non-2xx
+response or times out (configured at 10 seconds). A `degraded` status still
+returns 200 so Railway does not restart the service for transient DB issues —
+but monitoring should alert on it.
+
+##### Volume Mounting
 
 **Important**: Railway deployments are ephemeral — the SQLite database is lost on each deploy.
 For production use, mount a Railway Volume at the database path:
@@ -190,6 +204,35 @@ railway variables set DB_PATH=/data/indexer.db
 ```
 
 Without a volume, every deploy starts a fresh database and re-indexes from the configured `START_LEDGER`.
+
+##### Production Checklist
+
+Before deploying to production, ensure the following environment variables are set:
+
+```bash
+# Required
+railway variables set CONTRACT_ID=<your_contract_id>
+railway variables set RPC_URL=<your_rpc_url>
+railway variables set NETWORK_PASSPHRASE="Test SDF Network ; September 2015"  # or mainnet passphrase
+
+# Recommended for production
+railway variables set DB_PATH=/data/indexer.db
+railway variables set REDIS_URL=<your_redis_url>
+
+# Optional tuning
+railway variables set POLL_INTERVAL_MS=5000
+railway variables set RATE_LIMIT_WINDOW_MS=60000
+railway variables set RATE_LIMIT_MAX=100
+```
+
+##### Scaling Considerations
+
+The indexer is **designed for single-instance deployment only** due to:
+1. **SQLite single-writer constraint** — concurrent writes cause `SQLITE_BUSY`.
+2. **Cursor management** — multiple instances would race on the sync cursor.
+3. **Event deduplication** — the dedup layer is in-process, not shared.
+
+For high-traffic scenarios, use Redis for caching and consider read replicas for API queries.
 
 ## Environment Variables
 
