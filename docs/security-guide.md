@@ -263,6 +263,7 @@ After the fix is deployed and downstream integrators have had time to update:
 
 ## Related Documents
 
+- [Incident Response Runbook](./incident-response.md) — operational runbook for SDK, indexer, oracle, and notifications service incidents
 - [Threat Model](./threat-model.md) — full attack surface analysis across SDK, frontend, API, and governance
 - [SECURITY.md](../SECURITY.md) — canonical root-level disclosure policy and supported versions
 - [Security](./security.md) — stub that redirects to `SECURITY.md`, kept for existing links
