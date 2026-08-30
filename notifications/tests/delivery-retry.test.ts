@@ -61,6 +61,8 @@ import {
   clearDeadLetterQueue,
   deliverNotification,
   getRetryMetrics,
+  getCircuitBreakerState,
+  resetCircuitBreakers,
   sendEmail,
   sendSms,
   sendWebhook,
@@ -146,6 +148,7 @@ let fetchMock: ReturnType<typeof vi.fn>;
 beforeEach(() => {
   vi.useFakeTimers();
   clearDeadLetterQueue();
+  resetCircuitBreakers();
 
   emailSend.mockResolvedValue({ id: 'email-1' });
   smsCreate.mockResolvedValue({ sid: 'SM123', status: 'queued' });
@@ -436,5 +439,249 @@ describe('dead-letter queue', () => {
     // queue lives in process memory only, so clearing it (or restarting the
     // process) discards the failed notifications outright.
     expect(getRetryMetrics().deadLetterCount).toBe(0);
+  });
+});
+
+// ─── Circuit Breaker ─────────────────────────────────────────────────────────
+
+describe('circuit breaker', () => {
+  it('stays closed after a successful delivery', async () => {
+    const sub = makeSubscription({ destination: 'good@example.com' });
+    await sendEmail(sub, makePayload());
+
+    expect(getCircuitBreakerState('good@example.com')).toBe('closed');
+  });
+
+  it('stays closed with fewer failures than the threshold', async () => {
+    emailSend.mockRejectedValue(new Error('transient'));
+    const sub = makeSubscription({ destination: 'flaky@example.com' });
+
+    // Fail 4 times (threshold is 5)
+    for (let i = 0; i < 4; i++) {
+      try {
+        await sendEmail(sub, makePayload());
+      } catch {
+        // expected
+      }
+    }
+
+    expect(getCircuitBreakerState('flaky@example.com')).toBe('closed');
+  });
+
+  it('opens after the failure threshold is reached', async () => {
+    emailSend.mockRejectedValue(new Error('persistent'));
+    const sub = makeSubscription({ destination: 'bad@example.com' });
+
+    // Fail 5 times (threshold is 5)
+    for (let i = 0; i < 5; i++) {
+      try {
+        await sendEmail(sub, makePayload());
+      } catch {
+        // expected
+      }
+    }
+
+    expect(getCircuitBreakerState('bad@example.com')).toBe('open');
+  });
+
+  it('skips delivery when circuit is open', async () => {
+    emailSend.mockRejectedValue(new Error('down'));
+    const sub = makeSubscription({ destination: 'open@example.com' });
+
+    // Trip the circuit breaker
+    for (let i = 0; i < 5; i++) {
+      try {
+        await sendEmail(sub, makePayload());
+      } catch {
+        // expected
+      }
+    }
+
+    // Circuit is open — should skip without calling the provider
+    emailSend.mockClear();
+    await sendEmail(sub, makePayload());
+
+    expect(emailSend).not.toHaveBeenCalled();
+  });
+
+  it('transitions to half-open after the reset timeout', async () => {
+    vi.useFakeTimers();
+    emailSend.mockRejectedValue(new Error('down'));
+    const sub = makeSubscription({ destination: 'timeout@example.com' });
+
+    // Trip the circuit breaker
+    for (let i = 0; i < 5; i++) {
+      try {
+        await sendEmail(sub, makePayload());
+      } catch {
+        // expected
+      }
+    }
+
+    expect(getCircuitBreakerState('timeout@example.com')).toBe('open');
+
+    // Advance past the reset timeout (60 seconds)
+    vi.advanceTimersByTime(60_000);
+
+    // Circuit should now be half-open and allow a probe request
+    emailSend.mockResolvedValue({ id: 'probe-ok' });
+    await sendEmail(sub, makePayload());
+
+    // Successful probe closes the circuit
+    expect(getCircuitBreakerState('timeout@example.com')).toBe('closed');
+    vi.useRealTimers();
+  });
+
+  it('resets circuit on success after half-open probe', async () => {
+    vi.useFakeTimers();
+    const sub = makeSubscription({ destination: 'recover@example.com' });
+
+    // Trip the circuit
+    emailSend.mockRejectedValue(new Error('down'));
+    for (let i = 0; i < 5; i++) {
+      try { await sendEmail(sub, makePayload()); } catch { /* expected */ }
+    }
+    expect(getCircuitBreakerState('recover@example.com')).toBe('open');
+
+    // Advance past reset timeout
+    vi.advanceTimersByTime(60_000);
+
+    // Probe succeeds
+    emailSend.mockResolvedValue({ id: 'recovered' });
+    await sendEmail(sub, makePayload());
+
+    expect(getCircuitBreakerState('recover@example.com')).toBe('closed');
+    vi.useRealTimers();
+  });
+
+  it('records webhook circuit breaker on exhausted retries', async () => {
+    fetchMock.mockResolvedValue({ ok: false, status: 500 });
+    const sub = makeSubscription({ id: 3, channel: 'webhook', destination: 'https://fail.example.com/hook' });
+
+    await sendWebhook(sub, makePayload());
+    await vi.runAllTimersAsync();
+
+    expect(getCircuitBreakerState('https://fail.example.com/hook')).toBe('open');
+  });
+
+  it('isolates circuit breakers per destination', async () => {
+    emailSend.mockRejectedValue(new Error('down'));
+    const bad = makeSubscription({ destination: 'bad-isolated@example.com' });
+    const good = makeSubscription({ destination: 'good-isolated@example.com' });
+
+    // Trip the circuit for bad@example.com
+    for (let i = 0; i < 5; i++) {
+      try { await sendEmail(bad, makePayload()); } catch { /* expected */ }
+    }
+
+    // good@example.com is unaffected
+    emailSend.mockResolvedValue({ id: 'ok' });
+    await sendEmail(good, makePayload());
+
+    expect(getCircuitBreakerState('bad-isolated@example.com')).toBe('open');
+    expect(getCircuitBreakerState('good-isolated@example.com')).toBe('closed');
+  });
+
+  it('permanently-failing destination stops consuming retries after circuit opens', async () => {
+    // Scenario: a webhook destination is permanently down (always returns 500).
+    // After the failure threshold is reached, the circuit opens and subsequent
+    // delivery attempts are skipped — retry volume for that destination drops
+    // to near-zero.
+    fetchMock.mockResolvedValue({ ok: false, status: 500 });
+    const failingSub = makeSubscription({
+      id: 3,
+      channel: 'webhook',
+      destination: 'https://permanently-down.example.com/hook',
+    });
+
+    // First batch: 3 attempts (maxWebhookRetry) exhaust retries, circuit opens
+    await sendWebhook(failingSub, makePayload());
+    await vi.runAllTimersAsync();
+
+    // Circuit is open — next delivery attempt should be skipped entirely
+    fetchMock.mockClear();
+    await sendWebhook(failingSub, makePayload());
+    await vi.runAllTimersAsync();
+
+    // fetch was NOT called — circuit breaker prevented the retry
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(getCircuitBreakerState('https://permanently-down.example.com/hook')).toBe('open');
+  });
+
+  it('other destinations continue normal delivery while one destination is circuit-broken', async () => {
+    // Simulate two webhook destinations: one permanently down, one healthy.
+    // The healthy destination should continue receiving deliveries normally.
+    const badUrl = 'https://down.example.com/hook';
+    const goodUrl = 'https://healthy.example.com/hook';
+
+    // Set up: bad always fails, good always succeeds
+    fetchMock.mockImplementation(async (url: string) => {
+      if (url === badUrl) {
+        return { ok: false, status: 500 };
+      }
+      return { ok: true, status: 200 };
+    });
+
+    const badSub = makeSubscription({ id: 10, channel: 'webhook', destination: badUrl });
+    const goodSub = makeSubscription({ id: 11, channel: 'webhook', destination: goodUrl });
+
+    // Trip the circuit for badUrl (3 attempts × 1 full retry cycle each)
+    for (let i = 0; i < 3; i++) {
+      await sendWebhook(badSub, makePayload());
+      await vi.runAllTimersAsync();
+    }
+    expect(getCircuitBreakerState(badUrl)).toBe('open');
+
+    // goodUrl should still work — independent circuit breaker
+    fetchMock.mockClear();
+    fetchMock.mockImplementation(async (url: string) => {
+      if (url === badUrl) return { ok: false, status: 500 };
+      return { ok: true, status: 200 };
+    });
+
+    await sendWebhook(goodSub, makePayload());
+    await vi.runAllTimersAsync();
+
+    // goodUrl got its delivery; badUrl was skipped
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(fetchMock).toHaveBeenCalledWith(goodUrl, expect.anything());
+    expect(getCircuitBreakerState(goodUrl)).toBe('closed');
+  });
+
+  it('circuit breaker records failure after all retries exhausted for webhook', async () => {
+    // Verifies that the circuit breaker failure count is recorded once per
+    // full retry exhaustion, not once per individual attempt.
+    fetchMock.mockResolvedValue({ ok: false, status: 500 });
+    const sub = makeSubscription({
+      id: 3,
+      channel: 'webhook',
+      destination: 'https://count.example.com/hook',
+    });
+
+    // First full retry cycle: 3 attempts, circuit records 1 failure
+    await sendWebhook(sub, makePayload());
+    await vi.runAllTimersAsync();
+    expect(getCircuitBreakerState('https://count.example.com/hook')).toBe('closed');
+
+    // Second full retry cycle: 3 more attempts, circuit records 2nd failure
+    await sendWebhook(sub, makePayload());
+    await vi.runAllTimersAsync();
+    expect(getCircuitBreakerState('https://count.example.com/hook')).toBe('closed');
+
+    // Third full retry cycle: 3 more attempts, circuit records 3rd failure
+    await sendWebhook(sub, makePayload());
+    await vi.runAllTimersAsync();
+    expect(getCircuitBreakerState('https://count.example.com/hook')).toBe('closed');
+
+    // Fourth full retry cycle: circuit reaches threshold (5) and opens
+    await sendWebhook(sub, makePayload());
+    await vi.runAllTimersAsync();
+    expect(getCircuitBreakerState('https://count.example.com/hook')).toBe('open');
+
+    // Subsequent attempts are skipped
+    fetchMock.mockClear();
+    await sendWebhook(sub, makePayload());
+    await vi.runAllTimersAsync();
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 });

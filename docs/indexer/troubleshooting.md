@@ -119,7 +119,7 @@ echo $NETWORK_PASSPHRASE
 top -p $(pgrep -f "node dist/index.js")
 
 # Restart if needed
-pm2 restart indexer
+pkill -f "node dist/index.js" && npm start
 ```
 
 #### Slow sync speed
@@ -131,6 +131,31 @@ pm2 restart indexer
 2. Use a closer/faster RPC node
 3. Check for rate limiting in RPC logs
 4. Consider batch size optimization
+
+#### Indexer falls behind (sync lag)
+
+**Cause**: The poller is processing events slower than new ledgers are closed. Common causes: slow RPC responses, large event batches, or high `POLL_INTERVAL_MS`.
+
+**Symptoms**:
+- `lastSync` timestamp from `/health` is more than a few minutes old
+- New invoices submitted on-chain are not appearing in the API
+- Poller logs show repeated long poll cycles
+
+**Solution**:
+```bash
+# Check current cursor position vs latest ledger
+sqlite3 indexer.db "SELECT * FROM cursor;"
+
+# Reduce poll interval (default 5000ms)
+railway variables set POLL_INTERVAL_MS=3000
+
+# Check RPC latency
+curl -s -o /dev/null -w "%{time_total}\n" -X POST $RPC_URL \
+  -H "Content-Type: application/json" \
+  -d '{"jsonrpc":"2.0","id":1,"method":"getHealth"}'
+
+# If sync lag persists, consider reducing batch size in poller.ts (BATCH_SIZE)
+```
 
 #### API response timeouts
 
@@ -219,6 +244,106 @@ docker inspect iln-indexer | grep -A 10 "Env"
 # Test container manually
 docker run --rm -it iln-indexer /bin/sh
 ```
+
+### 7. Reorg Handling
+
+#### Stale data after a crash or mid-batch failure
+
+**Cause**: The indexer crashed or was killed while processing events, leaving the cursor
+at a ledger that was only partially processed. Note: **Stellar has no chain
+reorganizations** — this section covers crash recovery, not true reorgs.
+
+**Symptoms**:
+- Invoices with stale or contradictory statuses
+- Events referencing ledger sequence numbers that no longer exist
+- `cursor` table pointing to a partially-processed ledger
+
+**Solution**:
+```bash
+# Check the current cursor position
+sqlite3 indexer.db "SELECT * FROM cursor;"
+
+# Check for events at suspect ledger sequences
+sqlite3 indexer.db "SELECT COUNT(*) FROM events WHERE ledger_sequence > <suspect_height>;"
+
+# If the indexer does not auto-recover, reset to a known-good ledger:
+sqlite3 indexer.db "UPDATE cursor SET ledger_sequence = <safe_ledger>;"
+
+# Restart the indexer to re-sync from the safe point
+pkill -f "node dist/index.js" && npm start
+```
+
+The indexer re-processes events from the cursor position. Duplicate events are
+skipped by the deduplication check, so a simple cursor reset is safe.
+
+**How the indexer prevents this**: The poller re-scans the last processed ledger
+on every cycle (`startLedger = stored` in `poller.ts`), giving a natural overlap
+window. Combined with the deduplication check in `processor.ts`, this makes the
+indexer resilient to most crash scenarios without manual intervention.
+
+### 8. Railway Deployment Issues
+
+#### Database lost after deploy
+
+**Cause**: Railway deploys create ephemeral containers; the SQLite file is not persisted by default.
+
+**Solution**:
+```bash
+# Add a Railway volume mounted at /data
+railway volume add -m /data
+
+# Set the database path to the mounted volume
+railway variables set DB_PATH=/data/indexer.db
+
+# Redeploy
+railway up
+```
+
+#### Service enters restart loop
+
+**Cause**: The health check at `/health` is failing repeatedly, exceeding `restartPolicyMaxRetries`.
+
+**Diagnosis**:
+```bash
+# Check Railway logs for the health check failures
+railway logs --follow
+
+# Look for common causes:
+# - Missing environment variables (CONTRACT_ID, RPC_URL)
+# - SQLite database not writable
+# - Port mismatch
+# - Health endpoint returning "degraded" (DB unreachable)
+```
+
+**Solution**: Ensure all required environment variables are set and the
+database path is writable. The health endpoint returns `{ "status": "ok" }`
+when SQLite is accessible and `{ "status": "degraded" }` when the DB check fails.
+
+#### Health check returns degraded
+
+**Cause**: The SQLite database is not accessible or corrupted, but the Node.js
+process is still running.
+
+**Diagnosis**:
+```bash
+# Check health endpoint
+curl http://localhost:3001/health
+
+# If status is "degraded", check the database file
+ls -la $DB_PATH
+
+# Verify the directory is writable
+touch $DB_PATH.test && rm $DB_PATH.test
+```
+
+**Solution**:
+1. Ensure the volume mount exists and `DB_PATH` points to it
+2. Check for disk space: `df -h /data`
+3. If the database is corrupted, remove it and let the indexer re-sync:
+   ```bash
+   rm $DB_PATH
+   railway up  # triggers a fresh deploy with re-indexing
+   ```
 
 ## Debugging
 
