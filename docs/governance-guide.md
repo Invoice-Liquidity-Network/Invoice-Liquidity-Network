@@ -12,8 +12,9 @@ ILN uses token-weighted on-chain governance so that token holders collectively c
 
 - Propose parameter changes (fee rate, max discount rate, supported tokens)
 - Vote on active proposals with weight proportional to their token balance
-- Delegate voting power to another address
+- Delegate voting power to another address (transitive delegation, max 10 hops)
 - Execute proposals that have passed their timelock
+- Disable admin veto power permanently (via governance vote)
 
 ### Proposal lifecycle
 
@@ -28,22 +29,33 @@ create_proposal()
     └─── quorum met AND for > against
               │
               ▼
-          [Passed]  ← timelock delay
+          [Passed]  ← timelock delay (configurable)
               │
     ┌─────────┴──────────┐
     │                    │
     ▼                    ▼
-[Executed]           [Vetoed]  ← admin emergency block (temporary)
+[Executed]           [Vetoed]  ← admin emergency block
 ```
 
 ### Governance parameters (testnet defaults)
 
 | Parameter              | Default      | Description                                   |
 | ---------------------- | ------------ | --------------------------------------------- |
-| Voting period          | 3 days       | Duration of the voting window                 |
-| Quorum                 | 10%          | Minimum share of total supply that must vote  |
+| Voting period          | 3 days (259,200 s) | Duration of the voting window         |
+| Quorum                 | 1,000 bps (10%) | Minimum share of total supply that must vote |
 | Minimum proposal balance | 1,000 stroops | Tokens required to submit a proposal        |
 | Execution delay        | 0 ledgers    | Timelock before execution (admin-configurable)|
+| Max delegation depth   | 10 hops      | Circuit breaker for transitive delegation chains |
+| Veto power             | Enabled      | Can be permanently disabled by governance vote |
+
+### Contract addresses
+
+| Network  | Contract ID                                              |
+| -------- | -------------------------------------------------------- |
+| Testnet  | `CD7GOIU3GNK7EZHG7XWBC7VI4NRVGMRCU7X2FOCAPQN6EGTSW46BY4EB` |
+| Mainnet  | Coming after audit                                       |
+
+> **Cross-repo reference:** The governance contract's implementation lives in the [ILN-Smart-Contract](https://github.com/Invoice-Liquidity-Network/ILN-Smart-Contract) repository under `contracts/iln_governance`. See the [Governance Contract Reference](./contracts/governance-contract.md) for the full API surface.
 
 ### Contract addresses
 
@@ -54,27 +66,17 @@ create_proposal()
 
 ---
 
-## Production Multi-Sig Admin Configuration
+## Multi-Sig Admin and Key Custody
 
-For mainnet production safety, all privileged administrator powers (such as emergency circuit breaking, parameter overrides, contract upgrade execution, and dispute resolution fallback) are transferred to an m-of-n Multi-Sig Admin setup coordinated across the [ILN-Smart-Contract](https://github.com/Invoice-Liquidity-Network/ILN-Smart-Contract) and main repository runbooks.
+The ILN governance contract supports admin privileges (emergency veto, execution delay configuration) that are held by a multi-signature admin setup for production safety. The complete multi-sig runbook — including key allocation, quorum thresholds, timelock procedures, HSM custody, and emergency response steps — is maintained as the **authoritative source** in the [ILN-Smart-Contract repository](https://github.com/Invoice-Liquidity-Network/ILN-Smart-Contract).
 
-### Multi-Sig Quorum and Thresholds
+> **For the full multi-sig runbook:** See the smart contract repo's operational documentation covering 2-of-3 (testnet) and 4-of-7 (mainnet) signer configurations, key custody procedures, and emergency pause/unpause workflows.
 
-| Network | Signer Setup | Quorum Threshold | Timelock Delay | Purpose |
-| --- | --- | --- | --- | --- |
-| **Testnet** | 2-of-3 Multi-Sig | 2 Signers | 0 ledgers | Fast iteration and development testing |
-| **Mainnet** | 4-of-7 Multi-Sig | 4 Core Signers | 48 hours (approx. 34,560 ledgers) | Routine upgrades, parameter governance overrides |
-| **Emergency Mainnet** | 3-of-7 Multi-Sig | 3 Core Signers | 0 ledgers (Emergency Pause only) | Circuit breaker activation during active exploit |
+This governance guide covers the **governance process** (proposals, voting, delegation) rather than admin key-management details. The admin's powers in the governance contract are:
 
-### Admin Key Allocation
-- **Protocol Engineers**: 3 keys distributed across core protocol maintainers in separate hardware security modules (HSMs).
-- **Security & Auditor Custodians**: 2 keys held by external security audit partners.
-- **Community / Governance Custodians**: 2 keys held by community elected stewards.
-
-### Emergency Response & Timelock Procedure
-1. **Emergency Pause (Circuit Breaker)**: Requires 3-of-7 threshold to immediately halt funding and invoice creation without delay.
-2. **Unpause / Upgrade / Parameter Override**: Requires 4-of-7 threshold and enforces a mandatory 48-hour timelock to allow ecosystem participants to inspect proposed changes.
-3. **Cross-Repo Coordination**: Operational multi-sig runbooks and deployment execution scripts are maintained in the [ILN-Smart-Contract repository](https://github.com/Invoice-Liquidity-Network/ILN-Smart-Contract) and cross-verified before each release.
+- **Veto power** — can block proposals in Active or Passed state (can be permanently disabled by governance vote via `disable_veto_power`)
+- **Execution delay** — configures the timelock before proposal execution
+- **Emergency circuit breaker** — immediate halt (coordinated through the multi-sig runbook)
 
 ---
 
@@ -319,10 +321,10 @@ await server.sendTransaction(tx.transaction);
 ## FAQ
 
 **Q: How many tokens do I need to create a proposal?**  
-A: At least 1,000 stroops of the ILN governance token at the time you call `create_proposal`. If your balance drops after submission the proposal still proceeds.
+A: At least 1,000 stroops (default `min_proposal_balance`, configurable by governance). Your current balance is snapshotted at proposal creation — balance changes afterward do not affect the proposal.
 
 **Q: How is my voting weight calculated?**  
-A: Your weight = your own token balance at proposal creation + any tokens delegated to you (transitively). If you delegated your tokens away before the vote, your own weight is zero.
+A: Your weight = your own token balance (snapshotted at proposal creation) + any tokens delegated to you transitively. If you delegated your tokens away before the vote, your own weight is zero.
 
 **Q: Can I vote if I delegated my tokens?**  
 A: No. If you have an active delegation your weight counts toward your delegate's vote. Revoke delegation first with `undelegateVotes` if you want to vote directly.
@@ -331,24 +333,38 @@ A: No. If you have an active delegation your weight counts toward your delegate'
 A: No. Each address may only vote once per proposal (`AlreadyVoted` error is returned on a second attempt).
 
 **Q: What is the maximum delegation chain depth?**  
-A: 10 hops. Chains longer than 10 are rejected with `DelegationCyclePrevented` as a circuit breaker.
+A: 10 hops (`MAX_DELEGATION_DEPTH`). Chains longer than 10 are rejected with `DelegationCyclePrevented` as a circuit breaker to prevent infinite delegation loops.
 
 **Q: Can the admin veto any proposal?**  
-A: Yes, while veto power is enabled. The admin can block proposals in `Active` or `Passed` state. Veto power can be permanently disabled by a governance vote, after which no single party can block proposals.
+A: Yes, while veto power is enabled. The admin can block proposals in `Active` or `Passed` state (error `NotVetoable` for other states). Veto power can be permanently disabled by calling `disable_veto_power` through the ILN contract after a governance vote, after which no single party can block proposals.
+
+**Q: Can veto power be re-enabled after being disabled?**  
+A: No. `disable_veto_power` is a one-way switch — once disabled, veto power cannot be re-enabled. This is by design to allow governance to fully control the protocol.
 
 **Q: Is testnet governance the same as mainnet?**  
 A: The contract logic is identical. Testnet uses `GOVERNANCE_TESTNET_CONTRACT_ID` (`CD7GOIU3GNK7EZHG7XWBC7VI4NRVGMRCU7X2FOCAPQN6EGTSW46BY4EB`). Testnet tokens have no real value; use them freely for experimentation.
 
 **Q: Where is the off-chain proposal description stored?**  
-A: Only a SHA-256 hash is stored on-chain. The full description should be published on the ILN governance forum or IPFS and the hash must match what was submitted.
+A: Only a SHA-256 hash (`description_hash`) is stored on-chain. The full description should be published on the ILN governance forum or IPFS and the hash must match what was submitted.
 
 **Q: What happens if quorum is not met?**  
 A: The proposal moves to `Rejected` status after the voting period ends. A new proposal with the same parameters can be submitted.
+
+**Q: What is the vote receipt TTL?**  
+A: Vote receipts are stored in temporary storage with a TTL threshold of 50,000 ledgers and an explicit TTL of 69,120 ledgers (~4 days at 5s/ledger) for audit trail purposes.
+
+**Q: What error do I get if I try to vote after the voting deadline?**  
+A: `VotingEnded` (error code 3). The voting period is exactly 3 days (259,200 seconds) from proposal creation.
+
+**Q: What happens if I try to delegate to myself?**  
+A: `CannotDelegateToSelf` (error code 11). The contract prevents self-delegation.
 
 ---
 
 ## Further reading
 
-- [Governance Contract Reference](./contracts/governance-contract.md)
-- [SDK API Reference](./sdk-api-reference.md)
-- [Protocol Overview](./protocol-overview.md)
+- [Governance Contract Reference](./contracts/governance-contract.md) — full contract API and error codes
+- [SDK API Reference](./sdk-api-reference.md) — SDK governance client methods
+- [Protocol Overview](./protocol-overview.md) — system-wide design context
+- [ILN Smart Contract Repository](https://github.com/Invoice-Liquidity-Network/ILN-Smart-Contract) — contract source and multi-sig runbook
+- [Governance Monitor Example](../examples/governance-monitor/README.md) — reference implementation for contract monitoring

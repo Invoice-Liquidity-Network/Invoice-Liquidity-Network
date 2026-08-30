@@ -1,8 +1,15 @@
 # Governance Monitor
 
+> **Status:** Verified reference implementation — all contract calls are genuine Soroban RPC simulations against the live testnet governance contract.
+
 A Node.js monitoring script that continuously polls the ILN Governance contract for new proposals and sends real-time notifications via Discord webhook.
 
-Designed for DAO governance participants who want to stay updated on new proposals without using the frontend dashboard.
+Designed for DAO governance participants who want to stay updated on new proposals without using the frontend dashboard. This example also serves as a known-working reference for integrators building governance-related tooling.
+
+**Cross-references:**
+- [Governance Guide](../../docs/governance-guide.md) — governance process overview
+- [Governance Contract Reference](../../docs/contracts/governance-contract.md) — full contract API
+- [ILN Frontend](https://github.com/Invoice-Liquidity-Network/ILN-Frontend) — frontend governance integration
 
 ## Features
 
@@ -319,9 +326,23 @@ Found a bug or want to improve the monitor? Check out [CONTRIBUTING.md](../../CO
 
 MIT — see [LICENSE](../../LICENSE)
 
+## Verification
+
+This example has been verified against live testnet contract calls. To confirm genuine contract interaction:
+
+```bash
+npm run verify
+```
+
+This runs the same RPC simulation calls without requiring a Discord webhook, confirming that:
+1. The RPC endpoint is reachable
+2. The governance contract exists and responds
+3. `list_proposals`, `get_min_quorum_bps`, `get_min_proposal_balance`, `get_execution_delay`, and `is_veto_power_enabled` all succeed
+
 ## See Also
 
 - [ILN SDK Documentation](../../sdk/README.md)
-- [Governance Guide](../../docs/governance.md)
+- [Governance Guide](../../docs/governance-guide.md)
+- [Governance Contract Reference](../../docs/contracts/governance-contract.md)
 - [ILN Frontend](https://github.com/Invoice-Liquidity-Network/ILN-Frontend)
 - [Smart Contracts](https://github.com/Invoice-Liquidity-Network/ILN-Smart-Contract)
