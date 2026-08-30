@@ -21,7 +21,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 // Hoisted alongside the mocks because `vi.mock` factories run before any
 // top-level `const`. The retry values mirror the real CONFIG defaults
 // (`maxWebhookRetry: 3`, `webhookBackoffBaseMs: 500`) in src/config.ts.
-const { MAX_RETRIES, BACKOFF_BASE_MS, emailSend, smsCreate, twilioFactory, createLog, updateLog } =
+const { MAX_RETRIES, BACKOFF_BASE_MS, emailSend, smsCreate, twilioFactory, createLog, updateLog, dnsLookup } =
   vi.hoisted(() => ({
     MAX_RETRIES: 3,
     BACKOFF_BASE_MS: 500,
@@ -30,6 +30,7 @@ const { MAX_RETRIES, BACKOFF_BASE_MS, emailSend, smsCreate, twilioFactory, creat
     twilioFactory: vi.fn(),
     createLog: vi.fn(),
     updateLog: vi.fn(),
+    dnsLookup: vi.fn(),
   }));
 
 vi.mock('../src/config', () => ({
@@ -42,6 +43,13 @@ vi.mock('../src/config', () => ({
     maxWebhookRetry: MAX_RETRIES,
     webhookBackoffBaseMs: BACKOFF_BASE_MS,
   },
+}));
+
+// `sendWebhook` validates every outbound target against SSRF by resolving the
+// hostname at delivery time. Mock DNS so hostnames resolve to a public IP by
+// default; the SSRF tests below override this to simulate private/rbind targets.
+vi.mock('node:dns/promises', () => ({
+  lookup: dnsLookup,
 }));
 
 vi.mock('resend', () => ({
@@ -155,6 +163,9 @@ beforeEach(() => {
 
   fetchMock = vi.fn().mockResolvedValue({ ok: true, status: 200 });
   vi.stubGlobal('fetch', fetchMock);
+
+  dnsLookup.mockReset();
+  dnsLookup.mockResolvedValue([{ address: '93.184.216.34', family: 4 }]);
 });
 
 afterEach(() => {
@@ -378,6 +389,91 @@ describe('sendWebhook failure handling', () => {
     await expect(promise).resolves.toBeUndefined();
 
     expect(getRetryMetrics().deadLetterCount).toBe(1);
+  });
+});
+
+// ─── SSRF rejection ───────────────────────────────────────────────────────────
+
+describe('sendWebhook SSRF rejection', () => {
+  const webhookSub = (destination: string) =>
+    makeSubscription({ id: 3, channel: 'webhook', destination });
+
+  it('refuses an IP-literal pointing at a private range before any request', async () => {
+    const promise = sendWebhook(webhookSub('http://169.254.169.254/latest/meta-data/'), makePayload());
+    await vi.runAllTimersAsync();
+    await promise;
+
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(updateLog).toHaveBeenCalledWith(99, {
+      status: 'failed',
+      attempts: 1,
+      error: expect.stringContaining('169.254.0.0/16'),
+    });
+    expect(getRetryMetrics().deadLetterEntries).toHaveLength(1);
+    expect(getRetryMetrics().deadLetterEntries[0]).toMatchObject({
+      channel: 'webhook',
+      lastError: expect.stringContaining('169.254.0.0/16'),
+    });
+  });
+
+  it('refuses a hostname that resolves to a private IP (DNS rebinding)', async () => {
+    dnsLookup.mockResolvedValue([{ address: '10.0.0.5', family: 4 }]);
+
+    const promise = sendWebhook(webhookSub('https://rebind.example.com/hook'), makePayload());
+    await vi.runAllTimersAsync();
+    await promise;
+
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(updateLog).toHaveBeenCalledWith(99, {
+      status: 'failed',
+      attempts: 1,
+      error: expect.stringContaining('10.0.0.0/8'),
+    });
+    expect(getRetryMetrics().deadLetterEntries[0].lastError).toContain('rebind.example.com');
+  });
+
+  it('refuses a hostname when any of several resolved addresses is private', async () => {
+    dnsLookup.mockResolvedValue([
+      { address: '93.184.216.34', family: 4 },
+      { address: '::ffff:127.0.0.1', family: 6 },
+    ]);
+
+    const promise = sendWebhook(webhookSub('https://mix.example.com/hook'), makePayload());
+    await vi.runAllTimersAsync();
+    await promise;
+
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(getRetryMetrics().deadLetterEntries[0].lastError).toContain('loopback');
+  });
+
+  it('refuses a non-http(s) scheme', async () => {
+    const promise = sendWebhook(webhookSub('file:///etc/passwd'), makePayload());
+    await vi.runAllTimersAsync();
+    await promise;
+
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(getRetryMetrics().deadLetterEntries[0].lastError).toContain('http or https');
+  });
+
+  it('refuses an unresolvable hostname instead of falling through to fetch', async () => {
+    dnsLookup.mockRejectedValue(new Error('ENOTFOUND'));
+
+    const promise = sendWebhook(webhookSub('https://does-not-exist.example.com/hook'), makePayload());
+    await vi.runAllTimersAsync();
+    await promise;
+
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(getRetryMetrics().deadLetterEntries[0].lastError).toContain('DNS resolution');
+  });
+
+  it('still delivers to a public target after hardening', async () => {
+    const promise = sendWebhook(webhookSub(WEBHOOK_URL), makePayload());
+    await vi.runAllTimersAsync();
+    await promise;
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(updateLog).toHaveBeenCalledWith(99, { status: 'success' });
+    expect(getRetryMetrics().deadLetterCount).toBe(0);
   });
 });
 
