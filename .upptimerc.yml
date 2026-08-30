@@ -15,10 +15,26 @@ sites:
     body: '{"jsonrpc":"2.0","id":1,"method":"getContractData","params":{"contract":"CCPASLHKRFBMVV5PZG3LKDGKFEDXZMB5U7DK42CVLUVWCMUCSRPVBIMO"}}'
     expectedStatusCodes:
       - 200
+  - name: ILN Indexer Service
+    url: https://indexer.iln.finance/health
+    expectedStatusCodes:
+      - 200
+  - name: ILN Notifications Service
+    url: https://notifications.iln.finance/health
+    expectedStatusCodes:
+      - 200
+  - name: ILN Oracle Service
+    url: https://oracle.iln.finance/v1/health
+    expectedStatusCodes:
+      - 200
   - name: ILN Frontend
     url: https://iln.finance
+    expectedStatusCodes:
+      - 200
   - name: ILN Docs
     url: https://docs.iln.finance
+    expectedStatusCodes:
+      - 200
 
 status-website:
   cname: status.iln.finance
