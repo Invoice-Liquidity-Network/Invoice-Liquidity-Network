@@ -1,0 +1,113 @@
+name: Synthetic Canary Monitoring
+
+on:
+  schedule:
+    # Run every 15 minutes around the clock
+    - cron: '*/15 * * * *'
+  workflow_dispatch:
+    inputs:
+      canary_invoice_id:
+        description: 'Canary invoice ID to probe on the indexer'
+        required: false
+        default: '1'
+      canary_payer_address:
+        description: 'Stellar address used for the oracle canary check'
+        required: false
+        default: 'GC5GY2JTEOIVJDNFPEZQNMGZBTZJ5LFTJFWL5UB3LV4BGVVQAHC3D4S'
+
+# Only allow one run at a time to prevent alert storms.
+concurrency:
+  group: synthetic-canary
+  cancel-in-progress: false
+
+# Least-privilege: the job only makes HTTP probes; no repo writes needed.
+permissions:
+  contents: read
+
+jobs:
+  # ── Unit / offline tests ────────────────────────────────────────────────────
+  canary-unit-tests:
+    name: Canary unit tests (offline mocks)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up pnpm store cache
+        uses: ./.github/actions/setup-pnpm
+        continue-on-error: true  # setup action may not exist in all forks
+
+      - name: Install dependencies (fallback)
+        if: always()
+        run: |
+          if ! command -v pnpm &>/dev/null; then
+            npm install -g pnpm
+          fi
+          pnpm install --frozen-lockfile --ignore-scripts || true
+
+      - name: Run synthetic canary tests
+        run: pnpm vitest run tests/synthetic/canary.test.ts --reporter=verbose
+        env:
+          CANARY_INVOICE_ID: ${{ inputs.canary_invoice_id || '1' }}
+          CANARY_PAYER_ADDRESS: ${{ inputs.canary_payer_address || 'GC5GY2JTEOIVJDNFPEZQNMGZBTZJ5LFTJFWL5UB3LV4BGVVQAHC3D4S' }}
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: canary-unit-results-${{ github.run_id }}
+          path: test-results/
+          retention-days: 7
+
+  # ── Live probe against deployed services ────────────────────────────────────
+  canary-live-probe:
+    name: Live canary probe (deployed services)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    # Only run live checks when secrets are configured
+    if: |
+      vars.INDEXER_BASE_URL != '' ||
+      secrets.INDEXER_BASE_URL != ''
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install tsx (for script execution)
+        run: npm install -g tsx
+
+      - name: Install ws (for WebSocket canary)
+        run: npm install ws
+
+      - name: Run synthetic canary script
+        id: canary
+        run: tsx scripts/synthetic-canary.ts
+        continue-on-error: true
+        env:
+          INDEXER_BASE_URL: ${{ secrets.INDEXER_BASE_URL || vars.INDEXER_BASE_URL || 'http://localhost:3001' }}
+          NOTIFICATIONS_BASE_URL: ${{ secrets.NOTIFICATIONS_BASE_URL || vars.NOTIFICATIONS_BASE_URL || 'http://localhost:4001' }}
+          NOTIFICATIONS_WS_URL: ${{ secrets.NOTIFICATIONS_WS_URL || vars.NOTIFICATIONS_WS_URL || 'ws://localhost:4002/ws' }}
+          ORACLE_BASE_URL: ${{ secrets.ORACLE_BASE_URL || vars.ORACLE_BASE_URL || 'http://localhost:3010' }}
+          ALERT_WEBHOOK_URL: ${{ secrets.CANARY_ALERT_WEBHOOK_URL || '' }}
+          CANARY_INVOICE_ID: ${{ inputs.canary_invoice_id || vars.CANARY_INVOICE_ID || '1' }}
+          CANARY_PAYER_ADDRESS: ${{ inputs.canary_payer_address || vars.CANARY_PAYER_ADDRESS || 'GC5GY2JTEOIVJDNFPEZQNMGZBTZJ5LFTJFWL5UB3LV4BGVVQAHC3D4S' }}
+          CANARY_WEBHOOK_SUB_ID: ${{ vars.CANARY_WEBHOOK_SUB_ID || '0' }}
+          CANARY_REQUEST_TIMEOUT_MS: '8000'
+
+      - name: Report canary failure as GitHub Alert
+        if: steps.canary.outcome == 'failure'
+        run: |
+          echo "::error title=Synthetic Canary Failed::One or more ILN service canary checks failed. Check the logs and any configured ALERT_WEBHOOK_URL for details."
+          exit 1
+
+  # ── Testnet health gate (reuse existing reusable workflow) ──────────────────
+  testnet-health:
+    name: Gate on testnet health
+    uses: ./.github/workflows/reusable-testnet-health.yml
+    with:
+      horizon-url: https://horizon-testnet.stellar.org
+      max-attempts: 3
+      retry-delay-seconds: 10
