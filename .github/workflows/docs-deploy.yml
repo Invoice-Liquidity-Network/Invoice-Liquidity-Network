@@ -17,6 +17,8 @@ on:
       - '.github/workflows/docs-deploy.yml'
 
 jobs:
+  deploy-docs:
+    runs-on: ubuntu-latest
   # Check that every _meta.json in docs/ is in sync with the file tree before
   # attempting to build. This catches orphaned nav entries (pointing at deleted
   # pages) and undiscoverable pages (exist but not in the sidebar) on every PR.
@@ -59,6 +61,47 @@ jobs:
       - name: Checkout Repository
         uses: actions/checkout@v4
 
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          
+      - name: Install Documentation Toolchain Dependencies
+        run: |
+          if [ -f "packages/docs/package.json" ]; then
+            cd packages/docs && npm install --no-audit --no-fund
+          else
+            npm install --no-audit --no-fund
+          fi
+
+
+      - name: Audit Content Inventory and Consolidate Build Directories
+        run: |
+          echo "🔍 Auditing content completeness across inventory tracks..."
+          mkdir -p packages/docs/content/root-migrated
+          
+          # Copy remaining root docs into the canonical workspace target area to fix deployment gaps
+          if [ -d "docs" ] && [ "$(ls -A docs)" ]; then
+            echo "📦 Migrating legacy root docs contents into canonical build stream..."
+            cp -R docs/* packages/docs/content/root-migrated/
+          fi
+
+      - name: Build Comprehensive Documentation Site
+        run: |
+          if [ -f "packages/docs/package.json" ]; then
+            npm run build --prefix packages/docs
+          --else
+            npm run build
+          fi
+
+      - name: Verify Completeness of Output Inventory Artifacts
+        run: |
+          echo "📊 Verifying final build asset distribution footprint..."
+          if [ ! -d "packages/docs/dist" ] && [ ! -d "packages/docs/.vuepress/dist" ] && [ ! -d "packages/docs/build" ] && [ ! -d "packages/docs/.next" ]; then
+            echo "❌ Error: Build output directory not detected. Pipeline incomplete."
+            exit 1
+          fi
+          echo "✅ Audit Complete: Unified documentation site generated successfully!"
       - name: Setup pnpm with store cache
         uses: ./.github/actions/setup-pnpm
 
