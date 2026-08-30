@@ -1,38 +1,20 @@
-name: Deploy Docs
+﻿name: Deploy Documentation Site
 
-# Issue #746: build failures must block PRs, not just post-merge deploys.
-# We trigger on every PR that touches either `packages/docs/**` (the GitHub
-# Pages subtree) OR the top-level `docs/**` workspace (the secondary Nextra
-# site with its own docs/package.json). The workflow also still runs on
-# push-to-main so the Pages deployment still happens. Deploy jobs are gated
-# below so PRs only run the `build` job — they never publish.
 on:
   push:
-    branches: [main]
+    branches:
+      - main
     paths:
-      - 'packages/docs/**'
       - 'docs/**'
+      - 'packages/docs/**'
       - '.github/workflows/docs-deploy.yml'
-
   pull_request:
+    branches:
+      - main
     paths:
-      - 'packages/docs/**'
       - 'docs/**'
+      - 'packages/docs/**'
       - '.github/workflows/docs-deploy.yml'
-
-  workflow_dispatch:
-
-# Least-privilege: deploy to GitHub Pages via OIDC.
-# issues: write needed for PR failure comments (see Comment PR on build failure step).
-permissions:
-  contents: read
-  pages: write
-  id-token: write
-  issues: write
-
-concurrency:
-  group: 'pages'
-  cancel-in-progress: false
 
 jobs:
   # Check that every _meta.json in docs/ is in sync with the file tree before
@@ -74,7 +56,7 @@ jobs:
         working-directory: packages/docs
 
     steps:
-      - name: Checkout
+      - name: Checkout Repository
         uses: actions/checkout@v4
 
       - name: Setup pnpm with store cache

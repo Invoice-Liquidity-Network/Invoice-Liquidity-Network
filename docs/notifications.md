@@ -111,3 +111,10 @@ docker run -d \
 ---
 
 *For more details, see the SDK and service source code.*
+
+## Architectural Note: Notifications WebSocket vs Indexer Subscription
+
+This monorepo maintains two independent WebSocket streams optimizing for distinct responsibilities:
+
+1. **Indexer Subscription Path (`packages/indexer`)**: Tracks raw on-chain state adjustments directly via RPC streams. It handles atomic smart-contract transformations and state mutations.
+2. **Notifications Path (`packages/notifications`)**: A hardened service acting as a secure real-time notification engine for front-end actions (e.g., active triggers, system alerts, user updates). It is protected by intentional per-IP connections ceilings and client authentication guards (`NOTIFICATIONS_WS_AUTH_TOKEN`) preventing unauthorized state surface scanning.
