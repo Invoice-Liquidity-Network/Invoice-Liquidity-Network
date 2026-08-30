@@ -19,6 +19,14 @@ sites:
     url: https://iln.finance
   - name: ILN Docs
     url: https://docs.iln.finance
+  # oracle-service gates fund_invoice()'s require_oracle_verification path, so
+  # its availability is protocol-critical rather than a nice-to-have. /v1/health
+  # reports degraded after a verification failure, which a plain root check
+  # would miss.
+  - name: ILN Oracle Service
+    url: https://oracle.iln.finance/v1/health
+    expectedStatusCodes:
+      - 200
 
 status-website:
   cname: status.iln.finance

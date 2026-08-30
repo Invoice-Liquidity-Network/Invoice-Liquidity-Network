@@ -4,7 +4,9 @@
   "scripts": {
     "test": "turbo run test",
     "test:coverage": "turbo run test:coverage",
+    "test:e2e": "vitest run tests/e2e/*.test.ts",
     "test:checklist": "node --test scripts/__tests__/mainnet-checklist-parser.test.js",
+    "test:provenance": "node --test scripts/__tests__/release-provenance.test.js",
     "test:compatibility": "vitest run scripts/__tests__/check-compatibility.test.ts",
     "test:audit": "node --test scripts/__tests__/dependency-audit.test.js",
     "test:load": "ts-node --esm scripts/load-test.ts",

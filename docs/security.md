@@ -13,8 +13,7 @@ For operational incident handling procedures across SDK, indexer, oracle, and no
 
 For the protocol-level attack surface analysis, see the [Threat Model](./threat-model.md).
 
+For the reporter-facing introduction to disclosure, see the
+[Vulnerability Disclosure Policy](./vulnerability-disclosure.md).
+
 This stub is kept so existing links to `docs/security.md` continue to resolve.
-
-## Unified Vulnerability Disclosure
-
-For our complete reporting policy, response timelines, severity criteria, and links to technical threat models, please review our canonical [Vulnerability Disclosure Guide](vulnerability-disclosure.md).

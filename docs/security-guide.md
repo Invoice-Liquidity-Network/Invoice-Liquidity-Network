@@ -32,9 +32,10 @@ ILN protects three classes of assets:
 
 The disclosure policy — how to report, what to include, severity classification, response
 timelines, safe harbour, and recognition — is defined once, canonically, in the repository root
-[`SECURITY.md`](../SECURITY.md). Report through one of the channels listed there (a private
-GitHub Security Advisory or `security@invoiceliquidity.network`) rather than a public issue or
-pull request.
+[`SECURITY.md`](../SECURITY.md). For the reporter-facing entryway, see the
+[Vulnerability Disclosure Policy](./vulnerability-disclosure.md). Report through one of the
+channels listed there (a private GitHub Security Advisory or
+`security@invoiceliquidity.network`) rather than a public issue or pull request.
 
 ---
 
@@ -61,13 +62,13 @@ const { transaction } = await sdk.buildWriteTransaction(...);
 **Dependency management**
 
 - Pin your lockfile (`pnpm-lock.yaml` or equivalent) and review changes to transitive dependencies on every update.
-- Verify SDK package provenance after install:
+- Verify SDK package provenance after install (once `@iln/sdk-next` is published):
 
 ```bash
-npm audit signatures @invoice-liquidity/sdk
+npm audit signatures
 ```
 
-Expected output:
+Expected output for the installed SDK:
 ```
 1 package has a verified registry signature
 1 package has a verified attestation
@@ -105,23 +106,40 @@ RATE_LIMIT_WHITELIST=10.0.0.5,10.0.0.6
 
 ### Package provenance (SLSA Level 3)
 
-All ILN npm packages (`@invoice-liquidity/sdk`, `@invoice-liquidity/cli`) are published with [SLSA Level 3](https://slsa.dev/spec/v1.0/levels#build-l3) provenance attestations. Each attestation links the published tarball to the exact GitHub Actions workflow run and commit SHA that built it.
+Every npm publish path in this repository is configured to publish with
+[SLSA Level 3](https://slsa.dev/spec/v1.0/levels#build-l3) provenance
+attestations: the publish steps use the `--provenance` flag (or
+`NPM_CONFIG_PROVENANCE=true`), the jobs hold the `id-token: write` permission
+GitHub Actions OIDC needs, and each attestation links the published tarball to
+the exact GitHub Actions workflow run and commit SHA that built it. The audit
+and per-workflow status are recorded in
+[release-process.md#package-provenance-verification](release-process.md#package-provenance-verification).
 
-**Verify via npm:**
+The canonical package is `@iln/sdk-next` (`packages/sdk`). It is not yet
+published to the npm registry — this section describes the configured
+guarantee and the procedure that applies from the first release onward; it is
+not a claim that an attestation already exists.
+
+**Verify a published package's attestation via the registry:**
 
 ```bash
-npm audit signatures @invoice-liquidity/sdk
+# Attestations endpoint — answers only once the package is published:
+curl -s https://registry.npmjs.org/-/npm/v1/attestations/@iln/sdk-next@<version> | jq
+
+# Or inspect the version metadata:
+npm view @iln/sdk-next@<version> --json | jq '.provenance'
 ```
 
-**Verify via GitHub CLI:**
+**Verify via GitHub CLI (per release):**
 
 ```bash
 gh attestation verify \
-  $(npm pack @invoice-liquidity/sdk --dry-run 2>/dev/null | tail -1) \
+  "$(npm pack @iln/sdk-next@<version> --silent)" \
   --repo Invoice-Liquidity-Network/Invoice-Liquidity-Network
 ```
 
-A successful verification prints the attestation details including the workflow run URL and commit SHA.
+A successful verification prints the attestation details including the
+workflow run URL and commit SHA.
 
 ### Smart contract audits
 

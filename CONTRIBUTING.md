@@ -6,7 +6,7 @@ Thank you for your interest in contributing to Invoice Liquidity Network (ILN).
 
 ### Prerequisites
 
-- Node.js 18+
+- Node.js 20+ (see `.nvmrc`)
 - pnpm 9+
 - Rust 1.74+
 - Docker
@@ -44,9 +44,15 @@ pnpm build
 
 ## Secret scanning
 
-The repository uses a Husky `pre-commit` hook to run gitleaks against staged changes. After `pnpm install`, Husky installs the hook automatically through the root `prepare` script. The hook is deliberately limited to staged content so it does not perform a full-repository scan on every commit.
-
-A commit containing a detected secret is rejected. Remove the secret from the staged changes, rotate or revoke it when appropriate, and then commit again. Do not add real credentials to source files, examples, documentation, tests, or local configuration that could be committed. Use environment variables and document required variables instead.
+The repository uses gitleaks to prevent secrets from being committed. The scan
+runs in CI on every pull request and push via the `gitleaks` job in
+`.github/workflows/ci.yml`. Commit-level enforcement is configured through a
+Husky `pre-commit` hook after `pnpm install` (the root `prepare` script installs
+Husky); a commit containing a detected secret is rejected. Remove the secret
+from the staged changes, rotate or revoke it when appropriate, and then commit
+again. Do not add real credentials to source files, examples, documentation,
+tests, or local configuration that could be committed. Use environment
+variables and document required variables instead.
 
 In a genuine emergency only, the hook can be bypassed with:
 
@@ -64,7 +70,7 @@ pnpm gitleaks:scan
 
 ## Pull requests
 
-1. Create a focused branch from the current main branch.
+1. Create a focused branch from the current `dev` branch (the repository's default branch).
 2. Keep changes limited to the issue being addressed.
 3. Add or update tests for behavior changes.
 4. Run the relevant formatting, lint, type-check, build, and test commands locally.

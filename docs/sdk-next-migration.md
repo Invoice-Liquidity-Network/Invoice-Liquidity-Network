@@ -25,10 +25,16 @@ This document details the step-by-step migration path from the legacy SDK (`@iln
 | Legacy `@iln/sdk` Pattern | New `@iln/sdk-next` Pattern | Notes |
 | :--- | :--- | :--- |
 | `import { ILNSdk } from '@iln/sdk'` | `import { InvoiceClient } from '@iln/sdk-next'` | Renamed client export |
-| `new ILNSdk({ ...ILN_TESTNET })` | `new InvoiceClient(horizonUrl, contractId)` | Constructor accepts positional config |
-| `sdk.submitInvoice({ freelancer, ... })` | `client.submitInvoice({ freelancer, ... })` | Updated method call |
-| `sdk.fundInvoice({ funder, invoiceId })` | `client.fundInvoice(invoiceId, funder)` | Positional arguments |
-| `sdk.getInvoice(invoiceId)` | `client.getInvoice(invoiceId)` | Returns typed `Invoice` |
+| `new ILNSdk({ ...ILN_TESTNET })` | `new InvoiceClient({ contractId, rpcUrl, horizonUrl, signer })` | Config-object constructor is preferred; a legacy `(serverUrl, contractId, options?)` positional form is also supported for transaction-history-only usage |
+| `sdk.submitInvoice({ freelancer, payer, amount, dueDate, discountRate })` | `client.submitInvoice({ freelancer, payer, amount, dueDate, discountRate, token })` | `token` (the funding token's contract ID) is a **required** field on `sdk-next`; `freelancer` is optional and defaults to the configured signer's address |
+| `sdk.fundInvoice({ funder, invoiceId })` | `client.fundInvoice(invoiceId, amount?)` | The second positional argument is an **optional funding amount**, not the funder address — `funder` defaults to the configured signer and can only be overridden via the object form `fundInvoice({ invoiceId, funder, amount })` |
+| `sdk.getInvoice(invoiceId)` | `client.getInvoice(invoiceId)` | Returns typed `Invoice`; does not require a `signer` |
+
+> This table was audited against `packages/sdk/src/clients/InvoiceClient.ts`
+> on 2026-08-25 to correct two prior inaccuracies: `token` was missing from
+> the `submitInvoice` example, and `fundInvoice`'s second argument was
+> documented as the funder address when it is actually an optional funding
+> amount.
 
 ---
 
@@ -59,17 +65,19 @@ console.log('Submitted invoice ID:', invoiceId);
 ```typescript
 import { InvoiceClient } from '@iln/sdk-next';
 
-const client = new InvoiceClient(
-  'https://horizon-testnet.stellar.org',
-  'CA3D26RZE4CJGDWIDVRWS5PGAEV7R3Y5QG5W2VDJ3CQ626FJG5423F7E'
-);
+const client = new InvoiceClient({
+  contractId: 'CA3D26RZE4CJGDWIDVRWS5PGAEV7R3Y5QG5W2VDJ3CQ626FJG5423F7E',
+  rpcUrl: 'https://soroban-testnet.stellar.org',
+  horizonUrl: 'https://horizon-testnet.stellar.org',
+  signer, // required for writes; freelancer defaults to signer.getPublicKey()
+});
 
-const invoiceId = await client.submitInvoice({
-  freelancer: 'GBRPYHIL2CI3FNQ4BXLFMNDLFIMTXHRGY2TEWLYYACGNDWDRV4TVTBU5',
+const { invoiceId } = await client.submitInvoice({
   payer: 'GA2C5RFPE6GCKMY3US5PAB4BO4FRGSRTCMGV35EOWFCG3LXDTR27TMZG',
   amount: 25_000_000n,
   dueDate: Math.floor(Date.now() / 1000) + 604800,
   discountRate: 300,
+  token: 'CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC', // required
 });
 console.log('Submitted invoice ID:', invoiceId);
 ```
@@ -94,15 +102,23 @@ await sdk.fundInvoice({
 ```typescript
 import { InvoiceClient } from '@iln/sdk-next';
 
-const client = new InvoiceClient(
-  'https://horizon-testnet.stellar.org',
-  'CA3D26RZE4CJGDWIDVRWS5PGAEV7R3Y5QG5W2VDJ3CQ626FJG5423F7E'
-);
+const client = new InvoiceClient({
+  contractId: 'CA3D26RZE4CJGDWIDVRWS5PGAEV7R3Y5QG5W2VDJ3CQ626FJG5423F7E',
+  rpcUrl: 'https://soroban-testnet.stellar.org',
+  signer, // funder defaults to signer.getPublicKey()
+});
 
-await client.fundInvoice(
-  1n,
-  'GC3KW5E4ZJ4Z627FJG5423F7ECA3D26RZE4CJGDWIDVRWS5PGAEV7R3Y'
-);
+// Positional form: fundInvoice(invoiceId, amount?) — the second argument is
+// an optional funding amount, not the funder address.
+await client.fundInvoice(1n);
+
+// To fund from a different address than the configured signer, or to fund a
+// specific partial amount, use the object form instead:
+await client.fundInvoice({
+  invoiceId: 1n,
+  funder: 'GC3KW5E4ZJ4Z627FJG5423F7ECA3D26RZE4CJGDWIDVRWS5PGAEV7R3Y',
+  amount: 10_000_000n,
+});
 ```
 
 ---
@@ -139,18 +155,23 @@ console.log('Status:', invoice.status);
 `@iln/sdk-next` provides browser bundles with zero Node.js runtime dependencies:
 
 ```typescript
-// vite.browser.config.ts
+// packages/sdk/vite.browser.config.ts (actual, as of this writing)
 import { defineConfig } from 'vite';
+import wasm from 'vite-plugin-wasm';
 
 export default defineConfig({
+  plugins: [wasm()],
   build: {
     lib: {
-      entry: 'src/index.ts',
-      name: 'ILNSdkNext',
-      fileName: (format) => `browser/index.${format}.js`,
+      entry: 'src/index.browser.ts',
       formats: ['es'],
+      fileName: 'index',
     },
+    outDir: 'dist/browser',
     target: 'es2022',
+  },
+  resolve: {
+    conditions: ['browser'],
   },
 });
 ```

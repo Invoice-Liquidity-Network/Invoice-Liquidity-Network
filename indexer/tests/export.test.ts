@@ -306,10 +306,32 @@ describe('POST /v1/export/jobs', () => {
   });
 });
 
+
 // ── GET /v1/export/jobs/:jobId — status polling ───────────────────────────────
 
 describe('GET /v1/export/jobs/:jobId', () => {
+  it('enforces ASYNC_EXPORT_LIMIT and fails the job when the dataset is too large', async () => {
+    const { processExportJob: process, createExportJob: create, ASYNC_EXPORT_LIMIT } = await import('../src/export');
+    
+    // We mock countInvoicesForExport to return a huge number to simulate an oversized result
+    const exportModule = await import('../src/export');
+    const originalCount = exportModule.countInvoicesForExport;
+    (exportModule as any).countInvoicesForExport = () => ASYNC_EXPORT_LIMIT + 1;
+
+    try {
+      const job = create('invoices', 'json', {});
+      await process(job.jobId);
+
+      const res = await request(app).get(`/v1/export/jobs/${job.jobId}`);
+      expect(res.body.status).toBe('failed');
+      expect(res.body.error).toContain('Result set too large');
+    } finally {
+      (exportModule as any).countInvoicesForExport = originalCount;
+    }
+  });
+
   it('returns the job status after creation', async () => {
+
     const createRes = await request(app)
       .post('/v1/export/jobs')
       .send({ type: 'invoices', format: 'json' });

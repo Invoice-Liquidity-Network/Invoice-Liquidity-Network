@@ -81,7 +81,8 @@ The SDK provides its stated security properties only when all of the following a
 
 - **Oracle or external data**
   - Any off-chain evidence, price feeds, or external validation required by business logic is outside the SDK.
-  - The SDK only packages the transaction and relies on the contract and network to evaluate observable state.
+  - The SDK only packages the transaction and relies on the contract, off-chain oracle service (`oracle-service/`), and network to evaluate observable state.
+  - For detailed trust boundaries and honest scoping regarding what the oracle verifies (on-chain payment behavior, default frequency, rapid succession fraud signals) versus what it does not verify (real-world corporate entity existence, legal KYB), refer to [docs/oracle-service.md](./oracle-service.md).
 
 - **Contract policy rules and token allowlists**
   - The SDK does not independently maintain the contract token allowlist or business rule enforcement.
@@ -261,11 +262,12 @@ The following threats are specific to SDK integration. For the full protocol thr
 
 ### Configuration poisoning
 
-**Threat:** An attacker controls `contractId`, `rpcUrl`, or `networkPassphrase` — for example, by injecting environment variables at runtime or by intercepting a dynamic config fetch.
+**Threat:** An attacker controls `contractId`, `rpcUrl`, or `networkPassphrase` — for example, by injecting environment variables at runtime or by intercepting a dynamic config fetch, leading the SDK to target an attacker-controlled contract.
 
-**SDK mitigation:** None. The SDK fully trusts configuration. It does not pin, verify, or compare config values against a known-good source.
+**SDK mitigation:** The SDK performs an automatic sanity check on initialization by comparing the configured `contractId` against a known-good registry (`KNOWN_OFFICIAL_CONTRACT_IDS`). If the ID is unrecognized, it emits a loud, un-missable warning (`[ILNSdk WARNING] Configured contractId ... does not match any known official ILN deployment`). This check is non-blocking to support self-hosted/custom deployments while alerting developers to misconfiguration.
 
 **Integrator action:**
+- Pay attention to `[ILNSdk WARNING]` logs on startup during development and deployment.
 - Hardcode or pin `contractId` and `networkPassphrase` in server-side environment config, not in user-supplied input or a dynamically fetched remote file.
 - Load config from environment variables at startup; do not accept config overrides from API request parameters or query strings.
 - Maintain a separate, trusted reference for the canonical `contractId` (for example, pinned in a checked-in constants file), and validate against it at startup.

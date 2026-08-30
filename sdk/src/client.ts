@@ -86,8 +86,8 @@ import {
   resolveRequestTimeouts,
   TimeoutError,
   withTimeout,
-  type RequestTimeouts,
 } from './timeouts';
+import { verifyContractId } from './registry';
 
 const READ_ACCOUNT = 'GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF';
 const POLL_ATTEMPTS = 20;
@@ -171,6 +171,14 @@ export class ILNSdk {
     if (config.offline !== undefined) {
       this.offlineManager = new OfflineManager(config.offline);
       this.offlineManager.onSubmit((item) => this.executeQueuedOperation(item));
+    }
+
+    if (config.verifyContractId !== false) {
+      const verification = verifyContractId(this.contractId);
+      if (!verification.isOfficial && verification.warningMessage) {
+        console.warn(verification.warningMessage);
+        this.logger.warn(verification.warningMessage);
+      }
     }
   }
 

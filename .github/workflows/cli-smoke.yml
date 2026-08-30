@@ -4,13 +4,13 @@ on:
   push:
     branches: [main]
     paths:
-      - 'packages/cli/**'
+      - 'cli/**'
       - 'sdk/**'
       - 'packages/shared/**'
       - '.github/workflows/cli-smoke.yml'
   pull_request:
     paths:
-      - 'packages/cli/**'
+      - 'cli/**'
       - 'sdk/**'
       - 'packages/shared/**'
       - '.github/workflows/cli-smoke.yml'
@@ -54,21 +54,20 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Build the CLI and its workspace dependencies
-        # `...` builds @iln/cli plus everything it depends on (@iln/sdk, @iln/shared).
-        run: pnpm --filter "@iln/cli..." build
+        # `...` builds @invoice-liquidity/cli plus everything it depends on (@iln/sdk).
+        run: pnpm --filter "@invoice-liquidity/cli..." build
 
       - name: Pack the CLI and its unpublished workspace dependencies
-        # The CLI depends on @iln/sdk -> @iln/shared, neither of which is published to
-        # npm. `pnpm pack` rewrites the `workspace:*` specifiers to the real versions, so
-        # installing all three tarballs together lets npm resolve the internal graph
-        # locally while fetching the published deps (commander, @stellar/*, ...) normally.
+        # The CLI depends on @iln/sdk, which is not published to npm. `pnpm pack`
+        # rewrites the `workspace:*` specifiers to the real versions, so installing
+        # both tarballs together lets npm resolve the internal graph locally while
+        # fetching the published deps (commander, @stellar/*, ...) normally.
         run: |
           set -euo pipefail
           TARBALLS="$RUNNER_TEMP/iln-tarballs"
           mkdir -p "$TARBALLS"
-          ( cd packages/shared && pnpm pack --pack-destination "$TARBALLS" )
-          ( cd sdk            && pnpm pack --pack-destination "$TARBALLS" )
-          ( cd packages/cli   && pnpm pack --pack-destination "$TARBALLS" )
+          ( cd sdk && pnpm pack --pack-destination "$TARBALLS" )
+          ( cd cli && pnpm pack --pack-destination "$TARBALLS" )
           echo "Packed tarballs:"
           ls -la "$TARBALLS"
 

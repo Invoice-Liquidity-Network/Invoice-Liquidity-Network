@@ -2,6 +2,7 @@
 import { Address, StrKey } from '@stellar/stellar-sdk';
 import { Command } from 'commander';
 import pc from 'picocolors';
+import fs from 'node:fs';
 
 import { parseDisplayAmount } from './amounts';
 import { ILNClient } from './client';
@@ -21,6 +22,10 @@ import {
   formatInvoiceListJson,
   formatProtocolConfig,
   formatProtocolConfigJson,
+  formatProtocolStats,
+  formatProtocolStatsJson,
+  formatReputation,
+  formatReputationJson,
   helpExample,
   helpSection,
   formatJsonSuccess,
@@ -48,7 +53,7 @@ import {
   fundWalletFromFriendbot,
 } from './wallet';
 import type { Ui } from './format';
-import type { ResolvedConfig } from './types';
+import type { Invoice, ResolvedConfig } from './types';
 
 import { checkCompatibility } from '@iln/sdk';
 import { runInteractive } from './interactive';
@@ -689,6 +694,283 @@ export async function runCli(
         ui.info(output);
       }
     );
+
+  program
+    .command('watch')
+    .description('Watch an invoice for real-time status updates until it reaches a terminal state.')
+    .requiredOption('--id <invoiceId>', 'invoice ID')
+    .option('--interval <ms>', 'poll interval in milliseconds', '3000')
+    .addHelpText(
+      'after',
+      [
+        '',
+        helpSection('Examples:'),
+        helpExample('iln watch --id 42'),
+        helpExample('iln watch --id 42 --interval 5000'),
+        '',
+        helpSection('Tips:'),
+        helpExample('Exits automatically once the invoice reaches Paid, Defaulted, or Disputed.'),
+        helpExample('Press Ctrl-C to stop watching early.'),
+        '',
+        helpSection('See also:'),
+        helpExample('iln status --id <id>    One-shot status check'),
+      ].join('\n')
+    )
+    .action(async (options: { id: string; interval: string }) => {
+      const invoiceId = parseInvoiceId(options.id);
+      const intervalMs = Math.max(1000, parseInt(options.interval, 10) || 3000);
+      const client = createClient(load());
+      const globalOpts = program.opts() as { json?: boolean; quiet?: boolean };
+      const TERMINAL = new Set(['Paid', 'Defaulted', 'Disputed']);
+
+      let lastStatus: string | undefined;
+
+      const print = (invoice: Invoice) => {
+        const ts = new Date().toISOString();
+        if (globalOpts.json) {
+          stdout.write(
+            JSON.stringify({ ts, invoiceId: invoice.id.toString(), status: invoice.status }) + '\n'
+          );
+        } else {
+          ui.info(`[${ts}] Invoice ${invoice.id} — ${invoice.status}`);
+        }
+      };
+
+      if (!globalOpts.quiet && !globalOpts.json) {
+        ui.info(pc.bold(`Watching invoice ${invoiceId} (Ctrl-C to stop)...`));
+      }
+
+      await new Promise<void>((resolve) => {
+        let stopped = false;
+        let timer: ReturnType<typeof setInterval> | undefined;
+
+        const finish = () => {
+          if (stopped) return;
+          stopped = true;
+          if (timer) clearInterval(timer);
+          process.off('SIGINT', onSigint);
+          resolve();
+        };
+
+        const onSigint = () => {
+          if (!globalOpts.quiet && !globalOpts.json) {
+            ui.info('\nStopped watching.');
+          }
+          finish();
+        };
+
+        const poll = async () => {
+          try {
+            const invoice = await client.getInvoice(invoiceId);
+            if (invoice.status !== lastStatus) {
+              print(invoice);
+              lastStatus = invoice.status;
+            }
+            if (TERMINAL.has(invoice.status)) {
+              if (!globalOpts.json) {
+                ui.success(`Invoice reached terminal state: ${invoice.status}`);
+              }
+              finish();
+            }
+          } catch (err: any) {
+            ui.error(err?.message ?? String(err));
+          }
+        };
+
+        process.on('SIGINT', onSigint);
+        void poll().then(() => {
+          if (!stopped) {
+            timer = setInterval(poll, intervalMs);
+          }
+        });
+      });
+    });
+
+  program
+    .command('export')
+    .description('Export invoices to CSV.')
+    .option('--address <address>', 'filter by freelancer, payer, or funder address')
+    .option('--output <file>', 'output file path; use - for stdout', 'invoices.csv')
+    .addHelpText(
+      'after',
+      [
+        '',
+        helpSection('Examples:'),
+        helpExample('iln export --output invoices.csv'),
+        helpExample('iln export --address GABC... --output -'),
+        '',
+        helpSection('See also:'),
+        helpExample('iln list --address <G>  List invoices without exporting'),
+      ].join('\n')
+    )
+    .action(async (options: { address?: string; output: string }) => {
+      if (options.address) {
+        assertStellarAddress(options.address, 'address');
+      }
+
+      const client = createClient(load());
+      const progress = cliProgressOptions(program, stdout);
+      const invoices = await withSpinner(
+        'Fetching invoices…',
+        () => fetchInvoicesForExport(client, options.address),
+        progress,
+        'Invoices loaded'
+      );
+
+      const header = 'id,freelancer,payer,amount,discountRate,dueDate,status,funder,fundedAt';
+      const rows = invoices.map((inv) =>
+        [
+          inv.id.toString(),
+          inv.freelancer,
+          inv.payer,
+          inv.amount.toString(),
+          inv.discountRate,
+          inv.dueDate,
+          inv.status,
+          inv.funder ?? '',
+          inv.fundedAt ?? '',
+        ].join(',')
+      );
+      const csv = [header, ...rows].join('\n');
+
+      if (options.output === '-') {
+        stdout.write(csv + '\n');
+      } else {
+        fs.writeFileSync(options.output, csv, 'utf8');
+        ui.success(`Exported ${invoices.length} invoice(s) to ${options.output}`);
+      }
+    });
+
+  program
+    .command('stats')
+    .description('Show protocol-wide analytics: total invoices, funded, paid, and volume.')
+    .option('--api-url <url>', 'override the analytics API base URL')
+    .addHelpText(
+      'after',
+      [
+        '',
+        helpSection('Examples:'),
+        helpExample('iln stats'),
+        helpExample('iln stats --api-url https://api.iln.network'),
+      ].join('\n')
+    )
+    .action(async (options: { apiUrl?: string }) => {
+      const config = load();
+      const { AnalyticsSDK } = await import('@iln/sdk');
+      const baseUrl =
+        options.apiUrl ??
+        (config.network === 'mainnet' ? 'https://api.iln.network' : 'http://localhost:3001');
+      const api = new AnalyticsSDK(baseUrl);
+
+      const progress = cliProgressOptions(program, stdout);
+      const stats = await withSpinner(
+        'Fetching protocol stats…',
+        () => api.getProtocolStats(),
+        progress,
+        'Stats loaded'
+      );
+
+      const globalOpts = program.opts() as { json?: boolean };
+      ui.info(
+        globalOpts.json
+          ? formatJsonSuccess(JSON.parse(formatProtocolStatsJson(stats)))
+          : formatProtocolStats(stats)
+      );
+    });
+
+  // Reputation command
+  const reputationCommand = program
+    .command('reputation')
+    .description('Query on-chain reputation scores.');
+
+  reputationCommand
+    .command('get [address]')
+    .description(
+      'Get the reputation score of a Stellar address (defaults to the configured signer).'
+    )
+    .addHelpText(
+      'after',
+      [
+        '',
+        helpSection('Examples:'),
+        helpExample('iln reputation get GABC...'),
+        helpExample("iln reputation get   (uses the configured signer's address)"),
+      ].join('\n')
+    )
+    .action(async (address: string | undefined) => {
+      const config = load();
+      const client = createClient(config);
+
+      let targetAddress = address;
+      if (!targetAddress) {
+        const signer = createKeypairFileSigner(config.keypairPath);
+        targetAddress = await signer.getPublicKey();
+      }
+      assertStellarAddress(targetAddress, 'address');
+
+      const progress = cliProgressOptions(program, stdout);
+      const score = await withSpinner(
+        'Fetching reputation…',
+        () => client.getReputation(targetAddress!),
+        progress,
+        'Reputation loaded'
+      );
+
+      const globalOpts = program.opts() as { json?: boolean };
+      ui.info(
+        globalOpts.json
+          ? formatJsonSuccess(JSON.parse(formatReputationJson(targetAddress, score)))
+          : formatReputation(targetAddress, score)
+      );
+    });
+
+  // Network command
+  const networkCommand = program
+    .command('network')
+    .description('Manage the active Stellar network.');
+
+  networkCommand
+    .command('switch <target>')
+    .description(
+      'Switch the active network (testnet, mainnet, or standalone) in the local config file.'
+    )
+    .addHelpText(
+      'after',
+      [
+        '',
+        helpSection('Examples:'),
+        helpExample('iln network switch mainnet'),
+        helpExample('iln network switch testnet'),
+        '',
+        helpSection('Tips:'),
+        helpExample('Writes to .ilnrc.json, creating it if none exists.'),
+        helpExample(
+          "Clears any explicit `rpcUrl` override so the new network's default RPC endpoint applies."
+        ),
+        '',
+        helpSection('See also:'),
+        helpExample('iln config show   View the resolved configuration for the current directory'),
+      ].join('\n')
+    )
+    .action((target: string) => {
+      if (target !== 'testnet' && target !== 'mainnet' && target !== 'standalone') {
+        throw new Error('Unsupported network. Choose one of: "testnet", "mainnet", "standalone".');
+      }
+
+      const cwd = process.cwd();
+      const { rawConfig } = readRawConfig(cwd);
+      rawConfig.network = target;
+      delete rawConfig.rpcUrl;
+      const filePath = writeRawConfig(cwd, rawConfig);
+
+      const globalOpts = program.opts() as { json?: boolean };
+      if (globalOpts.json) {
+        stdout.write(formatJsonSuccess({ network: target }) + '\n');
+      } else {
+        ui.success(`Active network switched to ${target}.`);
+        ui.info(`Saved to ${filePath}`);
+      }
+    });
 
   // Compatibility check command
   const compatCommand = program
@@ -1435,6 +1717,26 @@ function cliProgressOptions(program: Command, stdout: NodeJS.WritableStream): Pr
     return { output: stdout, enabled: false };
   }
   return { output: stdout };
+}
+
+async function fetchInvoicesForExport(
+  client: Pick<ILNClient, 'getInvoiceCount' | 'getInvoice' | 'listInvoicesByAddress'>,
+  address?: string
+): Promise<Invoice[]> {
+  if (address) {
+    return client.listInvoicesByAddress(address);
+  }
+
+  const count = await client.getInvoiceCount();
+  const invoices: Invoice[] = [];
+  for (let i = 1n; i <= count; i += 1n) {
+    try {
+      invoices.push(await client.getInvoice(i));
+    } catch {
+      // Skip failed/non-existent indexes
+    }
+  }
+  return invoices;
 }
 
 function parseInvoiceId(value: string): bigint {

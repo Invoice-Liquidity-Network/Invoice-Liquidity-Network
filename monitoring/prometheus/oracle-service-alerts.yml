@@ -1,0 +1,172 @@
+# Prometheus alerting rules for oracle-service.
+#
+# Load alongside the other rule files:
+#
+#   # prometheus.yml
+#   rule_files:
+#     - /etc/prometheus/rules/oracle-service-alerts.yml
+#
+# Under the Prometheus Operator, wrap `groups` in a PrometheusRule resource.
+#
+# Scrape target: oracle-service exposes /metrics and /v1/metrics on
+# ORACLE_PORT (default 3010).
+
+groups:
+  - name: oracle-service-verification-outcomes
+    interval: 30s
+    rules:
+      # ── Fraud-flag rate anomaly ───────────────────────────────────────────
+      # The alert the service exists to have. A sudden spike in flagged
+      # submissions means one of two things and both are urgent:
+      #   - an attacker probing the oracle, or
+      #   - a bug in the heuristics rejecting legitimate payers.
+      # Neither is visible from a bare request-count metric, which is why the
+      # service publishes a ratio rather than only counters.
+      - alert: OracleFraudFlagRateHigh
+        expr: avg_over_time(oracle_fraud_flag_ratio[10m]) > 0.25
+        for: 10m
+        labels:
+          severity: warning
+          team: ops
+          component: oracle-service
+        annotations:
+          summary: >-
+            {{ $value | humanizePercentage }} of oracle verdicts on
+            {{ $labels.instance }} carried a fraud signal over the last 10m.
+          description: >-
+            Baseline is low single digits. Sustained elevation is either an
+            attack or a heuristic regression. Check
+            oracle_fraud_signal_total to see which heuristic is firing — a
+            single signal dominating points at a bug, a spread points at an
+            attack.
+
+      - alert: OracleFraudFlagRateCritical
+        expr: avg_over_time(oracle_fraud_flag_ratio[5m]) > 0.6
+        for: 5m
+        labels:
+          severity: critical
+          team: ops
+          component: oracle-service
+        annotations:
+          summary: >-
+            Most oracle verdicts on {{ $labels.instance }} are being fraud-flagged
+            ({{ $value | humanizePercentage }}).
+          description: >-
+            At this rate legitimate funding is almost certainly being blocked.
+            Treat as a heuristic regression until proven otherwise.
+
+      # ── Nothing is being verified ─────────────────────────────────────────
+      # A flat verdict counter while the service is up means verification is
+      # silently broken — the failure mode a plain uptime check misses, because
+      # /health keeps returning 200.
+      - alert: OracleNoVerifications
+        expr: |
+          rate(oracle_verification_requests_total[15m]) == 0
+          and on(instance) up{job="oracle-service"} == 1
+        for: 15m
+        labels:
+          severity: warning
+          team: ops
+          component: oracle-service
+        annotations:
+          summary: No oracle verifications on {{ $labels.instance }} for 15 minutes.
+          description: >-
+            The service is up but has verified nothing. Either upstream traffic
+            has stopped or requests are failing before they reach the verifier.
+
+      # ── Everything rejected ───────────────────────────────────────────────
+      - alert: OracleAllVerificationsRejected
+        expr: |
+          sum by (instance) (rate(oracle_verification_outcome_total{outcome=~"rejected-.*"}[10m]))
+          / clamp_min(sum by (instance) (rate(oracle_verification_outcome_total[10m])), 0.0001)
+          > 0.95
+        for: 10m
+        labels:
+          severity: critical
+          team: ops
+          component: oracle-service
+        annotations:
+          summary: >-
+            Oracle is rejecting essentially every verification on
+            {{ $labels.instance }}.
+          description: >-
+            `fund_invoice()`'s require_oracle_verification path is effectively
+            closed. Check the outcome breakdown: rejected-stale-data points at
+            a broken indexer feed, rejected-low-trust at a reputation lookup
+            failure.
+
+      # ── Stale upstream data ───────────────────────────────────────────────
+      - alert: OracleStaleResponsesRising
+        expr: rate(oracle_stale_responses_total[10m]) > 0
+        for: 10m
+        labels:
+          severity: warning
+          team: ops
+          component: oracle-service
+        annotations:
+          summary: Oracle is serving stale verdicts on {{ $labels.instance }}.
+          description: >-
+            Source data is older than ORACLE_MAX_ORACLE_AGE_MS. Usually the
+            indexer has fallen behind or the reputation contract is unreachable.
+
+  - name: oracle-service-availability
+    interval: 30s
+    rules:
+      - alert: OracleVerificationLatencyHigh
+        expr: |
+          histogram_quantile(0.95,
+            sum by (le, instance) (rate(oracle_verification_duration_seconds_bucket[5m]))
+          ) > 2
+        for: 10m
+        labels:
+          severity: warning
+          team: ops
+          component: oracle-service
+        annotations:
+          summary: >-
+            Oracle p95 verification latency on {{ $labels.instance }} is
+            {{ $value | humanizeDuration }}.
+          description: >-
+            Callers time out well before the oracle does. Check the indexer and
+            the Soroban RPC endpoint.
+
+      # ── Cache effectiveness ───────────────────────────────────────────────
+      # A collapsed hit rate means every verification is hitting the indexer and
+      # RPC, which is how latency alerts start.
+      - alert: OracleCacheHitRateLow
+        expr: |
+          sum by (instance) (rate(oracle_cache_hits_total[15m]))
+          / clamp_min(
+              sum by (instance) (rate(oracle_cache_hits_total[15m]))
+            + sum by (instance) (rate(oracle_cache_misses_total[15m])), 0.0001)
+          < 0.2
+        for: 15m
+        labels:
+          severity: warning
+          team: ops
+          component: oracle-service
+        annotations:
+          summary: Oracle cache hit rate on {{ $labels.instance }} is below 20%.
+          description: >-
+            Expected to be low right after a deploy or a Redis restart. Sustained
+            low hit rate suggests the cache backend is unreachable and every
+            request is recomputing.
+
+      - alert: OracleExternalProviderUnavailable
+        expr: |
+          sum by (instance) (rate(oracle_external_verification_total{status="unknown"}[10m]))
+          / clamp_min(sum by (instance) (rate(oracle_external_verification_total[10m])), 0.0001)
+          > 0.5
+        for: 10m
+        labels:
+          severity: warning
+          team: ops
+          component: oracle-service
+        annotations:
+          summary: >-
+            Over half of external KYB lookups on {{ $labels.instance }} returned
+            unknown.
+          description: >-
+            The provider is likely down. Verdicts still resolve — the composition
+            policy treats unknown as inert — but they lose the corroborating
+            signal, so confidence is lower across the board.

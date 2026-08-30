@@ -158,6 +158,79 @@ Two-tier caching system:
 - Cache is invalidated when new events are processed
 - Stats are cached for 30 seconds
 
+### 6. Admin Dashboard (`dashboard.ts`) and its access model
+
+The admin dashboard is served at `GET /v1/dashboard` (and the unversioned
+`GET /dashboard` alias for backwards compatibility). It is a **public,
+unauthenticated** operational metrics endpoint.
+
+**Access model**
+
+| Question | Answer |
+|---|---|
+| Who can reach it? | Anyone with network access to the indexer HTTP port |
+| Authentication? | None — no API key, token, or session is required |
+| Rate limiting? | Yes — the global per-IP limiter applies (default 100 req/min) |
+| What data is exposed? | Sync state, request/query counters, error counts and rates, uptime, and process memory usage |
+| What data is NOT exposed? | Invoice/event rows, addresses, credentials, file paths, stack traces |
+
+**Why it is safe to expose without auth**: the endpoint deliberately returns
+only *aggregated* counters and a sanitized last-error string. Every error
+message that enters the metrics (`recordError`) is passed through
+`sanitizeOperationalError`, which:
+
+1. Drops everything after the first line of a message (stack traces are cut).
+2. Redacts connection strings (`postgres://…`, `mysql://…`, `redis://…`, …).
+3. Redacts `user:password@` credentials inside any URL scheme.
+4. Redacts `key=value` / `key: value` pairs for well-known secret field names
+   (`api_key`, `token`, `secret`, `password`, …), including JSON-quoted forms.
+5. Redacts `Authorization` header values (`Bearer` / `Basic` / `Digest`).
+6. Redacts AWS-style access key IDs and common filesystem paths.
+7. Truncates the result to 240 characters.
+
+The metrics query path is also failure-tolerant: if the database query fails,
+the dashboard returns `null` sync fields with a `200` rather than surfacing a
+`500` with error details to the caller.
+
+**Deployment guidance**: because the endpoint is public, do not put anything
+sensitive in fields that flow through `recordError`. If operational metrics
+must be private (e.g. in a shared environment), put the indexer behind a
+reverse proxy that restricts access to `/v1/dashboard`.
+
+### 7. GraphQL subscriptions and pub-sub (`graphql/pubsub.ts`)
+
+The indexer has a single canonical pub-sub event bus at
+`src/graphql/pubsub.ts`, backed by `graphql-subscriptions`. Both GraphQL
+surfaces share it:
+
+- **Legacy monolithic Yoga schema** (`graphql.ts`) — served over HTTP/SSE,
+  still mounted inside `createApp()` for backwards compatibility. Subscribes
+  to the namespaced `LEGACY_INVOICE_CREATED` / `LEGACY_INVOICE_UPDATED`
+  channels.
+- **Current modular Apollo + graphql-ws schema** (`graphql/`) — served over
+  WebSocket at `ws://…/graphql` via `createGraphQLServer()` in `index.ts`.
+  Subscribes to `INVOICE_UPDATED` / `EVENT_STREAM` channels.
+
+The `processor.ts` publishes each invoice event once per channel; there is no
+second event bus. (Historically `src/pubsub.ts` held a second, graphql-yoga
+pub-sub and `processor.ts` published to both — that duplicate was removed.)
+
+**WebSocket subscription limits & authentication**
+
+Subscription connections are protected against resource exhaustion and can
+optionally require a shared secret:
+
+| Setting | Env var | Default |
+|---|---|---|
+| Max concurrent WS connections (global) | `SUBSCRIPTION_MAX_CONNECTIONS` | `100` (`0` = unlimited) |
+| Max concurrent WS connections per IP | `SUBSCRIPTION_MAX_CONNECTIONS_PER_IP` | `10` (`0` = unlimited) |
+| Optional bearer token | `SUBSCRIPTION_AUTH_TOKEN` | unset = public |
+
+When `SUBSCRIPTION_AUTH_TOKEN` is set, clients must present it as
+`Authorization: Bearer <token>` in the graphql-transport-ws `connection_init`
+handshake; otherwise the connection is rejected. Exceeding either connection
+cap closes the new socket immediately with code `1008`.
+
 ## Data Flow
 
 ```

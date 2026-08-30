@@ -132,6 +132,17 @@ export class ILNClient {
     return String(this.unwrapContractResult(this.extractRetval(simulation), 'get_version'));
   }
 
+  async getReputation(address: string): Promise<number> {
+    const transaction = this.buildReadTransaction('get_reputation', [
+      Address.fromString(address).toScVal(),
+    ]);
+    const simulation = await this.simulate(transaction, 'get_reputation');
+    return this.toNumber(
+      this.unwrapContractResult(this.extractRetval(simulation), 'get_reputation'),
+      'reputation score'
+    );
+  }
+
   async getProtocolConfig(): Promise<ProtocolConfig> {
     const now = Date.now();
     if (this.protocolConfigCache && this.protocolConfigCache.expiresAt > now) {

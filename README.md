@@ -13,14 +13,13 @@ No banks. No credit checks. No 60-day waits.
 
 ---
 
-
 ## Organisation Repositories
 
 | Repository                                                                                          | Description                                                                 | Language   |
 | --------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------- | ---------- |
 | [Invoice-Liquidity-Network](https://github.com/Invoice-Liquidity-Network/Invoice-Liquidity-Network) | **This repo** — org overview, shared docs, SDK, CLI, indexer, notifications | TypeScript |
-| [ILN-Frontend](https://github.com/Invoice-Liquidity-Network/ILN-Frontend) | Next.js dApp — freelancer dashboard, LP analytics, governance UI | TypeScript |
-| [ILN-Smart-Contract](https://github.com/Invoice-Liquidity-Network/ILN-Smart-Contract) | Soroban smart contracts — invoice lifecycle, multi-token, reputation | Rust |
+| [ILN-Frontend](https://github.com/Invoice-Liquidity-Network/ILN-Frontend)                           | Next.js dApp — freelancer dashboard, LP analytics, governance UI            | TypeScript |
+| [ILN-Smart-Contract](https://github.com/Invoice-Liquidity-Network/ILN-Smart-Contract)               | Soroban smart contracts — invoice lifecycle, multi-token, reputation        | Rust       |
 
 ---
 
@@ -94,12 +93,14 @@ iln status --id 1
 
 See [`cli/README.md`](./cli/README.md) for setup and usage.
 
-This is the canonical CLI. `packages/cli` (`@iln/cli`) is a separate,
-experimental package with a smaller command set — see
-[`docs/cli-vs-cli-next.md`](./docs/cli-vs-cli-next.md) for the full
-comparison and which one to use.
+This is the one and only CLI in this repository. `packages/cli` (`@iln/cli`)
+was an experimental duplicate with a smaller command set and has been
+removed — see [`docs/cli-vs-cli-next.md`](./docs/cli-vs-cli-next.md) for how
+its unique commands (`watch`, `export`, `stats`, `reputation`, `network
+switch`) were folded in here.
 
 **Development vs Production CLI:**
+
 - The published CLI package (`@invoice-liquidity/cli`) installs the `iln` binary — this is the public-facing tool for interacting with the ILN contract.
 - The monorepo's development tooling includes an internal `iln-dev` binary (via `pnpm iln-dev`) — this is an internal development/configuration tool with no public API. Do not install the root package globally; use the CLI package instead.
 
@@ -151,48 +152,59 @@ Deployment and development helper scripts.
 
 This is a **pnpm workspace** (see `pnpm-workspace.yaml`). For a complete table with status, purpose, and dependency information for every workspace, see [docs/monorepo-map.md](docs/monorepo-map.md).
 
+### Which package should I use?
+
+If you are a new integrator, use this quick decision guide to find what you need:
+
+| If you are building...     | You should use...   | NPM Package              |
+| -------------------------- | ------------------- | ------------------------ |
+| A command-line integration | `cli/`              | `@invoice-liquidity/cli` |
+| A TypeScript/Node.js app   | `sdk/`              | `@invoice-liquidity/sdk` |
+| A React frontend           | `packages/react/`   | `@iln/react`             |
+| Direct Horizon queries     | `packages/indexer/` | `@iln/indexer`           |
+
+> Note: The legacy CLI (`@iln/cli`) and experimental SDK (`@iln/sdk`) have been consolidated. Always use the top-level `cli/` and `sdk/` directories for new integrations.
+
 The table below lists every workspace package, its directory, npm package name, and role. `pnpm-workspace.yaml` is the single source of truth — the `workspaces` field has been removed from `package.json` because pnpm ignores it.
 
 ### Top-level service packages
 
-| Directory | Package name | Role |
-|---|---|---|
-| `sdk/` | `@invoice-liquidity/sdk` | TypeScript SDK — browser Freighter + Node.js keypair signing |
-| `cli/` | `@invoice-liquidity/cli` | Published CLI (`iln` binary) for interacting with the contract |
-| `indexer/` | `iln-indexer` | Production event indexer service — Soroban RPC → SQLite → REST/GraphQL, deployed on Railway |
-| `notifications/` | `@invoice-liquidity/notifications` | Webhook notification service for invoice lifecycle events |
-| `docs/` | `@invoice-liquidity/docs` | Nextra 2 legacy docs source — content `.md` files; **not deployed** (migration in progress) |
+| Directory        | Package name                       | Role                                                                                        |
+| ---------------- | ---------------------------------- | ------------------------------------------------------------------------------------------- |
+| `sdk/`           | `@invoice-liquidity/sdk`           | TypeScript SDK — browser Freighter + Node.js keypair signing                                |
+| `cli/`           | `@invoice-liquidity/cli`           | Published CLI (`iln` binary) for interacting with the contract                              |
+| `indexer/`       | `iln-indexer`                      | Production event indexer service — Soroban RPC → SQLite → REST/GraphQL, deployed on Railway |
+| `notifications/` | `@invoice-liquidity/notifications` | Webhook notification service for invoice lifecycle events                                   |
+| `docs/`          | `@invoice-liquidity/docs`          | Nextra 2 legacy docs source — content `.md` files; **not deployed** (migration in progress) |
 
 ### Shared library packages (`packages/*`)
 
-| Directory | Package name | Role |
-|---|---|---|
-| `packages/sdk/` | `@iln/sdk` | SDK package variant (experimental / next iteration) |
-| `packages/cli/` | `@iln/cli` | CLI package variant (experimental) — see [`docs/cli-vs-cli-next.md`](./docs/cli-vs-cli-next.md) |
-| `packages/docs/` | `@invoice-liquidity/docs-next` | **Canonical deployed docs site** (Nextra 3, Next.js 15 App Router) — [docs.iln.finance](https://docs.iln.finance) |
-| `packages/shared/` | `@iln/shared` | Shared utilities consumed by SDK, CLI, and other packages |
-| `packages/indexer/` | `@iln/indexer` | Horizon-based event indexer utility library (stateless, publishable) |
-| `packages/invoice-sdk/` | `@iln/invoice-sdk` | Invoice SDK variant |
-| `packages/react/` | `@iln/react` | React component library for ILN protocol interactions |
-| `packages/opentelemetry/` | `@iln/opentelemetry` | OpenTelemetry instrumentation helpers |
-| `packages/mock-backend/` | `@iln/mock-backend` | Mock backend for local testing without a live Stellar node |
-| `packages/eslint-config/` | `@iln/eslint-config` | Shared ESLint configuration used across all workspaces |
-| `packages/test-utils/` | `@iln/test-utils` | Test helper utilities shared across packages |
-| `packages/upgrade-tests/` | `@iln/upgrade-tests` | Upgrade compatibility test suite |
-| `packages/scripts/` | *(internal)* | Internal dev scripts and the `iln-dev` binary |
+| Directory                 | Package name                   | Role                                                                                                              |
+| ------------------------- | ------------------------------ | ----------------------------------------------------------------------------------------------------------------- |
+| `packages/sdk/`           | `@iln/sdk`                     | SDK package variant (experimental / next iteration)                                                               |
+| `packages/docs/`          | `@invoice-liquidity/docs-next` | **Canonical deployed docs site** (Nextra 3, Next.js 15 App Router) — [docs.iln.finance](https://docs.iln.finance) |
+| `packages/shared/`        | `@iln/shared`                  | Shared utilities consumed by SDK, CLI, and other packages                                                         |
+| `packages/indexer/`       | `@iln/indexer`                 | Horizon-based event indexer utility library (stateless, publishable)                                              |
+| `packages/react/`         | `@iln/react`                   | React component library for ILN protocol interactions                                                             |
+| `packages/opentelemetry/` | `@iln/opentelemetry`           | OpenTelemetry instrumentation helpers                                                                             |
+| `packages/mock-backend/`  | `@iln/mock-backend`            | Mock backend for local testing without a live Stellar node                                                        |
+| `packages/eslint-config/` | `@iln/eslint-config`           | Shared ESLint configuration used across all workspaces                                                            |
+| `packages/test-utils/`    | `@iln/test-utils`              | Test helper utilities shared across packages                                                                      |
+| `packages/upgrade-tests/` | `@iln/upgrade-tests`           | Upgrade compatibility test suite                                                                                  |
+| `packages/scripts/`       | _(internal)_                   | Internal dev scripts and the `iln-dev` binary                                                                     |
 
 ### Example applications (`examples/*`)
 
-| Directory | Role |
-|---|---|
-| `examples/analytics-plugin/` | Analytics plugin integration example |
+| Directory                      | Role                                   |
+| ------------------------------ | -------------------------------------- |
+| `examples/analytics-plugin/`   | Analytics plugin integration example   |
 | `examples/governance-monitor/` | On-chain governance monitoring example |
-| `examples/javascript-example/` | Plain JavaScript SDK usage example |
-| `examples/lp-automation/` | Automated LP funding bot example |
-| `examples/portfolio-report/` | LP/freelancer portfolio report script |
-| `examples/react-example/` | React app SDK integration example |
-| `examples/submit-invoice/` | Invoice submission walkthrough example |
-| `examples/typescript-example/` | TypeScript SDK usage example |
+| `examples/javascript-example/` | Plain JavaScript SDK usage example     |
+| `examples/lp-automation/`      | Automated LP funding bot example       |
+| `examples/portfolio-report/`   | LP/freelancer portfolio report script  |
+| `examples/react-example/`      | React app SDK integration example      |
+| `examples/submit-invoice/`     | Invoice submission walkthrough example |
+| `examples/typescript-example/` | TypeScript SDK usage example           |
 
 > Directories without a `package.json` (`backend/`, `frontend/`, `tests/`, `workers/`, etc.) are **not** pnpm workspaces — they are submodules, supporting scripts, or non-JS artefacts.
 
@@ -277,24 +289,24 @@ npm run test:e2e              # Run E2E integration tests
 > legacy Nextra 2 app that is not deployed — see [`docs/DOCS_SETUP.md`](./docs/DOCS_SETUP.md)
 > for the migration status.
 
-| Doc                                                                      | Description                                                                   |
-| ------------------------------------------------------------------------ | ----------------------------------------------------------------------------- |
-| [docs.iln.finance](https://docs.iln.finance)                             | **Live documentation site** (canonical, deployed from `packages/docs/`)       |
-| [`docs/index.md`](./docs/index.md)                                       | Protocol overview                                                             |
-| [`docs/tutorials/lp-funding.md`](./docs/tutorials/lp-funding.md)         | LP funding tutorial                                                           |
-| [`docs/governance-guide.md`](./docs/governance-guide.md)                 | Governance guide                                                              |
-| [`docs/tokens/multi-token-support.md`](./docs/tokens/multi-token-support.md) | Multi-token support                                                       |
-| [`docs/notifications.md`](./docs/notifications.md)                       | Notification system                                                           |
-| [`docs/api-collection.md`](./docs/api-collection.md)                     | Horizon and Soroban RPC API collection examples                               |
-| [`docs/local-development.md`](./docs/local-development.md)               | Local dev setup                                                               |
-| [`docs/mainnet-launch-checklist.md`](./docs/mainnet-launch-checklist.md) | Mainnet readiness checklist with owners, statuses, and sign-off               |
-| [`docs/glossary.md`](./docs/glossary.md)                                 | Protocol terminology for Stellar, invoice factoring, DeFi, and security terms |
-| [`docs/tutorials/first-invoice.md`](./docs/tutorials/first-invoice.md)   | Hands-on invoice submission tutorial                                          |
-| [`docs/ci-cd.md`](./docs/ci-cd.md)                                       | CI/CD and deployment environments                                             |
-| [`docs/DOCS_SETUP.md`](./docs/DOCS_SETUP.md)                             | Docs migration checklist and developer setup guide                            |
-| [`CONTRIBUTING.md`](./CONTRIBUTING.md)                                   | How to contribute                                                             |
-| [`CODE_OF_CONDUCT.md`](./CODE_OF_CONDUCT.md)                             | Community standards and guidelines                                            |
-| [`SECURITY.md`](./SECURITY.md)                                           | Security policy                                                               |
+| Doc                                                                          | Description                                                                   |
+| ---------------------------------------------------------------------------- | ----------------------------------------------------------------------------- |
+| [docs.iln.finance](https://docs.iln.finance)                                 | **Live documentation site** (canonical, deployed from `packages/docs/`)       |
+| [`docs/index.md`](./docs/index.md)                                           | Protocol overview                                                             |
+| [`docs/tutorials/lp-funding.md`](./docs/tutorials/lp-funding.md)             | LP funding tutorial                                                           |
+| [`docs/governance-guide.md`](./docs/governance-guide.md)                     | Governance guide                                                              |
+| [`docs/tokens/multi-token-support.md`](./docs/tokens/multi-token-support.md) | Multi-token support                                                           |
+| [`docs/notifications.md`](./docs/notifications.md)                           | Notification system                                                           |
+| [`docs/api-collection.md`](./docs/api-collection.md)                         | Horizon and Soroban RPC API collection examples                               |
+| [`docs/local-development.md`](./docs/local-development.md)                   | Local dev setup                                                               |
+| [`docs/mainnet-launch-checklist.md`](./docs/mainnet-launch-checklist.md)     | Mainnet readiness checklist with owners, statuses, and sign-off               |
+| [`docs/glossary.md`](./docs/glossary.md)                                     | Protocol terminology for Stellar, invoice factoring, DeFi, and security terms |
+| [`docs/tutorials/first-invoice.md`](./docs/tutorials/first-invoice.md)       | Hands-on invoice submission tutorial                                          |
+| [`docs/ci-cd.md`](./docs/ci-cd.md)                                           | CI/CD and deployment environments                                             |
+| [`docs/DOCS_SETUP.md`](./docs/DOCS_SETUP.md)                                 | Docs migration checklist and developer setup guide                            |
+| [`CONTRIBUTING.md`](./CONTRIBUTING.md)                                       | How to contribute                                                             |
+| [`CODE_OF_CONDUCT.md`](./CODE_OF_CONDUCT.md)                                 | Community standards and guidelines                                            |
+| [`SECURITY.md`](./SECURITY.md)                                               | Security policy                                                               |
 
 ---
 

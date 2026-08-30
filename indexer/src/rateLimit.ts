@@ -1,5 +1,6 @@
 import { rateLimit, type RateLimitRequestHandler } from 'express-rate-limit';
 import type { Request } from 'express';
+import { isIP } from 'node:net';
 import { CONFIG } from './config';
 
 /**
@@ -16,7 +17,10 @@ import { CONFIG } from './config';
  * RateLimit-Remaining, and RateLimit-Reset headers.
  *
  * IPs listed in RATE_LIMIT_WHITELIST (comma-separated) bypass the limiter
- * entirely, so internal services and monitoring are never throttled.
+ * entirely, so internal services and monitoring are never throttled. This is
+ * intentionally an exact, parsed IP match: forwarded headers are interpreted
+ * by Express according to its trusted-proxy configuration and arbitrary
+ * request headers cannot manufacture a whitelist identity.
  */
 export function createApiRateLimiter(): RateLimitRequestHandler {
   return rateLimit({
@@ -25,15 +29,20 @@ export function createApiRateLimiter(): RateLimitRequestHandler {
     standardHeaders: 'draft-6',
     legacyHeaders: false,
     skip: (req: Request) => {
-      const ip = req.ip ?? '';
-      // Normalize ::ffff:x.x.x.x (IPv4-mapped IPv6) and ::1 to their IPv4 equivalents
-      const normalized = ip.startsWith('::ffff:') ? ip.slice(7) : ip === '::1' ? '127.0.0.1' : ip;
-      return (
-        CONFIG.rateLimitWhitelist.includes(ip) || CONFIG.rateLimitWhitelist.includes(normalized)
-      );
+      const normalized = normalizeIp(req.ip ?? '');
+      return isIP(normalized) !== 0 && CONFIG.rateLimitWhitelist.includes(normalized);
     },
     message: {
       error: 'Too many requests - please slow down and try again shortly.',
     },
   });
+}
+
+/** Normalize only valid IP spellings; never treat arbitrary identifiers as addresses. */
+function normalizeIp(ip: string): string {
+  const trimmed = ip.trim().toLowerCase();
+  if (trimmed.startsWith('::ffff:')) {
+    return trimmed.slice(7);
+  }
+  return trimmed === '::1' ? '127.0.0.1' : trimmed;
 }

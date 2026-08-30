@@ -5,6 +5,10 @@
       "pattern": "^mailto:"
     },
     {
+      "comment": "Localhost dev URLs are example documentation endpoints, not live servers in CI",
+      "pattern": "^http://localhost:"
+    },
+    {
       "comment": "Absolute paths on a contributor's own machine, never resolvable for anyone else (see docs/pr-16-submission-form.md)",
       "pattern": "^/Users/"
     },
@@ -25,7 +29,7 @@
       "pattern": "^https://docs\\.iln\\.finance"
     }
   ],
-  "aliveStatusCodes": [200, 206, 429],
+  "aliveStatusCodes": [200, 206, 301, 302, 429],
   "retryOn429": true,
   "retryCount": 3,
   "timeout": "20s"

@@ -78,9 +78,6 @@
       "entry": ["**/*.{ts,js}"],
       "project": ["**/*.{ts,js}"]
     },
-    "packages/invoice-sdk": {
-      "ignoreDependencies": ["@iln/sdk"]
-    },
     "packages/eslint-config": {
       "ignoreDependencies": []
     }

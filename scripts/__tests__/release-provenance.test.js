@@ -1,0 +1,99 @@
+/**
+ * Issue #878 — npm package provenance regression guard.
+ *
+ * Every release workflow that publishes to npm must actually be configured
+ * for provenance attestation (the --provenance flag or NPM_CONFIG_PROVENANCE
+ * plus the id-token: write permission GitHub Actions OIDC needs), and must
+ * reference the real package name declared in the package directory it
+ * publishes. The audit this test encodes found that the provenance flags
+ * were correct but two workflows referenced stale state (an old package name
+ * and a private package); both were fixed and this test keeps the
+ * configuration honest.
+ */
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import { readdirSync, readFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+const ROOT = fileURLToPath(new URL('../..', import.meta.url));
+const WORKFLOWS = join(ROOT, '.github', 'workflows');
+const workflowFiles = readdirSync(WORKFLOWS).filter(f => f.endsWith('.yml'));
+
+const read = rel => readFileSync(join(ROOT, rel), 'utf8');
+
+test('every release workflow that publishes to npm is provenance-enabled', () => {
+  for (const file of workflowFiles) {
+    const content = readFileSync(join(WORKFLOWS, file), 'utf8');
+
+    // A publish command is the tell that this workflow ships a package.
+    if (!/(npm|pnpm)\s+publish/.test(content)) continue;
+
+    const hasFlag = content.includes('--provenance');
+    const hasEnvFlag = content.includes('NPM_CONFIG_PROVENANCE');
+    const hasOidc = content.includes('id-token: write');
+
+    assert.ok(
+      (hasFlag || hasEnvFlag) && hasOidc,
+      `${file} publishes to npm but is missing provenance attestation config ` +
+        `(need --provenance or NPM_CONFIG_PROVENANCE=true, plus id-token: write). ` +
+        'npm publish without provenance defeats the supply-chain guarantee.',
+    );
+  }
+});
+
+test('every npm publish targets a package name that actually exists in the repo', () => {
+  // The workflow must name the package it publishes (its header/comments
+  // document it) and that name must match packages/<dir>/package.json.
+  const packageNames = new Set();
+  for (const dir of readdirSync(join(ROOT, 'packages'))) {
+    const pkgPath = join(ROOT, 'packages', dir, 'package.json');
+    try {
+      packageNames.add(JSON.parse(readFileSync(pkgPath, 'utf8')).name);
+    } catch {
+      // not a package directory
+    }
+  }
+
+  const sdkRelease = read('.github/workflows/sdk-release.yml');
+  const sdkName = JSON.parse(read('packages/sdk/package.json')).name;
+  assert.ok(
+    sdkRelease.includes(sdkName),
+    `sdk-release.yml must reference the real package name ${sdkName} (issue #878 found stale "@iln/sdk")`,
+  );
+  assert.ok(
+    packageNames.has(sdkName),
+    `${sdkName} (from packages/sdk/package.json) must exist in the repo's package set`,
+  );
+});
+
+test('no release workflow references the removed scripts publish path', () => {
+  assert.ok(
+    !workflowFiles.includes('scripts-release.yml'),
+    'scripts-release.yml was removed (issue #878): @iln/scripts is private and "not for public installation"',
+  );
+  for (const file of workflowFiles) {
+    const content = readFileSync(join(WORKFLOWS, file), 'utf8');
+    assert.ok(
+      !/publish.*@iln\/scripts|@iln\/scripts.*publish/.test(content),
+      `${file} still references publishing @iln/scripts`,
+    );
+  }
+});
+
+test('the provenance docs reference the real package name', () => {
+  const securityGuide = read('docs/security-guide.md');
+  const releaseProcess = read('docs/release-process.md');
+  assert.ok(
+    securityGuide.includes('@iln/sdk-next'),
+    'docs/security-guide.md should reference @iln/sdk-next',
+  );
+  assert.ok(
+    !securityGuide.includes('npm audit signatures @invoice-liquidity/sdk'),
+    'docs/security-guide.md must not present the stale @invoice-liquidity/sdk verification block',
+  );
+  assert.ok(
+    releaseProcess.includes('@iln/sdk-next'),
+    'docs/release-process.md should reference @iln/sdk-next',
+  );
+});
