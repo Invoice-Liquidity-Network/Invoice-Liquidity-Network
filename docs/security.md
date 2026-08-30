@@ -5,8 +5,11 @@
 > repository root [`SECURITY.md`](../SECURITY.md).
 
 For broader security practices (integrator guidance, node-operator hardening, package
-provenance verification, audit information, and incident response), see the
+provenance verification, audit information, and general incident response), see the
 [Security Guide](./security-guide.md).
+
+For operational incident handling procedures across SDK, indexer, oracle, and notifications services, see the
+[Incident Response Runbook](./incident-response.md).
 
 For the protocol-level attack surface analysis, see the [Threat Model](./threat-model.md).
 
