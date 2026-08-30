@@ -1,0 +1,16 @@
+# Scrape configuration for oracle-service.
+#
+# Merge into the `scrape_configs` list of the Prometheus config used for the
+# rest of the monorepo's services. The `job` label must stay `oracle-service`:
+# the OracleNoVerifications rule joins against `up{job="oracle-service"}`.
+
+scrape_configs:
+  - job_name: oracle-service
+    metrics_path: /v1/metrics
+    scrape_interval: 30s
+    static_configs:
+      - targets:
+          - 'oracle-service:3010'
+        labels:
+          service: oracle-service
+          component: oracle

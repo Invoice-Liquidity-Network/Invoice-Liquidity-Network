@@ -1,0 +1,104 @@
+import type { KYBVerificationResult, VerificationProvider } from '../types';
+
+export interface MockKYBProviderOptions {
+  name?: string;
+  defaultVerified?: boolean;
+  defaultJurisdiction?: string;
+  knownBusinesses?: Record<
+    string,
+    {
+      isVerified: boolean;
+      businessName: string;
+      registrationNumber: string;
+      jurisdiction: string;
+      riskScore?: number;
+      signals?: string[];
+    }
+  >;
+}
+
+/**
+ * Reference / Mock KYB Verification Provider Adapter
+ *
+ * Implements the pluggable `VerificationProvider` interface to demonstrate external
+ * business entity verification integration alongside in-house fraud heuristics.
+ */
+export class MockKYBProvider implements VerificationProvider {
+  public readonly name: string;
+  private readonly defaultVerified: boolean;
+  private readonly defaultJurisdiction: string;
+  private readonly knownBusinesses: Map<
+    string,
+    {
+      isVerified: boolean;
+      businessName: string;
+      registrationNumber: string;
+      jurisdiction: string;
+      riskScore?: number;
+      signals?: string[];
+    }
+  >;
+
+  constructor(options: MockKYBProviderOptions = {}) {
+    this.name = options.name ?? 'MockKYBProvider';
+    this.defaultVerified = options.defaultVerified ?? true;
+    this.defaultJurisdiction = options.defaultJurisdiction ?? 'US-DE';
+    this.knownBusinesses = new Map(Object.entries(options.knownBusinesses ?? {}));
+  }
+
+  public registerBusiness(
+    payerAddress: string,
+    details: {
+      isVerified: boolean;
+      businessName: string;
+      registrationNumber: string;
+      jurisdiction: string;
+      riskScore?: number;
+      signals?: string[];
+    }
+  ): void {
+    this.knownBusinesses.set(payerAddress, details);
+  }
+
+  public async verifyPayer(
+    payerAddress: string,
+    metadata?: Record<string, unknown>
+  ): Promise<KYBVerificationResult> {
+    const known = this.knownBusinesses.get(payerAddress);
+    const verifiedAt = new Date().toISOString();
+
+    if (known) {
+      return {
+        provider: this.name,
+        isVerified: known.isVerified,
+        businessName: known.businessName,
+        registrationNumber: known.registrationNumber,
+        jurisdiction: known.jurisdiction,
+        riskScore: known.riskScore ?? (known.isVerified ? 10 : 85),
+        verifiedAt,
+        signals: known.signals ?? (known.isVerified ? [] : ['Unverified entity']),
+        rawDetails: {
+          matchedKnownEntity: true,
+          metadata,
+        },
+      };
+    }
+
+    return {
+      provider: this.name,
+      isVerified: this.defaultVerified,
+      businessName: metadata?.businessName
+        ? String(metadata.businessName)
+        : `Verified Entity (${payerAddress.slice(0, 8)})`,
+      registrationNumber: `REG-${payerAddress.slice(0, 6).toUpperCase()}-2026`,
+      jurisdiction: this.defaultJurisdiction,
+      riskScore: this.defaultVerified ? 15 : 90,
+      verifiedAt,
+      signals: this.defaultVerified ? [] : ['Entity not found in official registry'],
+      rawDetails: {
+        matchedKnownEntity: false,
+        metadata,
+      },
+    };
+  }
+}

@@ -1,10 +1,14 @@
 # ==============================================================================
-# SDK Release — Issue #232
+# SDK Release — Issue #232 / #878
 #
-# Publishes the @iln/sdk package (packages/sdk) to npm on every `v*` version tag,
-# with build provenance (--provenance) for supply-chain transparency, and creates
-# a matching GitHub Release whose body is the changelog section extracted from
-# CHANGELOG.md.
+# Publishes the @iln/sdk-next package (packages/sdk) to npm on every `v*` version
+# tag, with build provenance (--provenance) for supply-chain transparency, and
+# creates a matching GitHub Release whose body is the changelog section
+# extracted from CHANGELOG.md.
+#
+# NOTE (issue #878): the package was renamed from @iln/sdk to @iln/sdk-next
+# during the packages consolidation; the publish step targets whatever name
+# packages/sdk/package.json declares, so this workflow publishes @iln/sdk-next.
 #
 # On pull requests targeting `main` the workflow performs a dry run only
 # (install + build + pack), so packaging problems are caught before a tag is cut

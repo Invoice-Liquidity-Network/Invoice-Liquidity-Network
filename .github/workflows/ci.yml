@@ -51,10 +51,8 @@ jobs:
               - 'sdk/**'
               - 'packages/sdk/**'
               - 'packages/shared/**'
-              - 'packages/invoice-sdk/**'
             cli:
               - 'cli/**'
-              - 'packages/cli/**'
             indexer:
               - 'indexer/**'
               - 'packages/indexer/**'
@@ -366,6 +364,25 @@ jobs:
               body: '🚨 **Package.json validation failed!** Run `node scripts/validate-packages.mjs` locally and fix violations before merging.'
             })
 
+  gitleaks:
+    name: Secret scanning
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Scan repository for secrets
+        run: pnpm gitleaks:scan
+
   no-foreign-lockfiles:
     name: Guard against non-pnpm lockfiles
     runs-on: ubuntu-latest
@@ -409,7 +426,7 @@ jobs:
         if: always()
         continue-on-error: true
         run: |
-          for pkg in sdk cli indexer notifications packages/react packages/mock-backend packages/opentelemetry packages/upgrade-tests packages/test-utils packages/cli; do
+          for pkg in sdk cli indexer notifications packages/react packages/mock-backend packages/opentelemetry packages/upgrade-tests packages/test-utils; do
             if [ -f "$pkg/vitest.config.ts" ] || [ -f "$pkg/vitest.config.js" ]; then
               echo "Generating JUnit report for $pkg..."
               cd "$GITHUB_WORKSPACE/$pkg"
@@ -715,6 +732,12 @@ jobs:
           restore-keys: ${{ runner.os }}-turbo-test-
       - name: Test
         run: pnpm exec turbo run test --cache-dir=.turbo
+
+      - name: Root node --test suites
+        run: |
+          npm run test:checklist
+          npm run test:audit
+          npm run test:provenance
 
   core-build:
     name: Core · build

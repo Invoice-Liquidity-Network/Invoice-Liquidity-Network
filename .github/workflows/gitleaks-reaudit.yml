@@ -1,0 +1,35 @@
+name: Gitleaks Baseline Re-audit
+
+on:
+  schedule:
+    - cron: '0 9 1 1,4,7,10 *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  baseline-reaudit:
+    name: Verify secrets baseline freshness
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Scan against the tracked baseline
+        run: pnpm gitleaks:scan
+      - name: Regenerate baseline in a temporary directory
+        run: |
+          cp .secrets.baseline /tmp/secrets.baseline.before.json
+          pnpm exec gitleaks detect --no-git -s . --config gitleaks.toml \
+            --report-format json --report-path /tmp/secrets.baseline.after.json
+          diff -u /tmp/secrets.baseline.before.json /tmp/secrets.baseline.after.json

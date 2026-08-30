@@ -1,11 +1,15 @@
 import { randomUUID } from 'crypto';
-import { getDb } from './db';
-import type { Invoice, ILNEvent, InvoiceFilter } from './types';
+import { getDb, type InvoiceFilter } from './db';
+import type { Invoice, ILNEvent } from './types';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
 /** Maximum rows served synchronously. Requests exceeding this must use async jobs. */
 export const SYNC_EXPORT_LIMIT = 5_000;
+
+/** Maximum rows allowed in an async export job to prevent memory exhaustion. */
+export const ASYNC_EXPORT_LIMIT = 50_000;
+
 
 // ─── Filter types ─────────────────────────────────────────────────────────────
 
@@ -93,10 +97,18 @@ export async function processExportJob(jobId: string): Promise<void> {
     let rowCount: number;
 
     if (entry.job.type === 'invoices') {
+      const count = countInvoicesForExport(entry.job.filter as ExportFilter);
+      if (count > ASYNC_EXPORT_LIMIT) {
+        throw new Error(`Result set too large (${count} rows). Maximum allowed for async export is ${ASYNC_EXPORT_LIMIT}.`);
+      }
       const rows = queryInvoicesForExport(entry.job.filter as ExportFilter);
       rowCount = rows.length;
       content = entry.job.format === 'csv' ? invoicesToCsv(rows) : JSON.stringify(rows, null, 2);
     } else {
+      const count = countEventsForExport(entry.job.filter as EventExportFilter);
+      if (count > ASYNC_EXPORT_LIMIT) {
+        throw new Error(`Result set too large (${count} rows). Maximum allowed for async export is ${ASYNC_EXPORT_LIMIT}.`);
+      }
       const rows = queryEventsForExport(entry.job.filter as EventExportFilter);
       rowCount = rows.length;
       content = entry.job.format === 'csv' ? eventsToCsv(rows) : JSON.stringify(rows, null, 2);

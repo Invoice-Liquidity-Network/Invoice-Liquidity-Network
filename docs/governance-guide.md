@@ -54,6 +54,30 @@ create_proposal()
 
 ---
 
+## Production Multi-Sig Admin Configuration
+
+For mainnet production safety, all privileged administrator powers (such as emergency circuit breaking, parameter overrides, contract upgrade execution, and dispute resolution fallback) are transferred to an m-of-n Multi-Sig Admin setup coordinated across the [ILN-Smart-Contract](https://github.com/Invoice-Liquidity-Network/ILN-Smart-Contract) and main repository runbooks.
+
+### Multi-Sig Quorum and Thresholds
+
+| Network | Signer Setup | Quorum Threshold | Timelock Delay | Purpose |
+| --- | --- | --- | --- | --- |
+| **Testnet** | 2-of-3 Multi-Sig | 2 Signers | 0 ledgers | Fast iteration and development testing |
+| **Mainnet** | 4-of-7 Multi-Sig | 4 Core Signers | 48 hours (approx. 34,560 ledgers) | Routine upgrades, parameter governance overrides |
+| **Emergency Mainnet** | 3-of-7 Multi-Sig | 3 Core Signers | 0 ledgers (Emergency Pause only) | Circuit breaker activation during active exploit |
+
+### Admin Key Allocation
+- **Protocol Engineers**: 3 keys distributed across core protocol maintainers in separate hardware security modules (HSMs).
+- **Security & Auditor Custodians**: 2 keys held by external security audit partners.
+- **Community / Governance Custodians**: 2 keys held by community elected stewards.
+
+### Emergency Response & Timelock Procedure
+1. **Emergency Pause (Circuit Breaker)**: Requires 3-of-7 threshold to immediately halt funding and invoice creation without delay.
+2. **Unpause / Upgrade / Parameter Override**: Requires 4-of-7 threshold and enforces a mandatory 48-hour timelock to allow ecosystem participants to inspect proposed changes.
+3. **Cross-Repo Coordination**: Operational multi-sig runbooks and deployment execution scripts are maintained in the [ILN-Smart-Contract repository](https://github.com/Invoice-Liquidity-Network/ILN-Smart-Contract) and cross-verified before each release.
+
+---
+
 ## Proposal Creation Guide
 
 ### Prerequisites

@@ -285,7 +285,7 @@ describe('filterEventStream', () => {
 
 describe('PubSub integration', () => {
   it('INVOICE_UPDATED asyncIterator yields published payload', async () => {
-    const iter = pubsub.asyncIterableIterator<InvoiceUpdatedPayload>(INVOICE_UPDATED);
+    const iter = pubsub.asyncIterator<InvoiceUpdatedPayload>(INVOICE_UPDATED);
     const inv = makeInvoice({ id: 42, status: 'Funded' });
     const ev = makeEvent({ event_type: 'funded' });
 
@@ -305,7 +305,7 @@ describe('PubSub integration', () => {
   });
 
   it('EVENT_STREAM asyncIterator yields published event', async () => {
-    const iter = pubsub.asyncIterableIterator<EventStreamPayload>(EVENT_STREAM);
+    const iter = pubsub.asyncIterator<EventStreamPayload>(EVENT_STREAM);
     const ev = makeEvent({ event_id: 'stream-test', event_type: 'defaulted', invoice_id: 7 });
 
     const nextPromise = iter.next();

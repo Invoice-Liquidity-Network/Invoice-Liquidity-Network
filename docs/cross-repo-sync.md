@@ -302,3 +302,16 @@ A: Not automatically. If you remove a `sync:*` label, future syncs don't happen,
 
 **Q: What happens if I sync the same issue twice?**  
 A: Each label event creates a new issue. Avoid re-adding the same label to prevent duplicates. If this happens, close the duplicate and add a comment linking the issues.
+
+---
+
+## Hardening Batch Coordination
+
+During concurrent 125-issue hardening batches across the main repo, `ILN-Smart-Contract`, and `ILN-Frontend`, duplicate or overlapping work is governed by [docs/hardening-batch-coordination.md](hardening-batch-coordination.md).
+
+Key guidelines:
+- **Indexer Work**: `Invoice-Liquidity-Network` is authoritative for indexer implementation, RPC polling loop, and schema. Frontend indexer issues must consume the canonical indexer API.
+- **Notifications Work**: `Invoice-Liquidity-Network` is authoritative for notification service dispatch and webhook HMAC signatures.
+- **Oracle Work**: `ILN-Smart-Contract` is authoritative for Soroban oracle storage & on-chain verification, while `Invoice-Liquidity-Network` is authoritative for off-chain `oracle-service/` price fetchers.
+- **De-duplication**: Use `sync:*` labels on authoritative issues in the main repo to mirror and link duplicate items across repos rather than maintaining independent diverging copies.
+

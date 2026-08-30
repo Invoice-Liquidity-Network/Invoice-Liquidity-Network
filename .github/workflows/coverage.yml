@@ -25,6 +25,7 @@ jobs:
       sdk: ${{ steps.filter.outputs.sdk }}
       cli: ${{ steps.filter.outputs.cli }}
       indexer: ${{ steps.filter.outputs.indexer }}
+      oracle: ${{ steps.filter.outputs.oracle }}
       packages: ${{ steps.filter.outputs.packages }}
     steps:
       - uses: actions/checkout@v4
@@ -43,10 +44,11 @@ jobs:
               - 'packages/shared/**'
             cli:
               - 'cli/**'
-              - 'packages/cli/**'
             indexer:
               - 'indexer/**'
               - 'packages/indexer/**'
+            oracle:
+              - 'oracle-service/**'
             packages:
               - 'packages/**'
             shared_config:
@@ -157,5 +159,100 @@ jobs:
           flags: sdk
           name: sdk
 
+  # ── Oracle service coverage ───────────────────────────────────────────────
+  # oracle-service gates fund_invoice()'s require_oracle_verification path, so a
+  # gap here can release funds against an invoice that should have been
+  # rejected. It is held to 95% rather than the monorepo-wide 80%; the threshold
+  # lives in oracle-service/vitest.config.ts so `pnpm test` enforces the same
+  # bar locally as CI does.
+  #
+  # oracle-service is not a pnpm workspace member, so dependencies are installed
+  # with --ignore-workspace rather than through the root lockfile.
+  oracle-service-coverage:
+    name: Node.js coverage (oracle-service, 95% gate)
+    needs: changes
+    if: needs.changes.outputs.oracle == 'true' || needs.changes.outputs.shared_config == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup pnpm with store cache
+        uses: ./.github/actions/setup-pnpm
+
+      - name: Install dependencies
+        working-directory: oracle-service
+        run: pnpm install --ignore-workspace
+
+      # Fails the job when any of lines/functions/branches/statements drops
+      # below 95%.
+      - name: Run oracle-service tests with coverage
+        working-directory: oracle-service
+        run: pnpm exec vitest run --coverage
+
+      - name: Upload oracle-service coverage to Codecov
+        uses: codecov/codecov-action@5975040f7f7d40edaff8d784b576fd65ae95c073 # v5.5.5
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          slug: Nursca/Invoice-Liquidity-Network
+          directory: oracle-service
+          flags: oracle-service
+          name: oracle-service
+
   pnpm-cache:
     uses: ./.github/workflows/reusable-cache-pnpm.yml
+
+  cli-coverage:
+    name: Node.js coverage (CLI)
+    needs: [changes, pnpm-cache]
+    if: needs.changes.outputs.cli == 'true' || needs.changes.outputs.shared_config == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup pnpm with store cache
+        uses: ./.github/actions/setup-pnpm
+
+      - name: Install dependencies
+        working-directory: ./cli
+        run: pnpm install --frozen-lockfile
+
+      - name: Run CLI test with coverage
+        working-directory: ./cli
+        run: pnpm test:coverage
+
+      - name: Upload CLI coverage to Codecov
+        uses: codecov/codecov-action@5975040f7f7d40edaff8d784b576fd65ae95c073 # v5.5.5
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          slug: Nursca/Invoice-Liquidity-Network
+          directory: cli
+          flags: cli
+          name: cli
+
+  indexer-coverage:
+    name: Node.js coverage (Indexer)
+    needs: [changes, pnpm-cache]
+    if: needs.changes.outputs.indexer == 'true' || needs.changes.outputs.shared_config == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup pnpm with store cache
+        uses: ./.github/actions/setup-pnpm
+
+      - name: Install dependencies
+        working-directory: ./indexer
+        run: pnpm install --frozen-lockfile
+
+      - name: Run Indexer test with coverage
+        working-directory: ./indexer
+        run: pnpm test:coverage
+
+      - name: Upload Indexer coverage to Codecov
+        uses: codecov/codecov-action@5975040f7f7d40edaff8d784b576fd65ae95c073 # v5.5.5
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          slug: Nursca/Invoice-Liquidity-Network
+          directory: indexer
+          flags: indexer
+          name: indexer

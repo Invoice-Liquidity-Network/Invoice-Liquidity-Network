@@ -1,6 +1,11 @@
 # SDK Migration Guide
 
-This guide details the steps required to upgrade your application to the latest version of the Invoice Liquidity Network (ILN) SDK. It covers all breaking changes, code updates, testing checklists, and rollback instructions.
+This guide details the steps required to upgrade your application between
+versions of the stable, published **`@iln/sdk`** package (`sdk/`) — it does
+**not** cover `@iln/sdk-next` (`packages/sdk/`), which is a separate,
+experimental package with a different API surface (a distinct `InvoiceClient`
+class instead of `ILNSdk`). Every code example below was checked against
+`sdk/src/` on 2026-08-25 and is accurate for that package.
 
 > For migrating between `@iln/sdk` (`sdk/`) and `@iln/sdk-next` (`packages/sdk/`), see the [SDK vs SDK-next Migration Guide](sdk-next-migration.md).
 

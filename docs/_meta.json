@@ -102,6 +102,7 @@
   "security": "Security",
   "security-guide": "Security Guide",
   "vulnerability-disclosure": "Vulnerability Disclosure",
+  "scf-technical-narrative": "SCF Technical Narrative",
   "secrets-baseline-audit": "Secrets Baseline Audit",
   "privacy": "Privacy & Data Retention",
   "next.config": "Next Config",

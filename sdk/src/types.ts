@@ -187,7 +187,12 @@ export interface ILNSdkConfig {
     writeMs?: number;
     simulationMs?: number;
   };
-  cache?: CacheConfig;
+  /**
+   * Whether to verify the contractId against known official ILN deployment IDs on initialization.
+   * Defaults to true. If set to true (or omitted) and the contractId does not match a known official deployment,
+   * a loud warning will be logged to alert integrators of possible misconfiguration.
+   */
+  verifyContractId?: boolean;
   /**
    * Enable the offline transaction queue.
    * When provided, write methods (`submitInvoice`, `fundInvoice`, `markPaid`,
