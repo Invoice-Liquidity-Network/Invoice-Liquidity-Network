@@ -46,6 +46,43 @@ To receive webhook notifications:
 
 Webhook notifications will POST a JSON payload to your URL for each event.
 
+## HTTP API
+
+The service (`notifications/src/api.ts` + `preferences-api.ts`) listens on
+`PORT` (default **4001**). The WebSocket server listens on `PORT + 1`
+(default **4002**) at path `/ws`.
+
+### Subscriptions and delivery (`api.ts`)
+
+| Method & path | Purpose |
+| --- | --- |
+| `GET /health` | Liveness probe |
+| `POST /subscribe` | Create a subscription. Body (snake_case): `{ stellar_address, channel, destination, triggers, webhook_secret? }`. For `webhook` channel with no `webhook_secret`, the service generates a random 32-byte hex secret. Rate-limited. Returns `201 { subscription }`. |
+| `DELETE /unsubscribe` | Remove a subscription by `id`, or by `address` + `destination` |
+| `GET /subscriptions/:address` | List subscriptions for an address |
+| `GET /subscriptions/:id/logs` | Delivery-log history for a subscription |
+| `POST /test-webhook` | Send a synthetic event to a webhook subscription. Rate-limited. |
+| `GET /analytics`, `GET /analytics/channel-comparison`, `GET /analytics/trends` | Delivery analytics |
+| `GET /digest/preview/:address` | Preview the batched digest for an address |
+
+Allowed `channel` values on the persisted path: `email`, `webhook`, `sms`
+(`ALLOWED_CHANNELS` in `config.ts`). `websocket` is delivered by the injectable
+dispatcher but is not a persisted subscription channel. Allowed `triggers`
+(`ALLOWED_TRIGGERS`): `invoice_funded`, `invoice_paid`, `invoice_defaulted`,
+`invoice_due_soon`, `invoice_overdue`.
+
+### Preferences (`preferences-api.ts`, mounted at `/preferences`)
+
+| Method & path | Purpose |
+| --- | --- |
+| `GET /preferences/:address` | Read notification preferences |
+| `PUT /preferences/:address` | Replace preferences |
+| `PATCH /preferences/:address` | Partially update preferences |
+| `DELETE /preferences/:address` | Delete all preferences for an address |
+| `POST /preferences/:address/unsubscribe` | One-click unsubscribe for an address |
+| `POST /preferences/unsubscribe/token/:token` | Tokenized one-click unsubscribe (HMAC-SHA256 over `(address, nonce)`); this is the link embedded in email footers |
+| `GET /preferences/:address/export` | GDPR-style data export |
+
 ## Webhook Payload Format
 
 The webhook adapter sends the shared `NotificationPayload` fields. For example:
@@ -74,6 +111,18 @@ The webhook adapter sends the shared `NotificationPayload` fields. For example:
 }
 ```
 
+Outbound webhook requests carry these headers (`notifications/src/delivery.ts`):
+
+| Header | Value |
+| --- | --- |
+| `X-ILN-Trigger` | The trigger name, e.g. `invoice_paid` |
+| `X-ILN-Recipient` | The recipient Stellar address |
+| `X-ILN-Event-Id` | Present when the event has an id |
+| `X-ILN-Signature` | `sha256=<hex>` — HMAC-SHA256 of the raw request body, keyed by the **per-subscription** `webhook_secret` set at subscribe time. Omitted when the subscription has no secret. |
+
+Receivers should recompute the HMAC over the exact received body and reject on
+mismatch. There is no global signing secret — each subscription carries its own.
+
 ## Developer Guide: Self-Hosting the Notification Service
 
 To self-host:
@@ -85,28 +134,99 @@ To self-host:
 ```sh
 docker run -d \
   -e RESEND_API_KEY=your_resend_key \
-  -e DATABASE_URL=your_db_url \
-  -p 3000:3000 \
+  -e NOTIFICATIONS_RPC_URL=https://soroban-testnet.stellar.org \
+  -e NOTIFICATIONS_CONTRACT_ID=C... \
+  -e "NOTIFICATIONS_NETWORK_PASSPHRASE=Test SDF Network ; September 2015" \
+  -e NOTIFICATIONS_DB_PATH=/data/notifications.sqlite \
+  -p 4001:4001 \
+  -p 4002:4002 \
   nursca/invoice-liquidity-notifications:latest
 ```
 
-4. The service will be available on port 3000.
+4. The HTTP API is then available on port **4001** and the WebSocket server on
+   port **4002** (`/ws`).
 
 ## SDK Notifications Module Reference
 
-*Reference the actual method signatures from the SDK. Update this section after reviewing the SDK code.*
+`@iln/sdk` exports `NotificationsClient` for managing subscriptions against a
+running notification service. It is constructed with the service base URL.
 
-## Environment Variables Required
+```typescript
+import { NotificationsClient, NotificationTrigger } from "@iln/sdk";
 
-- `RESEND_API_KEY`: API key for sending emails
-- `DATABASE_URL`: Database connection string
-- `WEBHOOK_SECRET`: (optional) Secret for signing webhook payloads
+const client = new NotificationsClient("http://localhost:4001");
+
+const sub = await client.subscribeEmail(
+  "GABC...",
+  "user@example.com",
+  [NotificationTrigger.InvoiceFunded, NotificationTrigger.InvoiceSettled],
+);
+
+await client.subscribeWebhook(
+  "GABC...",
+  "https://myapp.example/webhook/iln",
+  [NotificationTrigger.InvoiceDefaulted],
+);
+
+const subs = await client.listSubscriptions("GABC...");
+await client.testWebhook(sub.id);      // { success, statusCode }
+await client.unsubscribe(sub.id);
+```
+
+| Method | Signature |
+| --- | --- |
+| `subscribeEmail` | `(address, email, triggers) => Promise<Subscription>` |
+| `subscribeWebhook` | `(address, url, triggers) => Promise<Subscription>` |
+| `listSubscriptions` | `(address) => Promise<Subscription[]>` |
+| `testWebhook` | `(subscriptionId) => Promise<{ success: boolean; statusCode: number }>` |
+| `unsubscribe` | `(subscriptionId) => Promise<void>` |
+
+The SDK client does not send a `webhook_secret`, so the service generates one
+per subscription. To set a known secret for verifying `X-ILN-Signature`, call
+`POST /subscribe` directly with a `webhook_secret` field.
+
+`SubscriptionChannel` in the SDK is `'email' | 'webhook'`. `NotificationTrigger`
+values: `InvoiceFunded` (`invoice_funded`), `InvoiceSettled` (`invoice_paid`),
+`InvoiceDefaulted` (`invoice_defaulted`), `DueDateWarning` (`invoice_due_soon`).
+
+## Environment Variables
+
+Read by `notifications/src/config.ts`; see also `notifications/.env.example`.
+
+| Variable | Required | Default | Description |
+| --- | --- | --- | --- |
+| `RESEND_API_KEY` | Yes | — | Resend API key for email delivery |
+| `NOTIFICATIONS_RPC_URL` | Yes | — | Stellar/Soroban RPC endpoint polled for invoice events |
+| `NOTIFICATIONS_CONTRACT_ID` | Yes | — | Contract ID to monitor |
+| `NOTIFICATIONS_NETWORK_PASSPHRASE` | Yes | — | Network passphrase for the monitored network |
+| `NOTIFICATIONS_DB_PATH` | No | `notifications.sqlite` | SQLite path for subscriptions, preferences, and delivery logs |
+| `RESEND_FROM_EMAIL` | No | `no-reply@invoice-liquidity.network` | Sender address |
+| `PORT` | No | `4001` | HTTP port (WebSocket server runs on `PORT + 1`) |
+| `NOTIFICATIONS_POLL_INTERVAL_MS` | No | `30000` | Event poll interval |
+| `NOTIFICATIONS_START_LEDGER` | No | `0` | First ledger to poll (`0` = service default) |
+| `DUE_WARNING_HOURS` | No | `48` | Hours before due date to send a warning |
+| `RATE_LIMIT_PER_USER` | No | `60` | Requests per window per address |
+| `RATE_LIMIT_PER_CHANNEL` | No | `200` | Requests per window per channel |
+| `RATE_LIMIT_WINDOW_MS` | No | `60000` | Sliding rate-limit window |
+| `TWILIO_ACCOUNT_SID` / `TWILIO_AUTH_TOKEN` / `TWILIO_FROM_NUMBER` | No | — | SMS delivery via Twilio |
+| `SMS_RATE_LIMIT_MAX` / `SMS_RATE_LIMIT_WINDOW_MS` | No | `10` / `3600000` | SMS-specific rate limit |
+
+There is **no** `DATABASE_URL` or global `WEBHOOK_SECRET`; earlier revisions of
+this doc listed those and they are not read by the service.
 
 ## Rate Limits and Delivery Guarantees
 
-- Email and webhook notifications are rate-limited to 10/minute per user.
-- Delivery is retried up to 3 times on failure.
-- Webhook payloads are signed if `WEBHOOK_SECRET` is set.
+- API requests are rate-limited per address (`RATE_LIMIT_PER_USER`, default
+  **60 / 60 s**) and per channel (`RATE_LIMIT_PER_CHANNEL`, default **200 / 60 s**),
+  with `X-RateLimit-*` headers on responses.
+- SMS has its own limit: `SMS_RATE_LIMIT_MAX` (default 10) per
+  `SMS_RATE_LIMIT_WINDOW_MS` (default 1 hour).
+- Webhook delivery is retried up to `CONFIG.maxWebhookRetry` (**3**) times with
+  exponential backoff from `webhookBackoffBaseMs` (500 ms).
+- Primary channels are attempted concurrently; the fallback chain runs
+  sequentially only if every primary attempt fails.
+- Webhook payloads are HMAC-SHA256 signed **when the subscription was created
+  with a `webhookSecret`** (see `X-ILN-Signature` above).
 
 ---
 
