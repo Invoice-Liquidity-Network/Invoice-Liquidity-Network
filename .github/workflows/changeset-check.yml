@@ -1,11 +1,18 @@
 # ==============================================================================
-# Changeset Check — Issue #247
+# Changeset Check — Issue #247 (audited for #958 — package-consolidation coverage)
 #
 # Enforces that every PR touching package source files includes a changeset.
 # This ensures changelog entries and semver bumps are never missed.
 #
-# Runs on: PRs touching packages/** or sdk/**
-# Skips:   PRs that only touch docs, tests, CI config, or non-package files
+# Runs on: PRs touching any publishable workspace package:
+#          packages/**  — shared, sdk-next, react, indexer, etc. (pnpm-workspace packages/*)
+#          sdk/**       — canonical SDK  (@iln/sdk)
+#          cli/**       — canonical CLI  (@invoice-liquidity/cli) — newly-canonical
+#                        post-consolidation (packages/cli removed, see
+#                        docs/monorepo-map.md Resolution Plans 2026-08-25)
+# Skips:   PRs that only touch docs, tests, CI config, private packages, or
+#          non-published service workspaces (e.g. indexer/, notifications/ with
+#          private:true, docs/ legacy source, examples/, private test helpers)
 # ==============================================================================
 
 name: Changeset Check
@@ -15,6 +22,7 @@ on:
     paths:
       - 'packages/**'
       - 'sdk/**'
+      - 'cli/**'
 
 # Least-privilege: read code and post the "changeset required" comment on PRs.
 permissions:
@@ -44,8 +52,15 @@ jobs:
           # Get list of changed files in this PR
           CHANGED=$(git diff --name-only origin/main...HEAD)
 
-          # Check if any package source files changed
-          PKG_CHANGED=$(echo "$CHANGED" | grep -E '^(packages|sdk)/' || true)
+          # Check if any publishable package source files changed.
+          # Must stay in sync with `on.pull_request.paths` above and
+          # pnpm-workspace.yaml workspaces. Covers:
+          #   packages/** — all shared libs (shared, sdk-next, react, etc.)
+          #   sdk/**      — canonical SDK  (@iln/sdk)
+          #   cli/**      — canonical CLI  (@invoice-liquidity/cli), the
+          #                 post-consolidation canonical package previously at
+          #                 packages/cli (removed 2026-08-25).
+          PKG_CHANGED=$(echo "$CHANGED" | grep -E '^(packages|sdk|cli)/' || true)
 
           if [ -z "$PKG_CHANGED" ]; then
             echo "No package source files changed — changeset not required."
