@@ -240,6 +240,68 @@ If your custom signer returns a public key from one keypair but signs with anoth
 
 ---
 
+## Verifying SDK Provenance
+
+Supply chain attacks targeting npm account takeovers or compromised credentials pose a major threat to DeFi integrators. Even if a publisher account is compromised on npm, cryptographic build provenance guarantees that the package was generated directly from this repository's audited source code via GitHub Actions OIDC and Sigstore, rather than uploaded from an unauthorized developer machine.
+
+Follow these verification steps when installing or upgrading `@iln/sdk` (or `@iln/sdk-next`).
+
+### 1. Verify npm Registry Attestation
+
+Inspect the provenance attestation recorded on the npm registry:
+
+```bash
+# Inspect the provenance metadata for the target release:
+npm view @iln/sdk@<version> --json | jq '.provenance'
+
+# Or query the npm attestations endpoint directly:
+curl -s https://registry.npmjs.org/-/npm/v1/attestations/@iln/sdk@<version> | jq
+```
+
+Verify that the output contains the following fields:
+- **Repository:** `Invoice-Liquidity-Network/Invoice-Liquidity-Network` (or `https://github.com/Invoice-Liquidity-Network/Invoice-Liquidity-Network`)
+- **Workflow:** `.github/workflows/sdk-release.yml` or `.github/workflows/release.yml`
+- **Commit SHA:** Matches the official release tag on GitHub.
+
+### 2. Cryptographic Attestation Verification via GitHub CLI
+
+Use GitHub CLI's `gh attestation verify` to cryptographically validate the Sigstore bundle and SLSA Level 3 build provenance:
+
+```bash
+gh attestation verify \
+  "$(npm pack @iln/sdk@<version> --silent)" \
+  --repo Invoice-Liquidity-Network/Invoice-Liquidity-Network
+```
+
+**Expected verification output:**
+- Signer: `https://token.actions.githubusercontent.com`
+- Source repository: `Invoice-Liquidity-Network/Invoice-Liquidity-Network`
+- Status: `Loaded digest ... from ... Verified against expected repository`
+
+If verification fails or the repository does not match, **do not install or execute the package**, and immediately notify the security team at `security@iln.finance`.
+
+### 3. Verify Tarball Checksum Against GitHub Releases
+
+Every official release publishes a canonical `checksums.txt` file on GitHub Releases. Compare your locally downloaded archive hash against the published digest:
+
+```bash
+# Generate the SHA-256 hash of the packed npm archive:
+npm pack @iln/sdk@<version> --silent | xargs sha256sum
+
+# Compare the hash against the checksums on:
+# https://github.com/Invoice-Liquidity-Network/Invoice-Liquidity-Network/releases/tag/v<version>
+```
+
+### 4. Continuous Verification in CI Pipelines
+
+Integrators should automate provenance and signature verification in their CI/CD deployment pipelines:
+
+- **Enforce Immutable Lockfiles:** Always use `pnpm install --frozen-lockfile` or `npm ci` in production builds.
+- **Audit Registry Signatures:** Run `npm audit signatures` as part of your CI dependency check stage.
+- **Dependency Review Action:** In GitHub Actions, add the `actions/dependency-review-action` to flag unverified package additions in pull requests.
+
+---
+
 ## SDK-Specific Threat Model
 
 The following threats are specific to SDK integration. For the full protocol threat model — including frontend, API, indexer, and governance surface — see [threat-model.md](./threat-model.md).
@@ -251,8 +313,8 @@ The following threats are specific to SDK integration. For the full protocol thr
 **SDK mitigation:** The SDK uses typed helpers, validates payload shapes before SCVal encoding, and keeps the transaction construction surface small and explicit.
 
 **Integrator action:**
-- Verify the SDK's package attestation on every install: `npm audit signatures @invoice-liquidity/sdk`. See [security.md](./security.md) for SLSA Level 3 verification details.
-- Pin `@invoice-liquidity/sdk` to an exact version in your `package-lock.json` or `yarn.lock`.
+- Verify the SDK's package attestation on every install using the steps in [Verifying SDK Provenance](#verifying-sdk-provenance).
+- Pin `@iln/sdk` to an exact version in your `package-lock.json` or `yarn.lock`.
 - Review transitive dependency updates before merging automated dependency PRs.
 
 ### XDR interception and replay

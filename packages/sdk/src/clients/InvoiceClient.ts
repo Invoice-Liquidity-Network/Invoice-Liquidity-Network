@@ -169,6 +169,33 @@ export interface MarkPaidInput {
   amount?: bigint | number | string;
 }
 
+export interface DisputeInvoiceInput {
+  disputer?: string;
+  invoiceId: bigint | number | string;
+  reasonCategory: 'quality' | 'timing' | 'amount' | 'other' | string;
+  evidenceCid: string;
+  reasonDescription?: string;
+}
+
+export interface SubmitDisputeEvidenceInput {
+  submitter?: string;
+  invoiceId: bigint | number | string;
+  evidenceCid: string;
+  description?: string;
+}
+
+export interface ResolveDisputeInput {
+  admin?: string;
+  invoiceId: bigint | number | string;
+  decision: 'favor_payer' | 'favor_freelancer';
+  notes?: string;
+}
+
+export interface AutoResolveDisputeInput {
+  caller?: string;
+  invoiceId: bigint | number | string;
+}
+
 export interface ContractEventResult {
   type?: string;
   topic: unknown[];
@@ -443,6 +470,102 @@ export class InvoiceClient {
     const transaction = await this.buildWriteTransaction(payer, 'mark_paid', args);
     await this.simulate(transaction, 'mark_paid');
     return this.prepareSignAndSend(transaction, payer, 'mark_paid');
+  }
+
+  /**
+   * Files a dispute on an invoice with reason category and evidence IPFS CID.
+   *
+   * @param input - Dispute filing payload.
+   * @returns The submitted transaction hash and parsed events.
+   */
+  public async disputeInvoice(input: DisputeInvoiceInput): Promise<ContractWriteResult> {
+    const disputer = input.disputer ?? (await this.requireSignerAddress());
+    await this.assertSignerMatches(disputer, 'disputeInvoice');
+
+    const invoiceId = this.toBigInt(input.invoiceId, 'invoiceId');
+    const args = [
+      this.addressScVal(disputer),
+      this.u64ScVal(invoiceId),
+      this.stringScVal(input.reasonCategory),
+      this.stringScVal(input.evidenceCid),
+    ];
+
+    const transaction = await this.buildWriteTransaction(disputer, 'dispute_invoice', args);
+    await this.simulate(transaction, 'dispute_invoice');
+    return this.prepareSignAndSend(transaction, disputer, 'dispute_invoice');
+  }
+
+  /**
+   * Submits supporting evidence (IPFS CID) for an active dispute.
+   *
+   * @param input - Evidence submission payload.
+   * @returns The submitted transaction hash and parsed events.
+   */
+  public async submitDisputeEvidence(
+    input: SubmitDisputeEvidenceInput
+  ): Promise<ContractWriteResult> {
+    const submitter = input.submitter ?? (await this.requireSignerAddress());
+    await this.assertSignerMatches(submitter, 'submitDisputeEvidence');
+
+    const invoiceId = this.toBigInt(input.invoiceId, 'invoiceId');
+    const args = [
+      this.addressScVal(submitter),
+      this.u64ScVal(invoiceId),
+      this.stringScVal(input.evidenceCid),
+    ];
+
+    const transaction = await this.buildWriteTransaction(
+      submitter,
+      'submit_dispute_evidence',
+      args
+    );
+    await this.simulate(transaction, 'submit_dispute_evidence');
+    return this.prepareSignAndSend(transaction, submitter, 'submit_dispute_evidence');
+  }
+
+  /**
+   * Resolves a dispute through admin arbitration.
+   *
+   * @param input - Arbitration resolution decision and memo.
+   * @returns The submitted transaction hash and parsed events.
+   */
+  public async resolveDispute(input: ResolveDisputeInput): Promise<ContractWriteResult> {
+    const admin = input.admin ?? (await this.requireSignerAddress());
+    await this.assertSignerMatches(admin, 'resolveDispute');
+
+    const invoiceId = this.toBigInt(input.invoiceId, 'invoiceId');
+    const args = [
+      this.addressScVal(admin),
+      this.u64ScVal(invoiceId),
+      this.stringScVal(input.decision),
+      this.stringScVal(input.notes ?? ''),
+    ];
+
+    const transaction = await this.buildWriteTransaction(admin, 'resolve_dispute', args);
+    await this.simulate(transaction, 'resolve_dispute');
+    return this.prepareSignAndSend(transaction, admin, 'resolve_dispute');
+  }
+
+  /**
+   * Auto-resolves a dispute once the evidence/dispute deadline has expired.
+   *
+   * @param input - Target invoice to auto-resolve.
+   * @returns The submitted transaction hash and parsed events.
+   */
+  public async autoResolveDispute(input: AutoResolveDisputeInput): Promise<ContractWriteResult> {
+    const caller = input.caller ?? (await this.requireSignerAddress());
+    await this.assertSignerMatches(caller, 'autoResolveDispute');
+
+    const invoiceId = this.toBigInt(input.invoiceId, 'invoiceId');
+    const args = [this.addressScVal(caller), this.u64ScVal(invoiceId)];
+
+    const transaction = await this.buildWriteTransaction(
+      caller,
+      'auto_resolve_dispute',
+      args
+    );
+    await this.simulate(transaction, 'auto_resolve_dispute');
+    return this.prepareSignAndSend(transaction, caller, 'auto_resolve_dispute');
   }
 
   private buildSubmitInvoiceArgs(
@@ -786,6 +909,14 @@ export class InvoiceClient {
   private bytesScVal(value: Uint8Array | string): stellarXdr.ScVal {
     const bytes = typeof value === 'string' ? this.stringToBytes(value) : value;
     return this.encodeScVal(nativeToScVal(bytes));
+  }
+
+  private stringScVal(value: string): stellarXdr.ScVal {
+    return this.encodeScVal(nativeToScVal(value, { type: 'string' }));
+  }
+
+  private symbolScVal(value: string): stellarXdr.ScVal {
+    return this.encodeScVal(nativeToScVal(value, { type: 'symbol' }));
   }
 
   private addressVecScVal(addresses: string[]): stellarXdr.ScVal {

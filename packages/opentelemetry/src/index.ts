@@ -1,6 +1,103 @@
-import { trace, metrics, SpanStatusCode, Tracer, Meter } from '@opentelemetry/api';
-// Assuming SDK has a class ILNClient or similar. We will create a wrapper.
-// The requirements say: "Instruments all SDK client methods with spans: method name, invoice ID, token, network, status"
+import { trace, metrics, SpanStatusCode, Tracer, Meter, Span } from '@opentelemetry/api';
+
+/**
+ * Default span attribute allowlist.
+ * Only safe, low-cardinality, non-sensitive operational metadata is captured.
+ */
+export const DEFAULT_ALLOWED_SPAN_ATTRIBUTES = new Set<string>([
+  'invoice_id',
+  'token',
+  'network',
+  'status',
+  'method',
+  'iln.method',
+  'iln.invoice_id',
+  'iln.token',
+  'iln.network',
+  'iln.status',
+  'iln.error.code',
+]);
+
+/**
+ * Regex pattern matching Stellar secret seed keys (typically 56 chars starting with S).
+ */
+export const STELLAR_SECRET_KEY_REGEX = /S[A-Z0-9]{50,56}/g;
+
+/**
+ * Regex pattern matching Bearer authentication tokens.
+ */
+export const BEARER_TOKEN_REGEX = /Bearer\s+[A-Za-z0-9_\-\.]+/gi;
+
+/**
+ * Regex pattern matching long unbroken Base64 strings (such as raw XDR envelopes).
+ * Requires contiguous base64 characters of 64+ length.
+ */
+export const RAW_XDR_REGEX = /(?:[A-Za-z0-9+/]{4}){16,}(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?/g;
+
+/**
+ * Configuration options for ILN OpenTelemetry instrumentation.
+ */
+export interface ILNInstrumentationOptions {
+  meterProvider?: any;
+  tracerProvider?: any;
+  /**
+   * Whether to sanitize and redact sensitive patterns (secret keys, tokens, XDR) from error messages and attributes.
+   * Default: true
+   */
+  redactSensitiveData?: boolean;
+  /**
+   * Maximum length for error messages attached to spans to prevent collector bloat.
+   * Default: 256
+   */
+  maxErrorMessageLength?: number;
+  /**
+   * Explicit allowlist of allowed span attribute names.
+   * Default: DEFAULT_ALLOWED_SPAN_ATTRIBUTES
+   */
+  allowedAttributes?: string[];
+  /**
+   * Custom attribute sanitizer hook for integrators requiring specialized scrubbing.
+   */
+  customRedactor?: (key: string, value: unknown) => unknown;
+}
+
+/**
+ * Sanitizes an error message by scrubbing secret keys, auth tokens, and long raw XDR payloads.
+ */
+export function sanitizeErrorMessage(
+  message: string | undefined | null,
+  maxLength = 256,
+  redact = true
+): string {
+  if (!message) return 'Unknown error';
+  if (!redact) {
+    return message.length > maxLength ? `${message.slice(0, maxLength)}... [TRUNCATED]` : message;
+  }
+
+  let sanitized = message
+    .replace(STELLAR_SECRET_KEY_REGEX, '[REDACTED_SECRET_KEY]')
+    .replace(BEARER_TOKEN_REGEX, 'Bearer [REDACTED_AUTH_TOKEN]')
+    .replace(RAW_XDR_REGEX, '[REDACTED_XDR_PAYLOAD]');
+
+  if (sanitized.length > maxLength) {
+    sanitized = `${sanitized.slice(0, maxLength)}... [TRUNCATED]`;
+  }
+
+  return sanitized;
+}
+
+/**
+ * Sanitizes an attribute value to ensure OpenTelemetry type safety (string, number, boolean).
+ */
+export function sanitizeAttributeValue(value: unknown): string | number | boolean | null {
+  if (value === null || value === undefined) return null;
+  if (typeof value === 'boolean' || typeof value === 'number') return value;
+  if (typeof value === 'bigint') return String(value);
+  if (typeof value === 'string') {
+    return value.replace(STELLAR_SECRET_KEY_REGEX, '[REDACTED_SECRET_KEY]');
+  }
+  return String(value);
+}
 
 export class ILNInstrumentation {
   private tracer: Tracer;
@@ -8,8 +105,21 @@ export class ILNInstrumentation {
   private transactionDuration: any;
   private simulationDuration: any;
   private errorCount: any;
+  private options: Required<Omit<ILNInstrumentationOptions, 'meterProvider' | 'tracerProvider' | 'customRedactor'>> & {
+    customRedactor?: (key: string, value: unknown) => unknown;
+  };
+  private allowedAttributesSet: Set<string>;
 
-  constructor(options: { meterProvider?: any; tracerProvider?: any } = {}) {
+  constructor(options: ILNInstrumentationOptions = {}) {
+    this.options = {
+      redactSensitiveData: options.redactSensitiveData ?? true,
+      maxErrorMessageLength: options.maxErrorMessageLength ?? 256,
+      allowedAttributes: options.allowedAttributes ?? Array.from(DEFAULT_ALLOWED_SPAN_ATTRIBUTES),
+      customRedactor: options.customRedactor,
+    };
+
+    this.allowedAttributesSet = new Set(this.options.allowedAttributes);
+
     this.tracer = trace.getTracer('@invoice-liquidity/sdk');
     this.meter = metrics.getMeter('@invoice-liquidity/sdk');
 
@@ -29,8 +139,27 @@ export class ILNInstrumentation {
   }
 
   /**
+   * Safely applies an attribute to a span if permitted by the allowlist.
+   */
+  private setSafeAttribute(span: Span, key: string, rawValue: unknown): void {
+    if (!this.allowedAttributesSet.has(key)) {
+      return;
+    }
+
+    let value = rawValue;
+    if (this.options.customRedactor) {
+      value = this.options.customRedactor(key, value);
+    }
+
+    const sanitized = sanitizeAttributeValue(value);
+    if (sanitized !== null) {
+      span.setAttribute(key, sanitized);
+    }
+  }
+
+  /**
    * Wraps an SDK client instance with OpenTelemetry instrumentation.
-   * We intercept method calls on the client.
+   * Intercepts method calls on the client while strictly filtering and redacting sensitive data.
    */
   public instrumentClient<T extends Record<string, any>>(client: T): T {
     const instrumented = { ...client };
@@ -47,16 +176,30 @@ export class ILNInstrumentation {
         const span = this.tracer.startSpan(`ILNClient.${method}`);
         const startTime = Date.now();
 
-        // Try to extract invoiceId, token, network if present in args (usually arg 0 is params)
-        const params = args[0] || {};
-        if (params.invoiceId) span.setAttribute('invoice_id', params.invoiceId);
-        if (params.token) span.setAttribute('token', params.token);
-        if (params.network) span.setAttribute('network', params.network);
+        // Safe parameter extraction — only inspect known safe fields (never arbitrary args/secrets)
+        const params = args[0] && typeof args[0] === 'object' ? args[0] : {};
+
+        if (params.invoiceId !== undefined) {
+          this.setSafeAttribute(span, 'invoice_id', params.invoiceId);
+          this.setSafeAttribute(span, 'iln.invoice_id', params.invoiceId);
+        }
+        if (params.token !== undefined) {
+          this.setSafeAttribute(span, 'token', params.token);
+          this.setSafeAttribute(span, 'iln.token', params.token);
+        }
+        if (params.network !== undefined) {
+          this.setSafeAttribute(span, 'network', params.network);
+          this.setSafeAttribute(span, 'iln.network', params.network);
+        }
+
+        this.setSafeAttribute(span, 'method', method);
+        this.setSafeAttribute(span, 'iln.method', method);
 
         try {
           const result = await original.apply(client, args);
           span.setStatus({ code: SpanStatusCode.OK });
-          span.setAttribute('status', 'success');
+          this.setSafeAttribute(span, 'status', 'success');
+          this.setSafeAttribute(span, 'iln.status', 'success');
 
           const duration = Date.now() - startTime;
           if (method.includes('simulate')) {
@@ -67,14 +210,25 @@ export class ILNInstrumentation {
 
           return result;
         } catch (error: any) {
+          const sanitizedMsg = sanitizeErrorMessage(
+            error?.message,
+            this.options.maxErrorMessageLength,
+            this.options.redactSensitiveData
+          );
+
           span.setStatus({
             code: SpanStatusCode.ERROR,
-            message: error.message,
+            message: sanitizedMsg,
           });
-          span.setAttribute('status', 'error');
 
-          const errorCode = error.code || 'UNKNOWN_ERROR';
-          this.errorCount.add(1, { method, code: errorCode });
+          this.setSafeAttribute(span, 'status', 'error');
+          this.setSafeAttribute(span, 'iln.status', 'error');
+
+          const rawCode = error?.code || 'UNKNOWN_ERROR';
+          const safeCode = typeof rawCode === 'string' && rawCode.length < 64 ? rawCode : 'UNKNOWN_ERROR';
+
+          this.setSafeAttribute(span, 'iln.error.code', safeCode);
+          this.errorCount.add(1, { method, code: safeCode });
 
           throw error;
         } finally {
