@@ -2,9 +2,9 @@ name: Snyk Security Scanning
 
 on:
   push:
-    branches: [ "main" ]
+    branches: ['main']
   pull_request:
-    branches: [ "main" ]
+    branches: ['main']
   schedule:
     - cron: '0 3 * * 0' # Weekly scan at 3 AM on Sunday
 
@@ -19,7 +19,7 @@ concurrency:
 jobs:
   snyk:
     name: Snyk Vulnerability Scanner
-    runs-on: namespace-profile-nursca
+    runs-on: ubuntu-latest
     env:
       SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
     steps:

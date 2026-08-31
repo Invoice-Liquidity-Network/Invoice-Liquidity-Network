@@ -6,7 +6,7 @@ import { createMockILNClient } from '../test/mocks';
 describe('ILNProvider', () => {
   it('provides client to children via context', () => {
     const mockClient = createMockILNClient();
-    
+
     function Consumer() {
       const client = useILNClient();
       return <div data-testid="client">{client ? 'available' : 'missing'}</div>;
@@ -29,15 +29,15 @@ describe('ILNProvider', () => {
 
     // Suppress console.error for expected throw
     const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
-    
+
     expect(() => render(<BadConsumer />)).toThrow(ILNProviderNotFoundError);
-    
+
     consoleSpy.mockRestore();
   });
 
   it('passes through children unchanged', () => {
     const mockClient = createMockILNClient();
-    
+
     const { container } = render(
       <ILNProvider client={mockClient}>
         <span>child content</span>

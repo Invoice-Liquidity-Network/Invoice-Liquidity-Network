@@ -18,7 +18,7 @@ export interface CacheStatistics {
 export interface CacheConfig {
   ttl: number;
   maxSize?: number;
-  storage?: "memory" | "localStorage";
+  storage?: 'memory' | 'localStorage';
   enabled?: boolean;
 }
 
@@ -31,13 +31,13 @@ export class Cache<T> {
   private cache: Map<string, CacheEntry<T>>;
   private config: Required<CacheConfig>;
   private stats: CacheStatistics;
-  private storageKey = "iln_cache";
+  private storageKey = 'iln_cache';
 
   constructor(config: CacheConfig) {
     this.config = {
       ttl: config.ttl,
       maxSize: config.maxSize ?? 1000,
-      storage: config.storage ?? "memory",
+      storage: config.storage ?? 'memory',
       enabled: config.enabled ?? true,
     };
     this.cache = new Map();
@@ -50,7 +50,7 @@ export class Cache<T> {
       hitRate: 0,
     };
 
-    if (this.config.storage === "localStorage") {
+    if (this.config.storage === 'localStorage') {
       this.loadFromStorage();
     }
   }
@@ -81,6 +81,10 @@ export class Cache<T> {
     if (!options?.forceRefresh) {
       entry.accessCount++;
       entry.lastAccessedAt = now;
+      // Move to the end of the Map's iteration order so it reads as most
+      // recently used, independent of Date.now() millisecond resolution.
+      this.cache.delete(key);
+      this.cache.set(key, entry);
       this.stats.hits++;
       this.updateHitRate();
       return entry.value;
@@ -113,7 +117,7 @@ export class Cache<T> {
     this.cache.set(key, entry);
     this.stats.sets++;
 
-    if (this.config.storage === "localStorage") {
+    if (this.config.storage === 'localStorage') {
       this.saveToStorage();
     }
   }
@@ -122,7 +126,7 @@ export class Cache<T> {
     const deleted = this.cache.delete(key);
     if (deleted) {
       this.stats.deletes++;
-      if (this.config.storage === "localStorage") {
+      if (this.config.storage === 'localStorage') {
         this.saveToStorage();
       }
     }
@@ -131,7 +135,7 @@ export class Cache<T> {
 
   clear(): void {
     this.cache.clear();
-    if (this.config.storage === "localStorage") {
+    if (this.config.storage === 'localStorage') {
       localStorage.removeItem(this.storageKey);
     }
   }
@@ -151,7 +155,7 @@ export class Cache<T> {
       this.cache.clear();
     }
 
-    if (count > 0 && this.config.storage === "localStorage") {
+    if (count > 0 && this.config.storage === 'localStorage') {
       this.saveToStorage();
     }
 
@@ -174,15 +178,9 @@ export class Cache<T> {
   }
 
   private evictLRU(): void {
-    let lruKey: string | null = null;
-    let lruTime = Infinity;
-
-    for (const [key, entry] of this.cache.entries()) {
-      if (entry.lastAccessedAt < lruTime) {
-        lruTime = entry.lastAccessedAt;
-        lruKey = key;
-      }
-    }
+    // Map iteration order tracks recency (get() re-inserts touched entries
+    // at the end), so the least recently used entry is simply the first one.
+    const lruKey = this.cache.keys().next().value ?? null;
 
     if (lruKey) {
       this.cache.delete(lruKey);
@@ -210,7 +208,7 @@ export class Cache<T> {
       if (serialized) {
         const entries = JSON.parse(serialized) as [string, CacheEntry<T>][];
         const now = Date.now();
-        
+
         for (const [key, entry] of entries) {
           // Only load non-expired entries
           if (entry.expiresAt > now) {

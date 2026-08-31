@@ -57,25 +57,23 @@ export function useFundInvoice(): UseFundInvoiceResult {
     { previous: unknown }
   >({
     mutationFn: (params: FundInvoiceParams): Promise<void> =>
-      (client as unknown as { fundInvoice(p: FundInvoiceParams): Promise<void> })
-        .fundInvoice(params),
+      (client as unknown as { fundInvoice(p: FundInvoiceParams): Promise<void> }).fundInvoice(
+        params
+      ),
 
     onMutate: async (params: FundInvoiceParams) => {
       const queryKey = ['invoices', 'detail', params.invoiceId];
       await queryClient.cancelQueries({ queryKey });
       const previous = queryClient.getQueryData(queryKey);
       queryClient.setQueryData(queryKey, (old: unknown) =>
-        old && typeof old === 'object' ? { ...old, status: 'Funded' } : old,
+        old && typeof old === 'object' ? { ...old, status: 'Funded' } : old
       );
       return { previous };
     },
 
     onError: (_err, params, context) => {
       if (context?.previous !== undefined) {
-        queryClient.setQueryData(
-          ['invoices', 'detail', params.invoiceId],
-          context.previous,
-        );
+        queryClient.setQueryData(['invoices', 'detail', params.invoiceId], context.previous);
       }
     },
 

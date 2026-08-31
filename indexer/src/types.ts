@@ -8,15 +8,15 @@
  * contract, it must be added here as well.
  */
 export type InvoiceStatus =
-  | "Pending"
-  | "PartiallyFunded"
-  | "Funded"
-  | "Paid"
-  | "Defaulted"
-  | "Appealed"
-  | "Disputed"
-  | "Expired"
-  | "Cancelled";
+  | 'Pending'
+  | 'PartiallyFunded'
+  | 'Funded'
+  | 'Paid'
+  | 'Defaulted'
+  | 'Appealed'
+  | 'Disputed'
+  | 'Expired'
+  | 'Cancelled';
 
 /**
  * Invoice row as stored in SQLite.
@@ -45,7 +45,7 @@ export interface Invoice {
 
 // ─── Events ───────────────────────────────────────────────────────────────────
 
-export type ILNEventType = "submitted" | "funded" | "paid" | "defaulted";
+export type ILNEventType = 'submitted' | 'funded' | 'paid' | 'defaulted';
 
 /** Processed ILN contract event as stored in SQLite. */
 export interface ILNEvent {

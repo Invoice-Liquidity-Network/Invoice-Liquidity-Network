@@ -34,12 +34,12 @@ on:
         description: Network passphrase for custom testnet registration
         required: false
         type: string
-        default: "Test SDF Network ; September 2015"
+        default: 'Test SDF Network ; September 2015'
       stellar-cli-features:
         description: Cargo features passed to stellar-cli install
         required: false
         type: string
-        default: opt
+        default: ''
     outputs:
       identity-name:
         description: Identity alias created or reused in the Stellar CLI config
@@ -58,7 +58,7 @@ permissions:
 jobs:
   setup:
     name: Stellar CLI and testnet identity
-    runs-on: namespace-profile-nursca
+    runs-on: ubuntu-latest
     outputs:
       identity-name: ${{ steps.identity.outputs.identity-name }}
       public-key: ${{ steps.identity.outputs.public-key }}
@@ -82,7 +82,7 @@ jobs:
             ${{ runner.os }}-stellar-cli-
 
       - name: Install Stellar CLI
-        run: cargo install --locked stellar-cli --features ${{ inputs.stellar-cli-features }}
+        run: cargo install --locked stellar-cli ${{ inputs.stellar-cli-features != '' && format('--features {0}', inputs.stellar-cli-features) || '' }}
 
       - name: Configure Stellar network
         id: network

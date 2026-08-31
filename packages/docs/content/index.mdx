@@ -3,7 +3,7 @@ title: Getting Started
 description: Learn how to build on the Invoice Liquidity Network protocol
 ---
 
-import { Cards, Card } from 'nextra/components'
+import { Cards, Card } from 'nextra/components';
 
 # Invoice Liquidity Network
 
@@ -44,37 +44,42 @@ sequenceDiagram
     F->>C: mark_paid(id)
     C->>L: Transfer full amount
     Note over L: LP earns the spread
+```
 
+1. **Submit** — A freelancer calls `submit_invoice()` with amount, payer, due date, and discount rate
+2. **Fund** — A liquidity provider calls `fund_invoice()`, sending USDC. The freelancer receives funds immediately
+3. **Pay** — The payer settles the invoice, releasing the full amount to the LP
+4. **Earn** — The LP earns the discount spread as yield
 
-    Submit — A freelancer calls submit_invoice() with amount, payer, due date, and discount rate
-Fund — A liquidity provider calls fund_invoice(), sending USDC. The freelancer receives funds immediately
-Pay — The payer settles the invoice, releasing the full amount to the LP
-Earn — The LP earns the discount spread as yield
+## Testnet Deployment
 
-Testnet Deployment
 | Contract          | Contract ID                                                |
 | ----------------- | ---------------------------------------------------------- |
 | ILN-Distribution  | `CAQGPMT3EQK4AABMIR66JJXEOCNCLPTDNXMS5OHZXH4LI24UYAF25V5B` |
 | Invoice-Liquidity | `CCPASLHKRFBMVV5PZG3LKDGKFEDXZMB5U7DK42CVLUVWCMUCSRPVBIMO` |
 | ILN-Governance    | `CD7GOIU3GNK7EZHG7XWBC7VI4NRVGMRCU7X2FOCAPQN6EGTSW46BY4EB` |
 
-
 ⚠️ Mainnet deployment coming after audit. Do not use with real funds until then.
 
-Prerequisites
-Node.js 18+
-Stellar CLI
-A Stellar wallet (Freighter recommended)
+## Prerequisites
 
-Installation
+- Node.js 18+
+- Stellar CLI
+- A Stellar wallet (Freighter recommended)
+
+## Installation
+
+```bash
 # Install the SDK
 npm install @invoice-liquidity/sdk
 
 # Or install the CLI globally
 npm install -g @invoice-liquidity/cli
+```
 
-Next Steps
-Read the Protocol Overview to understand the architecture
-Follow the First Invoice Tutorial to get hands-on
-Check the SDK Reference for API details
-Review Smart Contract Architecture for deep dives
+## Next Steps
+
+- Read the [Protocol Overview](/protocol-overview) to understand the architecture
+- Follow the [First Invoice Tutorial](/tutorials/first-invoice) to get hands-on
+- Check the [SDK Reference](/sdk-reference/installation) for API details
+- Review [Smart Contract Architecture](/smart-contracts/architecture) for deep dives

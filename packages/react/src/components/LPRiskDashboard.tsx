@@ -12,7 +12,7 @@ import {
   XAxis,
   YAxis,
 } from 'recharts';
-import type { Invoice, LPPortfolio } from '@invoice-liquidity/sdk';
+import type { Invoice, LPPortfolio } from '@iln/sdk';
 import { AddressDisplay } from './AddressDisplay';
 import { ResponsiveGrid } from './ResponsiveGrid';
 import { StatsCard } from './StatsCard';
@@ -57,7 +57,15 @@ function formatPayerLabel(address: string): string {
   return `${address.slice(0, 6)}…${address.slice(-4)}`;
 }
 
-function pieTooltip({ active, payload }: { active?: boolean; payload?: Array<{ payload: { payer?: string; token?: string; value?: number; amount?: bigint; share?: number } }> }) {
+function pieTooltip({
+  active,
+  payload,
+}: {
+  active?: boolean;
+  payload?: Array<{
+    payload: { payer?: string; token?: string; value?: number; amount?: bigint; share?: number };
+  }>;
+}) {
   if (!active || !payload?.length) {
     return null;
   }
@@ -68,15 +76,17 @@ function pieTooltip({ active, payload }: { active?: boolean; payload?: Array<{ p
   }
 
   return (
-    <div style={{
-      background: '#111827',
-      color: '#F9FAFB',
-      padding: '10px 12px',
-      borderRadius: '10px',
-      boxShadow: '0 12px 28px rgba(0,0,0,0.18)',
-      fontSize: '12px',
-      maxWidth: '220px',
-    }}>
+    <div
+      style={{
+        background: '#111827',
+        color: '#F9FAFB',
+        padding: '10px 12px',
+        borderRadius: '10px',
+        boxShadow: '0 12px 28px rgba(0,0,0,0.18)',
+        fontSize: '12px',
+        maxWidth: '220px',
+      }}
+    >
       <div style={{ fontWeight: 700, marginBottom: '4px' }}>
         {item.payer ? formatPayerLabel(item.payer) : item.token ?? 'Exposure'}
       </div>
@@ -88,7 +98,15 @@ function pieTooltip({ active, payload }: { active?: boolean; payload?: Array<{ p
   );
 }
 
-function barTooltip({ active, payload, label }: { active?: boolean; payload?: Array<{ payload: { amount?: bigint; share?: number; positionCount?: number } }>; label?: string | number }) {
+function barTooltip({
+  active,
+  payload,
+  label,
+}: {
+  active?: boolean;
+  payload?: Array<{ payload: { amount?: bigint; share?: number; positionCount?: number } }>;
+  label?: string | number;
+}) {
   if (!active || !payload?.length) {
     return null;
   }
@@ -99,15 +117,17 @@ function barTooltip({ active, payload, label }: { active?: boolean; payload?: Ar
   }
 
   return (
-    <div style={{
-      background: '#111827',
-      color: '#F9FAFB',
-      padding: '10px 12px',
-      borderRadius: '10px',
-      boxShadow: '0 12px 28px rgba(0,0,0,0.18)',
-      fontSize: '12px',
-      maxWidth: '220px',
-    }}>
+    <div
+      style={{
+        background: '#111827',
+        color: '#F9FAFB',
+        padding: '10px 12px',
+        borderRadius: '10px',
+        boxShadow: '0 12px 28px rgba(0,0,0,0.18)',
+        fontSize: '12px',
+        maxWidth: '220px',
+      }}
+    >
       <div style={{ fontWeight: 700, marginBottom: '4px' }}>{String(label ?? '')}</div>
       <div>{formatPercent(item.share ?? 0)}</div>
       {'amount' in item && typeof item.amount === 'bigint' && (
@@ -126,7 +146,7 @@ function MetricPill({
   label: string;
   value: string;
   tone?: 'neutral' | 'warning' | 'danger' | 'positive';
-}): JSX.Element {
+}) {
   const toneMap = {
     neutral: { bg: PANEL_ALT, text: TEXT },
     warning: { bg: '#FEF3C7', text: WARNING },
@@ -137,26 +157,24 @@ function MetricPill({
   const colors = toneMap[tone];
 
   return (
-    <div style={{
-      display: 'flex',
-      flexDirection: 'column',
-      gap: 4,
-      padding: '12px 14px',
-      borderRadius: 16,
-      background: colors.bg,
-      border: `1px solid ${BORDER}`,
-    }}>
+    <div
+      style={{
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 4,
+        padding: '12px 14px',
+        borderRadius: 16,
+        background: colors.bg,
+        border: `1px solid ${BORDER}`,
+      }}
+    >
       <span style={{ fontSize: 12, color: MUTED, fontWeight: 600 }}>{label}</span>
       <span style={{ fontSize: 20, color: colors.text, fontWeight: 700 }}>{value}</span>
     </div>
   );
 }
 
-export function PayerConcentrationChart({
-  data,
-}: {
-  data: LPRiskPayerExposure[];
-}): JSX.Element {
+export function PayerConcentrationChart({ data }: { data: LPRiskPayerExposure[] }) {
   const pieData = data.map((entry) => ({
     name: formatPayerLabel(entry.payer),
     payer: entry.payer,
@@ -167,8 +185,12 @@ export function PayerConcentrationChart({
 
   return (
     <section aria-labelledby="payer-concentration" style={cardStyle}>
-      <h3 id="payer-concentration" style={cardTitleStyle}>Concentration Risk</h3>
-      <p style={cardDescriptionStyle}>Exposure by payer address. The largest slice is your herd-risk anchor.</p>
+      <h3 id="payer-concentration" style={cardTitleStyle}>
+        Concentration Risk
+      </h3>
+      <p style={cardDescriptionStyle}>
+        Exposure by payer address. The largest slice is your herd-risk anchor.
+      </p>
       <div style={chartWrapStyle}>
         <ResponsiveContainer width="100%" height={280}>
           <PieChart>
@@ -193,8 +215,12 @@ export function PayerConcentrationChart({
         {data.slice(0, 4).map((entry) => (
           <li key={entry.payer} style={summaryItemStyle}>
             <div style={{ display: 'flex', flexDirection: 'column' }}>
-              <span style={{ fontWeight: 700, color: TEXT }}><AddressDisplay address={entry.payer} copyable={false} /></span>
-              <span style={{ color: MUTED, fontSize: 12 }}>{formatCurrency(entry.amount)} units</span>
+              <span style={{ fontWeight: 700, color: TEXT }}>
+                <AddressDisplay address={entry.payer} copyable={false} />
+              </span>
+              <span style={{ color: MUTED, fontSize: 12 }}>
+                {formatCurrency(entry.amount)} units
+              </span>
             </div>
             <strong style={{ color: TEXT }}>{formatPercent(entry.share)}</strong>
           </li>
@@ -204,11 +230,7 @@ export function PayerConcentrationChart({
   );
 }
 
-export function TokenDiversificationChart({
-  data,
-}: {
-  data: LPRiskTokenDiversification[];
-}): JSX.Element {
+export function TokenDiversificationChart({ data }: { data: LPRiskTokenDiversification[] }) {
   const barData = data.map((entry) => ({
     token: entry.token,
     value: Number(entry.amount),
@@ -219,13 +241,23 @@ export function TokenDiversificationChart({
 
   return (
     <section aria-labelledby="token-diversification" style={cardStyle}>
-      <h3 id="token-diversification" style={cardTitleStyle}>Token Diversification</h3>
+      <h3 id="token-diversification" style={cardTitleStyle}>
+        Token Diversification
+      </h3>
       <p style={cardDescriptionStyle}>Position breakdown across settlement tokens.</p>
       <div style={chartWrapStyle}>
         <ResponsiveContainer width="100%" height={280}>
-          <BarChart data={barData} layout="vertical" margin={{ left: 10, right: 20, top: 12, bottom: 12 }}>
+          <BarChart
+            data={barData}
+            layout="vertical"
+            margin={{ left: 10, right: 20, top: 12, bottom: 12 }}
+          >
             <CartesianGrid strokeDasharray="4 4" stroke={BORDER} />
-            <XAxis type="number" tickFormatter={(value) => `${Number(value) / 10_000_000}u`} stroke={MUTED} />
+            <XAxis
+              type="number"
+              tickFormatter={(value) => `${Number(value) / 10_000_000}u`}
+              stroke={MUTED}
+            />
             <YAxis type="category" dataKey="token" width={72} stroke={MUTED} />
             <Tooltip content={barTooltip as never} />
             <Bar dataKey="value" radius={[0, 12, 12, 0]}>
@@ -251,11 +283,7 @@ export function TokenDiversificationChart({
   );
 }
 
-export function MaturityProfileChart({
-  data,
-}: {
-  data: LPRiskMaturityBucket[];
-}): JSX.Element {
+export function MaturityProfileChart({ data }: { data: LPRiskMaturityBucket[] }) {
   const barData = data.map((entry) => ({
     bucket: entry.label,
     value: Number(entry.amount),
@@ -266,7 +294,9 @@ export function MaturityProfileChart({
 
   return (
     <section aria-labelledby="maturity-profile" style={cardStyle}>
-      <h3 id="maturity-profile" style={cardTitleStyle}>Maturity Profile</h3>
+      <h3 id="maturity-profile" style={cardTitleStyle}>
+        Maturity Profile
+      </h3>
       <p style={cardDescriptionStyle}>Positions grouped by days until due date.</p>
       <div style={chartWrapStyle}>
         <ResponsiveContainer width="100%" height={280}>
@@ -318,7 +348,7 @@ export function LPRiskDashboard({
   isLoading: externalLoading = false,
   className,
   style,
-}: LPRiskDashboardProps): JSX.Element {
+}: LPRiskDashboardProps) {
   const { data, isLoading, error } = useLPRiskMetrics(address, {
     portfolio,
     invoices,
@@ -369,35 +399,50 @@ export function LPRiskDashboard({
         ...style,
       }}
     >
-      <style dangerouslySetInnerHTML={{ __html: `
+      <style
+        dangerouslySetInnerHTML={{
+          __html: `
         @import url('https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Newsreader:opsz,wght@6..72,400;6..72,600;6..72,700&display=swap');
-      ` }} />
+      `,
+        }}
+      />
       <div style={dashboardBackgroundStyle} aria-hidden="true" />
       <header style={{ position: 'relative', zIndex: 1, marginBottom: 24 }}>
         <div style={eyebrowStyle}>Liquidity Provider Risk Intelligence</div>
         <h2 style={dashboardTitleStyle}>Comprehensive portfolio risk analytics for LPs</h2>
         <p style={dashboardSubtitleStyle}>
-          Monitor payer concentration, token mix, maturity pressure, default probability, and yield-adjusted exposure for {address}.
+          Monitor payer concentration, token mix, maturity pressure, default probability, and
+          yield-adjusted exposure for {address}.
         </p>
       </header>
 
       {loading ? (
-        <ResponsiveGrid cols={{ xs: 1, sm: 2, lg: 4 }} gap={16} style={{ position: 'relative', zIndex: 1 }}>
+        <ResponsiveGrid
+          cols={{ xs: 1, sm: 2, lg: 4 }}
+          gap={16}
+          style={{ position: 'relative', zIndex: 1 }}
+        >
           {Array.from({ length: 4 }).map((_, index) => (
-            <div key={index} style={{ ...cardStyle, minHeight: 112, background: PANEL, opacity: 0.8 }} />
+            <div
+              key={index}
+              style={{ ...cardStyle, minHeight: 112, background: PANEL, opacity: 0.8 }}
+            />
           ))}
         </ResponsiveGrid>
       ) : error ? (
-        <div role="alert" style={{
-          position: 'relative',
-          zIndex: 1,
-          padding: '16px 18px',
-          borderRadius: 18,
-          border: `1px solid #FCA5A5`,
-          background: '#FEF2F2',
-          color: DANGER,
-          fontWeight: 600,
-        }}>
+        <div
+          role="alert"
+          style={{
+            position: 'relative',
+            zIndex: 1,
+            padding: '16px 18px',
+            borderRadius: 18,
+            border: `1px solid #FCA5A5`,
+            background: '#FEF2F2',
+            color: DANGER,
+            fontWeight: 600,
+          }}
+        >
           Unable to load LP risk metrics: {error.message}
         </div>
       ) : data ? (
@@ -408,22 +453,37 @@ export function LPRiskDashboard({
               value={data.herdRisk ? 'Alert' : 'Clear'}
               tone={data.herdRisk ? 'danger' : 'positive'}
             />
-            <MetricPill label="Top payer share" value={formatPercent(data.herdShare)} tone={data.herdRisk ? 'warning' : 'neutral'} />
-            <MetricPill label="Default probability" value={formatPercent(data.defaultProbabilityEstimate)} tone="warning" />
-            <MetricPill label="Yield / Risk" value={formatRatio(data.yieldAdjustedRiskScore)} tone="positive" />
+            <MetricPill
+              label="Top payer share"
+              value={formatPercent(data.herdShare)}
+              tone={data.herdRisk ? 'warning' : 'neutral'}
+            />
+            <MetricPill
+              label="Default probability"
+              value={formatPercent(data.defaultProbabilityEstimate)}
+              tone="warning"
+            />
+            <MetricPill
+              label="Yield / Risk"
+              value={formatRatio(data.yieldAdjustedRiskScore)}
+              tone="positive"
+            />
           </div>
 
           {data.herdRisk && (
-            <div style={{
-              marginBottom: 18,
-              padding: '14px 16px',
-              borderRadius: 18,
-              border: `1px solid #FDBA74`,
-              background: '#FFF7ED',
-              color: '#9A3412',
-              fontWeight: 600,
-            }}>
-              Herd risk detected: more than 30% of this LP portfolio is concentrated in a single payer.
+            <div
+              style={{
+                marginBottom: 18,
+                padding: '14px 16px',
+                borderRadius: 18,
+                border: `1px solid #FDBA74`,
+                background: '#FFF7ED',
+                color: '#9A3412',
+                fontWeight: 600,
+              }}
+            >
+              Herd risk detected: more than 30% of this LP portfolio is concentrated in a single
+              payer.
             </div>
           )}
 
@@ -434,10 +494,13 @@ export function LPRiskDashboard({
                 title={stat.label}
                 value={stat.value}
                 accentColor={
-                  stat.tone === 'danger' ? DANGER :
-                  stat.tone === 'warning' ? WARNING :
-                  stat.tone === 'positive' ? POSITIVE :
-                  '#8B5E34'
+                  stat.tone === 'danger'
+                    ? DANGER
+                    : stat.tone === 'warning'
+                    ? WARNING
+                    : stat.tone === 'positive'
+                    ? POSITIVE
+                    : '#8B5E34'
                 }
                 style={{ background: PANEL }}
               />
@@ -450,16 +513,31 @@ export function LPRiskDashboard({
             <MaturityProfileChart data={data.maturityProfile} />
           </ResponsiveGrid>
 
-          <div style={{ display: 'grid', gap: 18, marginTop: 18, gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))' }}>
+          <div
+            style={{
+              display: 'grid',
+              gap: 18,
+              marginTop: 18,
+              gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
+            }}
+          >
             <section style={cardStyle}>
               <h3 style={cardTitleStyle}>Default Probability Estimate</h3>
               <p style={cardDescriptionStyle}>
                 Blended payer reputation and historical default rate.
               </p>
               <div style={{ display: 'grid', gap: 12 }}>
-                <MetricPill label="Weighted probability" value={formatPercent(data.defaultProbabilityEstimate)} tone="warning" />
+                <MetricPill
+                  label="Weighted probability"
+                  value={formatPercent(data.defaultProbabilityEstimate)}
+                  tone="warning"
+                />
                 <MetricPill label="Expected loss" value={formatCurrency(data.expectedLoss)} />
-                <MetricPill label="Expected yield" value={formatCurrency(data.expectedYield)} tone="positive" />
+                <MetricPill
+                  label="Expected yield"
+                  value={formatCurrency(data.expectedYield)}
+                  tone="positive"
+                />
               </div>
             </section>
 
@@ -467,24 +545,33 @@ export function LPRiskDashboard({
               <h3 style={cardTitleStyle}>Portfolio Notes</h3>
               <ul style={{ margin: 0, paddingLeft: 18, color: TEXT, lineHeight: 1.6 }}>
                 <li>
-                  Largest payer exposure: {topPayer ? <AddressDisplay address={topPayer.payer} copyable={false} /> : 'n/a'}
+                  Largest payer exposure:{' '}
+                  {topPayer ? <AddressDisplay address={topPayer.payer} copyable={false} /> : 'n/a'}
                 </li>
-                <li>Largest token bucket: {topToken?.token ?? 'n/a'} ({topToken ? formatPercent(topToken.share) : '0.0%'})</li>
-                <li>Nearest maturity bucket: {nearTerm?.label ?? 'n/a'} ({nearTerm ? formatPercent(nearTerm.share) : '0.0%'})</li>
+                <li>
+                  Largest token bucket: {topToken?.token ?? 'n/a'} (
+                  {topToken ? formatPercent(topToken.share) : '0.0%'})
+                </li>
+                <li>
+                  Nearest maturity bucket: {nearTerm?.label ?? 'n/a'} (
+                  {nearTerm ? formatPercent(nearTerm.share) : '0.0%'})
+                </li>
               </ul>
             </section>
           </div>
         </div>
       ) : (
-        <div style={{
-          position: 'relative',
-          zIndex: 1,
-          padding: '18px',
-          borderRadius: 18,
-          border: `1px dashed ${BORDER}`,
-          background: PANEL,
-          color: MUTED,
-        }}>
+        <div
+          style={{
+            position: 'relative',
+            zIndex: 1,
+            padding: '18px',
+            borderRadius: 18,
+            border: `1px dashed ${BORDER}`,
+            background: PANEL,
+            color: MUTED,
+          }}
+        >
           No LP positions found for this address yet.
         </div>
       )}

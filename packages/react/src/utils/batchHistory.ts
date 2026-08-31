@@ -14,11 +14,11 @@ export interface BatchHistoryEntry {
   durationMs: number;
 }
 
-const STORAGE_KEY = "iln-batch-history";
+const STORAGE_KEY = 'iln-batch-history';
 const MAX_ENTRIES = 50;
 
 export function loadBatchHistory(): BatchHistoryEntry[] {
-  if (typeof window === "undefined") return [];
+  if (typeof window === 'undefined') return [];
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     return raw ? (JSON.parse(raw) as BatchHistoryEntry[]) : [];
@@ -28,7 +28,7 @@ export function loadBatchHistory(): BatchHistoryEntry[] {
 }
 
 export function saveBatchEntry(entry: BatchHistoryEntry): void {
-  if (typeof window === "undefined") return;
+  if (typeof window === 'undefined') return;
   try {
     const history = loadBatchHistory();
     history.unshift(entry);
@@ -42,7 +42,7 @@ export function saveBatchEntry(entry: BatchHistoryEntry): void {
 }
 
 export function clearBatchHistory(): void {
-  if (typeof window === "undefined") return;
+  if (typeof window === 'undefined') return;
   try {
     localStorage.removeItem(STORAGE_KEY);
   } catch {
@@ -51,16 +51,20 @@ export function clearBatchHistory(): void {
 }
 
 export function exportBatchResultsAsCsv(entry: BatchHistoryEntry): string {
-  const header = "index,invoice_id,success,error";
+  const header = 'index,invoice_id,success,error';
   const rows = entry.results.map(
-    (r) => `${r.index + 1},${r.invoiceId?.toString() ?? ""},${r.success},"${r.error ?? ""}"`,
+    (r) => `${r.index + 1},${r.invoiceId?.toString() ?? ''},${r.success},"${r.error ?? ''}"`
   );
-  return [header, ...rows].join("\n");
+  return [header, ...rows].join('\n');
 }
 
-export function aggregateBatchStats(
-  history: BatchHistoryEntry[],
-): { totalBatches: number; totalInvoices: number; totalSucceeded: number; totalFailed: number; successRate: number } {
+export function aggregateBatchStats(history: BatchHistoryEntry[]): {
+  totalBatches: number;
+  totalInvoices: number;
+  totalSucceeded: number;
+  totalFailed: number;
+  successRate: number;
+} {
   const totalBatches = history.length;
   const totalInvoices = history.reduce((s, e) => s + e.totalInvoices, 0);
   const totalSucceeded = history.reduce((s, e) => s + e.succeeded, 0);

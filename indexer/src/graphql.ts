@@ -1,4 +1,4 @@
-import { createYoga, createSchema } from "graphql-yoga";
+import { createYoga, createSchema } from 'graphql-yoga';
 import {
   getDb,
   getInvoiceById,
@@ -10,9 +10,9 @@ import {
   getTopLPs,
   getEvents,
   getCursorUpdatedAt,
-} from "./db";
-import { pubSub } from "./pubsub";
-import type { Invoice, ILNEvent } from "./types";
+} from './db';
+import { pubSub } from './pubsub';
+import type { Invoice, ILNEvent } from './types';
 
 // ─── GraphQL schema ───────────────────────────────────────────────────────────
 
@@ -128,32 +128,32 @@ const startTime = Date.now();
 const resolvers = {
   // Map snake_case DB fields to camelCase GraphQL fields
   Invoice: {
-    dueDate:      (i: Invoice) => i.due_date,
+    dueDate: (i: Invoice) => i.due_date,
     discountRate: (i: Invoice) => i.discount_rate,
-    fundedAt:     (i: Invoice) => i.funded_at ?? null,
-    createdAt:    (i: Invoice) => i.created_at,
-    updatedAt:    (i: Invoice) => i.updated_at,
+    fundedAt: (i: Invoice) => i.funded_at ?? null,
+    createdAt: (i: Invoice) => i.created_at,
+    updatedAt: (i: Invoice) => i.updated_at,
   },
 
   Event: {
-    eventId:        (e: ILNEvent) => e.event_id,
-    eventType:      (e: ILNEvent) => e.event_type,
-    invoiceId:      (e: ILNEvent) => e.invoice_id,
+    eventId: (e: ILNEvent) => e.event_id,
+    eventType: (e: ILNEvent) => e.event_type,
+    invoiceId: (e: ILNEvent) => e.invoice_id,
     ledgerClosedAt: (e: ILNEvent) => e.ledger_closed_at,
-    createdAt:      (e: ILNEvent) => e.created_at,
+    createdAt: (e: ILNEvent) => e.created_at,
   },
 
   Query: {
     health: () => {
-      let dbStatus: "ok" | "error" = "ok";
+      let dbStatus: 'ok' | 'error' = 'ok';
       try {
-        getDb().prepare("SELECT 1").get();
+        getDb().prepare('SELECT 1').get();
       } catch {
-        dbStatus = "error";
+        dbStatus = 'error';
       }
       const lastSyncMs = getCursorUpdatedAt();
       return {
-        status: dbStatus === "ok" ? "ok" : "degraded",
+        status: dbStatus === 'ok' ? 'ok' : 'degraded',
         db: dbStatus,
         lastSync: lastSyncMs !== null ? new Date(lastSyncMs).toISOString() : null,
         uptime: Date.now() - startTime,
@@ -173,7 +173,7 @@ const resolvers = {
         funder?: string;
         first?: number;
         after?: string;
-      },
+      }
     ) => {
       const limit = Math.min(args.first ?? 100, 100);
       const { invoices, hasMore, nextCursor } = queryInvoicesPaginated(
@@ -184,13 +184,13 @@ const resolvers = {
           funder: args.funder,
         },
         limit,
-        args.after,
+        args.after
       );
 
       return {
         edges: invoices.map((invoice) => ({
           node: invoice,
-          cursor: Buffer.from(String(invoice.id)).toString("base64"),
+          cursor: Buffer.from(String(invoice.id)).toString('base64'),
         })),
         pageInfo: {
           hasNextPage: hasMore,
@@ -207,25 +207,18 @@ const resolvers = {
 
     lpStats: (_: unknown, { address }: { address: string }) => getLPStats(address),
 
-    freelancerStats: (_: unknown, { address }: { address: string }) =>
-      getFreelancerStats(address),
+    freelancerStats: (_: unknown, { address }: { address: string }) => getFreelancerStats(address),
 
-    topLPs: (
-      _: unknown,
-      { limit = 10, period = "all" }: { limit?: number; period?: string },
-    ) => {
-      if (!["all", "week", "month"].includes(period)) {
-        throw new Error("period must be all, week, or month");
+    topLPs: (_: unknown, { limit = 10, period = 'all' }: { limit?: number; period?: string }) => {
+      if (!['all', 'week', 'month'].includes(period)) {
+        throw new Error('period must be all, week, or month');
       }
       return getTopLPs(Math.min(limit, 100), period);
     },
 
-    history: (
-      _: unknown,
-      { address, role = "freelancer" }: { address: string; role?: string },
-    ) => {
-      if (role !== "freelancer" && role !== "payer" && role !== "funder") {
-        throw new Error("role must be freelancer, payer, or funder");
+    history: (_: unknown, { address, role = 'freelancer' }: { address: string; role?: string }) => {
+      if (role !== 'freelancer' && role !== 'payer' && role !== 'funder') {
+        throw new Error('role must be freelancer, payer, or funder');
       }
       return getInvoiceHistory(address, role);
     },
@@ -233,11 +226,11 @@ const resolvers = {
 
   Subscription: {
     invoiceCreated: {
-      subscribe: () => pubSub.subscribe("INVOICE_CREATED"),
+      subscribe: () => pubSub.subscribe('INVOICE_CREATED'),
       resolve: (invoice: Invoice) => invoice,
     },
     invoiceUpdated: {
-      subscribe: () => pubSub.subscribe("INVOICE_UPDATED"),
+      subscribe: () => pubSub.subscribe('INVOICE_UPDATED'),
       resolve: (invoice: Invoice) => invoice,
     },
   },
@@ -248,10 +241,10 @@ const resolvers = {
 export function createGraphQLHandler() {
   return createYoga({
     schema: createSchema({ typeDefs, resolvers }),
-    graphqlEndpoint: "/graphql",
+    graphqlEndpoint: '/graphql',
     // GraphiQL playground is enabled automatically in non-production environments.
     // Set NODE_ENV=production to disable it.
-    graphiql: process.env.NODE_ENV !== "production",
+    graphiql: process.env.NODE_ENV !== 'production',
     logging: false,
   });
 }

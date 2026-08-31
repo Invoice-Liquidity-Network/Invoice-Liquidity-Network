@@ -1,6 +1,6 @@
-import { randomUUID } from "crypto";
-import { getDb } from "./db";
-import type { Invoice, ILNEvent, InvoiceFilter } from "./types";
+import { randomUUID } from 'crypto';
+import { getDb } from './db';
+import type { Invoice, ILNEvent, InvoiceFilter } from './types';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -24,9 +24,9 @@ export interface EventExportFilter {
 
 // ─── Job types ────────────────────────────────────────────────────────────────
 
-export type ExportFormat = "csv" | "json";
-export type ExportType = "invoices" | "events";
-export type ExportStatus = "pending" | "processing" | "done" | "failed";
+export type ExportFormat = 'csv' | 'json';
+export type ExportType = 'invoices' | 'events';
+export type ExportStatus = 'pending' | 'processing' | 'done' | 'failed';
 
 export interface ExportJob {
   jobId: string;
@@ -52,14 +52,14 @@ const _jobs = new Map<string, JobEntry>();
 export function createExportJob(
   type: ExportType,
   format: ExportFormat,
-  filter: ExportFilter | EventExportFilter,
+  filter: ExportFilter | EventExportFilter
 ): ExportJob {
   const jobId = randomUUID();
   const job: ExportJob = {
     jobId,
     type,
     format,
-    status: "pending",
+    status: 'pending',
     filter,
     createdAt: Date.now(),
   };
@@ -86,35 +86,29 @@ export async function processExportJob(jobId: string): Promise<void> {
   const entry = _jobs.get(jobId);
   if (!entry) return;
 
-  entry.job.status = "processing";
+  entry.job.status = 'processing';
 
   try {
     let content: string;
     let rowCount: number;
 
-    if (entry.job.type === "invoices") {
+    if (entry.job.type === 'invoices') {
       const rows = queryInvoicesForExport(entry.job.filter as ExportFilter);
       rowCount = rows.length;
-      content =
-        entry.job.format === "csv"
-          ? invoicesToCsv(rows)
-          : JSON.stringify(rows, null, 2);
+      content = entry.job.format === 'csv' ? invoicesToCsv(rows) : JSON.stringify(rows, null, 2);
     } else {
       const rows = queryEventsForExport(entry.job.filter as EventExportFilter);
       rowCount = rows.length;
-      content =
-        entry.job.format === "csv"
-          ? eventsToCsv(rows)
-          : JSON.stringify(rows, null, 2);
+      content = entry.job.format === 'csv' ? eventsToCsv(rows) : JSON.stringify(rows, null, 2);
     }
 
-    entry.job.status = "done";
+    entry.job.status = 'done';
     entry.job.completedAt = Date.now();
     entry.job.rowCount = rowCount;
     entry.content = content;
   } catch (err) {
-    entry.job.status = "failed";
-    entry.job.error = err instanceof Error ? err.message : "Unknown error";
+    entry.job.status = 'failed';
+    entry.job.error = err instanceof Error ? err.message : 'Unknown error';
   }
 }
 
@@ -122,7 +116,7 @@ export async function processExportJob(jobId: string): Promise<void> {
 
 export function countInvoicesForExport(filter: ExportFilter): number {
   const { clauses, params } = buildInvoiceClauses(filter);
-  const where = clauses.length > 0 ? `WHERE ${clauses.join(" AND ")}` : "";
+  const where = clauses.length > 0 ? `WHERE ${clauses.join(' AND ')}` : '';
   const result = getDb()
     .prepare(`SELECT COUNT(*) as count FROM invoices ${where}`)
     .get(...params) as { count: number };
@@ -131,7 +125,7 @@ export function countInvoicesForExport(filter: ExportFilter): number {
 
 export function countEventsForExport(filter: EventExportFilter): number {
   const { clauses, params } = buildEventClauses(filter);
-  const where = clauses.length > 0 ? `WHERE ${clauses.join(" AND ")}` : "";
+  const where = clauses.length > 0 ? `WHERE ${clauses.join(' AND ')}` : '';
   const result = getDb()
     .prepare(`SELECT COUNT(*) as count FROM events ${where}`)
     .get(...params) as { count: number };
@@ -142,7 +136,7 @@ export function countEventsForExport(filter: EventExportFilter): number {
 
 export function queryInvoicesForExport(filter: ExportFilter): Invoice[] {
   const { clauses, params } = buildInvoiceClauses(filter);
-  const where = clauses.length > 0 ? `WHERE ${clauses.join(" AND ")}` : "";
+  const where = clauses.length > 0 ? `WHERE ${clauses.join(' AND ')}` : '';
   return getDb()
     .prepare(`SELECT * FROM invoices ${where} ORDER BY id ASC`)
     .all(...params) as Invoice[];
@@ -150,7 +144,7 @@ export function queryInvoicesForExport(filter: ExportFilter): Invoice[] {
 
 export function queryEventsForExport(filter: EventExportFilter): ILNEvent[] {
   const { clauses, params } = buildEventClauses(filter);
-  const where = clauses.length > 0 ? `WHERE ${clauses.join(" AND ")}` : "";
+  const where = clauses.length > 0 ? `WHERE ${clauses.join(' AND ')}` : '';
   return getDb()
     .prepare(`SELECT * FROM events ${where} ORDER BY ledger ASC`)
     .all(...params) as ILNEvent[];
@@ -166,27 +160,27 @@ function buildInvoiceClauses(filter: ExportFilter): {
   const params: (string | number)[] = [];
 
   if (filter.status) {
-    clauses.push("status = ?");
+    clauses.push('status = ?');
     params.push(filter.status);
   }
   if (filter.freelancer) {
-    clauses.push("freelancer = ?");
+    clauses.push('freelancer = ?');
     params.push(filter.freelancer);
   }
   if (filter.payer) {
-    clauses.push("payer = ?");
+    clauses.push('payer = ?');
     params.push(filter.payer);
   }
   if (filter.funder) {
-    clauses.push("funder = ?");
+    clauses.push('funder = ?');
     params.push(filter.funder);
   }
   if (filter.from) {
-    clauses.push("created_at >= ?");
+    clauses.push('created_at >= ?');
     params.push(new Date(filter.from).getTime());
   }
   if (filter.to) {
-    clauses.push("created_at <= ?");
+    clauses.push('created_at <= ?');
     params.push(new Date(filter.to).getTime());
   }
 
@@ -201,15 +195,15 @@ function buildEventClauses(filter: EventExportFilter): {
   const params: (string | number)[] = [];
 
   if (filter.invoiceId !== undefined) {
-    clauses.push("invoice_id = ?");
+    clauses.push('invoice_id = ?');
     params.push(filter.invoiceId);
   }
   if (filter.from) {
-    clauses.push("created_at >= ?");
+    clauses.push('created_at >= ?');
     params.push(new Date(filter.from).getTime());
   }
   if (filter.to) {
-    clauses.push("created_at <= ?");
+    clauses.push('created_at <= ?');
     params.push(new Date(filter.to).getTime());
   }
 
@@ -219,7 +213,7 @@ function buildEventClauses(filter: EventExportFilter): {
 // ─── CSV serializers ──────────────────────────────────────────────────────────
 
 const INVOICE_CSV_HEADER =
-  "id,freelancer,payer,amount,due_date,discount_rate,status,funder,funded_at,created_at,updated_at";
+  'id,freelancer,payer,amount,due_date,discount_rate,status,funder,funded_at,created_at,updated_at';
 
 export function invoicesToCsv(invoices: Invoice[]): string {
   const rows = invoices.map((inv) =>
@@ -231,17 +225,16 @@ export function invoicesToCsv(invoices: Invoice[]): string {
       inv.due_date,
       inv.discount_rate,
       csvEscape(inv.status),
-      inv.funder !== null ? csvEscape(inv.funder) : "",
-      inv.funded_at !== null ? inv.funded_at : "",
+      inv.funder !== null ? csvEscape(inv.funder) : '',
+      inv.funded_at !== null ? inv.funded_at : '',
       inv.created_at,
       inv.updated_at,
-    ].join(","),
+    ].join(',')
   );
-  return [INVOICE_CSV_HEADER, ...rows].join("\n");
+  return [INVOICE_CSV_HEADER, ...rows].join('\n');
 }
 
-const EVENT_CSV_HEADER =
-  "event_id,event_type,invoice_id,ledger,ledger_closed_at,created_at";
+const EVENT_CSV_HEADER = 'event_id,event_type,invoice_id,ledger,ledger_closed_at,created_at';
 
 export function eventsToCsv(events: ILNEvent[]): string {
   const rows = events.map((evt) =>
@@ -252,13 +245,13 @@ export function eventsToCsv(events: ILNEvent[]): string {
       evt.ledger,
       csvEscape(evt.ledger_closed_at),
       evt.created_at,
-    ].join(","),
+    ].join(',')
   );
-  return [EVENT_CSV_HEADER, ...rows].join("\n");
+  return [EVENT_CSV_HEADER, ...rows].join('\n');
 }
 
 function csvEscape(value: string): string {
-  if (value.includes(",") || value.includes('"') || value.includes("\n")) {
+  if (value.includes(',') || value.includes('"') || value.includes('\n')) {
     return `"${value.replace(/"/g, '""')}"`;
   }
   return value;

@@ -15,7 +15,7 @@ const {
   runLicenses,
   runScan,
   getSeverity,
-  getNpmAuditRoots
+  getNpmAuditRoots,
 } = require('../dependency-audit.js');
 
 function makeSpawnResult({ status = 0, stdout = '', stderr = '', error = null } = {}) {
@@ -128,7 +128,7 @@ describe('runCommand', () => {
     const spawn = mock.fn(() =>
       makeSpawnResult({
         status: null,
-        error: { message: 'ENOENT: spawn snyk' }
+        error: { message: 'ENOENT: spawn snyk' },
       })
     );
     const result = runCommand('snyk', ['test'], { _spawnSync: spawn });
@@ -138,9 +138,7 @@ describe('runCommand', () => {
   });
 
   it('combines stdout and stderr into output', () => {
-    const spawn = mock.fn(() =>
-      makeSpawnResult({ status: 0, stdout: 'out', stderr: 'err' })
-    );
+    const spawn = mock.fn(() => makeSpawnResult({ status: 0, stdout: 'out', stderr: 'err' }));
     const result = runCommand('cmd', [], { _spawnSync: spawn });
     assert.equal(result.output, 'outerr');
   });
@@ -183,8 +181,8 @@ describe('runNpmAudit', () => {
           calls.push({ cmd, args });
           return runCommand(cmd, args, { ...opts, _spawnSync: spawn });
         },
-        _spawnSync: spawn
-      }
+        _spawnSync: spawn,
+      },
     });
     assert.equal(calls.length, 2);
     assert.deepEqual(calls[0].args.slice(0, 3), ['audit', '--omit=dev', '--audit-level=high']);
@@ -197,10 +195,9 @@ describe('runNpmAudit', () => {
       _deps: {
         npmAuditRoots: ['cli'],
         repoRoot: tmpDir,
-        runCommand: (cmd, args, opts) =>
-          runCommand(cmd, args, { ...opts, _spawnSync: spawn }),
-        _spawnSync: spawn
-      }
+        runCommand: (cmd, args, opts) => runCommand(cmd, args, { ...opts, _spawnSync: spawn }),
+        _spawnSync: spawn,
+      },
     });
     assert.equal(result, false);
   });
@@ -217,8 +214,8 @@ describe('runNpmAudit', () => {
           calls.push({ cmd, args });
           return runCommand(cmd, args, { ...opts, _spawnSync: spawn });
         },
-        _spawnSync: spawn
-      }
+        _spawnSync: spawn,
+      },
     });
     assert.ok(calls[0].args.some((a) => a.includes('critical')));
   });
@@ -235,8 +232,8 @@ describe('runNpmAudit', () => {
           calls.push({ cmd, args });
           return runCommand(cmd, args, { ...opts, _spawnSync: spawn });
         },
-        _spawnSync: spawn
-      }
+        _spawnSync: spawn,
+      },
     });
     assert.ok(calls[0].args.includes('--json'));
   });
@@ -253,8 +250,8 @@ describe('runNpmAudit', () => {
           calls.push({ cmd, args });
           return runCommand(cmd, args, { ...opts, _spawnSync: spawn });
         },
-        _spawnSync: spawn
-      }
+        _spawnSync: spawn,
+      },
     });
     assert.deepEqual(calls[0].args, ['audit', 'fix', '--omit=dev']);
   });
@@ -269,10 +266,9 @@ describe('runNpmAudit', () => {
         _deps: {
           npmAuditRoots: ['cli'],
           repoRoot: tmpDir,
-          runCommand: (cmd, args, opts) =>
-            runCommand(cmd, args, { ...opts, _spawnSync: spawn }),
-          _spawnSync: spawn
-        }
+          runCommand: (cmd, args, opts) => runCommand(cmd, args, { ...opts, _spawnSync: spawn }),
+          _spawnSync: spawn,
+        },
       });
       assert.equal(result, false);
       assert.ok(logs.some((l) => l.includes('npm audit failed')));
@@ -309,8 +305,8 @@ describe('runPnpmAudit', () => {
           calls.push({ cmd, args });
           return runCommand(cmd, args, { ...opts, _spawnSync: spawn });
         },
-        _spawnSync: spawn
-      }
+        _spawnSync: spawn,
+      },
     });
     assert.equal(calls.length, 1);
     assert.equal(calls[0].cmd, 'pnpm');
@@ -324,10 +320,9 @@ describe('runPnpmAudit', () => {
     const result = runPnpmAudit({
       _deps: {
         repoRoot: tmpDir,
-        runCommand: (cmd, args, opts) =>
-          runCommand(cmd, args, { ...opts, _spawnSync: spawn }),
-        _spawnSync: spawn
-      }
+        runCommand: (cmd, args, opts) => runCommand(cmd, args, { ...opts, _spawnSync: spawn }),
+        _spawnSync: spawn,
+      },
     });
     assert.equal(result, false);
   });
@@ -344,8 +339,8 @@ describe('runPnpmAudit', () => {
           calls.push({ cmd, args });
           return runCommand(cmd, args, { ...opts, _spawnSync: spawn });
         },
-        _spawnSync: spawn
-      }
+        _spawnSync: spawn,
+      },
     });
     assert.ok(calls[0].args.includes('--json'));
   });
@@ -361,8 +356,8 @@ describe('runSnyk', () => {
           calls.push({ cmd, args });
           return runCommand(cmd, args, { ...opts, _spawnSync: spawn });
         },
-        _spawnSync: spawn
-      }
+        _spawnSync: spawn,
+      },
     });
     assert.equal(calls.length, 1);
     assert.equal(calls[0].cmd, 'npx');
@@ -375,10 +370,9 @@ describe('runSnyk', () => {
     const spawn = mock.fn(() => makeSpawnResult({ status: 1 }));
     const result = runSnyk({
       _deps: {
-        runCommand: (cmd, args, opts) =>
-          runCommand(cmd, args, { ...opts, _spawnSync: spawn }),
-        _spawnSync: spawn
-      }
+        runCommand: (cmd, args, opts) => runCommand(cmd, args, { ...opts, _spawnSync: spawn }),
+        _spawnSync: spawn,
+      },
     });
     assert.equal(result, false);
   });
@@ -393,8 +387,8 @@ describe('runSnyk', () => {
           calls.push({ cmd, args });
           return runCommand(cmd, args, { ...opts, _spawnSync: spawn });
         },
-        _spawnSync: spawn
-      }
+        _spawnSync: spawn,
+      },
     });
     assert.ok(calls[0].args.includes('--json'));
   });
@@ -409,8 +403,8 @@ describe('runSnyk', () => {
           calls.push({ cmd, args });
           return runCommand(cmd, args, { ...opts, _spawnSync: spawn });
         },
-        _spawnSync: spawn
-      }
+        _spawnSync: spawn,
+      },
     });
     assert.ok(calls[0].args.some((a) => a.includes('medium')));
   });
@@ -419,15 +413,14 @@ describe('runSnyk', () => {
     const spawn = mock.fn(() =>
       makeSpawnResult({
         status: null,
-        error: { message: 'ENOENT: npx snyk' }
+        error: { message: 'ENOENT: npx snyk' },
       })
     );
     const result = runSnyk({
       _deps: {
-        runCommand: (cmd, args, opts) =>
-          runCommand(cmd, args, { ...opts, _spawnSync: spawn }),
-        _spawnSync: spawn
-      }
+        runCommand: (cmd, args, opts) => runCommand(cmd, args, { ...opts, _spawnSync: spawn }),
+        _spawnSync: spawn,
+      },
     });
     assert.equal(result, false);
   });
@@ -443,8 +436,8 @@ describe('runLicenses', () => {
           calls.push({ cmd, args });
           return runCommand(cmd, args, { ...opts, _spawnSync: spawn });
         },
-        _spawnSync: spawn
-      }
+        _spawnSync: spawn,
+      },
     });
     assert.equal(calls.length, 1);
     assert.equal(calls[0].cmd, 'node');
@@ -455,10 +448,9 @@ describe('runLicenses', () => {
     const spawn = mock.fn(() => makeSpawnResult({ status: 1 }));
     const result = runLicenses({
       _deps: {
-        runCommand: (cmd, args, opts) =>
-          runCommand(cmd, args, { ...opts, _spawnSync: spawn }),
-        _spawnSync: spawn
-      }
+        runCommand: (cmd, args, opts) => runCommand(cmd, args, { ...opts, _spawnSync: spawn }),
+        _spawnSync: spawn,
+      },
     });
     assert.equal(result, false);
   });
@@ -467,15 +459,14 @@ describe('runLicenses', () => {
     const spawn = mock.fn(() =>
       makeSpawnResult({
         status: null,
-        error: { message: 'ENOENT: node scripts/check-licenses.js' }
+        error: { message: 'ENOENT: node scripts/check-licenses.js' },
       })
     );
     const result = runLicenses({
       _deps: {
-        runCommand: (cmd, args, opts) =>
-          runCommand(cmd, args, { ...opts, _spawnSync: spawn }),
-        _spawnSync: spawn
-      }
+        runCommand: (cmd, args, opts) => runCommand(cmd, args, { ...opts, _spawnSync: spawn }),
+        _spawnSync: spawn,
+      },
     });
     assert.equal(result, false);
   });
@@ -494,16 +485,15 @@ describe('runScan', () => {
 
   it('returns true when all sub-scans succeed', () => {
     const spawn = mock.fn(() => makeSpawnResult({ status: 0 }));
-    const fakeRun = (cmd, args, opts) =>
-      runCommand(cmd, args, { ...opts, _spawnSync: spawn });
+    const fakeRun = (cmd, args, opts) => runCommand(cmd, args, { ...opts, _spawnSync: spawn });
     const result = runScan({
       _deps: {
         repoRoot: tmpDir,
         reportDir: tmpDir,
         npmAuditRoots: [],
         runCommand: fakeRun,
-        _spawnSync: spawn
-      }
+        _spawnSync: spawn,
+      },
     });
     assert.equal(result, true);
   });
@@ -522,8 +512,8 @@ describe('runScan', () => {
         reportDir: tmpDir,
         npmAuditRoots: ['cli'],
         runCommand: fakeRun,
-        _spawnSync: () => makeSpawnResult()
-      }
+        _spawnSync: () => makeSpawnResult(),
+      },
     });
     assert.equal(result, false);
   });
@@ -537,10 +527,9 @@ describe('runScan', () => {
         repoRoot: tmpDir,
         reportDir,
         npmAuditRoots: [],
-        runCommand: (cmd, args, opts) =>
-          runCommand(cmd, args, { ...opts, _spawnSync: spawn }),
-        _spawnSync: spawn
-      }
+        runCommand: (cmd, args, opts) => runCommand(cmd, args, { ...opts, _spawnSync: spawn }),
+        _spawnSync: spawn,
+      },
     });
     assert.ok(fs.existsSync(reportDir));
   });

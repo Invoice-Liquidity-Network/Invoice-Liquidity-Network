@@ -49,11 +49,6 @@ export function recordRequest(responseTimeMs: number): void {
   totalResponseTime += responseTimeMs;
 }
 
-export function recordDbQuery(durationMs: number): void {
-  dbQueryCount++;
-  dbQueryAvgTime = (dbQueryAvgTime * (dbQueryCount - 1) + durationMs) / dbQueryCount;
-}
-
 export function recordError(errorType: string, message: string): void {
   errorCount++;
   errorsByType[errorType] = (errorsByType[errorType] || 0) + 1;
@@ -111,7 +106,8 @@ function getLastSyncLedger(): number | null {
   try {
     const db = getDb();
     const row = db.prepare('SELECT last_ledger FROM cursor WHERE id = 1').get() as
-      { last_ledger: number } | undefined;
+      | { last_ledger: number }
+      | undefined;
     return row?.last_ledger ?? null;
   } catch {
     return null;

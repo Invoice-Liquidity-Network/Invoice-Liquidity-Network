@@ -45,7 +45,7 @@ describe('useAuctionRate', () => {
 
     const { result } = renderHook(
       () => useAuctionRate(42, { now: () => 1_125, pollIntervalMs: 60_000 }),
-      { wrapper: ({ children }) => <TestWrapper client={mockClient}>{children}</TestWrapper> },
+      { wrapper: ({ children }) => <TestWrapper client={mockClient}>{children}</TestWrapper> }
     );
 
     await waitFor(() => expect(result.current.currentDiscountBps).toBe(200));
@@ -58,12 +58,13 @@ describe('useAuctionRate', () => {
     });
 
     const { result } = renderHook(
-      () => useAuctionRate(42, {
-        initialInvoice: auctionInvoice as any,
-        now: () => 1_125,
-        pollIntervalMs: 60_000,
-      }),
-      { wrapper: ({ children }) => <TestWrapper client={mockClient}>{children}</TestWrapper> },
+      () =>
+        useAuctionRate(42, {
+          initialInvoice: auctionInvoice as any,
+          now: () => 1_125,
+          pollIntervalMs: 60_000,
+        }),
+      { wrapper: ({ children }) => <TestWrapper client={mockClient}>{children}</TestWrapper> }
     );
 
     await waitFor(() => expect(result.current.currentDiscountBps).toBe(375));

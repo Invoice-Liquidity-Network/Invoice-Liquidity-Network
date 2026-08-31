@@ -9,7 +9,9 @@ const request: OracleVerificationRequest = {
   invoiceId: '42',
 };
 
-function makeResponse(overrides: Partial<OracleVerificationResponse> = {}): OracleVerificationResponse {
+function makeResponse(
+  overrides: Partial<OracleVerificationResponse> = {}
+): OracleVerificationResponse {
   return {
     requestId: 'req-1',
     payer: request.payer,

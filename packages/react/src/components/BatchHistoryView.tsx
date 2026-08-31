@@ -1,11 +1,11 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback } from 'react';
 import {
   loadBatchHistory,
   clearBatchHistory,
   exportBatchResultsAsCsv,
   aggregateBatchStats,
-} from "../utils/batchHistory";
-import type { BatchHistoryEntry } from "../utils/batchHistory";
+} from '../utils/batchHistory';
+import type { BatchHistoryEntry } from '../utils/batchHistory';
 
 interface BatchHistoryViewProps {
   maxDisplay?: number;
@@ -14,10 +14,6 @@ interface BatchHistoryViewProps {
 export function BatchHistoryView({ maxDisplay = 20 }: BatchHistoryViewProps) {
   const [history, setHistory] = useState<BatchHistoryEntry[]>(() => loadBatchHistory());
 
-  const refresh = useCallback(() => {
-    setHistory(loadBatchHistory());
-  }, []);
-
   const handleClear = useCallback(() => {
     clearBatchHistory();
     setHistory([]);
@@ -25,9 +21,9 @@ export function BatchHistoryView({ maxDisplay = 20 }: BatchHistoryViewProps) {
 
   const handleExport = useCallback((entry: BatchHistoryEntry) => {
     const csv = exportBatchResultsAsCsv(entry);
-    const blob = new Blob([csv], { type: "text/csv" });
+    const blob = new Blob([csv], { type: 'text/csv' });
     const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
+    const a = document.createElement('a');
     a.href = url;
     a.download = `batch-results-${entry.id}.csv`;
     a.click();
@@ -36,10 +32,10 @@ export function BatchHistoryView({ maxDisplay = 20 }: BatchHistoryViewProps) {
 
   const handleExportAll = useCallback(() => {
     if (history.length === 0) return;
-    const allCsv = history.map((entry) => exportBatchResultsAsCsv(entry)).join("\n\n");
-    const blob = new Blob([allCsv], { type: "text/csv" });
+    const allCsv = history.map((entry) => exportBatchResultsAsCsv(entry)).join('\n\n');
+    const blob = new Blob([allCsv], { type: 'text/csv' });
     const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
+    const a = document.createElement('a');
     a.href = url;
     a.download = `all-batch-results.csv`;
     a.click();
@@ -50,9 +46,7 @@ export function BatchHistoryView({ maxDisplay = 20 }: BatchHistoryViewProps) {
     return (
       <div className="bg-white border border-gray-200 rounded-lg p-6 text-center">
         <p className="text-sm text-gray-400">No batch submissions yet</p>
-        <p className="text-xs text-gray-300 mt-1">
-          Batch invoice submissions will appear here
-        </p>
+        <p className="text-xs text-gray-300 mt-1">Batch invoice submissions will appear here</p>
       </div>
     );
   }
@@ -115,23 +109,21 @@ export function BatchHistoryView({ maxDisplay = 20 }: BatchHistoryViewProps) {
           <div key={entry.id} className="p-3 hover:bg-gray-50 transition-colors">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
-                <span className={`w-2 h-2 rounded-full ${entry.failed > 0 ? "bg-amber-400" : "bg-green-400"}`} />
+                <span
+                  className={`w-2 h-2 rounded-full ${
+                    entry.failed > 0 ? 'bg-amber-400' : 'bg-green-400'
+                  }`}
+                />
                 <span className="text-xs text-gray-400">
                   {new Date(entry.timestamp).toLocaleString()}
                 </span>
-                <span className="text-xs text-gray-500">
-                  {entry.totalInvoices} invoices
-                </span>
-                <span className="text-xs text-green-600 font-medium">
-                  {entry.succeeded} ok
-                </span>
+                <span className="text-xs text-gray-500">{entry.totalInvoices} invoices</span>
+                <span className="text-xs text-green-600 font-medium">{entry.succeeded} ok</span>
                 {entry.failed > 0 && (
-                  <span className="text-xs text-red-500 font-medium">
-                    {entry.failed} failed
-                  </span>
+                  <span className="text-xs text-red-500 font-medium">{entry.failed} failed</span>
                 )}
                 <span className="text-xs text-gray-300">
-                  {((entry.durationMs / 1000).toFixed(1))}s
+                  {(entry.durationMs / 1000).toFixed(1)}s
                 </span>
               </div>
               <div className="flex gap-1">

@@ -10,7 +10,7 @@ permissions:
 
 jobs:
   sync-issues:
-    runs-on: namespace-profile-nursca
+    runs-on: ubuntu-latest
     permissions:
       issues: read
       contents: read

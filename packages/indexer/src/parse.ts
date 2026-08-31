@@ -1,26 +1,4 @@
-import { ParsedHorizonEvent } from "./types";
-
-/**
- * Raw Horizon transaction operation record shape (minimal subset we need).
- */
-export interface RawHorizonOperation {
-  type: string;
-  transaction_hash: string;
-  paging_token: string;
-  created_at: string;
-  // Soroban-specific fields
-  contract_id?: string;
-  function?: string;
-  parameters?: unknown[];
-  // Events field present in some Horizon versions
-  events?: RawHorizonEvent[];
-  // The full envelope for XDR decoding
-  transaction?: {
-    result_meta_xdr?: string;
-    ledger?: number;
-    closed_at?: string;
-  };
-}
+import { ParsedHorizonEvent } from './types';
 
 export interface RawHorizonEvent {
   type: string;
@@ -59,13 +37,13 @@ function tryDecodeXdr(xdrBase64: string): unknown {
  */
 export function parseContractEvent(raw: RawHorizonEvent): ParsedHorizonEvent {
   return {
-    contractId: raw.contract_id ?? "",
-    type: raw.type ?? "unknown",
+    contractId: raw.contract_id ?? '',
+    type: raw.type ?? 'unknown',
     topics: (raw.topics ?? []).map(tryDecodeXdr),
     value: raw.value ? tryDecodeXdr(raw.value) : null,
     ledger: raw.ledger ?? 0,
-    ledgerClosedAt: raw.ledger_closed_at ?? raw.ledger_closed_at ?? "",
-    txHash: raw.tx_hash ?? "",
-    pagingToken: raw.paging_token ?? "",
+    ledgerClosedAt: raw.ledger_closed_at ?? raw.ledger_closed_at ?? '',
+    txHash: raw.tx_hash ?? '',
+    pagingToken: raw.paging_token ?? '',
   };
 }

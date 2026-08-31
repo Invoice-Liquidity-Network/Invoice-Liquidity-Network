@@ -1,45 +1,31 @@
-import type { rpc } from "@stellar/stellar-sdk";
-import { scValToNative } from "@stellar/stellar-sdk";
+import type { rpc } from '@stellar/stellar-sdk';
+import { scValToNative } from '@stellar/stellar-sdk';
 import {
   hasEvent,
   insertEvent,
   upsertInvoice,
-  getInvoiceById,
   queryInvoicesByStatus,
   getSubscriptionsByAddress,
   hasSentNotification,
   logSentNotification,
-} from "./db";
-import { fetchInvoice } from "./rpc";
-import { deliverNotification } from "./delivery";
-import { digestScheduler, DigestScheduler } from "./digest";
-import { preferencesService } from "./preferences";
-import type {
-  Invoice,
-  ILNEventType,
-  NotificationTrigger,
-  Subscription,
-  InvoiceEvent,
-} from "./types";
-import { CONFIG } from "./config";
+} from './db';
+import { fetchInvoice } from './rpc';
+import { deliverNotification } from './delivery';
+import { digestScheduler, DigestScheduler } from './digest';
+import { preferencesService } from './preferences';
+import type { Invoice, ILNEventType, NotificationTrigger, InvoiceEvent } from './types';
+import { CONFIG } from './config';
 
-const KNOWN_EVENT_TYPES = new Set<ILNEventType>([
-  "submitted",
-  "funded",
-  "paid",
-  "defaulted",
-]);
+const KNOWN_EVENT_TYPES = new Set<ILNEventType>(['submitted', 'funded', 'paid', 'defaulted']);
 
 const EVENT_TO_TRIGGER: Record<ILNEventType, NotificationTrigger | null> = {
   submitted: null,
-  funded: "invoice_funded",
-  paid: "invoice_paid",
-  defaulted: "invoice_defaulted",
+  funded: 'invoice_funded',
+  paid: 'invoice_paid',
+  defaulted: 'invoice_defaulted',
 };
 
-export async function processEvent(
-  event: rpc.Api.EventResponse,
-): Promise<void> {
+export async function processEvent(event: rpc.Api.EventResponse): Promise<void> {
   if (hasEvent(event.id)) {
     return;
   }
@@ -83,62 +69,62 @@ export async function processScheduledNotifications(): Promise<void> {
 async function notifyDueSoon(): Promise<void> {
   const now = Math.floor(Date.now() / 1000);
   const cutoff = now + CONFIG.dueWarningHours * 3600;
-  const invoices = queryInvoicesByStatus("Funded");
+  const invoices = queryInvoicesByStatus('Funded');
 
   for (const invoice of invoices) {
     if (invoice.due_date <= now || invoice.due_date > cutoff) {
       continue;
     }
 
-    await dispatchNotifications("invoice_due_soon", invoice);
+    await dispatchNotifications('invoice_due_soon', invoice);
   }
 }
 
 async function notifyOverdue(): Promise<void> {
   const now = Math.floor(Date.now() / 1000);
-  const invoices = queryInvoicesByStatus("Funded");
+  const invoices = queryInvoicesByStatus('Funded');
 
   for (const invoice of invoices) {
     if (invoice.due_date >= now) {
       continue;
     }
 
-    await dispatchNotifications("invoice_overdue", invoice);
+    await dispatchNotifications('invoice_overdue', invoice);
   }
 }
 
 function getNotificationTargets(
   trigger: NotificationTrigger,
-  invoice: Invoice,
-): Array<{ recipient: string; actor: "freelancer" | "lp" | "payer" }> {
+  invoice: Invoice
+): Array<{ recipient: string; actor: 'freelancer' | 'lp' | 'payer' }> {
   switch (trigger) {
-    case "invoice_funded":
+    case 'invoice_funded':
       return [
-        { recipient: invoice.freelancer, actor: "freelancer" },
-        { recipient: invoice.payer, actor: "payer" },
+        { recipient: invoice.freelancer, actor: 'freelancer' },
+        { recipient: invoice.payer, actor: 'payer' },
       ];
-    case "invoice_paid": {
+    case 'invoice_paid': {
       const targets: Array<{
         recipient: string;
-        actor: "freelancer" | "lp" | "payer";
-      }> = [{ recipient: invoice.freelancer, actor: "freelancer" }];
+        actor: 'freelancer' | 'lp' | 'payer';
+      }> = [{ recipient: invoice.freelancer, actor: 'freelancer' }];
       if (invoice.funder) {
-        targets.push({ recipient: invoice.funder, actor: "lp" });
+        targets.push({ recipient: invoice.funder, actor: 'lp' });
       }
       return targets;
     }
-    case "invoice_defaulted":
+    case 'invoice_defaulted':
       if (!invoice.funder) {
         return [];
       }
-      return [{ recipient: invoice.funder, actor: "lp" }];
-    case "invoice_due_soon":
+      return [{ recipient: invoice.funder, actor: 'lp' }];
+    case 'invoice_due_soon':
       if (!invoice.funder) {
         return [];
       }
-      return [{ recipient: invoice.funder, actor: "lp" }];
-    case "invoice_overdue":
-      return [{ recipient: invoice.payer, actor: "payer" }];
+      return [{ recipient: invoice.funder, actor: 'lp' }];
+    case 'invoice_overdue':
+      return [{ recipient: invoice.payer, actor: 'payer' }];
     default:
       return [];
   }
@@ -148,11 +134,11 @@ function formatPayload(
   trigger: NotificationTrigger,
   invoice: Invoice,
   recipient: string,
-  actor: "freelancer" | "lp" | "payer",
+  actor: 'freelancer' | 'lp' | 'payer'
 ): { subject: string; message: string } {
   switch (trigger) {
-    case "invoice_funded":
-      if (actor === "freelancer") {
+    case 'invoice_funded':
+      if (actor === 'freelancer') {
         return {
           subject: `Invoice #${invoice.id} funded`,
           message: `Your invoice #${invoice.id} has been funded for ${invoice.amount} stroops.`,
@@ -162,8 +148,8 @@ function formatPayload(
         subject: `Invoice #${invoice.id} funding reminder`,
         message: `Invoice #${invoice.id} is funded and payment is due.`,
       };
-    case "invoice_paid":
-      if (actor === "lp") {
+    case 'invoice_paid':
+      if (actor === 'lp') {
         return {
           subject: `Invoice #${invoice.id} has been paid`,
           message: `Invoice #${invoice.id} was settled. Your loan has been repaid.`,
@@ -173,19 +159,19 @@ function formatPayload(
         subject: `Invoice #${invoice.id} paid`,
         message: `Invoice #${invoice.id} has been marked as paid.`,
       };
-    case "invoice_defaulted":
+    case 'invoice_defaulted':
       return {
         subject: `Invoice #${invoice.id} defaulted`,
         message: `Invoice #${invoice.id} has defaulted and requires attention.`,
       };
-    case "invoice_due_soon":
+    case 'invoice_due_soon':
       return {
         subject: `Invoice #${invoice.id} due in ${CONFIG.dueWarningHours} hours`,
         message: `Invoice #${invoice.id} is approaching its due date at ${new Date(
-          invoice.due_date * 1000,
+          invoice.due_date * 1000
         ).toISOString()}.`,
       };
-    case "invoice_overdue":
+    case 'invoice_overdue':
       return {
         subject: `Invoice #${invoice.id} overdue`,
         message: `Invoice #${invoice.id} is overdue. Payment is now past due.`,
@@ -198,25 +184,22 @@ function formatPayload(
   }
 }
 
-const TRIGGER_TO_EVENT_TYPE: Record<NotificationTrigger, ILNEventType | null> =
-  {
-    invoice_funded: "funded",
-    invoice_paid: "paid",
-    invoice_defaulted: "defaulted",
-    invoice_due_soon: null,
-    invoice_overdue: null,
-  };
+const TRIGGER_TO_EVENT_TYPE: Record<NotificationTrigger, ILNEventType | null> = {
+  invoice_funded: 'funded',
+  invoice_paid: 'paid',
+  invoice_defaulted: 'defaulted',
+  invoice_due_soon: null,
+  invoice_overdue: null,
+};
 
-function triggerToEventType(
-  trigger: NotificationTrigger,
-): ILNEventType | undefined {
+function triggerToEventType(trigger: NotificationTrigger): ILNEventType | undefined {
   return TRIGGER_TO_EVENT_TYPE[trigger] ?? undefined;
 }
 
 async function dispatchNotifications(
   trigger: NotificationTrigger,
   invoice: Invoice,
-  eventId?: string,
+  eventId?: string
 ): Promise<void> {
   const targets = getNotificationTargets(trigger, invoice);
   for (const target of targets) {
@@ -248,7 +231,7 @@ async function dispatchNotifications(
 
     const subscriptions = getSubscriptionsByAddress(target.recipient);
     const matchingSubscriptions = subscriptions.filter((subscription) =>
-      subscription.triggers.includes(trigger),
+      subscription.triggers.includes(trigger)
     );
 
     for (const subscription of matchingSubscriptions) {
@@ -257,7 +240,7 @@ async function dispatchNotifications(
         trigger,
         target.recipient,
         subscription.channel,
-        subscription.destination,
+        subscription.destination
       );
       if (alreadySent) {
         continue;
@@ -281,12 +264,12 @@ async function dispatchNotifications(
           target.recipient,
           subscription.channel,
           subscription.destination,
-          eventId,
+          eventId
         );
       } catch (error) {
         console.error(
           `[processor] Failed to deliver notification for invoice ${invoice.id} to ${subscription.destination}:`,
-          error,
+          error
         );
       }
     }

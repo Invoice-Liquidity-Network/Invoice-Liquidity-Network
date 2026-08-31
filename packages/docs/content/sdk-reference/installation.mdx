@@ -15,10 +15,11 @@ npm install @invoice-liquidity/sdk
 yarn add @invoice-liquidity/sdk
 # or
 pnpm add @invoice-liquidity/sdk
+```
 
+## Quick Start
 
-
-Quick Start
+```typescript
 import { ILNClient } from '@invoice-liquidity/sdk';
 import { Networks } from '@stellar/stellar-sdk';
 
@@ -41,17 +42,20 @@ const invoiceId = await client.submitInvoice({
 });
 
 console.log('Invoice submitted:', invoiceId);
+```
 
+## Configuration
 
-Configuration
-Network Options
+### Network Options
+
 | Network | RPC URL                               | Contract ID                                                |
 | ------- | ------------------------------------- | ---------------------------------------------------------- |
 | Testnet | `https://soroban-testnet.stellar.org` | `CCPASLHKRFBMVV5PZG3LKDGKFEDXZMB5U7DK42CVLUVWCMUCSRPVBIMO` |
 | Mainnet | `https://soroban-rpc.stellar.org`     | Coming soon                                                |
 
+### Browser vs Node.js
 
-Browser vs Node.js
+```typescript
 // Browser (with Freighter wallet)
 import { ILNClient } from '@invoice-liquidity/sdk';
 
@@ -71,20 +75,22 @@ const client = new ILNClient({
   contractId: '...',
   wallet: keypair,
 });
+```
 
+### TypeScript Support
 
-TypeScript Support
 The SDK is written in TypeScript and includes full type definitions:
-import type { 
-  Invoice, 
-  InvoiceStatus, 
+
+```typescript
+import type {
+  Invoice,
+  InvoiceStatus,
   SubmitInvoiceParams,
-  FundInvoiceParams 
+  FundInvoiceParams,
 } from '@invoice-liquidity/sdk';
+```
 
+## Next Steps
 
-
-Next Steps
-Read the API Reference for detailed method documentation
-Learn about Error Handling patterns
-Check the Frontend Guide for React integration
+- Read the [API Reference](/sdk-reference/api-reference) for detailed method documentation
+- Check the [Frontend Guide](/frontend-guide/integration) for React integration

@@ -23,7 +23,9 @@ class MockEventSource {
   }
   addEventListener(): void {}
   removeEventListener(): void {}
-  dispatchEvent(): boolean { return true; }
+  dispatchEvent(): boolean {
+    return true;
+  }
 }
 Object.defineProperty(globalThis, 'EventSource', { writable: true, value: MockEventSource });
 

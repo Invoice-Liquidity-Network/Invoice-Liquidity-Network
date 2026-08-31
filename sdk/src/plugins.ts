@@ -1,8 +1,8 @@
-import { createLogger } from "./logger";
-import type { ILNEventEmitter } from "./event-emitter";
-import { AnalyticsSDK } from "./analytics";
+import { createLogger } from './logger';
+import type { ILNEventEmitter } from './event-emitter';
+import { AnalyticsSDK } from './analytics';
 
-const logger = createLogger("plugins");
+const logger = createLogger('plugins');
 
 export interface PluginContext {
   readonly logger: (msg: string, data?: unknown) => void;
@@ -22,10 +22,7 @@ export interface ILNPlugin {
 
 type RegistryEntry = { plugin: ILNPlugin; ctx: PluginContext };
 
-type DispatchableHook = keyof Pick<
-  ILNPlugin,
-  "onBeforeOperation" | "onAfterOperation" | "onError"
->;
+type DispatchableHook = keyof Pick<ILNPlugin, 'onBeforeOperation' | 'onAfterOperation' | 'onError'>;
 
 export class PluginRegistry {
   private readonly plugins: Map<string, RegistryEntry> = new Map();
@@ -35,10 +32,7 @@ export class PluginRegistry {
     this.emitter = emitter;
   }
 
-  async register(
-    plugin: ILNPlugin,
-    config?: Record<string, unknown>,
-  ): Promise<void> {
+  async register(plugin: ILNPlugin, config?: Record<string, unknown>): Promise<void> {
     if (this.plugins.has(plugin.name)) {
       throw new Error(`Plugin "${plugin.name}" is already registered.`);
     }
@@ -53,9 +47,7 @@ export class PluginRegistry {
 
     await plugin.install?.(ctx);
     this.plugins.set(plugin.name, { plugin, ctx });
-    logger(
-      `registered: ${plugin.name}${plugin.version ? `@${plugin.version}` : ""}`,
-    );
+    logger(`registered: ${plugin.name}${plugin.version ? `@${plugin.version}` : ''}`);
   }
 
   async unregister(name: string): Promise<void> {
@@ -76,14 +68,9 @@ export class PluginRegistry {
     return Array.from(this.plugins.keys());
   }
 
-  private async runHook(
-    hookName: DispatchableHook,
-    ...args: unknown[]
-  ): Promise<void> {
+  private async runHook(hookName: DispatchableHook, ...args: unknown[]): Promise<void> {
     for (const { plugin } of this.plugins.values()) {
-      const hook = plugin[hookName] as
-        | ((...a: unknown[]) => void | Promise<void>)
-        | undefined;
+      const hook = plugin[hookName] as ((...a: unknown[]) => void | Promise<void>) | undefined;
       if (!hook) continue;
       try {
         await hook.call(plugin, ...args);
@@ -94,15 +81,15 @@ export class PluginRegistry {
   }
 
   async runBeforeOperation(name: string, params: unknown): Promise<void> {
-    return this.runHook("onBeforeOperation", name, params);
+    return this.runHook('onBeforeOperation', name, params);
   }
 
   async runAfterOperation(name: string, result: unknown): Promise<void> {
-    return this.runHook("onAfterOperation", name, result);
+    return this.runHook('onAfterOperation', name, result);
   }
 
   async runOnError(name: string, error: unknown): Promise<void> {
-    return this.runHook("onError", name, error);
+    return this.runHook('onError', name, error);
   }
 }
 
@@ -110,14 +97,14 @@ export class PluginRegistry {
 // Analytics Plugin System
 // =============================================================================
 
-export type WidgetSize = "small" | "medium" | "large" | "full";
-export type WidgetType = "chart" | "table" | "metric" | "heatmap" | "custom";
+export type WidgetSize = 'small' | 'medium' | 'large' | 'full';
+export type WidgetType = 'chart' | 'table' | 'metric' | 'heatmap' | 'custom';
 
 export interface MetricDefinition {
   id: string;
   name: string;
   description: string;
-  type: "number" | "percentage" | "duration" | "currency" | "ratio";
+  type: 'number' | 'percentage' | 'duration' | 'currency' | 'ratio';
   defaultValue?: number | bigint;
   compute: (context: AnalyticsPluginContext) => Promise<number | bigint | string>;
 }
@@ -179,37 +166,37 @@ function validatePlugin(plugin: AnalyticsPlugin): PluginValidationResult {
   const errors: string[] = [];
   const warnings: string[] = [];
 
-  if (!plugin.id || typeof plugin.id !== "string") {
-    errors.push("Plugin must have a string `id`");
+  if (!plugin.id || typeof plugin.id !== 'string') {
+    errors.push('Plugin must have a string `id`');
   }
-  if (!plugin.name || typeof plugin.name !== "string") {
-    errors.push("Plugin must have a string `name`");
+  if (!plugin.name || typeof plugin.name !== 'string') {
+    errors.push('Plugin must have a string `name`');
   }
-  if (!plugin.version || typeof plugin.version !== "string") {
-    errors.push("Plugin must have a string `version`");
+  if (!plugin.version || typeof plugin.version !== 'string') {
+    errors.push('Plugin must have a string `version`');
   }
-  if (!/^\d+\.\d+\.\d+/.test(plugin.version ?? "")) {
-    warnings.push("Plugin version should follow semver (e.g. 1.0.0)");
+  if (!/^\d+\.\d+\.\d+/.test(plugin.version ?? '')) {
+    warnings.push('Plugin version should follow semver (e.g. 1.0.0)');
   }
   if (!Array.isArray(plugin.metrics)) {
-    errors.push("Plugin must have a `metrics` array");
+    errors.push('Plugin must have a `metrics` array');
   }
   if (!Array.isArray(plugin.widgets)) {
-    errors.push("Plugin must have a `widgets` array");
+    errors.push('Plugin must have a `widgets` array');
   }
 
   if (Array.isArray(plugin.metrics)) {
     const metricIds = new Set<string>();
     for (const m of plugin.metrics) {
-      if (!m.id || typeof m.id !== "string") {
-        errors.push("Each metric must have a string `id`");
+      if (!m.id || typeof m.id !== 'string') {
+        errors.push('Each metric must have a string `id`');
       } else if (metricIds.has(m.id)) {
         errors.push(`Duplicate metric id: "${m.id}"`);
       } else {
         metricIds.add(m.id);
       }
       if (!m.name) errors.push(`Metric "${m.id}" must have a "name"`);
-      if (typeof m.compute !== "function") {
+      if (typeof m.compute !== 'function') {
         errors.push(`Metric "${m.id}" must have a "compute" function`);
       }
     }
@@ -218,18 +205,18 @@ function validatePlugin(plugin: AnalyticsPlugin): PluginValidationResult {
   if (Array.isArray(plugin.widgets)) {
     const widgetIds = new Set<string>();
     for (const w of plugin.widgets) {
-      if (!w.id || typeof w.id !== "string") {
-        errors.push("Each widget must have a string `id`");
+      if (!w.id || typeof w.id !== 'string') {
+        errors.push('Each widget must have a string `id`');
       } else if (widgetIds.has(w.id)) {
         errors.push(`Duplicate widget id: "${w.id}"`);
       } else {
         widgetIds.add(w.id);
       }
       if (!w.name) errors.push(`Widget "${w.id}" must have a "name"`);
-      if (typeof w.render !== "function") {
+      if (typeof w.render !== 'function') {
         errors.push(`Widget "${w.id}" must have a "render" function`);
       }
-      if (!["small", "medium", "large", "full"].includes(w.size)) {
+      if (!['small', 'medium', 'large', 'full'].includes(w.size)) {
         warnings.push(`Widget "${w.id}" has unknown size "${w.size}"`);
       }
     }
@@ -341,10 +328,7 @@ export class AnalyticsPluginLoader {
     return this.plugins.has(pluginId) && this.plugins.get(pluginId)!.enabled;
   }
 
-  async computeMetric(
-    pluginId: string,
-    metricId: string,
-  ): Promise<number | bigint | string> {
+  async computeMetric(pluginId: string, metricId: string): Promise<number | bigint | string> {
     const state = this.plugins.get(pluginId);
     if (!state || !state.enabled) {
       throw new Error(`Plugin "${pluginId}" is not loaded`);
@@ -386,10 +370,7 @@ export class AnalyticsPluginLoader {
     }
   }
 
-  async renderWidget(
-    pluginId: string,
-    widgetId: string,
-  ): Promise<WidgetRenderResult> {
+  async renderWidget(pluginId: string, widgetId: string): Promise<WidgetRenderResult> {
     const state = this.plugins.get(pluginId);
     if (!state || !state.enabled) {
       throw new Error(`Plugin "${pluginId}" is not loaded`);

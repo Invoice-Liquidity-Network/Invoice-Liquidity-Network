@@ -19,7 +19,6 @@ export type {
   BatchInvoiceInput,
   BatchProgress,
   InvoiceProgress,
-  InvoiceStatus,
 } from './useBatchSubmitInvoice';
 
 export { useFundInvoice } from './useFundInvoice';
@@ -44,7 +43,6 @@ export type { UseContractStatsResult } from './useContractStats';
 
 export { useLPRiskMetrics } from './useLPRiskMetrics';
 export type { UseLPRiskMetricsResult, UseLPRiskMetricsOptions } from './useLPRiskMetrics';
-export type { LPRiskMetrics } from './lpRiskMetrics';
 
 export { useGovernanceProposal } from './useGovernanceProposal';
 export type { GovernanceTimelockState, UseGovernanceProposalResult } from './useGovernanceProposal';
@@ -75,4 +73,3 @@ export type {
   UseSubmitClaimResult,
   UseReviewClaimResult,
 } from './useInsurance';
-export { useFocusTrap } from './useFocusTrap';

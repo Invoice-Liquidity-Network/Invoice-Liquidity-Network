@@ -23,7 +23,7 @@ jobs:
   sdk-api-docs:
     name: sdk-api-docs
     needs: [pnpm-cache]
-    runs-on: namespace-profile-nursca
+    runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v4

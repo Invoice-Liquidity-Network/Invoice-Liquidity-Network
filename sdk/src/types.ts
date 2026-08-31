@@ -2,17 +2,23 @@
  * Re-exported shared types from the @iln/shared package.
  * These represent core domain objects used throughout the SDK.
  */
+import type { ContractStats, GovernanceProposal, Invoice, ReputationScore } from '@iln/shared';
+import type { CacheConfig } from './cache';
+import type { BackoffOptions } from './backoff';
+
+// Note: GovernanceProposal and ProposalStatus are intentionally NOT
+// re-exported here — the SDK's public API surfaces the SDK-specific
+// versions from ./governance-types (see governance.ts), which
+// deliberately differ from @iln/shared's raw contract-shaped types.
 export type {
   ContractEvent,
   ContractStats,
-  GovernanceProposal,
   Invoice,
   InvoiceState,
   LPStats,
-  ProposalStatus,
   ReputationScore,
   Token,
-} from "@iln/shared";
+} from '@iln/shared';
 
 export type {
   InvoiceCreatedEvent,
@@ -27,7 +33,7 @@ export type {
   ReputationUpdatedEvent,
   ContractStatsUpdatedEvent,
   LPStatsUpdatedEvent,
-} from "@iln/shared";
+} from '@iln/shared';
 
 /**
  * Parameters for submitting a new invoice to the ILN contract.
@@ -132,10 +138,7 @@ export interface TransactionSigner {
    * @param options - Signing options including network passphrase.
    * @returns The signed transaction as a base64-encoded XDR string.
    */
-  signTransaction(
-    transactionXdr: string,
-    options: SignTransactionOptions,
-  ): Promise<string>;
+  signTransaction(transactionXdr: string, options: SignTransactionOptions): Promise<string>;
 }
 
 /**
@@ -192,7 +195,13 @@ export interface ILNSdkConfig {
    * offline and submit them when connectivity is restored.
    * Set to `{}` to use all defaults.
    */
-  offline?: import("./offline").OfflineConfig;
+  offline?: import('./offline').OfflineConfig;
+  /**
+   * Backoff/retry configuration for transient RPC failures.
+   * Set to `false` to disable automatic retries. When not provided,
+   * defaults to 3 retries with exponential backoff and jitter.
+   */
+  backoff?: BackoffOptions | false;
 }
 
 /**
@@ -218,62 +227,6 @@ export interface CompatibilityResult {
   contractVersion: string;
   sdkVersion: string;
   issues: string[];
-}
-
-/**
- * Parsed semantic version with numeric components.
- *
- * @property major - Major version number.
- * @property minor - Minor version number.
- * @property patch - Patch version number.
- * @property raw - Original unparsed version string.
- */
-export interface VersionInfo {
-  major: number;
-  minor: number;
-  patch: number;
-  raw: string;
-}
-
-/**
- * A deprecation warning for a deprecated SDK method.
- *
- * @property method - The deprecated method name.
- * @property message - Human-readable deprecation message.
- * @property alternative - The recommended replacement method (if any).
- * @property removedIn - The SDK version where the method will be removed.
- */
-export interface DeprecationWarning {
-  method: string;
-  message: string;
-  alternative?: string;
-  removedIn?: string;
-}
-
-/**
- * A migration guide describing changes between two SDK versions.
- *
- * @property fromVersion - The source version to migrate from.
- * @property toVersion - The target version to migrate to.
- * @property changes - List of changes between the versions.
- */
-export interface MigrationGuide {
-  fromVersion: string;
-  toVersion: string;
-  changes: MigrationChange[];
-}
-
-/**
- * A single change entry in a migration guide.
- *
- * @property type - The type of change: "breaking", "deprecated", "added", or "removed".
- * @property description - Human-readable description of the change.
- * @property migration - Migration instructions (if applicable).
- */
-export interface MigrationChange {
-  type: "breaking" | "deprecated" | "added" | "removed";
-  description: string;
-  migration?: string;
 }
 
 /**
@@ -341,233 +294,6 @@ export interface BatchPayParams {
   invoiceIds: bigint[];
 }
 
-export interface CacheConfig {
-  ttl: number;
-  storage: "memory" | "localStorage";
-  enabled: boolean;
-}
-
-export interface CacheEntry<T> {
-  value: T;
-  expiresAt: number;
-}
-
-export interface CacheStatistics {
-  hits: number;
-  misses: number;
-  size: number;
-}
-
-export interface CacheOptions {
-  key?: string;
-  ttl?: number;
-}
-
-export interface TimeoutError extends Error {
-  code: "TIMEOUT";
-  timeoutMs: number;
-}
-
-export interface RequestTimeouts {
-  readMs: number;
-  writeMs: number;
-  simulationMs: number;
-}
-
-export interface RetryOptions {
-  maxRetries: number;
-  baseDelayMs: number;
-  maxDelayMs: number;
-  backoffMultiplier: number;
-}
-
-export interface CircuitBreakerOptions {
-  failureThreshold: number;
-  resetTimeoutMs: number;
-  monitorIntervalMs: number;
-}
-
-export interface CircuitBreakerState {
-  failures: number;
-  lastFailureTime: number | null;
-  state: "closed" | "open" | "half-open";
-}
-
-export interface OfflineConfig {
-  maxQueueSize: number;
-  retryIntervalMs: number;
-  maxRetries: number;
-}
-
-export interface OfflineQueueItem {
-  id: string;
-  operation: string;
-  params: unknown;
-  timestamp: number;
-  retries: number;
-}
-
-export interface OfflineState {
-  isOnline: boolean;
-  queueSize: number;
-  lastSyncTime: number | null;
-}
-
-export interface ValidationResult {
-  valid: boolean;
-  errors: string[];
-}
-
-export interface StellarAddressValidationOptions {
-  allowTestnet?: boolean;
-  allowMainnet?: boolean;
-}
-
-export interface AmountValidationOptions {
-  min?: bigint;
-  max?: bigint;
-  decimals?: number;
-}
-
-export interface DateValidationOptions {
-  allowPast?: boolean;
-  maxFutureDays?: number;
-}
-
-export interface DiscountRateValidationOptions {
-  minBps?: number;
-  maxBps?: number;
-}
-
-export interface PluginContext {
-  config: ILNSdkConfig;
-  client: unknown;
-}
-
-export interface ILNPlugin {
-  name: string;
-  version: string;
-  install(context: PluginContext): void;
-  uninstall?(): void;
-}
-
-export interface EventHistoryEntry {
-  event: string;
-  data: unknown;
-  timestamp: number;
-}
-
-export interface NotificationTrigger {
-  type: "invoice_created" | "invoice_funded" | "invoice_paid" | "invoice_defaulted";
-  invoiceId?: bigint;
-}
-
-export interface SubscriptionChannel {
-  type: "webhook" | "email";
-  url?: string;
-  email?: string;
-}
-
-export interface Subscription {
-  id: string;
-  trigger: NotificationTrigger;
-  channel: SubscriptionChannel;
-  active: boolean;
-  createdAt: string;
-}
-
-export interface ProtocolStats {
-  totalInvoices: number;
-  totalVolume: bigint;
-  totalYield: bigint;
-  defaultRate: number;
-}
-
-export interface FreelancerStats {
-  submitted: number;
-  funded: number;
-  totalReceived: bigint;
-  avgDiscount: number;
-}
-
-export interface AnalyticsInvoice {
-  id: bigint;
-  status: string;
-  amount: bigint;
-  discountRate: number;
-  createdAt: number;
-}
-
-export interface LPStat {
-  address: string;
-  yield: bigint;
-  invoiceCount: number;
-}
-
-export interface YieldProjection {
-  apy: number;
-  projectedYield: bigint;
-  timeframe: string;
-}
-
-export interface RiskFactors {
-  defaultRisk: number;
-  liquidityRisk: number;
-  volatilityRisk: number;
-}
-
-export interface PortfolioAllocation {
-  conservative: number;
-  moderate: number;
-  aggressive: number;
-}
-
-export interface HistoricalPerformance {
-  period: string;
-  totalYield: bigint;
-  avgApy: number;
-  maxDrawdown: number;
-}
-
-export interface ComparisonResult {
-  metric: string;
-  current: number;
-  previous: number;
-  change: number;
-  changePercent: number;
-}
-
-export interface FederationRecord {
-  stellarAddress: string;
-  memo?: string;
-  memoType?: string;
-}
-
-export interface FederationRecordManager {
-  resolve(address: string): Promise<FederationRecord>;
-  register(record: FederationRecord): Promise<void>;
-}
-
-export type FederationResolutionError = Error;
-
-export interface GovernanceContractMethod {
-  name: string;
-  description: string;
-}
-
-export const GOVERNANCE_TESTNET = {
-  contractId: "C_GOVERNANCE_TESTNET_CONTRACT_ID",
-  networkPassphrase: "Test SDF Network ; September 2015",
-};
-
-export const GOVERNANCE_TESTNET_CONTRACT_ID = "C_GOVERNANCE_TESTNET_CONTRACT_ID";
-
-export enum ProposalActionKind {
-  ParameterChange = "parameter_change",
-  ContractUpgrade = "contract_upgrade",
-  TreasurySpend = "treasury_spend",
-}
-
 export interface GovernanceParamTypes {
   minInvoiceAmount: bigint;
   maxDiscountRate: number;
@@ -590,14 +316,18 @@ export interface ILNClient {
   createProposal(params: Record<string, unknown>): Promise<unknown>;
   vote(params: Record<string, unknown>): Promise<void>;
   connectWallet(): Promise<string>;
-  getLPCoverage?(address: string): Promise<import("./insurance-types").LPCoverage | null>;
-  getPoolBalance?(): Promise<import("./insurance-types").PoolBalance>;
-  getClaim?(claimId: bigint): Promise<import("./insurance-types").InsuranceClaim>;
-  listClaims?(statusFilter?: import("./insurance-types").ClaimStatus, page?: number, pageSize?: number): Promise<import("./insurance-types").InsuranceClaim[]>;
-  enroll?(params: import("./insurance-types").EnrollParams): Promise<void>;
-  depositPremium?(params: import("./insurance-types").DepositPremiumParams): Promise<void>;
-  submitClaim?(params: import("./insurance-types").SubmitClaimParams): Promise<bigint>;
-  reviewClaim?(params: import("./insurance-types").ReviewClaimParams): Promise<void>;
+  getLPCoverage?(address: string): Promise<import('./insurance-types').LPCoverage | null>;
+  getPoolBalance?(): Promise<import('./insurance-types').PoolBalance>;
+  getClaim?(claimId: bigint): Promise<import('./insurance-types').InsuranceClaim>;
+  listClaims?(
+    statusFilter?: import('./insurance-types').ClaimStatus,
+    page?: number,
+    pageSize?: number
+  ): Promise<import('./insurance-types').InsuranceClaim[]>;
+  enroll?(params: import('./insurance-types').EnrollParams): Promise<void>;
+  depositPremium?(params: import('./insurance-types').DepositPremiumParams): Promise<void>;
+  submitClaim?(params: import('./insurance-types').SubmitClaimParams): Promise<bigint>;
+  reviewClaim?(params: import('./insurance-types').ReviewClaimParams): Promise<void>;
 }
 
 export interface TokenBalance {
@@ -625,16 +355,4 @@ export interface Proposal {
   votesAgainst: bigint;
   deadline: number;
   executed: boolean;
-}
-
-export function parseGovernanceProposal(data: unknown): GovernanceProposal {
-  return data as GovernanceProposal;
-}
-
-export function parseGovernanceProposalSimulation(data: unknown): GovernanceProposal {
-  return data as GovernanceProposal;
-}
-
-export function parseGovernanceProposalListSimulation(data: unknown): GovernanceProposal[] {
-  return data as GovernanceProposal[];
 }

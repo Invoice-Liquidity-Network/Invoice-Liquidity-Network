@@ -15,20 +15,16 @@ on:
       - 'scripts/migrations/**'
 
 jobs:
+  pnpm-cache:
+    uses: ./.github/workflows/reusable-cache-pnpm.yml
+
   migration-schema:
+    needs: [pnpm-cache]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 20
-      # Install only what the isolated schema test imports. The root workspace
-      # lockfile currently contains unrelated unpublished workspace packages.
-      - name: Install migration test dependencies
-        working-directory: indexer
-        run: |
-          npm pkg delete 'devDependencies.@iln/eslint-config'
-          npm install --no-save --package-lock=false vitest@4.1.5 better-sqlite3@11 dotenv@16
+      - name: Setup pnpm with store cache
+        uses: ./.github/actions/setup-pnpm
       - name: Verify fresh database schema
         working-directory: indexer
-        run: npx vitest run tests/migrations.test.ts
+        run: pnpm exec vitest run tests/migrations.test.ts

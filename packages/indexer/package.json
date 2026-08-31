@@ -20,13 +20,14 @@
   "engines": {
     "node": ">=20"
   },
-  "dependencies": {
-    "@stellar/stellar-sdk": "^15.0.1"
-  },
   "devDependencies": {
     "@commitlint/cli": "^17.6.0",
     "@commitlint/config-conventional": "^17.6.0",
     "@iln/eslint-config": "workspace:*",
+    "@typescript-eslint/eslint-plugin": "^6.0.0",
+    "@typescript-eslint/parser": "^6.0.0",
+    "eslint": "^8.0.0",
+    "eslint-config-prettier": "^9.0.0",
     "@types/jest": "^30.0.0",
     "@types/node": "^20.0.0",
     "husky": "^8.0.0",

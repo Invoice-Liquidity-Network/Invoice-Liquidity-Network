@@ -29,10 +29,10 @@ services:
     image: stellar/quickstart:testing
     command: --standalone --enable-soroban-rpc
     ports:
-      - "8000:8000"   # Horizon + Friendbot + Soroban RPC
-      - "11626:11626" # Stellar Core peer port
+      - '8000:8000' # Horizon + Friendbot + Soroban RPC
+      - '11626:11626' # Stellar Core peer port
     healthcheck:
-      test: ["CMD-SHELL", "curl -s http://localhost:8000/friendbot | grep -q '\"status\": 400'"]
+      test: ['CMD-SHELL', 'curl -s http://localhost:8000/friendbot | grep -q ''"status": 400''']
       interval: 5s
       timeout: 5s
       retries: 15
@@ -42,7 +42,7 @@ services:
   redis:
     image: redis:7-alpine
     ports:
-      - "6379:6379"
+      - '6379:6379'
 
   indexer:
     image: node:20-alpine
@@ -59,7 +59,7 @@ services:
       RPC_URL: http://stellar-node:8000/soroban/rpc
       REDIS_URL: redis://redis:6379
     ports:
-      - "3001:3001"
+      - '3001:3001'
 
   contract-deployer:
     # Dockerised deployer — builds and deploys the Soroban contract to the
@@ -95,7 +95,7 @@ services:
       ORACLE_REQUEST_TIMEOUT_MS: 3500
       ORACLE_MAX_ORACLE_AGE_MS: 300000
     ports:
-      - "3010:3010"
+      - '3010:3010'
 
   account-seeder:
     # Dockerised account seeder — creates funded test accounts, mock USDC/EURC

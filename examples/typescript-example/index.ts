@@ -1,7 +1,7 @@
 // TypeScript example for the ILN SDK
 // Demonstrates type-safe usage of all major SDK features
 
-import "dotenv/config";
+import 'dotenv/config';
 import {
   ILNSdk,
   ILN_TESTNET,
@@ -9,8 +9,8 @@ import {
   type Invoice,
   type ProtocolConfig,
   type BatchResult,
-} from "@iln/sdk";
-import { Keypair, Networks } from "@stellar/stellar-sdk";
+} from '@iln/sdk';
+import { Keypair, Networks } from '@stellar/stellar-sdk';
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -28,8 +28,8 @@ function loadConfig(): AppConfig {
   const secretKey = process.env.SECRET_KEY;
   const payerAddress = process.env.PAYER_ADDRESS;
 
-  if (!secretKey) throw new Error("Missing SECRET_KEY");
-  if (!payerAddress) throw new Error("Missing PAYER_ADDRESS");
+  if (!secretKey) throw new Error('Missing SECRET_KEY');
+  if (!payerAddress) throw new Error('Missing PAYER_ADDRESS');
 
   // Validate keypair
   Keypair.fromSecret(secretKey);
@@ -51,7 +51,7 @@ function formatAmount(amount: bigint): string {
 // ── Main ─────────────────────────────────────────────────────────────────────
 
 async function main(): Promise<void> {
-  console.log("=== ILN SDK — TypeScript Example ===\n");
+  console.log('=== ILN SDK — TypeScript Example ===\n');
 
   const config = loadConfig();
   const keypair = Keypair.fromSecret(config.freelancerSecretKey);
@@ -65,12 +65,12 @@ async function main(): Promise<void> {
     signer: createKeypairSigner(config.freelancerSecretKey),
   });
 
-  console.log(`Network: ${config.networkPassphrase === Networks.TESTNET ? "Testnet" : "Mainnet"}`);
+  console.log(`Network: ${config.networkPassphrase === Networks.TESTNET ? 'Testnet' : 'Mainnet'}`);
   console.log(`Freelancer: ${freelancerAddress}`);
   console.log(`Payer: ${config.payerAddress}\n`);
 
   // ── 1. Protocol Configuration ──────────────────────────────────────────
-  console.log("1. Protocol Configuration");
+  console.log('1. Protocol Configuration');
   const protocolConfig: ProtocolConfig = await sdk.getProtocolConfig();
   console.log(`   Min amount:     ${protocolConfig.minInvoiceAmount}`);
   console.log(`   Max discount:   ${protocolConfig.maxDiscountRate} bps`);
@@ -78,14 +78,14 @@ async function main(): Promise<void> {
   console.log(`   Min reputation: ${protocolConfig.minPayerReputation}\n`);
 
   // ── 2. Compatibility Check ─────────────────────────────────────────────
-  console.log("2. Compatibility Check");
+  console.log('2. Compatibility Check');
   const compat = await sdk.checkCompatibility();
   console.log(`   SDK version:    ${compat.sdkVersion}`);
   console.log(`   Contract:       ${compat.contractVersion}`);
   console.log(`   Compatible:     ${compat.compatible}\n`);
 
   // ── 3. Submit Invoice ──────────────────────────────────────────────────
-  console.log("3. Submitting Invoice");
+  console.log('3. Submitting Invoice');
   const dueDate = Math.floor(Date.now() / 1000) + 30 * 24 * 60 * 60;
 
   const invoiceId: bigint = await sdk.submitInvoice({
@@ -98,7 +98,7 @@ async function main(): Promise<void> {
   console.log(`   Invoice ID: ${invoiceId}\n`);
 
   // ── 4. Query Invoice ───────────────────────────────────────────────────
-  console.log("4. Invoice Details");
+  console.log('4. Invoice Details');
   const invoice: Invoice = await sdk.getInvoice(invoiceId);
   console.log(`   Status:      ${invoice.status}`);
   console.log(`   Amount:      ${formatAmount(invoice.amount)}`);
@@ -106,20 +106,20 @@ async function main(): Promise<void> {
   console.log(`   Due:         ${new Date(invoice.dueDate * 1000).toLocaleDateString()}\n`);
 
   // ── 5. Reputation ──────────────────────────────────────────────────────
-  console.log("5. Reputation Score");
+  console.log('5. Reputation Score');
   const reputation: number = await sdk.getReputation(freelancerAddress);
   console.log(`   Score: ${reputation}\n`);
 
   // ── 6. Protocol Stats ──────────────────────────────────────────────────
-  console.log("6. Protocol Stats");
+  console.log('6. Protocol Stats');
   const stats = await sdk.getStats();
   console.log(`   Stats:`, stats);
   console.log();
 
-  console.log("TypeScript example complete!");
+  console.log('TypeScript example complete!');
 }
 
 main().catch((err: Error) => {
-  console.error("Error:", err.message);
+  console.error('Error:', err.message);
   process.exit(1);
 });

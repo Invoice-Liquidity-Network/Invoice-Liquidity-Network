@@ -1,20 +1,20 @@
 import {
-    Account,
-    Address,
-    nativeToScVal,
-    Operation,
-    rpc,
-    scValToNative,
-    TransactionBuilder,
-    xdr,
-} from "@stellar/stellar-sdk";
-import { CONFIG } from "./config";
-import type { Invoice } from "./types";
+  Account,
+  Address,
+  nativeToScVal,
+  Operation,
+  rpc,
+  scValToNative,
+  TransactionBuilder,
+  xdr,
+} from '@stellar/stellar-sdk';
+import { CONFIG } from './config';
+import type { Invoice } from './types';
 
 // ─── Singleton RPC server ─────────────────────────────────────────────────────
 
 export const server = new rpc.Server(CONFIG.rpcUrl, {
-  allowHttp: CONFIG.rpcUrl.startsWith("http://"),
+  allowHttp: CONFIG.rpcUrl.startsWith('http://'),
 });
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -24,7 +24,7 @@ export const server = new rpc.Server(CONFIG.rpcUrl, {
  * It has sequence 0 on every network and never needs to actually exist on-chain
  * for simulation purposes.
  */
-const DUMMY_ACCOUNT = "GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF";
+const DUMMY_ACCOUNT = 'GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF';
 
 // ─── Contract reader ──────────────────────────────────────────────────────────
 
@@ -34,23 +34,21 @@ const DUMMY_ACCOUNT = "GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF"
  */
 export async function fetchInvoice(
   id: number
-): Promise<Omit<Invoice, "created_at" | "updated_at"> | null> {
+): Promise<Omit<Invoice, 'created_at' | 'updated_at'> | null> {
   try {
-    const account = new Account(DUMMY_ACCOUNT, "0");
+    const account = new Account(DUMMY_ACCOUNT, '0');
 
     const tx = new TransactionBuilder(account, {
-      fee: "1000",
+      fee: '1000',
       networkPassphrase: CONFIG.networkPassphrase,
     })
       .addOperation(
         Operation.invokeHostFunction({
           func: xdr.HostFunction.hostFunctionTypeInvokeContract(
             new xdr.InvokeContractArgs({
-              contractAddress: Address.fromString(
-                CONFIG.contractId
-              ).toScAddress(),
-              functionName: "get_invoice",
-              args: [nativeToScVal(BigInt(id), { type: "u64" })],
+              contractAddress: Address.fromString(CONFIG.contractId).toScAddress(),
+              functionName: 'get_invoice',
+              args: [nativeToScVal(BigInt(id), { type: 'u64' })],
             })
           ),
           auth: [],
@@ -69,12 +67,8 @@ export async function fetchInvoice(
 
     return {
       id,
-      freelancer: Address.fromScAddress(
-        native.freelancer as xdr.ScAddress
-      ).toString(),
-      payer: Address.fromScAddress(
-        native.payer as xdr.ScAddress
-      ).toString(),
+      freelancer: Address.fromScAddress(native.freelancer as xdr.ScAddress).toString(),
+      payer: Address.fromScAddress(native.payer as xdr.ScAddress).toString(),
       amount: String(native.amount),
       due_date: Number(native.due_date),
       discount_rate: Number(native.discount_rate),
@@ -92,10 +86,10 @@ export async function fetchInvoice(
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-function parseStatus(raw: unknown): Invoice["status"] {
+function parseStatus(raw: unknown): Invoice['status'] {
   const key = Object.keys(raw as object)[0];
-  if (key === "Funded") return "Funded";
-  if (key === "Paid") return "Paid";
-  if (key === "Defaulted") return "Defaulted";
-  return "Pending";
+  if (key === 'Funded') return 'Funded';
+  if (key === 'Paid') return 'Paid';
+  if (key === 'Defaulted') return 'Defaulted';
+  return 'Pending';
 }

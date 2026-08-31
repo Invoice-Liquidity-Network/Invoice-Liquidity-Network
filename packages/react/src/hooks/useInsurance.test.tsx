@@ -1,6 +1,11 @@
 import { describe, it, expect, vi } from 'vitest';
 import { renderHook, act } from '@testing-library/react';
-import { createMockILNClient, mockLPCoverage, mockPoolBalance, mockInsuranceClaim } from '../test/mocks';
+import {
+  createMockILNClient,
+  mockLPCoverage,
+  mockPoolBalance,
+  mockInsuranceClaim,
+} from '../test/mocks';
 import { TestWrapper } from '../test/wrapper';
 import {
   useLPCoverage,
@@ -161,7 +166,9 @@ describe('useEnroll', () => {
       wrapper: ({ children }) => <TestWrapper client={mockClient}>{children}</TestWrapper>,
     });
     await act(async () => {
-      await result.current.enroll({ lp: LP_ADDRESS, coverageAmount: 1_000_000_000n, premiumRateBps: 500 }).catch(() => { });
+      await result.current
+        .enroll({ lp: LP_ADDRESS, coverageAmount: 1_000_000_000n, premiumRateBps: 500 })
+        .catch(() => {});
     });
     expect(result.current.error).toEqual(testError);
   });
@@ -193,10 +200,18 @@ describe('useSubmitClaim', () => {
     });
     let claimId: bigint | undefined;
     await act(async () => {
-      claimId = await result.current.submitClaim({ lp: LP_ADDRESS, invoiceId: 42n, reason: 'defaulted' });
+      claimId = await result.current.submitClaim({
+        lp: LP_ADDRESS,
+        invoiceId: 42n,
+        reason: 'defaulted',
+      });
     });
     expect(claimId).toBe(5n);
-    expect(mockClient.submitClaim).toHaveBeenCalledWith({ lp: LP_ADDRESS, invoiceId: 42n, reason: 'defaulted' });
+    expect(mockClient.submitClaim).toHaveBeenCalledWith({
+      lp: LP_ADDRESS,
+      invoiceId: 42n,
+      reason: 'defaulted',
+    });
   });
 });
 
@@ -211,7 +226,11 @@ describe('useReviewClaim', () => {
     await act(async () => {
       await result.current.reviewClaim({ reviewer: ADMIN_ADDRESS, claimId: 1n, approve: true });
     });
-    expect(mockClient.reviewClaim).toHaveBeenCalledWith({ reviewer: ADMIN_ADDRESS, claimId: 1n, approve: true });
+    expect(mockClient.reviewClaim).toHaveBeenCalledWith({
+      reviewer: ADMIN_ADDRESS,
+      claimId: 1n,
+      approve: true,
+    });
   });
 
   it('calls client.reviewClaim with rejection reason', async () => {
@@ -222,8 +241,18 @@ describe('useReviewClaim', () => {
       wrapper: ({ children }) => <TestWrapper client={mockClient}>{children}</TestWrapper>,
     });
     await act(async () => {
-      await result.current.reviewClaim({ reviewer: ADMIN_ADDRESS, claimId: 1n, approve: false, reason: 'insufficient evidence' });
+      await result.current.reviewClaim({
+        reviewer: ADMIN_ADDRESS,
+        claimId: 1n,
+        approve: false,
+        reason: 'insufficient evidence',
+      });
     });
-    expect(mockClient.reviewClaim).toHaveBeenCalledWith({ reviewer: ADMIN_ADDRESS, claimId: 1n, approve: false, reason: 'insufficient evidence' });
+    expect(mockClient.reviewClaim).toHaveBeenCalledWith({
+      reviewer: ADMIN_ADDRESS,
+      claimId: 1n,
+      approve: false,
+      reason: 'insufficient evidence',
+    });
   });
 });

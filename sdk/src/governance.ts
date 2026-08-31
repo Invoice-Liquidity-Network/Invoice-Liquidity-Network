@@ -1,10 +1,10 @@
-import { nativeToScVal, rpc } from "@stellar/stellar-sdk";
+import { nativeToScVal, rpc } from '@stellar/stellar-sdk';
 
 import {
   GovernanceContractMethod,
   GOVERNANCE_BPS_DENOMINATOR,
   GOVERNANCE_DEFAULT_MIN_QUORUM_BPS,
-} from "./governance-constants";
+} from './governance-constants';
 import type {
   CastVoteParams,
   CreateProposalParams,
@@ -17,7 +17,7 @@ import type {
   UndelegateVotesParams,
   VetoProposalParams,
   VotingResult,
-} from "./governance-types";
+} from './governance-types';
 import {
   buildReadContractTransaction,
   buildWriteContractTransaction,
@@ -26,8 +26,8 @@ import {
   toBytesN32ScVal,
   toOptionalProposalStatusScVal,
   type BuiltTransaction,
-} from "./governance-utils";
-import type { RpcServerLike } from "./types";
+} from './governance-utils';
+import type { RpcServerLike } from './types';
 
 /**
  * Client for interacting with the ILN governance contract.
@@ -84,8 +84,8 @@ export class GovernanceClient {
         toAddressScVal(params.proposer),
         encodeProposalAction(params.action),
         toBytesN32ScVal(params.descriptionHash),
-        nativeToScVal(params.proposedValue, { type: "i128" }),
-      ],
+        nativeToScVal(params.proposedValue, { type: 'i128' }),
+      ]
     );
   }
 
@@ -104,9 +104,9 @@ export class GovernanceClient {
       GovernanceContractMethod.CastVote,
       [
         toAddressScVal(params.voter),
-        nativeToScVal(params.proposalId, { type: "u64" }),
-        nativeToScVal(params.support, { type: "bool" }),
-      ],
+        nativeToScVal(params.proposalId, { type: 'u64' }),
+        nativeToScVal(params.support, { type: 'bool' }),
+      ]
     );
   }
 
@@ -124,9 +124,9 @@ export class GovernanceClient {
       params.source,
       GovernanceContractMethod.ExecuteProposal,
       [
-        nativeToScVal(params.proposalId, { type: "u64" }),
-        nativeToScVal(params.totalSupply, { type: "i128" }),
-      ],
+        nativeToScVal(params.proposalId, { type: 'u64' }),
+        nativeToScVal(params.totalSupply, { type: 'i128' }),
+      ]
     );
   }
 
@@ -143,10 +143,7 @@ export class GovernanceClient {
       this.networkPassphrase,
       params.admin,
       GovernanceContractMethod.VetoProposal,
-      [
-        nativeToScVal(params.proposalId, { type: "u64" }),
-        toBytesN32ScVal(params.reasonHash),
-      ],
+      [nativeToScVal(params.proposalId, { type: 'u64' }), toBytesN32ScVal(params.reasonHash)]
     );
   }
 
@@ -163,7 +160,7 @@ export class GovernanceClient {
       this.networkPassphrase,
       params.delegator,
       GovernanceContractMethod.DelegateVotes,
-      [toAddressScVal(params.delegator), toAddressScVal(params.delegate)],
+      [toAddressScVal(params.delegator), toAddressScVal(params.delegate)]
     );
   }
 
@@ -180,7 +177,7 @@ export class GovernanceClient {
       this.networkPassphrase,
       params.delegator,
       GovernanceContractMethod.UndelegateVotes,
-      [toAddressScVal(params.delegator)],
+      [toAddressScVal(params.delegator)]
     );
   }
 
@@ -195,7 +192,7 @@ export class GovernanceClient {
       this.contractId,
       this.networkPassphrase,
       GovernanceContractMethod.GetProposal,
-      [nativeToScVal(params.proposalId, { type: "u64" })],
+      [nativeToScVal(params.proposalId, { type: 'u64' })]
     );
   }
 
@@ -215,9 +212,9 @@ export class GovernanceClient {
       GovernanceContractMethod.ListProposals,
       [
         toOptionalProposalStatusScVal(params.status),
-        nativeToScVal(page, { type: "u32" }),
-        nativeToScVal(pageSize, { type: "u32" }),
-      ],
+        nativeToScVal(page, { type: 'u32' }),
+        nativeToScVal(pageSize, { type: 'u32' }),
+      ]
     );
   }
 
@@ -231,7 +228,7 @@ export class GovernanceClient {
       this.contractId,
       this.networkPassphrase,
       GovernanceContractMethod.GetMinQuorumBps,
-      [],
+      []
     );
   }
 
@@ -245,7 +242,7 @@ export class GovernanceClient {
       this.contractId,
       this.networkPassphrase,
       GovernanceContractMethod.GetExecutionDelay,
-      [],
+      []
     );
   }
 
@@ -303,7 +300,7 @@ export {
   GOVERNANCE_TESTNET,
   GOVERNANCE_TESTNET_CONTRACT_ID,
   GOVERNANCE_VOTING_PERIOD_SECS,
-} from "./governance-constants";
+} from './governance-constants';
 export {
   ProposalActionKind,
   ProposalStatus,
@@ -320,9 +317,9 @@ export {
   type UndelegateVotesParams,
   type VetoProposalParams,
   type VotingResult,
-} from "./governance-types";
+} from './governance-types';
 export {
   parseGovernanceProposal,
   parseGovernanceProposalListSimulation,
   parseGovernanceProposalSimulation,
-} from "./governance-parser";
+} from './governance-parser';

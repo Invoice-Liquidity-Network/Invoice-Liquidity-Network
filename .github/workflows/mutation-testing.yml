@@ -30,7 +30,7 @@ concurrency:
 jobs:
   sdk-errors-mutation:
     name: 📊 SDK errors.ts mutation score
-    runs-on: namespace-profile-nursca
+    runs-on: ubuntu-latest
     # Always continue even if the mutation score is below threshold
     continue-on-error: true
     steps:

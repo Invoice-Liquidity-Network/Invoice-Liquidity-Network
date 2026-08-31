@@ -17,19 +17,21 @@ const BORDER = '#E7DCCF';
 const TEXT = '#1F2937';
 const MUTED = '#5B6370';
 const POSITIVE = '#15803D';
-const WARNING = '#B45309';
 const DANGER = '#B91C1C';
 const ACCENT = '#8B5E34';
 
 type TabFilter = 'all' | 'Pending' | 'Approved' | 'Rejected';
 
 function formatCurrency(value: bigint | undefined | null): string {
-  if (value == null) return '$0.00';
-  return `$${(Number(value) / 10_000_000).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  if (value === null || value === undefined) return '$0.00';
+  return `$${(Number(value) / 10_000_000).toLocaleString(undefined, {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })}`;
 }
 
 function formatTimestamp(ts: number | null | undefined): string {
-  if (ts == null) return '—';
+  if (ts === null || ts === undefined) return '—';
   return new Date(ts * 1000).toLocaleDateString(undefined, {
     month: 'short',
     day: 'numeric',
@@ -38,11 +40,15 @@ function formatTimestamp(ts: number | null | undefined): string {
   });
 }
 
-export function AdminReviewDashboard({ adminAddress, className, style }: AdminReviewDashboardProps): JSX.Element {
+export function AdminReviewDashboard({
+  adminAddress,
+  className,
+  style,
+}: AdminReviewDashboardProps) {
   const [tab, setTab] = useState<TabFilter>('Pending');
   const [rejectionModal, setRejectionModal] = useState<{ claimId: bigint } | null>(null);
   const [rejectionReason, setRejectionReason] = useState('');
-  const dialogRef = useFocusTrap(rejectionModal != null);
+  const dialogRef = useFocusTrap(rejectionModal !== null && rejectionModal !== undefined);
 
   const statusFilter = tab === 'all' ? undefined : tab;
   const { data: claims, isLoading, error: listError } = useClaimsList(statusFilter);
@@ -52,7 +58,9 @@ export function AdminReviewDashboard({ adminAddress, className, style }: AdminRe
   const handleApprove = async (claimId: bigint) => {
     try {
       await reviewClaim({ reviewer: adminAddress, claimId, approve: true });
-    } catch { }
+    } catch {
+      // surfaced via useReviewClaim's own error state
+    }
   };
 
   const handleReject = async () => {
@@ -66,7 +74,9 @@ export function AdminReviewDashboard({ adminAddress, className, style }: AdminRe
       });
       setRejectionModal(null);
       setRejectionReason('');
-    } catch { }
+    } catch {
+      // surfaced via useReviewClaim's own error state
+    }
   };
 
   const tabs: { key: TabFilter; label: string; count?: number }[] = [
@@ -89,38 +99,99 @@ export function AdminReviewDashboard({ adminAddress, className, style }: AdminRe
         ...style,
       }}
     >
-      <div style={{ fontSize: 12, letterSpacing: '0.18em', textTransform: 'uppercase', color: ACCENT, fontWeight: 800, marginBottom: 8 }}>
+      <div
+        style={{
+          fontSize: 12,
+          letterSpacing: '0.18em',
+          textTransform: 'uppercase',
+          color: ACCENT,
+          fontWeight: 800,
+          marginBottom: 8,
+        }}
+      >
         Admin Review
       </div>
-      <h2 style={{ fontFamily: '"Newsreader", Georgia, serif', fontSize: 'clamp(1.6rem, 3vw, 2.4rem)', lineHeight: 1.1, margin: '0 0 6px 0' }}>
+      <h2
+        style={{
+          fontFamily: '"Newsreader", Georgia, serif',
+          fontSize: 'clamp(1.6rem, 3vw, 2.4rem)',
+          lineHeight: 1.1,
+          margin: '0 0 6px 0',
+        }}
+      >
         Claims Review Dashboard
       </h2>
       <p style={{ margin: '0 0 20px 0', color: MUTED, fontSize: 13, lineHeight: 1.5 }}>
-        Review, approve, or reject insurance claims filed by LPs. Approved claims are paid from the pool reserve.
+        Review, approve, or reject insurance claims filed by LPs. Approved claims are paid from the
+        pool reserve.
       </p>
 
       {poolBalance && (
         <div style={{ display: 'flex', gap: 16, marginBottom: 20, flexWrap: 'wrap' }}>
-          <div style={{ padding: '12px 16px', borderRadius: 14, background: PANEL, border: `1px solid ${BORDER}` }}>
+          <div
+            style={{
+              padding: '12px 16px',
+              borderRadius: 14,
+              background: PANEL,
+              border: `1px solid ${BORDER}`,
+            }}
+          >
             <div style={{ fontSize: 11, color: MUTED, fontWeight: 600 }}>Pool Reserve</div>
-            <div style={{ fontSize: 18, fontWeight: 700 }}>{formatCurrency(poolBalance.reserveBalance)}</div>
+            <div style={{ fontSize: 18, fontWeight: 700 }}>
+              {formatCurrency(poolBalance.reserveBalance)}
+            </div>
           </div>
-          <div style={{ padding: '12px 16px', borderRadius: 14, background: PANEL, border: `1px solid ${BORDER}` }}>
+          <div
+            style={{
+              padding: '12px 16px',
+              borderRadius: 14,
+              background: PANEL,
+              border: `1px solid ${BORDER}`,
+            }}
+          >
             <div style={{ fontSize: 11, color: MUTED, fontWeight: 600 }}>Total Premiums</div>
-            <div style={{ fontSize: 18, fontWeight: 700 }}>{formatCurrency(poolBalance.totalPremiums)}</div>
+            <div style={{ fontSize: 18, fontWeight: 700 }}>
+              {formatCurrency(poolBalance.totalPremiums)}
+            </div>
           </div>
-          <div style={{ padding: '12px 16px', borderRadius: 14, background: PANEL, border: `1px solid ${BORDER}` }}>
+          <div
+            style={{
+              padding: '12px 16px',
+              borderRadius: 14,
+              background: PANEL,
+              border: `1px solid ${BORDER}`,
+            }}
+          >
             <div style={{ fontSize: 11, color: MUTED, fontWeight: 600 }}>Total Payouts</div>
-            <div style={{ fontSize: 18, fontWeight: 700 }}>{formatCurrency(poolBalance.totalPayouts)}</div>
+            <div style={{ fontSize: 18, fontWeight: 700 }}>
+              {formatCurrency(poolBalance.totalPayouts)}
+            </div>
           </div>
-          <div style={{ padding: '12px 16px', borderRadius: 14, background: PANEL, border: `1px solid ${BORDER}` }}>
+          <div
+            style={{
+              padding: '12px 16px',
+              borderRadius: 14,
+              background: PANEL,
+              border: `1px solid ${BORDER}`,
+            }}
+          >
             <div style={{ fontSize: 11, color: MUTED, fontWeight: 600 }}>Enrolled LPs</div>
             <div style={{ fontSize: 18, fontWeight: 700 }}>{poolBalance.enrolledLps}</div>
           </div>
         </div>
       )}
 
-      <div role="tablist" aria-label="Claim status filter" style={{ display: 'flex', gap: 8, marginBottom: 20, borderBottom: `1px solid ${BORDER}`, paddingBottom: 12 }}>
+      <div
+        role="tablist"
+        aria-label="Claim status filter"
+        style={{
+          display: 'flex',
+          gap: 8,
+          marginBottom: 20,
+          borderBottom: `1px solid ${BORDER}`,
+          paddingBottom: 12,
+        }}
+      >
         {tabs.map((t) => (
           <button
             key={t.key}
@@ -144,7 +215,18 @@ export function AdminReviewDashboard({ adminAddress, className, style }: AdminRe
       </div>
 
       {listError && (
-        <div role="alert" style={{ padding: '12px 16px', borderRadius: 18, border: `1px solid #FCA5A5`, background: '#FEF2F2', color: DANGER, fontWeight: 600, marginBottom: 16 }}>
+        <div
+          role="alert"
+          style={{
+            padding: '12px 16px',
+            borderRadius: 18,
+            border: `1px solid #FCA5A5`,
+            background: '#FEF2F2',
+            color: DANGER,
+            fontWeight: 600,
+            marginBottom: 16,
+          }}
+        >
           Failed to load claims: {listError.message}
         </div>
       )}
@@ -155,7 +237,16 @@ export function AdminReviewDashboard({ adminAddress, className, style }: AdminRe
         )}
 
         {!isLoading && !listError && claims?.length === 0 && (
-          <div style={{ padding: 24, textAlign: 'center', color: MUTED, borderRadius: 18, border: `1px dashed ${BORDER}`, background: PANEL }}>
+          <div
+            style={{
+              padding: 24,
+              textAlign: 'center',
+              color: MUTED,
+              borderRadius: 18,
+              border: `1px dashed ${BORDER}`,
+              background: PANEL,
+            }}
+          >
             No {tab === 'all' ? '' : tab.toLowerCase()} claims to review.
           </div>
         )}
@@ -172,32 +263,57 @@ export function AdminReviewDashboard({ adminAddress, className, style }: AdminRe
               gap: 10,
             }}
           >
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 8 }}>
+            <div
+              style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'flex-start',
+                flexWrap: 'wrap',
+                gap: 8,
+              }}
+            >
               <div>
                 <div style={{ fontWeight: 700, fontSize: 15 }}>
                   Claim #{String(claim.id)} — Invoice #{String(claim.invoiceId)}
                 </div>
                 <div style={{ fontSize: 12, color: MUTED, marginTop: 2 }}>
-                  Filed by <AddressDisplay address={claim.lp} copyable={false} /> on {formatTimestamp(claim.filedAt)}
+                  Filed by <AddressDisplay address={claim.lp} copyable={false} /> on{' '}
+                  {formatTimestamp(claim.filedAt)}
                 </div>
               </div>
               <StatusBadge status={claim.status} />
             </div>
 
-            <div style={{ fontSize: 13, color: TEXT, background: PANEL_ALT, padding: '10px 12px', borderRadius: 12 }}>
+            <div
+              style={{
+                fontSize: 13,
+                color: TEXT,
+                background: PANEL_ALT,
+                padding: '10px 12px',
+                borderRadius: 12,
+              }}
+            >
               <strong>Reason:</strong> {claim.reason}
             </div>
 
             <div style={{ display: 'flex', gap: 16, fontSize: 12, color: MUTED, flexWrap: 'wrap' }}>
-              <span>Amount: <strong style={{ color: TEXT }}>{formatCurrency(claim.invoiceAmount)}</strong></span>
-              {claim.payoutAmount != null && (
-                <span>Payout: <strong style={{ color: POSITIVE }}>{formatCurrency(claim.payoutAmount)}</strong></span>
+              <span>
+                Amount:{' '}
+                <strong style={{ color: TEXT }}>{formatCurrency(claim.invoiceAmount)}</strong>
+              </span>
+              {claim.payoutAmount !== null && claim.payoutAmount !== undefined && (
+                <span>
+                  Payout:{' '}
+                  <strong style={{ color: POSITIVE }}>{formatCurrency(claim.payoutAmount)}</strong>
+                </span>
               )}
-              {claim.reviewedAt != null && (
+              {claim.reviewedAt !== null && claim.reviewedAt !== undefined && (
                 <span>Reviewed: {formatTimestamp(claim.reviewedAt)}</span>
               )}
               {claim.rejectionReason && (
-                <span>Reason: <strong style={{ color: DANGER }}>{claim.rejectionReason}</strong></span>
+                <span>
+                  Reason: <strong style={{ color: DANGER }}>{claim.rejectionReason}</strong>
+                </span>
               )}
             </div>
 
@@ -242,6 +358,11 @@ export function AdminReviewDashboard({ adminAddress, className, style }: AdminRe
       </div>
 
       {rejectionModal && (
+        // Backdrop click-to-dismiss + Escape-to-dismiss on a dialog overlay is
+        // a standard modal pattern; the backdrop itself isn't a semantic
+        // interactive control, so the noninteractive-element-interactions
+        // rule doesn't apply here.
+        // eslint-disable-next-line jsx-a11y/no-noninteractive-element-interactions
         <div
           ref={dialogRef}
           role="dialog"
@@ -261,6 +382,7 @@ export function AdminReviewDashboard({ adminAddress, className, style }: AdminRe
             if (e.key === 'Escape') setRejectionModal(null);
           }}
         >
+          {/* eslint-disable-next-line jsx-a11y/no-static-element-interactions, jsx-a11y/click-events-have-key-events -- stops propagation to the backdrop's dismiss handler; real interactive elements are the inputs/buttons inside */}
           <div
             style={{
               background: PANEL,
@@ -272,8 +394,22 @@ export function AdminReviewDashboard({ adminAddress, className, style }: AdminRe
             }}
             onClick={(e) => e.stopPropagation()}
           >
-            <h3 id="rejection-modal-title" style={{ margin: '0 0 12px 0', fontFamily: '"Newsreader", Georgia, serif' }}>Reject Claim #{String(rejectionModal.claimId)}</h3>
-            <label htmlFor="rejection-reason" style={{ display: 'block', fontSize: 12, color: MUTED, fontWeight: 600, marginBottom: 6 }}>
+            <h3
+              id="rejection-modal-title"
+              style={{ margin: '0 0 12px 0', fontFamily: '"Newsreader", Georgia, serif' }}
+            >
+              Reject Claim #{String(rejectionModal.claimId)}
+            </h3>
+            <label
+              htmlFor="rejection-reason"
+              style={{
+                display: 'block',
+                fontSize: 12,
+                color: MUTED,
+                fontWeight: 600,
+                marginBottom: 6,
+              }}
+            >
               Reason for rejection
             </label>
             <textarea
@@ -330,7 +466,7 @@ export function AdminReviewDashboard({ adminAddress, className, style }: AdminRe
   );
 }
 
-function StatusBadge({ status }: { status: string }): JSX.Element {
+function StatusBadge({ status }: { status: string }) {
   const colors: Record<string, { bg: string; text: string }> = {
     Pending: { bg: '#FEF3C7', text: '#92400E' },
     Approved: { bg: '#DCFCE7', text: '#166534' },

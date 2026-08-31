@@ -33,7 +33,7 @@ describe('AuctionRateTicker', () => {
           funder="GLP"
           showChart={false}
         />
-      </TestWrapper>,
+      </TestWrapper>
     );
 
     expect(await screen.findByText('Dutch Auction')).toBeTruthy();
@@ -57,17 +57,19 @@ describe('AuctionRateTicker', () => {
           funder="GLP"
           showChart={false}
         />
-      </TestWrapper>,
+      </TestWrapper>
     );
 
     fireEvent.click(await screen.findByRole('button', { name: 'Fund at Current Rate' }));
 
     await waitFor(() => {
-      expect(fundInvoice).toHaveBeenCalledWith(expect.objectContaining({
-        invoiceId: 42,
-        funder: 'GLP',
-        expectedDiscountBps: expect.any(Number),
-      }));
+      expect(fundInvoice).toHaveBeenCalledWith(
+        expect.objectContaining({
+          invoiceId: 42,
+          funder: 'GLP',
+          expectedDiscountBps: expect.any(Number),
+        })
+      );
     });
   });
 });

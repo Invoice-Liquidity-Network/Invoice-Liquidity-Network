@@ -10,10 +10,7 @@ import {
   type OracleVerificationRequest,
   type ReputationSnapshot,
 } from './types';
-import {
-  OracleVerifier,
-  fetchOnChainReputation,
-} from './verifier';
+import { OracleVerifier, fetchOnChainReputation } from './verifier';
 
 const DEFAULT_PORT = 3010;
 const DEFAULT_INDEXER_BASE_URL = 'http://localhost:3001';
@@ -71,7 +68,8 @@ function normalizeHistoryEntry(entry: Record<string, unknown>): IndexerInvoiceHi
     discount_rate: Number(entry.discount_rate ?? 0),
     status: String(entry.status ?? 'Pending') as IndexerInvoiceHistoryEntry['status'],
     funder: entry.funder ? String(entry.funder) : null,
-    funded_at: entry.funded_at === null || entry.funded_at === undefined ? null : Number(entry.funded_at),
+    funded_at:
+      entry.funded_at === null || entry.funded_at === undefined ? null : Number(entry.funded_at),
     created_at: Number(entry.created_at ?? 0),
     updated_at: Number(entry.updated_at ?? 0),
   };
@@ -80,12 +78,19 @@ function normalizeHistoryEntry(entry: Record<string, unknown>): IndexerInvoiceHi
 function createDefaultOptions(options: Partial<OracleServiceOptions> = {}): OracleServiceOptions {
   return {
     port: options.port ?? Number(process.env.ORACLE_PORT ?? DEFAULT_PORT),
-    indexerBaseUrl: options.indexerBaseUrl ?? process.env.INDEXER_BASE_URL ?? DEFAULT_INDEXER_BASE_URL,
+    indexerBaseUrl:
+      options.indexerBaseUrl ?? process.env.INDEXER_BASE_URL ?? DEFAULT_INDEXER_BASE_URL,
     reputationRpcUrl: options.reputationRpcUrl ?? process.env.ORACLE_REPUTATION_RPC_URL,
     reputationContractId: options.reputationContractId ?? process.env.ORACLE_REPUTATION_CONTRACT_ID,
-    cacheTtlSeconds: options.cacheTtlSeconds ?? Number(process.env.ORACLE_CACHE_TTL_SECONDS ?? DEFAULT_CACHE_TTL_SECONDS),
-    requestTimeoutMs: options.requestTimeoutMs ?? Number(process.env.ORACLE_REQUEST_TIMEOUT_MS ?? DEFAULT_REQUEST_TIMEOUT_MS),
-    maxOracleAgeMs: options.maxOracleAgeMs ?? Number(process.env.ORACLE_MAX_ORACLE_AGE_MS ?? DEFAULT_MAX_ORACLE_AGE_MS),
+    cacheTtlSeconds:
+      options.cacheTtlSeconds ??
+      Number(process.env.ORACLE_CACHE_TTL_SECONDS ?? DEFAULT_CACHE_TTL_SECONDS),
+    requestTimeoutMs:
+      options.requestTimeoutMs ??
+      Number(process.env.ORACLE_REQUEST_TIMEOUT_MS ?? DEFAULT_REQUEST_TIMEOUT_MS),
+    maxOracleAgeMs:
+      options.maxOracleAgeMs ??
+      Number(process.env.ORACLE_MAX_ORACLE_AGE_MS ?? DEFAULT_MAX_ORACLE_AGE_MS),
     redisUrl: options.redisUrl ?? process.env.REDIS_URL,
   };
 }
@@ -108,7 +113,7 @@ async function createHistoryProvider(baseUrl: string, timeoutMs: number) {
 }
 
 async function createReputationProvider(
-  options: OracleServiceOptions,
+  options: OracleServiceOptions
 ): Promise<(payer: string) => Promise<ReputationSnapshot>> {
   if (!options.reputationRpcUrl || !options.reputationContractId) {
     return async (payer: string) => ({
@@ -129,7 +134,7 @@ async function createReputationProvider(
         networkPassphrase: process.env.ORACLE_NETWORK_PASSPHRASE,
         source: process.env.ORACLE_RPC_SOURCE,
       },
-      payer,
+      payer
     );
 }
 
@@ -139,7 +144,9 @@ export interface CreateOracleAppResult {
   health(): OracleServiceHealth;
 }
 
-export async function createOracleApp(options: Partial<OracleServiceOptions> = {}): Promise<CreateOracleAppResult> {
+export async function createOracleApp(
+  options: Partial<OracleServiceOptions> = {}
+): Promise<CreateOracleAppResult> {
   const resolved = createDefaultOptions(options);
   const metrics = createOracleMetrics();
   const cache = options.cache
@@ -149,7 +156,8 @@ export async function createOracleApp(options: Partial<OracleServiceOptions> = {
         ttlSeconds: resolved.cacheTtlSeconds,
       });
   const historyProvider =
-    options.historyProvider ?? (await createHistoryProvider(resolved.indexerBaseUrl, resolved.requestTimeoutMs));
+    options.historyProvider ??
+    (await createHistoryProvider(resolved.indexerBaseUrl, resolved.requestTimeoutMs));
   const reputationProvider =
     options.reputationProvider ?? (await createReputationProvider(resolved));
   const verifier = new OracleVerifier({
@@ -278,7 +286,9 @@ export async function createOracleApp(options: Partial<OracleServiceOptions> = {
   };
 }
 
-export async function startOracleService(options: Partial<OracleServiceOptions> = {}): Promise<void> {
+export async function startOracleService(
+  options: Partial<OracleServiceOptions> = {}
+): Promise<void> {
   const { app } = await createOracleApp(options);
   const resolved = createDefaultOptions(options);
   app.listen(resolved.port, () => {
@@ -286,7 +296,8 @@ export async function startOracleService(options: Partial<OracleServiceOptions> 
   });
 }
 
-const shouldAutostart = process.env.NODE_ENV !== 'test' && process.env.ORACLE_DISABLE_AUTOSTART !== 'true';
+const shouldAutostart =
+  process.env.NODE_ENV !== 'test' && process.env.ORACLE_DISABLE_AUTOSTART !== 'true';
 if (shouldAutostart) {
   void startOracleService().catch((error) => {
     console.error('[oracle] failed to start', error);

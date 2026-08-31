@@ -9,17 +9,33 @@ const ADMIN_ADDRESS = 'GADMIN0000000000000000000000000000000000000000000000000';
 
 async function renderDashboard(overrides: Record<string, unknown> = {}) {
   const mockClient = createMockILNClient({
-    getPoolBalance: vi.fn().mockResolvedValue({ totalPremiums: 10_000_000_000n, totalPayouts: 3_000_000_000n, reserveBalance: 7_000_000_000n, enrolledLps: 5, activeClaims: 3, pendingClaims: 2, approvedClaims: 1, rejectedClaims: 0 }),
+    getPoolBalance: vi.fn().mockResolvedValue({
+      totalPremiums: 10_000_000_000n,
+      totalPayouts: 3_000_000_000n,
+      reserveBalance: 7_000_000_000n,
+      enrolledLps: 5,
+      activeClaims: 3,
+      pendingClaims: 2,
+      approvedClaims: 1,
+      rejectedClaims: 0,
+    }),
     listClaims: vi.fn().mockResolvedValue([
       { ...mockInsuranceClaim, id: 1n, status: 'Pending' },
-      { ...mockInsuranceClaim, id: 2n, status: 'Approved', payoutAmount: 5_000_000_000n, reviewedAt: 1735862400, reviewer: ADMIN_ADDRESS },
+      {
+        ...mockInsuranceClaim,
+        id: 2n,
+        status: 'Approved',
+        payoutAmount: 5_000_000_000n,
+        reviewedAt: 1735862400,
+        reviewer: ADMIN_ADDRESS,
+      },
     ]),
     ...overrides,
   });
   return render(
     <TestWrapper client={mockClient}>
       <AdminReviewDashboard adminAddress={ADMIN_ADDRESS} />
-    </TestWrapper>,
+    </TestWrapper>
   );
 }
 
@@ -76,9 +92,9 @@ describe('AdminReviewDashboard', () => {
   });
 
   it('filters claims by status tab', async () => {
-    const listClaimsMock = vi.fn().mockResolvedValue([
-      { ...mockInsuranceClaim, id: 1n, status: 'Pending' },
-    ]);
+    const listClaimsMock = vi
+      .fn()
+      .mockResolvedValue([{ ...mockInsuranceClaim, id: 1n, status: 'Pending' }]);
     await renderDashboard({ listClaims: listClaimsMock });
     await vi.waitFor(() => {
       expect(screen.getByText('Pending')).toBeTruthy();

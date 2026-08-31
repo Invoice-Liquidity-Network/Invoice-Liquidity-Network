@@ -32,25 +32,21 @@ Plugins define two kinds of assets:
 
 ```typescript
 // my-plugin.ts
-import type {
-  AnalyticsPlugin,
-  AnalyticsPluginContext,
-  WidgetRenderResult,
-} from "@iln/sdk";
+import type { AnalyticsPlugin, AnalyticsPluginContext, WidgetRenderResult } from '@iln/sdk';
 
 export const MY_PLUGIN: AnalyticsPlugin = {
-  id: "my-custom-plugin",
-  name: "My Custom Plugin",
-  version: "1.0.0",
-  description: "Tracks custom metrics",
-  author: "Your Name",
-  icon: "📊",
+  id: 'my-custom-plugin',
+  name: 'My Custom Plugin',
+  version: '1.0.0',
+  description: 'Tracks custom metrics',
+  author: 'Your Name',
+  icon: '📊',
   metrics: [
     {
-      id: "custom-metric",
-      name: "Custom Metric",
-      description: "Description of what this measures",
-      type: "number",
+      id: 'custom-metric',
+      name: 'Custom Metric',
+      description: 'Description of what this measures',
+      type: 'number',
       compute: async (ctx: AnalyticsPluginContext) => {
         const stats = await ctx.sdk.getProtocolStats();
         return stats.totalInvoices;
@@ -59,18 +55,16 @@ export const MY_PLUGIN: AnalyticsPlugin = {
   ],
   widgets: [
     {
-      id: "custom-widget",
-      name: "Custom Widget",
-      description: "Displays custom data",
-      type: "metric",
-      size: "small",
+      id: 'custom-widget',
+      name: 'Custom Widget',
+      description: 'Displays custom data',
+      type: 'metric',
+      size: 'small',
       refreshIntervalMs: 30000,
-      render: async (
-        ctx: AnalyticsPluginContext,
-      ): Promise<WidgetRenderResult> => {
+      render: async (ctx: AnalyticsPluginContext): Promise<WidgetRenderResult> => {
         const stats = await ctx.sdk.getProtocolStats();
         return {
-          type: "metric",
+          type: 'metric',
           data: {
             totalInvoices: stats.totalInvoices,
           },
@@ -85,14 +79,14 @@ export const MY_PLUGIN: AnalyticsPlugin = {
 
 ```typescript
 // my-plugin.test.ts
-import { describe, it, expect } from "vitest";
-import type { AnalyticsPluginContext } from "@iln/sdk";
-import { AnalyticsSDK } from "@iln/sdk";
-import { MY_PLUGIN } from "./my-plugin";
+import { describe, it, expect } from 'vitest';
+import type { AnalyticsPluginContext } from '@iln/sdk';
+import { AnalyticsSDK } from '@iln/sdk';
+import { MY_PLUGIN } from './my-plugin';
 
 function createMockContext(): AnalyticsPluginContext {
   return {
-    sdk: new AnalyticsSDK("http://localhost:3001"),
+    sdk: new AnalyticsSDK('http://localhost:3001'),
     logger: () => {},
     config: {},
     cache: new Map(),
@@ -101,20 +95,20 @@ function createMockContext(): AnalyticsPluginContext {
   };
 }
 
-describe("MyPlugin", () => {
-  it("computes custom metric", async () => {
+describe('MyPlugin', () => {
+  it('computes custom metric', async () => {
     const ctx = createMockContext();
     const metric = MY_PLUGIN.metrics[0];
     const result = await metric.compute(ctx);
-    expect(typeof result).toBe("number");
+    expect(typeof result).toBe('number');
   });
 
-  it("renders custom widget", async () => {
+  it('renders custom widget', async () => {
     const ctx = createMockContext();
     const widget = MY_PLUGIN.widgets[0];
     const result = await widget.render(ctx);
-    expect(result.type).toBe("metric");
-    expect(result.data).toHaveProperty("totalInvoices");
+    expect(result.type).toBe('metric');
+    expect(result.data).toHaveProperty('totalInvoices');
   });
 });
 ```
@@ -123,35 +117,35 @@ describe("MyPlugin", () => {
 
 The `AnalyticsPluginContext` provides everything a plugin needs:
 
-| Property | Type | Description |
-|---|---|---|
-| `sdk` | `AnalyticsSDK` | Pre-configured analytics client for fetching protocol data |
-| `logger` | `(msg, data?) => void` | Structured logger scoped to your plugin |
-| `config` | `Record<string, unknown>` | User-provided configuration passed at load time |
-| `cache` | `Map` | In-memory cache (per-plugin, lost on page refresh) |
-| `fetchFromCache` | `<T>(key) => T \| undefined` | Read from plugin cache |
-| `setCache` | `<T>(key, data, ttlMs) => void` | Write to plugin cache with TTL |
+| Property         | Type                            | Description                                                |
+| ---------------- | ------------------------------- | ---------------------------------------------------------- |
+| `sdk`            | `AnalyticsSDK`                  | Pre-configured analytics client for fetching protocol data |
+| `logger`         | `(msg, data?) => void`          | Structured logger scoped to your plugin                    |
+| `config`         | `Record<string, unknown>`       | User-provided configuration passed at load time            |
+| `cache`          | `Map`                           | In-memory cache (per-plugin, lost on page refresh)         |
+| `fetchFromCache` | `<T>(key) => T \| undefined`    | Read from plugin cache                                     |
+| `setCache`       | `<T>(key, data, ttlMs) => void` | Write to plugin cache with TTL                             |
 
 ## Widget Types
 
 The dashboard renders these widget types:
 
-| Type | Description | Suitable For |
-|---|---|---|
-| `metric` | Grid of labeled numeric values | KPIs, summaries |
-| `chart` | Bar chart with optional series comparison | Time series, rankings |
-| `table` | Sortable data table | Leaderboards, lists |
-| `heatmap` | Color-intensity grid cells | Distributions, patterns |
-| `custom` | Raw JSON display (fallback) | Debugging, custom rendering |
+| Type      | Description                               | Suitable For                |
+| --------- | ----------------------------------------- | --------------------------- |
+| `metric`  | Grid of labeled numeric values            | KPIs, summaries             |
+| `chart`   | Bar chart with optional series comparison | Time series, rankings       |
+| `table`   | Sortable data table                       | Leaderboards, lists         |
+| `heatmap` | Color-intensity grid cells                | Distributions, patterns     |
+| `custom`  | Raw JSON display (fallback)               | Debugging, custom rendering |
 
 ### Widget Sizes
 
-| Size | Grid Span | Recommended Content |
-|---|---|---|
-| `small` | 2 cols (compact) | 2-4 metric values |
-| `medium` | 3 cols | Charts with single series |
-| `large` | 4 cols | Charts with comparisons, tables |
-| `full` | 6 cols (full width) | Complex visualizations |
+| Size     | Grid Span           | Recommended Content             |
+| -------- | ------------------- | ------------------------------- |
+| `small`  | 2 cols (compact)    | 2-4 metric values               |
+| `medium` | 3 cols              | Charts with single series       |
+| `large`  | 4 cols              | Charts with comparisons, tables |
+| `full`   | 6 cols (full width) | Complex visualizations          |
 
 ### WidgetRenderResult
 
@@ -161,12 +155,13 @@ Your widget's `render` function must return:
 interface WidgetRenderResult {
   type: WidgetType;
   data: unknown;
-  labels?: string[];       // X-axis or row labels
-  series?: Array<{         // Chart series data
+  labels?: string[]; // X-axis or row labels
+  series?: Array<{
+    // Chart series data
     name: string;
     values: number[];
   }>;
-  metadata?: Record<string, unknown>;  // Extra info for consumers
+  metadata?: Record<string, unknown>; // Extra info for consumers
 }
 ```
 
@@ -181,11 +176,11 @@ interface WidgetRenderResult {
 
 The SDK ships with four built-in plugins as reference implementations:
 
-| Plugin | ID | Widgets |
-|---|---|---|
-| **Yield Tracker** | `iln-yield-tracker` | Yield Curve History, Yield Summary |
-| **Volume Monitor** | `iln-volume-monitor` | Volume Overview, Volume Metrics |
-| **Payer Analysis** | `iln-payer-analysis` | Payer Reliability, Payer Activity Heatmap |
+| Plugin             | ID                   | Widgets                                           |
+| ------------------ | -------------------- | ------------------------------------------------- |
+| **Yield Tracker**  | `iln-yield-tracker`  | Yield Curve History, Yield Summary                |
+| **Volume Monitor** | `iln-volume-monitor` | Volume Overview, Volume Metrics                   |
+| **Payer Analysis** | `iln-payer-analysis` | Payer Reliability, Payer Activity Heatmap         |
 | **LP Performance** | `iln-lp-performance` | LP Rankings, LP Performance Summary, LP Benchmark |
 
 These are located at `sdk/src/analytics-plugins/builtins.ts` and serve as models for your own plugins.
@@ -219,5 +214,5 @@ import type {
   WidgetRenderResult,
   WidgetType,
   WidgetSize,
-} from "@iln/sdk";
+} from '@iln/sdk';
 ```

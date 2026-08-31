@@ -107,10 +107,7 @@ function buildGraph() {
       ...pkg.devDependencies,
       ...pkg.peerDependencies,
     };
-    internalDepsOfName.set(
-      pkg.name,
-      new Set(Object.keys(allDeps).filter(isInternalDep)),
-    );
+    internalDepsOfName.set(pkg.name, new Set(Object.keys(allDeps).filter(isInternalDep)));
   }
 
   return { dirOfName, internalDepsOfName };

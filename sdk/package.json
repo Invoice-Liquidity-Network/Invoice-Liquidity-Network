@@ -50,16 +50,19 @@
     "docs:generate": "typedoc --out ../docs/sdk-api src/index.ts"
   },
   "dependencies": {
-    "@iln/shared": "^0.1.0",
+    "@iln/shared": "workspace:*",
     "@stellar/freighter-api": "^6.0.1",
     "@stellar/stellar-sdk": "^15.0.1",
-    "axios": "^1.16.0",
-    "debug": "^4.3.4"
+    "axios": "^1.16.0"
   },
   "devDependencies": {
-    "@iln/eslint-config": "^1.0.0",
+    "@iln/eslint-config": "workspace:*",
     "@types/node": "^20.0.0",
+    "@typescript-eslint/eslint-plugin": "^6.0.0",
+    "@typescript-eslint/parser": "^6.0.0",
     "@vitest/coverage-v8": "^4.1.5",
+    "eslint": "^8.0.0",
+    "eslint-config-prettier": "^9.0.0",
     "@commitlint/cli": "^17.6.0",
     "@commitlint/config-conventional": "^17.6.0",
     "husky": "^8.0.0",

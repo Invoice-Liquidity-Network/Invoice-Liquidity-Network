@@ -24,7 +24,8 @@ async function getUsdcBalance(publicKey: string, assetId: string): Promise<bigin
 async function getTokenBalance(publicKey: string, contractId: string): Promise<bigint> {
   try {
     const account = await server.getAccount(publicKey);
-    const balanceStr = account.balances.find((b: any) => b.asset_code === contractId)?.balance || '0';
+    const balanceStr =
+      account.balances.find((b: any) => b.asset_code === contractId)?.balance || '0';
     return BigInt(parseFloat(balanceStr) * 10_000_000);
   } catch {
     return 0n;
@@ -111,11 +112,7 @@ describe('E2E Invoice Lifecycle', () => {
     it('verify final state transitions are correct', async (ctx) => {
       if (!isNodeRunning) return ctx.skip();
 
-      const stateTransitions = [
-        'Pending',
-        'Funded',
-        'Paid',
-      ];
+      const stateTransitions = ['Pending', 'Funded', 'Paid'];
 
       expect(stateTransitions).toHaveLength(3);
       expect(stateTransitions[0]).toBe('Pending');

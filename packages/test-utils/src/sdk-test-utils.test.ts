@@ -1,10 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import {
-  createMockILNClient,
-  MOCK_INVOICE,
-  MOCK_LP_STATS,
-  MOCK_CONTRACT_STATS,
-} from './mocks';
+import { createMockILNClient, MOCK_INVOICE, MOCK_LP_STATS, MOCK_CONTRACT_STATS } from './mocks';
 import {
   assertValidInvoice,
   assertInvoiceStatus,

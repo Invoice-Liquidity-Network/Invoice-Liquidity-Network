@@ -47,6 +47,7 @@ These run on every PR and form the primary merge gate:
 |---|---|---|---|
 | `CI / Run Node.js tests` | `node-tests` | Yes | Always runs |
 | `CI / Node.js coverage (≥80%)` | `node-coverage` | Yes | Always runs; enforces ≥80% coverage |
+| `CI / Shared package type tests` | `shared-type-tests` | Yes | Always runs; `tsc` + `tsd` over `packages/shared` |
 | `CI / Dependency license compliance check` | `license-compliance` | Yes | Always runs |
 | `CI / Core · install` | `core-install` | Yes | Always runs |
 | `CI / Core · format` | `core-format` | Yes | Always runs |
@@ -93,6 +94,7 @@ These run only when `backend/**` or `.gitmodules` change (path-filtered):
 ```
 CI / Run Node.js tests
 CI / Node.js coverage (≥80%)
+CI / Shared package type tests
 CI / Dependency license compliance check
 CI / Core · install
 CI / Core · format

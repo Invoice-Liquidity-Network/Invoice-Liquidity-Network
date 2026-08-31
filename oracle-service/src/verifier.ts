@@ -107,7 +107,9 @@ function defaultRateFromHistory(history: IndexerInvoiceHistoryEntry[]): number {
 }
 
 function averageHistoricalAmount(history: IndexerInvoiceHistoryEntry[]): number {
-  const values = history.map((entry) => normalizeAmountToNumber(entry.amount)).filter((value) => value > 0);
+  const values = history
+    .map((entry) => normalizeAmountToNumber(entry.amount))
+    .filter((value) => value > 0);
   return average(values);
 }
 
@@ -134,7 +136,7 @@ function settlementDurationsDays(history: IndexerInvoiceHistoryEntry[]): number[
 
 function latestSourceTimestampMs(
   history: IndexerInvoiceHistoryEntry[],
-  reputation: ReputationSnapshot,
+  reputation: ReputationSnapshot
 ): number {
   const historyMax = history.reduce((max, entry) => {
     const updated = normalizeTimestampToMs(entry.updated_at);
@@ -150,7 +152,7 @@ function latestSourceTimestampMs(
 function detectFraudSignals(
   history: IndexerInvoiceHistoryEntry[],
   requestAmount: number,
-  nowMs: number,
+  nowMs: number
 ): string[] {
   const signals = new Set<string>();
   const recentHistory = history
@@ -163,7 +165,8 @@ function detectFraudSignals(
     if (historicalAmount <= 0 || requestAmount <= 0) {
       return false;
     }
-    const delta = Math.abs(historicalAmount - requestAmount) / Math.max(historicalAmount, requestAmount);
+    const delta =
+      Math.abs(historicalAmount - requestAmount) / Math.max(historicalAmount, requestAmount);
     return delta <= 0.05;
   });
 
@@ -216,7 +219,7 @@ function computeTrustScore(
   reputation: ReputationSnapshot,
   history: IndexerInvoiceHistoryEntry[],
   requestAmount: number,
-  nowMs: number,
+  nowMs: number
 ): {
   trustScore: number;
   confidence: number;
@@ -255,10 +258,10 @@ function computeTrustScore(
         amountFitScore * 0.17 +
         varianceFitScore * 0.12 -
         defaultPenalty -
-        fraudPenalty,
+        fraudPenalty
     ),
     0,
-    100,
+    100
   );
 
   const historyVolumeConfidence = history.length === 0 ? 0.05 : Math.min(1, history.length / 12);
@@ -266,24 +269,26 @@ function computeTrustScore(
   const dataFreshnessConfidence = 0.5;
   const confidence = clamp(
     round(
-      historyVolumeConfidence * 0.45 +
-        reputationConfidence * 0.35 +
-        dataFreshnessConfidence * 0.2,
-      4,
+      historyVolumeConfidence * 0.45 + reputationConfidence * 0.35 + dataFreshnessConfidence * 0.2,
+      4
     ),
     0,
-    1,
+    1
   );
 
   evidence.push(`On-chain reputation score: ${reputationScore}/100`);
   evidence.push(`Historical payment success rate: ${(successRate * 100).toFixed(1)}%`);
   evidence.push(`Historical default rate: ${(defaultRate * 100).toFixed(1)}%`);
-  evidence.push(`Average historical invoice amount: ${Math.round(historicalAverageAmount).toString()}`);
+  evidence.push(
+    `Average historical invoice amount: ${Math.round(historicalAverageAmount).toString()}`
+  );
   evidence.push(`Requested amount deviation: ${amountDeviation.toFixed(1)}%`);
   evidence.push(`Settlement variance: ${settlementVarianceDays.toFixed(2)} days`);
 
   if (history.length === 0) {
-    evidence.push('No payer history available from the indexer; score weighted toward reputation only');
+    evidence.push(
+      'No payer history available from the indexer; score weighted toward reputation only'
+    );
   }
   if (fraudSignals.length > 0) {
     evidence.push(`Fraud signals: ${fraudSignals.join('; ')}`);
@@ -319,10 +324,14 @@ export function assessOracleRequest(input: OracleAssessmentInput): OracleAssessm
   return {
     sourceTimestampMs: computed.sourceTimestampMs,
     response: {
-      requestId: input.request.requestId ?? `${input.request.payer}:${input.request.invoiceId}:${input.nowMs}`,
+      requestId:
+        input.request.requestId ??
+        `${input.request.payer}:${input.request.invoiceId}:${input.nowMs}`,
       payer: input.request.payer,
       invoiceId: String(input.request.invoiceId),
-      amount: String(BigInt(Math.max(0, Math.trunc(Number.isFinite(requestAmount) ? requestAmount : 0)))),
+      amount: String(
+        BigInt(Math.max(0, Math.trunc(Number.isFinite(requestAmount) ? requestAmount : 0)))
+      ),
       trustScore: computed.trustScore,
       confidence: computed.confidence,
       confidenceLevel: computed.confidenceLevel,
@@ -413,7 +422,7 @@ export class OracleVerifier {
 
   private async computeVerification(
     request: OracleVerificationRequest,
-    cacheKey: string,
+    cacheKey: string
   ): Promise<OracleVerificationResponse> {
     const nowMs = this.now();
     let history: IndexerInvoiceHistoryEntry[] = [];
@@ -466,7 +475,7 @@ export interface LedgerRpcOracleOptions {
 
 export async function fetchOnChainReputation(
   options: LedgerRpcOracleOptions,
-  address: string,
+  address: string
 ): Promise<ReputationSnapshot> {
   try {
     const server = new SorobanRpc.Server(options.rpcUrl);
@@ -495,7 +504,9 @@ export async function fetchOnChainReputation(
       if (native instanceof Map) {
         return native.get(key);
       }
-      return native && typeof native === 'object' ? (native as Record<string, unknown>)[key] : undefined;
+      return native && typeof native === 'object'
+        ? (native as Record<string, unknown>)[key]
+        : undefined;
     };
 
     return {

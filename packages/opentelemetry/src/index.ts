@@ -9,7 +9,7 @@ export class ILNInstrumentation {
   private simulationDuration: any;
   private errorCount: any;
 
-  constructor(options: { meterProvider?: any, tracerProvider?: any } = {}) {
+  constructor(options: { meterProvider?: any; tracerProvider?: any } = {}) {
     this.tracer = trace.getTracer('@invoice-liquidity/sdk');
     this.meter = metrics.getMeter('@invoice-liquidity/sdk');
 
@@ -35,14 +35,14 @@ export class ILNInstrumentation {
   public instrumentClient<T extends Record<string, any>>(client: T): T {
     const instrumented = { ...client };
     const prototype = Object.getPrototypeOf(client);
-    
+
     const methods = Object.getOwnPropertyNames(prototype).filter(
-      p => typeof client[p] === 'function' && p !== 'constructor'
+      (p) => typeof client[p] === 'function' && p !== 'constructor'
     );
 
     for (const method of methods) {
       const original = client[method];
-      
+
       (instrumented as any)[method] = async (...args: any[]) => {
         const span = this.tracer.startSpan(`ILNClient.${method}`);
         const startTime = Date.now();
@@ -57,14 +57,14 @@ export class ILNInstrumentation {
           const result = await original.apply(client, args);
           span.setStatus({ code: SpanStatusCode.OK });
           span.setAttribute('status', 'success');
-          
+
           const duration = Date.now() - startTime;
           if (method.includes('simulate')) {
             this.simulationDuration.record(duration, { method });
           } else {
             this.transactionDuration.record(duration, { method });
           }
-          
+
           return result;
         } catch (error: any) {
           span.setStatus({
@@ -72,17 +72,17 @@ export class ILNInstrumentation {
             message: error.message,
           });
           span.setAttribute('status', 'error');
-          
+
           const errorCode = error.code || 'UNKNOWN_ERROR';
           this.errorCount.add(1, { method, code: errorCode });
-          
+
           throw error;
         } finally {
           span.end();
         }
       };
     }
-    
+
     return instrumented as T;
   }
 }

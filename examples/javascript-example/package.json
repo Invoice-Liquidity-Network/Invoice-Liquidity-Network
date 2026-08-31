@@ -11,8 +11,9 @@
     "node": ">=20"
   },
   "dependencies": {
-    "@iln/sdk": "^0.1.0",
+    "@iln/sdk": "file:../../sdk",
     "@stellar/stellar-sdk": "^15.0.1",
     "dotenv": "^16.4.5"
-  }
+  },
+  "private": true
 }

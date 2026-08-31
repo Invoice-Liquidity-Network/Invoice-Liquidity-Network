@@ -21,7 +21,7 @@ on:
         default: 5
     outputs:
       healthy:
-        description: "true when Horizon responds with a valid stellar.json document"
+        description: 'true when Horizon responds with a valid stellar.json document'
         value: ${{ jobs.health.outputs.healthy }}
 
 # Least-privilege: no repo contents are accessed; the job only makes HTTP probes.
@@ -30,7 +30,7 @@ permissions: {}
 jobs:
   health:
     name: Horizon testnet health
-    runs-on: namespace-profile-nursca
+    runs-on: ubuntu-latest
     outputs:
       healthy: ${{ steps.check.outputs.healthy }}
     steps:

@@ -9,7 +9,7 @@ import {
   XAxis,
   YAxis,
 } from 'recharts';
-import type { Invoice } from '@invoice-liquidity/sdk';
+import type { Invoice } from '@iln/sdk';
 import { useAuctionRate } from '../hooks/useAuctionRate';
 import { ILNContext } from '../context/ILNContext';
 
@@ -21,7 +21,11 @@ export interface AuctionRateTickerProps {
   showChart?: boolean;
   className?: string;
   style?: React.CSSProperties;
-  onFund?: (params: { invoiceId: number; currentDiscountBps: number; funder?: string }) => Promise<void> | void;
+  onFund?: (params: {
+    invoiceId: number;
+    currentDiscountBps: number;
+    funder?: string;
+  }) => Promise<void> | void;
   onFunded?: () => void;
   onError?: (error: Error) => void;
 }
@@ -64,14 +68,16 @@ function chartTooltip({
   if (!active || !payload?.length) return null;
 
   return (
-    <div style={{
-      background: '#111827',
-      color: '#F9FAFB',
-      padding: '10px 12px',
-      borderRadius: 12,
-      boxShadow: '0 14px 30px rgba(0,0,0,0.18)',
-      fontSize: 12,
-    }}>
+    <div
+      style={{
+        background: '#111827',
+        color: '#F9FAFB',
+        padding: '10px 12px',
+        borderRadius: 12,
+        boxShadow: '0 14px 30px rgba(0,0,0,0.18)',
+        fontSize: 12,
+      }}
+    >
       <div style={{ fontWeight: 700 }}>{formatBps(Number(payload[0]?.value ?? 0))}</div>
       <div>{new Date(Number(label) * 1000).toLocaleTimeString()}</div>
     </div>
@@ -89,7 +95,7 @@ export function AuctionRateTicker({
   onFund,
   onFunded,
   onError,
-}: AuctionRateTickerProps): JSX.Element {
+}: AuctionRateTickerProps) {
   const client = useContext(ILNContext);
   const queryClient = useQueryClient();
   const auction = useAuctionRate(invoiceId, {
@@ -115,9 +121,15 @@ export function AuctionRateTicker({
         throw new Error('Connect an LP wallet before funding this auction.');
       }
 
-      await (client as unknown as {
-        fundInvoice(params: { invoiceId: number; funder: string; expectedDiscountBps?: number }): Promise<unknown>;
-      }).fundInvoice({
+      await (
+        client as unknown as {
+          fundInvoice(params: {
+            invoiceId: number;
+            funder: string;
+            expectedDiscountBps?: number;
+          }): Promise<unknown>;
+        }
+      ).fundInvoice({
         invoiceId,
         funder,
         expectedDiscountBps: auction.currentDiscountBps,
@@ -131,22 +143,23 @@ export function AuctionRateTicker({
   });
 
   const chartData = useMemo(
-    () => auction.rateHistory.map((point) => ({
-      timestamp: point.timestamp,
-      rate: point.discountBps,
-    })),
-    [auction.rateHistory],
+    () =>
+      auction.rateHistory.map((point) => ({
+        timestamp: point.timestamp,
+        rate: point.discountBps,
+      })),
+    [auction.rateHistory]
   );
 
   const disabledReason = auction.isExpired
     ? 'Auction expired'
     : auction.isFunded
-      ? 'Already funded'
-      : !client && !onFund
-        ? 'Connect ILN client'
-        : !funder && !onFund
-          ? 'Connect LP wallet'
-          : null;
+    ? 'Already funded'
+    : !client && !onFund
+    ? 'Connect ILN client'
+    : !funder && !onFund
+    ? 'Connect LP wallet'
+    : null;
 
   const handleFund = async () => {
     try {
@@ -156,7 +169,8 @@ export function AuctionRateTicker({
     }
   };
 
-  const actionError = auction.error ?? (fundMutation.error instanceof Error ? fundMutation.error : null);
+  const actionError =
+    auction.error ?? (fundMutation.error instanceof Error ? fundMutation.error : null);
 
   return (
     <section
@@ -187,24 +201,37 @@ export function AuctionRateTicker({
       />
 
       <div style={{ position: 'relative', zIndex: 1 }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', gap: 16, flexWrap: 'wrap', marginBottom: 18 }}>
+        <div
+          style={{
+            display: 'flex',
+            justifyContent: 'space-between',
+            gap: 16,
+            flexWrap: 'wrap',
+            marginBottom: 18,
+          }}
+        >
           <div>
-            <div style={{
-              color: ACCENT,
-              fontSize: 11,
-              fontWeight: 800,
-              letterSpacing: '0.16em',
-              textTransform: 'uppercase',
-              marginBottom: 6,
-            }}>
+            <div
+              style={{
+                color: ACCENT,
+                fontSize: 11,
+                fontWeight: 800,
+                letterSpacing: '0.16em',
+                textTransform: 'uppercase',
+                marginBottom: 6,
+              }}
+            >
               Dutch Auction
             </div>
-            <h3 id={`auction-rate-${invoiceId}`} style={{
-              margin: 0,
-              fontFamily: '"Newsreader", Georgia, serif',
-              fontSize: 'clamp(1.6rem, 4vw, 2.4rem)',
-              lineHeight: 1,
-            }}>
+            <h3
+              id={`auction-rate-${invoiceId}`}
+              style={{
+                margin: 0,
+                fontFamily: '"Newsreader", Georgia, serif',
+                fontSize: 'clamp(1.6rem, 4vw, 2.4rem)',
+                lineHeight: 1,
+              }}
+            >
               {auction.isLoading ? 'Loading rate…' : formatBps(auction.currentDiscountBps)}
             </h3>
           </div>
@@ -229,12 +256,14 @@ export function AuctionRateTicker({
           </button>
         </div>
 
-        <div style={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))',
-          gap: 12,
-          marginBottom: showChart ? 16 : 0,
-        }}>
+        <div
+          style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))',
+            gap: 12,
+            marginBottom: showChart ? 16 : 0,
+          }}
+        >
           <div style={metricStyle}>
             <span style={metricLabelStyle}>Starts at</span>
             <strong>{formatBps(auction.startDiscountBps)}</strong>
@@ -245,13 +274,19 @@ export function AuctionRateTicker({
           </div>
           <div style={metricStyle}>
             <span style={metricLabelStyle}>Next increment</span>
-            <strong>{auction.nextIncrementAt ? formatCountdown(auction.secondsUntilNextIncrement) : 'Ceiling reached'}</strong>
+            <strong>
+              {auction.nextIncrementAt
+                ? formatCountdown(auction.secondsUntilNextIncrement)
+                : 'Ceiling reached'}
+            </strong>
           </div>
         </div>
 
         {auction.nextIncrementAt && (
           <div
-            aria-label={`Next rate increment progress: ${Math.round(auction.progressToNextStep * 100)} percent`}
+            aria-label={`Next rate increment progress: ${Math.round(
+              auction.progressToNextStep * 100
+            )} percent`}
             style={{
               height: 8,
               background: PANEL_ALT,
@@ -260,12 +295,14 @@ export function AuctionRateTicker({
               marginBottom: showChart ? 16 : 0,
             }}
           >
-            <div style={{
-              width: `${Math.round(auction.progressToNextStep * 100)}%`,
-              height: '100%',
-              background: `linear-gradient(90deg, ${ACCENT}, ${POSITIVE})`,
-              borderRadius: 999,
-            }} />
+            <div
+              style={{
+                width: `${Math.round(auction.progressToNextStep * 100)}%`,
+                height: '100%',
+                background: `linear-gradient(90deg, ${ACCENT}, ${POSITIVE})`,
+                borderRadius: 999,
+              }}
+            />
           </div>
         )}
 
@@ -282,10 +319,19 @@ export function AuctionRateTicker({
                 <CartesianGrid strokeDasharray="4 4" stroke={BORDER} />
                 <XAxis
                   dataKey="timestamp"
-                  tickFormatter={(value) => new Date(Number(value) * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                  tickFormatter={(value) =>
+                    new Date(Number(value) * 1000).toLocaleTimeString([], {
+                      hour: '2-digit',
+                      minute: '2-digit',
+                    })
+                  }
                   stroke={MUTED}
                 />
-                <YAxis tickFormatter={(value) => formatBps(Number(value))} stroke={MUTED} width={56} />
+                <YAxis
+                  tickFormatter={(value) => formatBps(Number(value))}
+                  stroke={MUTED}
+                  width={56}
+                />
                 <Tooltip content={chartTooltip as never} />
                 <Area
                   type="stepAfter"
@@ -300,7 +346,10 @@ export function AuctionRateTicker({
         )}
 
         {actionError && (
-          <p role="alert" style={{ margin: '12px 0 0 0', color: DANGER, fontSize: 13, fontWeight: 600 }}>
+          <p
+            role="alert"
+            style={{ margin: '12px 0 0 0', color: DANGER, fontSize: 13, fontWeight: 600 }}
+          >
             {actionError.message}
           </p>
         )}

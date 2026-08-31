@@ -1,10 +1,14 @@
-import { useState, useRef, useCallback } from "react";
-import { useBatchSubmitInvoice } from "../hooks/useBatchSubmitInvoice";
-import type { BatchInvoiceInput, InvoiceProgress, BatchProgress } from "../hooks/useBatchSubmitInvoice";
-import { parseCsv, formatBatchErrorSummary } from "../utils/csvImport";
-import type { CsvInvoiceRow, CsvValidationError } from "../utils/csvImport";
-import { saveBatchEntry } from "../utils/batchHistory";
-import type { BatchHistoryEntry } from "../utils/batchHistory";
+import { useState, useRef, useCallback } from 'react';
+import { useBatchSubmitInvoice } from '../hooks/useBatchSubmitInvoice';
+import type {
+  BatchInvoiceInput,
+  InvoiceProgress,
+  BatchProgress,
+} from '../hooks/useBatchSubmitInvoice';
+import { parseCsv, formatBatchErrorSummary } from '../utils/csvImport';
+import type { CsvInvoiceRow, CsvValidationError } from '../utils/csvImport';
+import { saveBatchEntry } from '../utils/batchHistory';
+import type { BatchHistoryEntry } from '../utils/batchHistory';
 
 interface BatchInvoiceFormProps {
   freelancer: string;
@@ -30,7 +34,7 @@ function InvoiceRowInput({
         className="flex-1 min-w-0 px-2 py-1 text-xs border border-gray-200 rounded font-mono"
         placeholder="payer (G...)"
         value={invoice.payer}
-        onChange={(e) => onChange(index, "payer", e.target.value)}
+        onChange={(e) => onChange(index, 'payer', e.target.value)}
       />
       <input
         className="w-24 px-2 py-1 text-xs border border-gray-200 rounded"
@@ -39,21 +43,21 @@ function InvoiceRowInput({
         min="0"
         placeholder="amount"
         value={Number(invoice.amount) / 10_000_000}
-        onChange={(e) => onChange(index, "amount", e.target.value)}
+        onChange={(e) => onChange(index, 'amount', e.target.value)}
       />
       <input
         className="w-20 px-2 py-1 text-xs border border-gray-200 rounded"
         type="number"
         placeholder="rate bps"
         value={invoice.discountRate}
-        onChange={(e) => onChange(index, "discountRate", e.target.value)}
+        onChange={(e) => onChange(index, 'discountRate', e.target.value)}
       />
       <input
         className="w-28 px-2 py-1 text-xs border border-gray-200 rounded"
         type="number"
         placeholder="due date (unix)"
         value={invoice.dueDate}
-        onChange={(e) => onChange(index, "dueDate", e.target.value)}
+        onChange={(e) => onChange(index, 'dueDate', e.target.value)}
       />
       <button
         onClick={() => onRemove(index)}
@@ -67,24 +71,25 @@ function InvoiceRowInput({
 }
 
 function ProgressTracker({ progress }: { progress: BatchProgress }) {
-  const pct = progress.totalCount > 0
-    ? Math.round((progress.completedCount / progress.totalCount) * 100)
-    : 0;
+  const pct =
+    progress.totalCount > 0 ? Math.round((progress.completedCount / progress.totalCount) * 100) : 0;
   const elapsed = Math.floor((Date.now() - progress.startedAt) / 1000);
   const remaining =
     progress.completedCount > 0 && progress.completedCount < progress.totalCount
-      ? Math.round((elapsed / progress.completedCount) * (progress.totalCount - progress.completedCount))
+      ? Math.round(
+          (elapsed / progress.completedCount) * (progress.totalCount - progress.completedCount)
+        )
       : 0;
 
   const statusIcon = (status: string) => {
     switch (status) {
-      case "pending":
+      case 'pending':
         return <span className="w-3 h-3 rounded-full bg-gray-300 inline-block" />;
-      case "submitting":
+      case 'submitting':
         return <span className="w-3 h-3 rounded-full bg-blue-400 animate-pulse inline-block" />;
-      case "success":
+      case 'success':
         return <span className="text-green-500 text-xs">check</span>;
-      case "failed":
+      case 'failed':
         return <span className="text-red-500 text-xs">x</span>;
       default:
         return null;
@@ -98,7 +103,7 @@ function ProgressTracker({ progress }: { progress: BatchProgress }) {
           Batch Progress ({progress.completedCount}/{progress.totalCount})
         </h3>
         <span className="text-xs text-gray-400">
-          {elapsed}s elapsed{remaining > 0 ? ` \u00b7 ~${remaining}s remaining` : ""}
+          {elapsed}s elapsed{remaining > 0 ? ` \u00b7 ~${remaining}s remaining` : ''}
         </span>
       </div>
 
@@ -112,7 +117,7 @@ function ProgressTracker({ progress }: { progress: BatchProgress }) {
       >
         <div
           className={`h-2 rounded-full transition-all duration-300 ${
-            pct === 100 ? "bg-green-500" : pct > 50 ? "bg-blue-500" : "bg-blue-400"
+            pct === 100 ? 'bg-green-500' : pct > 50 ? 'bg-blue-500' : 'bg-blue-400'
           }`}
           style={{ width: `${pct}%` }}
         />
@@ -121,7 +126,9 @@ function ProgressTracker({ progress }: { progress: BatchProgress }) {
       <div className="flex gap-4 text-xs mb-3">
         <span className="text-green-600">{progress.successCount} succeeded</span>
         <span className="text-red-600">{progress.failedCount} failed</span>
-        <span className="text-gray-400">{progress.totalCount - progress.completedCount} pending</span>
+        <span className="text-gray-400">
+          {progress.totalCount - progress.completedCount} pending
+        </span>
       </div>
 
       <div className="space-y-1 max-h-40 overflow-y-auto">
@@ -135,13 +142,11 @@ function ProgressTracker({ progress }: { progress: BatchProgress }) {
             <span className="font-mono text-gray-700 flex-1 truncate">
               {inv.payer.slice(0, 8)}...
             </span>
-            <span className="text-gray-400">
-              {Number(inv.amount) / 10_000_000} USDC
-            </span>
-            {inv.status === "success" && inv.invoiceId !== undefined && (
+            <span className="text-gray-400">{Number(inv.amount) / 10_000_000} USDC</span>
+            {inv.status === 'success' && inv.invoiceId !== undefined && (
               <span className="text-green-600 font-mono">#{String(inv.invoiceId)}</span>
             )}
-            {inv.status === "failed" && inv.error && (
+            {inv.status === 'failed' && inv.error && (
               <span className="text-red-500 truncate max-w-[200px]" title={inv.error}>
                 {inv.error}
               </span>
@@ -154,20 +159,20 @@ function ProgressTracker({ progress }: { progress: BatchProgress }) {
 }
 
 function ErrorSummary({ results }: { results: InvoiceProgress[] }) {
-  const failed = results.filter((r) => r.status === "failed");
+  const failed = results.filter((r) => r.status === 'failed');
   if (failed.length === 0) return null;
 
   const summaries = formatBatchErrorSummary(
-    failed.map((r) => ({ index: r.index, success: false, error: r.error })),
+    failed.map((r) => ({ index: r.index, success: false, error: r.error }))
   );
 
   return (
     <div className="bg-red-50 border border-red-200 rounded-lg p-3" role="alert">
-      <h4 className="text-sm font-semibold text-red-700 mb-1">
-        {failed.length} invoice(s) failed
-      </h4>
+      <h4 className="text-sm font-semibold text-red-700 mb-1">{failed.length} invoice(s) failed</h4>
       {summaries.map((s, i) => (
-        <p key={i} className="text-xs text-red-600 mb-0.5">{s}</p>
+        <p key={i} className="text-xs text-red-600 mb-0.5">
+          {s}
+        </p>
       ))}
     </div>
   );
@@ -187,7 +192,7 @@ function CsvPreview({
   return (
     <div className="bg-white border border-gray-200 rounded-lg p-4">
       <h3 className="text-sm font-semibold text-gray-700 mb-2">
-        CSV Preview ({rows.length} invoice{rows.length !== 1 ? "s" : ""})
+        CSV Preview ({rows.length} invoice{rows.length !== 1 ? 's' : ''})
       </h3>
 
       {errors.length > 0 && (
@@ -246,19 +251,16 @@ function CsvPreview({
   );
 }
 
-export function BatchInvoiceForm({ freelancer, onComplete, maxInvoices = 10 }: BatchInvoiceFormProps) {
-  const {
-    submitBatch,
-    batchProgress,
-    isPending,
-    error,
-    reset,
-    retryFailed,
-    failedInvoices: failedInputs,
-  } = useBatchSubmitInvoice();
+export function BatchInvoiceForm({
+  freelancer,
+  onComplete,
+  maxInvoices = 10,
+}: BatchInvoiceFormProps) {
+  const { submitBatch, batchProgress, isPending, error, reset, retryFailed } =
+    useBatchSubmitInvoice();
 
   const [invoices, setInvoices] = useState<BatchInvoiceInput[]>(() => [
-    { freelancer, payer: "", amount: 0n, dueDate: 0, discountRate: 0 },
+    { freelancer, payer: '', amount: 0n, dueDate: 0, discountRate: 0 },
   ]);
   const [csvPreview, setCsvPreview] = useState<{
     rows: CsvInvoiceRow[];
@@ -272,21 +274,21 @@ export function BatchInvoiceForm({ freelancer, onComplete, maxInvoices = 10 }: B
         prev.map((inv, i) => {
           if (i !== index) return inv;
           switch (field) {
-            case "payer":
+            case 'payer':
               return { ...inv, payer: value };
-            case "amount":
-              return { ...inv, amount: BigInt(Math.round(parseFloat(value || "0") * 10_000_000)) };
-            case "discountRate":
-              return { ...inv, discountRate: parseInt(value || "0", 10) };
-            case "dueDate":
-              return { ...inv, dueDate: parseInt(value || "0", 10) };
+            case 'amount':
+              return { ...inv, amount: BigInt(Math.round(parseFloat(value || '0') * 10_000_000)) };
+            case 'discountRate':
+              return { ...inv, discountRate: parseInt(value || '0', 10) };
+            case 'dueDate':
+              return { ...inv, dueDate: parseInt(value || '0', 10) };
             default:
               return inv;
           }
-        }),
+        })
       );
     },
-    [],
+    []
   );
 
   const handleRemove = useCallback((index: number) => {
@@ -296,12 +298,12 @@ export function BatchInvoiceForm({ freelancer, onComplete, maxInvoices = 10 }: B
   const handleAdd = useCallback(() => {
     setInvoices((prev) => [
       ...prev,
-      { freelancer, payer: "", amount: 0n, dueDate: 0, discountRate: 0 },
+      { freelancer, payer: '', amount: 0n, dueDate: 0, discountRate: 0 },
     ]);
   }, [freelancer]);
 
   const handleSubmit = useCallback(async () => {
-    const valid = invoices.filter((inv) => inv.payer.startsWith("G") && inv.amount > 0n);
+    const valid = invoices.filter((inv) => inv.payer.startsWith('G') && inv.amount > 0n);
     if (valid.length === 0) return;
 
     try {
@@ -343,7 +345,7 @@ export function BatchInvoiceForm({ freelancer, onComplete, maxInvoices = 10 }: B
       setCsvPreview(parsed);
     };
     reader.readAsText(file);
-    e.target.value = "";
+    e.target.value = '';
   }, []);
 
   const handleCsvConfirm = useCallback(() => {
@@ -425,9 +427,7 @@ export function BatchInvoiceForm({ freelancer, onComplete, maxInvoices = 10 }: B
         />
       )}
 
-      {isSubmitting && batchProgress && (
-        <ProgressTracker progress={batchProgress} />
-      )}
+      {isSubmitting && batchProgress && <ProgressTracker progress={batchProgress} />}
 
       <div className="space-y-2">
         {invoices.map((inv, i) => (
@@ -460,11 +460,16 @@ export function BatchInvoiceForm({ freelancer, onComplete, maxInvoices = 10 }: B
             </button>
           )}
         </div>
-        <span className="text-xs text-gray-400">{invoices.length}/{maxInvoices}</span>
+        <span className="text-xs text-gray-400">
+          {invoices.length}/{maxInvoices}
+        </span>
       </div>
 
       {error && (
-        <div className="bg-red-50 border border-red-200 rounded p-2 text-xs text-red-600" role="alert">
+        <div
+          className="bg-red-50 border border-red-200 rounded p-2 text-xs text-red-600"
+          role="alert"
+        >
           {error.message}
         </div>
       )}
@@ -473,13 +478,15 @@ export function BatchInvoiceForm({ freelancer, onComplete, maxInvoices = 10 }: B
         onClick={handleSubmit}
         disabled={
           isSubmitting ||
-          invoices.filter((inv) => inv.payer.startsWith("G") && inv.amount > 0n).length === 0
+          invoices.filter((inv) => inv.payer.startsWith('G') && inv.amount > 0n).length === 0
         }
         className="w-full px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
       >
         {isSubmitting
           ? `Submitting ${batchProgress?.completedCount ?? 0}/${invoices.length}...`
-          : `Submit ${invoices.filter((inv) => inv.payer.startsWith("G") && inv.amount > 0n).length} Invoice(s)`}
+          : `Submit ${
+              invoices.filter((inv) => inv.payer.startsWith('G') && inv.amount > 0n).length
+            } Invoice(s)`}
       </button>
     </div>
   );

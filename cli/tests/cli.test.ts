@@ -1,42 +1,52 @@
-import { Keypair } from "@stellar/stellar-sdk";
-import { Writable } from "node:stream";
+import { Keypair } from '@stellar/stellar-sdk';
+import { Writable } from 'node:stream';
 
-import { describe, expect, it, vi, afterEach } from "vitest";
+import { describe, expect, it, vi, afterEach } from 'vitest';
 
-import * as sdk from "@invoice-liquidity/sdk";
-import * as devSeedModule from "../src/dev-seed";
-import { runCli } from "../src/cli";
-import type { Invoice, ListedInvoice, ResolvedConfig } from "../src/types";
+import * as sdk from '@iln/sdk';
+import * as devSeedModule from '../src/dev-seed';
+import { runCli } from '../src/cli';
+import type { Invoice, ListedInvoice, ResolvedConfig } from '../src/types';
 
 afterEach(() => {
   vi.restoreAllMocks();
 });
 
 const TEST_CONFIG: ResolvedConfig = {
-  contractId: validAddress("C"),
-  keypairPath: "/tmp/iln.secret",
-  network: "testnet",
-  networkPassphrase: "Test SDF Network ; September 2015",
-  rpcUrl: "https://soroban-testnet.stellar.org",
-  tokenId: validAddress("T"),
+  contractId: validAddress('C'),
+  keypairPath: '/tmp/iln.secret',
+  network: 'testnet',
+  networkPassphrase: 'Test SDF Network ; September 2015',
+  rpcUrl: 'https://soroban-testnet.stellar.org',
+  tokenId: validAddress('T'),
 };
 
-describe("runCli", () => {
-  it("submits an invoice using config token fallback", async () => {
+describe('runCli', () => {
+  it('submits an invoice using config token fallback', async () => {
     const stdout = createMemoryStream();
     const stderr = createMemoryStream();
     const client = {
-      submitInvoice: vi.fn().mockResolvedValue({ invoiceId: 42n, txHash: "abc123" }),
+      submitInvoice: vi.fn().mockResolvedValue({ invoiceId: 42n, txHash: 'abc123' }),
     };
 
     const exitCode = await runCli(
-      ["submit", "--payer", validAddress(), "--amount", "100", "--due", "2025-12-31", "--rate", "300"],
+      [
+        'submit',
+        '--payer',
+        validAddress(),
+        '--amount',
+        '100',
+        '--due',
+        '2025-12-31',
+        '--rate',
+        '300',
+      ],
       {
         createClient: () => client as any,
         loadConfig: () => TEST_CONFIG,
         stderr,
         stdout,
-      },
+      }
     );
 
     expect(exitCode).toBe(0);
@@ -45,19 +55,19 @@ describe("runCli", () => {
         amount: 1_000_000_000n,
         discountRate: 300,
         tokenId: TEST_CONFIG.tokenId,
-      }),
+      })
     );
-    expect(stdout.toString()).toContain("Submitted invoice 42");
-    expect(stderr.toString()).toBe("");
+    expect(stdout.toString()).toContain('Submitted invoice 42');
+    expect(stderr.toString()).toBe('');
   });
 
-  it("auto-funds the remaining balance when amount is omitted", async () => {
+  it('auto-funds the remaining balance when amount is omitted', async () => {
     const stdout = createMemoryStream();
     const client = {
-      fundInvoice: vi.fn().mockResolvedValue({ hash: "tx-hash" }),
+      fundInvoice: vi.fn().mockResolvedValue({ hash: 'tx-hash' }),
     };
 
-    const exitCode = await runCli(["fund", "--id", "7"], {
+    const exitCode = await runCli(['fund', '--id', '7'], {
       createClient: () => client as any,
       loadConfig: () => TEST_CONFIG,
       stderr: createMemoryStream(),
@@ -66,10 +76,10 @@ describe("runCli", () => {
 
     expect(exitCode).toBe(0);
     expect(client.fundInvoice).toHaveBeenCalledWith(7n, undefined);
-    expect(stdout.toString()).toContain("Funded invoice 7");
+    expect(stdout.toString()).toContain('Funded invoice 7');
   });
 
-  it("prints invoice status details", async () => {
+  it('prints invoice status details', async () => {
     const stdout = createMemoryStream();
     const invoice: Invoice = {
       amount: 1_000_000_000n,
@@ -80,15 +90,15 @@ describe("runCli", () => {
       fundedAt: null,
       funder: null,
       id: 3n,
-      payer: validAddress("B"),
-      status: "Pending",
-      token: "CTOKEN",
+      payer: validAddress('B'),
+      status: 'Pending',
+      token: 'CTOKEN',
     };
     const client = {
       getInvoice: vi.fn().mockResolvedValue(invoice),
     };
 
-    const exitCode = await runCli(["status", "--id", "3"], {
+    const exitCode = await runCli(['status', '--id', '3'], {
       createClient: () => client as any,
       loadConfig: () => TEST_CONFIG,
       stderr: createMemoryStream(),
@@ -96,20 +106,22 @@ describe("runCli", () => {
     });
 
     expect(exitCode).toBe(0);
-    expect(stdout.toString()).toContain("Status");
-    expect(stdout.toString()).toContain("Pending");
+    expect(stdout.toString()).toContain('Status');
+    expect(stdout.toString()).toContain('Pending');
   });
 
-  it("lists invoices for an address", async () => {
+  it('lists invoices for an address', async () => {
     const stdout = createMemoryStream();
     const client = {
-      listInvoicesByAddress: vi.fn().mockResolvedValue([
-        createListedInvoice({ id: 1n, role: "freelancer", status: "Pending" }),
-        createListedInvoice({ id: 2n, role: "payer", status: "Funded" }),
-      ]),
+      listInvoicesByAddress: vi
+        .fn()
+        .mockResolvedValue([
+          createListedInvoice({ id: 1n, role: 'freelancer', status: 'Pending' }),
+          createListedInvoice({ id: 2n, role: 'payer', status: 'Funded' }),
+        ]),
     };
 
-    const exitCode = await runCli(["list", "--address", validAddress()], {
+    const exitCode = await runCli(['list', '--address', validAddress()], {
       createClient: () => client as any,
       loadConfig: () => TEST_CONFIG,
       stderr: createMemoryStream(),
@@ -117,12 +129,12 @@ describe("runCli", () => {
     });
 
     expect(exitCode).toBe(0);
-    expect(stdout.toString()).toContain("ID");
-    expect(stdout.toString()).toContain("freelancer");
-    expect(stdout.toString()).toContain("Funded");
+    expect(stdout.toString()).toContain('ID');
+    expect(stdout.toString()).toContain('freelancer');
+    expect(stdout.toString()).toContain('Funded');
   });
 
-  it("prints live protocol configuration", async () => {
+  it('prints live protocol configuration', async () => {
     const stdout = createMemoryStream();
     const client = {
       getProtocolConfig: vi.fn().mockResolvedValue({
@@ -134,7 +146,7 @@ describe("runCli", () => {
       }),
     };
 
-    const exitCode = await runCli(["protocol-config"], {
+    const exitCode = await runCli(['protocol-config'], {
       createClient: () => client as any,
       loadConfig: () => TEST_CONFIG,
       stderr: createMemoryStream(),
@@ -143,32 +155,35 @@ describe("runCli", () => {
 
     expect(exitCode).toBe(0);
     expect(client.getProtocolConfig).toHaveBeenCalledTimes(1);
-    expect(stdout.toString()).toContain("Min Amount");
-    expect(stdout.toString()).toContain("10000000");
-    expect(stdout.toString()).toContain("Fee");
+    expect(stdout.toString()).toContain('Min Amount');
+    expect(stdout.toString()).toContain('10000000');
+    expect(stdout.toString()).toContain('Fee');
   });
 
-  it("prints actionable errors", async () => {
+  it('prints actionable errors', async () => {
     const stderr = createMemoryStream();
 
-    const exitCode = await runCli(["submit", "--payer", "not-a-key", "--amount", "100", "--due", "2025-12-31", "--rate", "300"], {
-      createClient: () => ({}) as any,
-      loadConfig: () => TEST_CONFIG,
-      stderr,
-      stdout: createMemoryStream(),
-    });
+    const exitCode = await runCli(
+      ['submit', '--payer', 'not-a-key', '--amount', '100', '--due', '2025-12-31', '--rate', '300'],
+      {
+        createClient: () => ({} as any),
+        loadConfig: () => TEST_CONFIG,
+        stderr,
+        stdout: createMemoryStream(),
+      }
+    );
 
     expect(exitCode).toBe(1);
-    expect(stderr.toString()).toContain("Invalid payer address");
+    expect(stderr.toString()).toContain('Invalid payer address');
   });
 
-  it("marks an invoice as paid", async () => {
+  it('marks an invoice as paid', async () => {
     const stdout = createMemoryStream();
     const client = {
-      markPaid: vi.fn().mockResolvedValue({ hash: "paid-hash" }),
+      markPaid: vi.fn().mockResolvedValue({ hash: 'paid-hash' }),
     };
 
-    const exitCode = await runCli(["pay", "--id", "42"], {
+    const exitCode = await runCli(['pay', '--id', '42'], {
       createClient: () => client as any,
       loadConfig: () => TEST_CONFIG,
       stderr: createMemoryStream(),
@@ -177,28 +192,40 @@ describe("runCli", () => {
 
     expect(exitCode).toBe(0);
     expect(client.markPaid).toHaveBeenCalledWith(42n);
-    expect(stdout.toString()).toContain("Marked invoice 42 as paid in transaction paid-hash.");
+    expect(stdout.toString()).toContain('Marked invoice 42 as paid in transaction paid-hash.');
   });
 
-  it("filters history by action, id, limit, and format json", async () => {
+  it('filters history by action, id, limit, and format json', async () => {
     const stdout = createMemoryStream();
     const invoices = [
-      createListedInvoice({ id: 1n, role: "freelancer", status: "Pending" }),
-      createListedInvoice({ id: 2n, role: "funder", status: "Funded" }),
-      createListedInvoice({ id: 3n, role: "payer", status: "Paid" }),
+      createListedInvoice({ id: 1n, role: 'freelancer', status: 'Pending' }),
+      createListedInvoice({ id: 2n, role: 'funder', status: 'Funded' }),
+      createListedInvoice({ id: 3n, role: 'payer', status: 'Paid' }),
     ];
     const client = {
       listInvoicesByAddress: vi.fn().mockResolvedValue(invoices),
     };
 
     const exitCode = await runCli(
-      ["history", "--address", validAddress(), "--action", "pay", "--id", "3", "--limit", "1", "--format", "json"],
+      [
+        'history',
+        '--address',
+        validAddress(),
+        '--action',
+        'pay',
+        '--id',
+        '3',
+        '--limit',
+        '1',
+        '--format',
+        'json',
+      ],
       {
         createClient: () => client as any,
         loadConfig: () => TEST_CONFIG,
         stderr: createMemoryStream(),
         stdout,
-      },
+      }
     );
 
     expect(exitCode).toBe(0);
@@ -206,16 +233,16 @@ describe("runCli", () => {
     // The preAction hook writes a "Using ..." banner to stdout before the JSON.
     // Slice from the first '[' to parse only the JSON array.
     const raw = stdout.toString();
-    const output = JSON.parse(raw.slice(raw.indexOf("[")));
+    const output = JSON.parse(raw.slice(raw.indexOf('[')));
     expect(output).toHaveLength(1);
-    expect(output[0].id).toBe("3");
-    expect(output[0].action).toBe("pay");
+    expect(output[0].id).toBe('3');
+    expect(output[0].action).toBe('pay');
   });
 
-  it("rejects invalid history limits and action values", async () => {
+  it('rejects invalid history limits and action values', async () => {
     const stderr = createMemoryStream();
 
-    const invalidLimit = await runCli(["history", "--address", validAddress(), "--limit", "0"], {
+    const invalidLimit = await runCli(['history', '--address', validAddress(), '--limit', '0'], {
       createClient: () => ({ listInvoicesByAddress: vi.fn().mockResolvedValue([]) } as any),
       loadConfig: () => TEST_CONFIG,
       stderr,
@@ -223,35 +250,52 @@ describe("runCli", () => {
     });
 
     expect(invalidLimit).toBe(1);
-    expect(stderr.toString()).toContain("--limit must be a positive integer");
+    expect(stderr.toString()).toContain('--limit must be a positive integer');
 
     const stderr2 = createMemoryStream();
-    const invalidAction = await runCli(["history", "--address", validAddress(), "--action", "unknown"], {
-      createClient: () => ({ listInvoicesByAddress: vi.fn().mockResolvedValue([]) } as any),
-      loadConfig: () => TEST_CONFIG,
-      stderr: stderr2,
-      stdout: createMemoryStream(),
-    });
+    const invalidAction = await runCli(
+      ['history', '--address', validAddress(), '--action', 'unknown'],
+      {
+        createClient: () => ({ listInvoicesByAddress: vi.fn().mockResolvedValue([]) } as any),
+        loadConfig: () => TEST_CONFIG,
+        stderr: stderr2,
+        stdout: createMemoryStream(),
+      }
+    );
 
     expect(invalidAction).toBe(1);
-    expect(stderr2.toString()).toContain("--action must be one of");
+    expect(stderr2.toString()).toContain('--action must be one of');
   });
 
-  it("fails submit when no token ID is configured and no token flag is provided", async () => {
+  it('fails submit when no token ID is configured and no token flag is provided', async () => {
     const stderr = createMemoryStream();
 
-    const exitCode = await runCli(["submit", "--payer", validAddress(), "--amount", "100", "--due", "2025-12-31", "--rate", "300"], {
-      createClient: () => ({ submitInvoice: vi.fn().mockResolvedValue({ invoiceId: 1n, txHash: "hash" }) } as any),
-      loadConfig: () => ({ ...TEST_CONFIG, tokenId: undefined }),
-      stderr,
-      stdout: createMemoryStream(),
-    });
+    const exitCode = await runCli(
+      [
+        'submit',
+        '--payer',
+        validAddress(),
+        '--amount',
+        '100',
+        '--due',
+        '2025-12-31',
+        '--rate',
+        '300',
+      ],
+      {
+        createClient: () =>
+          ({ submitInvoice: vi.fn().mockResolvedValue({ invoiceId: 1n, txHash: 'hash' }) } as any),
+        loadConfig: () => ({ ...TEST_CONFIG, tokenId: undefined }),
+        stderr,
+        stdout: createMemoryStream(),
+      }
+    );
 
     expect(exitCode).toBe(1);
-    expect(stderr.toString()).toContain("Missing token ID");
+    expect(stderr.toString()).toContain('Missing token ID');
   });
 
-  it("runs dev start, stop, and reset using the provided environment helper", async () => {
+  it('runs dev start, stop, and reset using the provided environment helper', async () => {
     const start = vi.fn().mockResolvedValue(undefined);
     const stop = vi.fn().mockResolvedValue(undefined);
     const reset = vi.fn().mockResolvedValue(undefined);
@@ -259,33 +303,33 @@ describe("runCli", () => {
     const createDevEnvironment = vi.fn(() => ({ start, stop, reset, status }));
 
     await expect(
-      runCli(["dev", "start"], {
-        createClient: () => ({}) as any,
+      runCli(['dev', 'start'], {
+        createClient: () => ({} as any),
         createDevEnvironment,
         loadConfig: () => TEST_CONFIG,
         stderr: createMemoryStream(),
         stdout: createMemoryStream(),
-      }),
+      })
     ).resolves.toBe(0);
 
     await expect(
-      runCli(["dev", "stop"], {
-        createClient: () => ({}) as any,
+      runCli(['dev', 'stop'], {
+        createClient: () => ({} as any),
         createDevEnvironment,
         loadConfig: () => TEST_CONFIG,
         stderr: createMemoryStream(),
         stdout: createMemoryStream(),
-      }),
+      })
     ).resolves.toBe(0);
 
     await expect(
-      runCli(["dev", "reset"], {
-        createClient: () => ({}) as any,
+      runCli(['dev', 'reset'], {
+        createClient: () => ({} as any),
         createDevEnvironment,
         loadConfig: () => TEST_CONFIG,
         stderr: createMemoryStream(),
         stdout: createMemoryStream(),
-      }),
+      })
     ).resolves.toBe(0);
 
     expect(createDevEnvironment).toHaveBeenCalledTimes(3);
@@ -294,15 +338,15 @@ describe("runCli", () => {
     expect(reset).toHaveBeenCalledTimes(1);
   });
 
-  it("runs local dev status without requiring ILN config", async () => {
+  it('runs local dev status without requiring ILN config', async () => {
     const stdout = createMemoryStream();
     const status = vi.fn().mockResolvedValue(undefined);
     const loadConfig = vi.fn(() => {
-      throw new Error("config should not be loaded");
+      throw new Error('config should not be loaded');
     });
 
-    const exitCode = await runCli(["dev", "status"], {
-      createClient: () => ({}) as any,
+    const exitCode = await runCli(['dev', 'status'], {
+      createClient: () => ({} as any),
       createDevEnvironment: () => ({
         reset: vi.fn(),
         start: vi.fn(),
@@ -319,24 +363,24 @@ describe("runCli", () => {
     expect(loadConfig).not.toHaveBeenCalled();
   });
 
-  it("decodes ScVal XDR without requiring ILN config", async () => {
+  it('decodes ScVal XDR without requiring ILN config', async () => {
     const stdout = createMemoryStream();
     const loadConfig = vi.fn(() => {
-      throw new Error("config should not be loaded");
+      throw new Error('config should not be loaded');
     });
 
     const exitCode = await runCli(
       [
-        "xdr",
-        "decode",
-        "AAAAEQAAAAEAAAADAAAADgAAAAZhbW91bnQAAAAAAAUAAAAAO5rKAAAAAA4AAAACaWQAAAAAAAUAAAAAAAAAKgAAAA4AAAAGc3RhdHVzAAAAAAAOAAAABkZ1bmRlZAAA",
+        'xdr',
+        'decode',
+        'AAAAEQAAAAEAAAADAAAADgAAAAZhbW91bnQAAAAAAAUAAAAAO5rKAAAAAA4AAAACaWQAAAAAAAUAAAAAAAAAKgAAAA4AAAAGc3RhdHVzAAAAAAAOAAAABkZ1bmRlZAAA',
       ],
       {
-        createClient: () => ({}) as any,
+        createClient: () => ({} as any),
         loadConfig,
         stderr: createMemoryStream(),
         stdout,
-      },
+      }
     );
 
     expect(exitCode).toBe(0);
@@ -345,18 +389,20 @@ describe("runCli", () => {
     expect(stdout.toString()).toContain('"status": "Funded"');
   });
 
-  it("checks SDK compatibility and passes when compatible", async () => {
+  it('checks SDK compatibility and passes when compatible', async () => {
     const stdout = createMemoryStream();
     const client = {
-      getVersion: vi.fn().mockResolvedValue("1.0.0"),
+      getVersion: vi.fn().mockResolvedValue('1.0.0'),
     };
-    vi.spyOn(sdk, "checkCompatibility").mockImplementation(async (fn: (method: string) => Promise<unknown>) => {
-      const sdkVersion = "1.0.0";
-      const contractVersion = (await fn("get_version")) as string;
-      return { sdkVersion, contractVersion, compatible: true, issues: [] };
-    });
+    vi.spyOn(sdk, 'checkCompatibility').mockImplementation(
+      async (fn: (method: string) => Promise<unknown>) => {
+        const sdkVersion = '1.0.0';
+        const contractVersion = (await fn('get_version')) as string;
+        return { sdkVersion, contractVersion, compatible: true, issues: [] };
+      }
+    );
 
-    const exitCode = await runCli(["compat", "check"], {
+    const exitCode = await runCli(['compat', 'check'], {
       createClient: () => client as any,
       loadConfig: () => TEST_CONFIG,
       stderr: createMemoryStream(),
@@ -364,26 +410,26 @@ describe("runCli", () => {
     });
 
     expect(exitCode).toBe(0);
-    expect(stdout.toString()).toContain("SDK Version:      1.0.0");
-    expect(stdout.toString()).toContain("Contract Version: 1.0.0");
-    expect(stdout.toString()).toContain("success Compatibility check passed!");
+    expect(stdout.toString()).toContain('SDK Version:      1.0.0');
+    expect(stdout.toString()).toContain('Contract Version: 1.0.0');
+    expect(stdout.toString()).toContain('success Compatibility check passed!');
   });
 
-  it("fails compatibility check and prints issues", async () => {
+  it('fails compatibility check and prints issues', async () => {
     const stderr = createMemoryStream();
     const client = {
-      getVersion: vi.fn().mockResolvedValue("2.0.0"),
+      getVersion: vi.fn().mockResolvedValue('2.0.0'),
     };
-    vi.spyOn(sdk, "checkCompatibility").mockImplementation(async () => {
+    vi.spyOn(sdk, 'checkCompatibility').mockImplementation(async () => {
       return {
-        sdkVersion: "1.0.0",
-        contractVersion: "2.0.0",
+        sdkVersion: '1.0.0',
+        contractVersion: '2.0.0',
         compatible: false,
-        issues: ["Method mismatch", "Type mismatch"],
+        issues: ['Method mismatch', 'Type mismatch'],
       };
     });
 
-    const exitCode = await runCli(["compat", "check"], {
+    const exitCode = await runCli(['compat', 'check'], {
       createClient: () => client as any,
       loadConfig: () => TEST_CONFIG,
       stderr,
@@ -392,70 +438,81 @@ describe("runCli", () => {
 
     expect(exitCode).toBe(1);
     // Issues and failure message go to stderr via ui.error
-    expect(stderr.toString()).toContain("Compatibility check failed!");
-    expect(stderr.toString()).toContain("Method mismatch");
-    expect(stderr.toString()).toContain("Type mismatch");
+    expect(stderr.toString()).toContain('Compatibility check failed!');
+    expect(stderr.toString()).toContain('Method mismatch');
+    expect(stderr.toString()).toContain('Type mismatch');
   });
 
-  it("rejects invalid dev seed count and token values", async () => {
+  it('rejects invalid dev seed count and token values', async () => {
     const stderr = createMemoryStream();
 
-    const exitCode = await runCli(["dev", "seed", "--count", "0"], {
-      createClient: () => ({}) as any,
+    const exitCode = await runCli(['dev', 'seed', '--count', '0'], {
+      createClient: () => ({} as any),
       loadConfig: () => TEST_CONFIG,
       stderr,
       stdout: createMemoryStream(),
     });
 
     expect(exitCode).toBe(1);
-    expect(stderr.toString()).toContain("--count must be a positive integer");
+    expect(stderr.toString()).toContain('--count must be a positive integer');
 
     const stderr2 = createMemoryStream();
-    const exitCode2 = await runCli(["dev", "seed", "--token", "INVALID"], {
-      createClient: () => ({}) as any,
+    const exitCode2 = await runCli(['dev', 'seed', '--token', 'INVALID'], {
+      createClient: () => ({} as any),
       loadConfig: () => TEST_CONFIG,
       stderr: stderr2,
       stdout: createMemoryStream(),
     });
 
     expect(exitCode2).toBe(1);
-    expect(stderr2.toString()).toContain("Invalid token");
+    expect(stderr2.toString()).toContain('Invalid token');
   });
 
-  it("supports submit --json formatting", async () => {
+  it('supports submit --json formatting', async () => {
     const stdout = createMemoryStream();
     const stderr = createMemoryStream();
     const client = {
-      submitInvoice: vi.fn().mockResolvedValue({ invoiceId: 123n, txHash: "abc123" }),
+      submitInvoice: vi.fn().mockResolvedValue({ invoiceId: 123n, txHash: 'abc123' }),
     };
 
     const exitCode = await runCli(
-      ["--json", "submit", "--payer", validAddress(), "--amount", "100", "--due", "2025-12-31", "--rate", "300"],
+      [
+        '--json',
+        'submit',
+        '--payer',
+        validAddress(),
+        '--amount',
+        '100',
+        '--due',
+        '2025-12-31',
+        '--rate',
+        '300',
+      ],
       {
         createClient: () => client as any,
         loadConfig: () => TEST_CONFIG,
         stderr,
         stdout,
-      },
+      }
     );
 
     expect(exitCode).toBe(0);
     const parsed = JSON.parse(stdout.toString());
     expect(parsed).toEqual({
       success: true,
-      invoiceId: "123",
-      txHash: "abc123",
+      invoiceId: '123',
+      txHash: 'abc123',
     });
-    expect(stderr.toString()).toContain("Using testnet");
+    expect(stderr.toString()).toContain('Using testnet');
   });
 
-  it("supports fund --json formatting", async () => {
+  it('supports fund --json formatting', async () => {
     const stdout = createMemoryStream();
     const client = {
-      fundInvoice: vi.fn().mockResolvedValue({ hash: "tx-hash" }),
+      fundInvoice: vi.fn().mockResolvedValue({ hash: 'tx-hash' }),
     };
 
-    const exitCode = await runCli(["--json", "fund", "--id", "123"], {
+    const exitCode = await runCli(['--json', 'fund', '--id', '123'], {
       createClient: () => client as any,
       loadConfig: () => TEST_CONFIG,
       stderr: createMemoryStream(),
@@ -466,18 +523,18 @@ describe("runCli", () => {
     const parsed = JSON.parse(stdout.toString());
     expect(parsed).toEqual({
       success: true,
-      invoiceId: "123",
-      txHash: "tx-hash",
+      invoiceId: '123',
+      txHash: 'tx-hash',
     });
   });
 
-  it("supports pay --json formatting", async () => {
+  it('supports pay --json formatting', async () => {
     const stdout = createMemoryStream();
     const client = {
-      markPaid: vi.fn().mockResolvedValue({ hash: "tx-hash" }),
+      markPaid: vi.fn().mockResolvedValue({ hash: 'tx-hash' }),
     };
 
-    const exitCode = await runCli(["--json", "pay", "--id", "123"], {
+    const exitCode = await runCli(['--json', 'pay', '--id', '123'], {
       createClient: () => client as any,
       loadConfig: () => TEST_CONFIG,
       stderr: createMemoryStream(),
@@ -488,12 +545,12 @@ describe("runCli", () => {
     const parsed = JSON.parse(stdout.toString());
     expect(parsed).toEqual({
       success: true,
-      invoiceId: "123",
-      txHash: "tx-hash",
+      invoiceId: '123',
+      txHash: 'tx-hash',
     });
   });
 
-  it("outputs protocol config in json when requested", async () => {
+  it('outputs protocol config in json when requested', async () => {
     const stdout = createMemoryStream();
     const client = {
       getProtocolConfig: vi.fn().mockResolvedValue({
@@ -508,7 +565,7 @@ describe("runCli", () => {
       }),
     };
 
-    const exitCode = await runCli(["--json", "protocol-config"], {
+    const exitCode = await runCli(['--json', 'protocol-config'], {
       createClient: () => client as any,
       loadConfig: () => TEST_CONFIG,
       stderr: createMemoryStream(),
@@ -518,7 +575,7 @@ describe("runCli", () => {
     expect(exitCode).toBe(0);
     const parsed = JSON.parse(stdout.toString());
     expect(parsed).toEqual({
-      minInvoiceAmount: "10000000",
+      minInvoiceAmount: '10000000',
       maxDiscountRate: 2000,
       protocolFeeBps: 250,
       minPayerReputation: 70,
@@ -529,12 +586,12 @@ describe("runCli", () => {
     });
   });
 
-  it("formats error messages as JSON when --json option is passed", async () => {
+  it('formats error messages as JSON when --json option is passed', async () => {
     const stdout = createMemoryStream();
     const stderr = createMemoryStream();
 
-    const exitCode = await runCli(["--json", "submit", "--payer", "invalid-address"], {
-      createClient: () => ({}) as any,
+    const exitCode = await runCli(['--json', 'submit', '--payer', 'invalid-address'], {
+      createClient: () => ({} as any),
       loadConfig: () => TEST_CONFIG,
       stderr,
       stdout,
@@ -543,26 +600,26 @@ describe("runCli", () => {
     expect(exitCode).toBe(1);
     const parsed = JSON.parse(stdout.toString());
     expect(parsed.success).toBe(false);
-    expect(parsed.error).toContain("Invalid payer address");
+    expect(parsed.error).toContain('Invalid payer address');
   });
 
-  it("pipes stdin to commands expecting invoice id", async () => {
+  it('pipes stdin to commands expecting invoice id', async () => {
     const stdout = createMemoryStream();
     const client = {
-      fundInvoice: vi.fn().mockResolvedValue({ hash: "tx-hash" }),
+      fundInvoice: vi.fn().mockResolvedValue({ hash: 'tx-hash' }),
     };
 
-    const Readable = require("node:stream").Readable;
+    const Readable = require('node:stream').Readable;
     const mockStdin = new Readable();
-    mockStdin.push("123\n");
+    mockStdin.push('123\n');
     mockStdin.push(null);
     mockStdin.isTTY = false;
 
     const oldStdin = process.stdin;
-    Object.defineProperty(process, "stdin", { value: mockStdin, configurable: true });
+    Object.defineProperty(process, 'stdin', { value: mockStdin, configurable: true });
 
     try {
-      const exitCode = await runCli(["fund"], {
+      const exitCode = await runCli(['fund'], {
         createClient: () => client as any,
         loadConfig: () => TEST_CONFIG,
         stderr: createMemoryStream(),
@@ -572,27 +629,27 @@ describe("runCli", () => {
       expect(exitCode).toBe(0);
       expect(client.fundInvoice).toHaveBeenCalledWith(123n, undefined);
     } finally {
-      Object.defineProperty(process, "stdin", { value: oldStdin, configurable: true });
+      Object.defineProperty(process, 'stdin', { value: oldStdin, configurable: true });
     }
   });
 
-  it("pipes JSON from stdin to commands expecting invoice id", async () => {
+  it('pipes JSON from stdin to commands expecting invoice id', async () => {
     const stdout = createMemoryStream();
     const client = {
-      markPaid: vi.fn().mockResolvedValue({ hash: "tx-hash" }),
+      markPaid: vi.fn().mockResolvedValue({ hash: 'tx-hash' }),
     };
 
-    const Readable = require("node:stream").Readable;
+    const Readable = require('node:stream').Readable;
     const mockStdin = new Readable();
-    mockStdin.push(JSON.stringify({ success: true, invoiceId: "456", txHash: "abc" }));
+    mockStdin.push(JSON.stringify({ success: true, invoiceId: '456', txHash: 'abc' }));
     mockStdin.push(null);
     mockStdin.isTTY = false;
 
     const oldStdin = process.stdin;
-    Object.defineProperty(process, "stdin", { value: mockStdin, configurable: true });
+    Object.defineProperty(process, 'stdin', { value: mockStdin, configurable: true });
 
     try {
-      const exitCode = await runCli(["pay"], {
+      const exitCode = await runCli(['pay'], {
         createClient: () => client as any,
         loadConfig: () => TEST_CONFIG,
         stderr: createMemoryStream(),
@@ -602,16 +659,16 @@ describe("runCli", () => {
       expect(exitCode).toBe(0);
       expect(client.markPaid).toHaveBeenCalledWith(456n);
     } finally {
-      Object.defineProperty(process, "stdin", { value: oldStdin, configurable: true });
+      Object.defineProperty(process, 'stdin', { value: oldStdin, configurable: true });
     }
   });
 });
 
-describe("help output", () => {
+describe('help output', () => {
   async function getHelp(args: string[]): Promise<string> {
     const stdout = createMemoryStream();
     await runCli(args, {
-      createClient: () => ({}) as any,
+      createClient: () => ({} as any),
       loadConfig: () => TEST_CONFIG,
       stderr: createMemoryStream(),
       stdout,
@@ -619,164 +676,164 @@ describe("help output", () => {
     return stdout.toString();
   }
 
-  it("program --help contains Quick tips", async () => {
-    const out = await getHelp(["--help"]);
-    expect(out).toContain("Quick tips");
-    expect(out).toContain("iln dev start");
-    expect(out).toContain("iln dashboard");
+  it('program --help contains Quick tips', async () => {
+    const out = await getHelp(['--help']);
+    expect(out).toContain('Quick tips');
+    expect(out).toContain('iln dev start');
+    expect(out).toContain('iln dashboard');
   });
 
-  it("submit --help contains Examples and See also sections", async () => {
-    const out = await getHelp(["submit", "--help"]);
-    expect(out).toContain("Examples:");
-    expect(out).toContain("--payer");
-    expect(out).toContain("--amount");
-    expect(out).toContain("See also:");
-    expect(out).toContain("iln status");
-    expect(out).toContain("iln list");
+  it('submit --help contains Examples and See also sections', async () => {
+    const out = await getHelp(['submit', '--help']);
+    expect(out).toContain('Examples:');
+    expect(out).toContain('--payer');
+    expect(out).toContain('--amount');
+    expect(out).toContain('See also:');
+    expect(out).toContain('iln status');
+    expect(out).toContain('iln list');
   });
 
-  it("fund --help contains Examples and See also sections", async () => {
-    const out = await getHelp(["fund", "--help"]);
-    expect(out).toContain("Examples:");
-    expect(out).toContain("iln fund --id 42");
-    expect(out).toContain("See also:");
-    expect(out).toContain("iln history");
+  it('fund --help contains Examples and See also sections', async () => {
+    const out = await getHelp(['fund', '--help']);
+    expect(out).toContain('Examples:');
+    expect(out).toContain('iln fund --id 42');
+    expect(out).toContain('See also:');
+    expect(out).toContain('iln history');
   });
 
-  it("pay --help contains Examples, Tips, and See also sections", async () => {
-    const out = await getHelp(["pay", "--help"]);
-    expect(out).toContain("Examples:");
-    expect(out).toContain("iln pay --id 42");
-    expect(out).toContain("Tips:");
-    expect(out).toContain("See also:");
+  it('pay --help contains Examples, Tips, and See also sections', async () => {
+    const out = await getHelp(['pay', '--help']);
+    expect(out).toContain('Examples:');
+    expect(out).toContain('iln pay --id 42');
+    expect(out).toContain('Tips:');
+    expect(out).toContain('See also:');
   });
 
-  it("status --help contains Examples and See also sections", async () => {
-    const out = await getHelp(["status", "--help"]);
-    expect(out).toContain("Examples:");
-    expect(out).toContain("iln status --id 42");
-    expect(out).toContain("See also:");
+  it('status --help contains Examples and See also sections', async () => {
+    const out = await getHelp(['status', '--help']);
+    expect(out).toContain('Examples:');
+    expect(out).toContain('iln status --id 42');
+    expect(out).toContain('See also:');
   });
 
-  it("list --help contains Examples and See also sections", async () => {
-    const out = await getHelp(["list", "--help"]);
-    expect(out).toContain("Examples:");
-    expect(out).toContain("iln list --address");
-    expect(out).toContain("See also:");
+  it('list --help contains Examples and See also sections', async () => {
+    const out = await getHelp(['list', '--help']);
+    expect(out).toContain('Examples:');
+    expect(out).toContain('iln list --address');
+    expect(out).toContain('See also:');
   });
 
-  it("history --help contains Examples and See also sections", async () => {
-    const out = await getHelp(["history", "--help"]);
-    expect(out).toContain("Examples:");
-    expect(out).toContain("iln history --address");
-    expect(out).toContain("--action fund");
-    expect(out).toContain("See also:");
+  it('history --help contains Examples and See also sections', async () => {
+    const out = await getHelp(['history', '--help']);
+    expect(out).toContain('Examples:');
+    expect(out).toContain('iln history --address');
+    expect(out).toContain('--action fund');
+    expect(out).toContain('See also:');
   });
 
-  it("config --help contains Examples and See also sections", async () => {
-    const out = await getHelp(["config", "--help"]);
-    expect(out).toContain("Examples:");
-    expect(out).toContain("iln config");
-    expect(out).toContain("See also:");
-    expect(out).toContain("iln compat check");
+  it('config --help contains Examples and See also sections', async () => {
+    const out = await getHelp(['config', '--help']);
+    expect(out).toContain('Examples:');
+    expect(out).toContain('iln config');
+    expect(out).toContain('See also:');
+    expect(out).toContain('iln compat check');
   });
 
-  it("dashboard --help contains Examples and Tips sections", async () => {
-    const out = await getHelp(["dashboard", "--help"]);
-    expect(out).toContain("Examples:");
-    expect(out).toContain("iln dashboard");
-    expect(out).toContain("Tips:");
-    expect(out).toContain("--refresh");
-    expect(out).toContain("--export");
+  it('dashboard --help contains Examples and Tips sections', async () => {
+    const out = await getHelp(['dashboard', '--help']);
+    expect(out).toContain('Examples:');
+    expect(out).toContain('iln dashboard');
+    expect(out).toContain('Tips:');
+    expect(out).toContain('--refresh');
+    expect(out).toContain('--export');
   });
 
-  it("xdr decode --help contains Examples and Tips", async () => {
-    const out = await getHelp(["xdr", "decode", "--help"]);
-    expect(out).toContain("Examples:");
-    expect(out).toContain("Tips:");
+  it('xdr decode --help contains Examples and Tips', async () => {
+    const out = await getHelp(['xdr', 'decode', '--help']);
+    expect(out).toContain('Examples:');
+    expect(out).toContain('Tips:');
   });
 
-  it("dev start --help contains Examples and See also", async () => {
-    const out = await getHelp(["dev", "start", "--help"]);
-    expect(out).toContain("Examples:");
-    expect(out).toContain("iln dev start");
-    expect(out).toContain("See also:");
-    expect(out).toContain("iln dev seed");
+  it('dev start --help contains Examples and See also', async () => {
+    const out = await getHelp(['dev', 'start', '--help']);
+    expect(out).toContain('Examples:');
+    expect(out).toContain('iln dev start');
+    expect(out).toContain('See also:');
+    expect(out).toContain('iln dev seed');
   });
 
-  it("dev seed --help contains Examples, Tips, and See also", async () => {
-    const out = await getHelp(["dev", "seed", "--help"]);
-    expect(out).toContain("Examples:");
-    expect(out).toContain("--scenario");
-    expect(out).toContain("Tips:");
-    expect(out).toContain("See also:");
+  it('dev seed --help contains Examples, Tips, and See also', async () => {
+    const out = await getHelp(['dev', 'seed', '--help']);
+    expect(out).toContain('Examples:');
+    expect(out).toContain('--scenario');
+    expect(out).toContain('Tips:');
+    expect(out).toContain('See also:');
   });
 });
 
-describe("man command", () => {
-  it("iln man outputs roff .TH header for top-level", async () => {
+describe('man command', () => {
+  it('iln man outputs roff .TH header for top-level', async () => {
     const stdout = createMemoryStream();
-    const exitCode = await runCli(["man"], {
-      createClient: () => ({}) as any,
+    const exitCode = await runCli(['man'], {
+      createClient: () => ({} as any),
       loadConfig: () => TEST_CONFIG,
       stderr: createMemoryStream(),
       stdout,
     });
     expect(exitCode).toBe(0);
     const out = stdout.toString();
-    expect(out).toContain(".TH ILN 1");
-    expect(out).toContain(".SH NAME");
-    expect(out).toContain(".SH SYNOPSIS");
-    expect(out).toContain(".SH COMMANDS");
-    expect(out).toContain(".SH EXAMPLES");
+    expect(out).toContain('.TH ILN 1');
+    expect(out).toContain('.SH NAME');
+    expect(out).toContain('.SH SYNOPSIS');
+    expect(out).toContain('.SH COMMANDS');
+    expect(out).toContain('.SH EXAMPLES');
   });
 
-  it("iln man submit outputs submit subcommand man page", async () => {
+  it('iln man submit outputs submit subcommand man page', async () => {
     const stdout = createMemoryStream();
-    const exitCode = await runCli(["man", "submit"], {
-      createClient: () => ({}) as any,
+    const exitCode = await runCli(['man', 'submit'], {
+      createClient: () => ({} as any),
       loadConfig: () => TEST_CONFIG,
       stderr: createMemoryStream(),
       stdout,
     });
     expect(exitCode).toBe(0);
     const out = stdout.toString();
-    expect(out).toContain(".TH ILN-SUBMIT 1");
+    expect(out).toContain('.TH ILN-SUBMIT 1');
     // roff escapes - as \- so iln-submit → iln\-submit in the output
-    expect(out).toContain("iln\\-submit");
-    expect(out).toContain("payer");
-    expect(out).toContain("amount");
-    expect(out).toContain("rate");
+    expect(out).toContain('iln\\-submit');
+    expect(out).toContain('payer');
+    expect(out).toContain('amount');
+    expect(out).toContain('rate');
   });
 
-  it("iln man fund outputs fund subcommand man page", async () => {
+  it('iln man fund outputs fund subcommand man page', async () => {
     const stdout = createMemoryStream();
-    await runCli(["man", "fund"], {
-      createClient: () => ({}) as any,
+    await runCli(['man', 'fund'], {
+      createClient: () => ({} as any),
       loadConfig: () => TEST_CONFIG,
       stderr: createMemoryStream(),
       stdout,
     });
     const out = stdout.toString();
-    expect(out).toContain(".TH ILN-FUND 1");
-    expect(out).toContain("invoice ID");
+    expect(out).toContain('.TH ILN-FUND 1');
+    expect(out).toContain('invoice ID');
   });
 
-  it("iln man unknown-command outputs error message", async () => {
+  it('iln man unknown-command outputs error message', async () => {
     const stdout = createMemoryStream();
-    await runCli(["man", "nonexistent"], {
-      createClient: () => ({}) as any,
+    await runCli(['man', 'nonexistent'], {
+      createClient: () => ({} as any),
       loadConfig: () => TEST_CONFIG,
       stderr: createMemoryStream(),
       stdout,
     });
-    expect(stdout.toString()).toContain("unknown command");
+    expect(stdout.toString()).toContain('unknown command');
   });
 });
 
 function createMemoryStream(): Writable & { toString(): string } {
-  let output = "";
+  let output = '';
   return Object.assign(
     new Writable({
       write(chunk, _encoding, callback) {
@@ -788,12 +845,12 @@ function createMemoryStream(): Writable & { toString(): string } {
       toString() {
         return output;
       },
-    },
+    }
   );
 }
 
 function createListedInvoice(
-  overrides: Partial<ListedInvoice> & Pick<ListedInvoice, "id" | "role" | "status">,
+  overrides: Partial<ListedInvoice> & Pick<ListedInvoice, 'id' | 'role' | 'status'>
 ): ListedInvoice {
   const { id, role, status, ...rest } = overrides;
   return {
@@ -805,14 +862,14 @@ function createListedInvoice(
     fundedAt: null,
     funder: null,
     id,
-    payer: validAddress("B"),
+    payer: validAddress('B'),
     role,
     status,
-    token: "CTOKEN",
+    token: 'CTOKEN',
     ...rest,
   };
 }
 
-function validAddress(seed = "A"): string {
+function validAddress(seed = 'A'): string {
   return Keypair.random().publicKey();
 }

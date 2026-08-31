@@ -1,9 +1,8 @@
 import { describe, it, expect, beforeAll } from 'vitest';
 import * as StellarSdk from '@stellar/stellar-sdk';
-import { ILNClient } from '../';
+import { ILNSdk } from '../';
 
 const FRIENDBOT = 'http://localhost:8000/friendbot';
-const HORIZON = 'http://localhost:8000';
 const RPC_URL = 'http://localhost:8000/soroban/rpc';
 
 describe('SDK e2e against local Stellar node', () => {
@@ -35,8 +34,11 @@ describe('SDK e2e against local Stellar node', () => {
     const lp = await createFundedAccount();
     const payer = await createFundedAccount();
 
-    const client = new ILNClient({ rpcUrl: RPC_URL, networkPassphrase: StellarSdk.Networks.STANDALONE });
-    
+    const client = new ILNSdk({
+      rpcUrl: RPC_URL,
+      networkPassphrase: StellarSdk.Networks.STANDALONE,
+    });
+
     // Simulate SDK usage:
     // 1. Submit Invoice
     const invoiceId = await client.submitInvoice({
@@ -44,7 +46,7 @@ describe('SDK e2e against local Stellar node', () => {
       amount: '1000',
       dueDate: Date.now() + 86400000, // 1 day
       discountRate: 300,
-      signer: borrower
+      signer: borrower,
     });
 
     expect(invoiceId).toBeDefined();
@@ -53,7 +55,7 @@ describe('SDK e2e against local Stellar node', () => {
     await client.fundInvoice({
       invoiceId,
       lp: lp.publicKey(),
-      signer: lp
+      signer: lp,
     });
 
     const status = await client.getInvoiceStatus(invoiceId);
@@ -63,7 +65,7 @@ describe('SDK e2e against local Stellar node', () => {
     await client.markPaid({
       invoiceId,
       payer: payer.publicKey(),
-      signer: payer
+      signer: payer,
     });
 
     // 4. Verify LP payout
@@ -75,20 +77,23 @@ describe('SDK e2e against local Stellar node', () => {
   it('Dispute flow', async (ctx) => {
     if (!isNodeRunning) return ctx.skip();
     const borrower = await createFundedAccount();
-    const client = new ILNClient({ rpcUrl: RPC_URL, networkPassphrase: StellarSdk.Networks.STANDALONE });
-    
+    const client = new ILNSdk({
+      rpcUrl: RPC_URL,
+      networkPassphrase: StellarSdk.Networks.STANDALONE,
+    });
+
     const invoiceId = await client.submitInvoice({
       borrower: borrower.publicKey(),
       amount: '500',
       dueDate: Date.now() + 86400000,
       discountRate: 200,
-      signer: borrower
+      signer: borrower,
     });
 
     await client.disputeInvoice({
       invoiceId,
       reason: 'Services not rendered',
-      signer: borrower
+      signer: borrower,
     });
 
     const status = await client.getInvoiceStatus(invoiceId);
@@ -98,19 +103,22 @@ describe('SDK e2e against local Stellar node', () => {
   it('Cancellation flow', async (ctx) => {
     if (!isNodeRunning) return ctx.skip();
     const borrower = await createFundedAccount();
-    const client = new ILNClient({ rpcUrl: RPC_URL, networkPassphrase: StellarSdk.Networks.STANDALONE });
-    
+    const client = new ILNSdk({
+      rpcUrl: RPC_URL,
+      networkPassphrase: StellarSdk.Networks.STANDALONE,
+    });
+
     const invoiceId = await client.submitInvoice({
       borrower: borrower.publicKey(),
       amount: '500',
       dueDate: Date.now() + 86400000,
       discountRate: 200,
-      signer: borrower
+      signer: borrower,
     });
 
     await client.cancelInvoice({
       invoiceId,
-      signer: borrower
+      signer: borrower,
     });
 
     const status = await client.getInvoiceStatus(invoiceId);
@@ -121,21 +129,24 @@ describe('SDK e2e against local Stellar node', () => {
     if (!isNodeRunning) return ctx.skip();
     const borrower = await createFundedAccount();
     const payer = await createFundedAccount();
-    const client = new ILNClient({ rpcUrl: RPC_URL, networkPassphrase: StellarSdk.Networks.STANDALONE });
-    
+    const client = new ILNSdk({
+      rpcUrl: RPC_URL,
+      networkPassphrase: StellarSdk.Networks.STANDALONE,
+    });
+
     const invoiceId = await client.submitInvoice({
       borrower: borrower.publicKey(),
       amount: '1000',
       dueDate: Date.now() + 86400000,
       discountRate: 200,
-      signer: borrower
+      signer: borrower,
     });
 
     await client.payPartial({
       invoiceId,
       amount: '500',
       payer: payer.publicKey(),
-      signer: payer
+      signer: payer,
     });
 
     const details = await client.getInvoiceDetails(invoiceId);
@@ -148,8 +159,11 @@ describe('SDK e2e against local Stellar node', () => {
     const borrower = await createFundedAccount();
     const lp = await createFundedAccount();
     const payer = await createFundedAccount();
-    const client = new ILNClient({ rpcUrl: RPC_URL, networkPassphrase: StellarSdk.Networks.STANDALONE });
-    
+    const client = new ILNSdk({
+      rpcUrl: RPC_URL,
+      networkPassphrase: StellarSdk.Networks.STANDALONE,
+    });
+
     const initialReputation = await client.getReputation(borrower.publicKey());
 
     const invoiceId = await client.submitInvoice({
@@ -157,7 +171,7 @@ describe('SDK e2e against local Stellar node', () => {
       amount: '1000',
       dueDate: Date.now() + 86400000,
       discountRate: 300,
-      signer: borrower
+      signer: borrower,
     });
 
     await client.fundInvoice({ invoiceId, lp: lp.publicKey(), signer: lp });

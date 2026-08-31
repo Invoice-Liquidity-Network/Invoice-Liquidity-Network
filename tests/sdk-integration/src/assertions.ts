@@ -12,6 +12,6 @@ export function expectValidInvoice(inv: Invoice) {
 }
 
 export function expectNetworkCalledWith(urlPart: string, calls: Array<{ url: string }>) {
-  const found = calls.some(c => c.url.includes(urlPart));
+  const found = calls.some((c) => c.url.includes(urlPart));
   expect(found).toBeTruthy();
 }

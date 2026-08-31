@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { Invoice, LPPortfolio } from '@invoice-liquidity/sdk';
+import type { Invoice, LPPortfolio } from '@iln/sdk';
 import { calculateLPRiskMetrics } from './lpRiskMetrics';
 
 const NOW = Date.UTC(2026, 0, 1);
@@ -34,10 +34,34 @@ const portfolio = {
 describe('calculateLPRiskMetrics', () => {
   it('derives concentration, diversification, and risk metrics from known positions', () => {
     const invoices = [
-      makeInvoice({ payer: 'GPAYER_A', amount: 100n, discountRate: 300, dueDate: NOW + (5 * 86_400_000), token: 'USDC_CONTRACT_ID' }),
-      makeInvoice({ payer: 'GPAYER_A', amount: 100n, discountRate: 200, dueDate: NOW + (20 * 86_400_000), token: 'USDC_CONTRACT_ID' }),
-      makeInvoice({ payer: 'GPAYER_B', amount: 50n, discountRate: 400, dueDate: NOW + (40 * 86_400_000), token: 'EURC_CONTRACT_ID' }),
-      makeInvoice({ payer: 'GPAYER_C', amount: 50n, discountRate: 500, dueDate: NOW + (120 * 86_400_000), token: 'XLM' }),
+      makeInvoice({
+        payer: 'GPAYER_A',
+        amount: 100n,
+        discountRate: 300,
+        dueDate: NOW + 5 * 86_400_000,
+        token: 'USDC_CONTRACT_ID',
+      }),
+      makeInvoice({
+        payer: 'GPAYER_A',
+        amount: 100n,
+        discountRate: 200,
+        dueDate: NOW + 20 * 86_400_000,
+        token: 'USDC_CONTRACT_ID',
+      }),
+      makeInvoice({
+        payer: 'GPAYER_B',
+        amount: 50n,
+        discountRate: 400,
+        dueDate: NOW + 40 * 86_400_000,
+        token: 'EURC_CONTRACT_ID',
+      }),
+      makeInvoice({
+        payer: 'GPAYER_C',
+        amount: 50n,
+        discountRate: 500,
+        dueDate: NOW + 120 * 86_400_000,
+        token: 'XLM',
+      }),
     ];
 
     const metrics = calculateLPRiskMetrics({
@@ -71,8 +95,17 @@ describe('calculateLPRiskMetrics', () => {
       payer: 'GPAYER_A',
       positionCount: 2,
     });
-    expect(metrics.tokenDiversification.map((entry) => entry.token)).toEqual(['USDC', 'EURC', 'XLM']);
-    expect(metrics.maturityProfile.map((entry) => entry.label)).toEqual(['0-7d', '7-30d', '30-90d', '90d+']);
+    expect(metrics.tokenDiversification.map((entry) => entry.token)).toEqual([
+      'USDC',
+      'EURC',
+      'XLM',
+    ]);
+    expect(metrics.maturityProfile.map((entry) => entry.label)).toEqual([
+      '0-7d',
+      '7-30d',
+      '30-90d',
+      '90d+',
+    ]);
   });
 
   it('returns empty metrics when no positions are available', () => {

@@ -25,7 +25,7 @@ export interface InsuranceClaim {
   payoutAmount: bigint | null;
 }
 
-export type ClaimStatus = "Pending" | "Approved" | "Rejected";
+export type ClaimStatus = 'Pending' | 'Approved' | 'Rejected';
 
 export interface EnrollParams {
   lp: string;

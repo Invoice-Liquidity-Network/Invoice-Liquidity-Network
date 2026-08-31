@@ -1,10 +1,10 @@
-name: "CodeQL Analysis"
+name: 'CodeQL Analysis'
 
 on:
   push:
-    branches: [ "main" ]
+    branches: ['main']
   pull_request:
-    branches: [ "main" ]
+    branches: ['main']
   schedule:
     - cron: '0 2 * * 0' # Weekly scan at 2 AM on Sunday
 
@@ -20,7 +20,7 @@ concurrency:
 jobs:
   analyze-ts:
     name: Analyze (${{ matrix.language }})
-    runs-on: namespace-profile-nursca
+    runs-on: ubuntu-latest
     permissions:
       security-events: write
       actions: read
@@ -29,66 +29,66 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        language: [ 'javascript-typescript' ]
+        language: ['javascript-typescript']
 
     steps:
-    - name: Checkout repository
-      uses: actions/checkout@v4
+      - name: Checkout repository
+        uses: actions/checkout@v4
 
-    - name: Initialize CodeQL
-      uses: github/codeql-action/init@f081e69141f6ea0aa740920b0c7012cd81a4fbe6 # v3.37.3
-      with:
-        languages: ${{ matrix.language }}
-        config: |
-          paths:
-            - sdk
-            - cli
-            - indexer
-            - notifications
-            - frontend
-            - docs
-            - packages
-            - examples
-            - scripts
-            - workers
-            - contract-deployer
-            - account-seeder
-            - tests
-          paths-ignore:
-            - backend
-            - "**/*.md"
-            - "**/node_modules/**"
-            - "**/dist/**"
-            - "**/coverage/**"
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@f081e69141f6ea0aa740920b0c7012cd81a4fbe6 # v3.37.3
+        with:
+          languages: ${{ matrix.language }}
+          config: |
+            paths:
+              - sdk
+              - cli
+              - indexer
+              - notifications
+              - frontend
+              - docs
+              - packages
+              - examples
+              - scripts
+              - workers
+              - contract-deployer
+              - account-seeder
+              - tests
+            paths-ignore:
+              - backend
+              - "**/*.md"
+              - "**/node_modules/**"
+              - "**/dist/**"
+              - "**/coverage/**"
 
-    - name: Perform CodeQL Analysis
-      uses: github/codeql-action/analyze@f081e69141f6ea0aa740920b0c7012cd81a4fbe6 # v3.37.3
-      with:
-        category: "/language:${{matrix.language}}"
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@f081e69141f6ea0aa740920b0c7012cd81a4fbe6 # v3.37.3
+        with:
+          category: '/language:${{matrix.language}}'
 
   analyze-rust:
     name: Analyze (rust)
-    runs-on: namespace-profile-nursca
+    runs-on: ubuntu-latest
     permissions:
       security-events: write
       actions: read
       contents: read
 
     steps:
-    - name: Checkout repository
-      uses: actions/checkout@v4
-      with:
-        submodules: recursive
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
 
-    - name: Initialize CodeQL
-      uses: github/codeql-action/init@f081e69141f6ea0aa740920b0c7012cd81a4fbe6 # v3.37.3
-      with:
-        languages: rust
-        config: |
-          paths:
-            - backend
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@f081e69141f6ea0aa740920b0c7012cd81a4fbe6 # v3.37.3
+        with:
+          languages: rust
+          config: |
+            paths:
+              - backend
 
-    - name: Perform CodeQL Analysis
-      uses: github/codeql-action/analyze@f081e69141f6ea0aa740920b0c7012cd81a4fbe6 # v3.37.3
-      with:
-        category: "/language:rust"
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@f081e69141f6ea0aa740920b0c7012cd81a4fbe6 # v3.37.3
+        with:
+          category: '/language:rust'

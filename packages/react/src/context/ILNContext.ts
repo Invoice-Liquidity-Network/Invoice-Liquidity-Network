@@ -1,5 +1,5 @@
 import { createContext, useContext } from 'react';
-import type { ILNClient } from '@invoice-liquidity/sdk';
+import type { ILNClient } from '@iln/sdk';
 
 /**
  * Context for sharing the ILNClient instance across the React tree.
@@ -12,7 +12,9 @@ export const ILNContext = createContext<ILNClient | null>(null);
  */
 export class ILNProviderNotFoundError extends Error {
   constructor() {
-    super('useILNClient must be used within an ILNProvider. Wrap your app with <ILNProvider client={client}>');
+    super(
+      'useILNClient must be used within an ILNProvider. Wrap your app with <ILNProvider client={client}>'
+    );
     this.name = 'ILNProviderNotFoundError';
   }
 }

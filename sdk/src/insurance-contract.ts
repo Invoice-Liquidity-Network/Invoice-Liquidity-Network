@@ -7,9 +7,9 @@ import {
   BASE_FEE,
   Operation,
   xdr,
-} from "@stellar/stellar-sdk";
+} from '@stellar/stellar-sdk';
 
-import type { RpcServerLike } from "./types";
+import type { RpcServerLike } from './types';
 import type {
   LPCoverage,
   InsuranceClaim,
@@ -19,9 +19,9 @@ import type {
   DepositPremiumParams,
   SubmitClaimParams,
   ReviewClaimParams,
-} from "./insurance-types";
+} from './insurance-types';
 
-const READ_ACCOUNT = "GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF";
+const READ_ACCOUNT = 'GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF';
 
 type BuiltTransaction = ReturnType<typeof TransactionBuilder.prototype.build>;
 
@@ -44,7 +44,7 @@ export class InsurancePoolClient {
   }
 
   private buildReadTransaction(method: string, args: xdr.ScVal[]): BuiltTransaction {
-    return new TransactionBuilder(new Account(READ_ACCOUNT, "0"), {
+    return new TransactionBuilder(new Account(READ_ACCOUNT, '0'), {
       fee: BASE_FEE,
       networkPassphrase: this.networkPassphrase,
     })
@@ -53,7 +53,7 @@ export class InsurancePoolClient {
           contract: this.contractId,
           function: method,
           args,
-        }),
+        })
       )
       .setTimeout(30)
       .build();
@@ -62,7 +62,7 @@ export class InsurancePoolClient {
   private async buildWriteTransaction(
     sourceAddress: string,
     method: string,
-    args: xdr.ScVal[],
+    args: xdr.ScVal[]
   ): Promise<BuiltTransaction> {
     const sourceAccount = (await this.server.getAccount(sourceAddress)) as Account;
     return new TransactionBuilder(sourceAccount, {
@@ -74,7 +74,7 @@ export class InsurancePoolClient {
           contract: this.contractId,
           function: method,
           args,
-        }),
+        })
       )
       .setTimeout(30)
       .build();
@@ -94,26 +94,30 @@ export class InsurancePoolClient {
   private extractRetval(simulation: unknown): unknown {
     const sim = simulation as { result?: { retval?: xdr.ScVal } };
     if (!sim.result?.retval) {
-      throw new Error("RPC simulation did not return a contract result.");
+      throw new Error('RPC simulation did not return a contract result.');
     }
     return scValToNative(sim.result.retval as xdr.ScVal);
   }
 
   private unwrapResult(value: unknown, method: string): unknown {
-    if (!value || typeof value !== "object") {
+    if (!value || typeof value !== 'object') {
       return value;
     }
-    if ("ok" in value) {
+    if ('ok' in value) {
       return (value as { ok: unknown }).ok;
     }
-    if ("Ok" in value) {
+    if ('Ok' in value) {
       return (value as { Ok: unknown }).Ok;
     }
-    if ("err" in value) {
-      throw new Error(`Contract rejected ${method}: ${JSON.stringify((value as { err: unknown }).err)}`);
+    if ('err' in value) {
+      throw new Error(
+        `Contract rejected ${method}: ${JSON.stringify((value as { err: unknown }).err)}`
+      );
     }
-    if ("Err" in value) {
-      throw new Error(`Contract rejected ${method}: ${JSON.stringify((value as { Err: unknown }).Err)}`);
+    if ('Err' in value) {
+      throw new Error(
+        `Contract rejected ${method}: ${JSON.stringify((value as { Err: unknown }).Err)}`
+      );
     }
     return value;
   }
@@ -126,16 +130,16 @@ export class InsurancePoolClient {
     if (!status) {
       return xdr.ScVal.scvVoid();
     }
-    return nativeToScVal(status, { type: "string" });
+    return nativeToScVal(status, { type: 'string' });
   }
 
   private parseLPCoverage(value: unknown): LPCoverage | null {
-    if (!value || typeof value !== "object") {
+    if (!value || typeof value !== 'object') {
       return null;
     }
     const v = value as Record<string, unknown>;
     return {
-      address: String(v.address ?? ""),
+      address: String(v.address ?? ''),
       enrolledAt: Number(v.enrolled_at ?? v.enrolledAt ?? 0),
       coverageAmount: BigInt(String(v.coverage_amount ?? v.coverageAmount ?? 0)),
       premiumRateBps: Number(v.premium_rate_bps ?? v.premiumRateBps ?? 0),
@@ -151,20 +155,35 @@ export class InsurancePoolClient {
   private parseClaim(value: unknown): InsuranceClaim {
     const v = value as Record<string, unknown>;
     const statusRaw = v.status as Record<string, string> | string;
-    const status = typeof statusRaw === "string" ? statusRaw : Object.keys(statusRaw ?? {})[0] ?? "Pending";
+    const status =
+      typeof statusRaw === 'string' ? statusRaw : Object.keys(statusRaw ?? {})[0] ?? 'Pending';
 
     return {
       id: BigInt(String(v.id ?? 0)),
-      lp: String(v.lp ?? ""),
+      lp: String(v.lp ?? ''),
       invoiceId: BigInt(String(v.invoice_id ?? v.invoiceId ?? 0)),
       invoiceAmount: BigInt(String(v.invoice_amount ?? v.invoiceAmount ?? 0)),
-      reason: String(v.reason ?? ""),
+      reason: String(v.reason ?? ''),
       status: status as ClaimStatus,
       filedAt: Number(v.filed_at ?? v.filedAt ?? 0),
-      reviewedAt: v.reviewed_at != null ? Number(v.reviewed_at) : v.reviewedAt != null ? Number(v.reviewedAt) : null,
+      reviewedAt:
+        v.reviewed_at !== null && v.reviewed_at !== undefined
+          ? Number(v.reviewed_at)
+          : v.reviewedAt !== null && v.reviewedAt !== undefined
+          ? Number(v.reviewedAt)
+          : null,
       reviewer: v.reviewer ? String(v.reviewer) : null,
-      rejectionReason: v.rejection_reason ? String(v.rejection_reason) : v.rejectionReason ? String(v.rejectionReason) : null,
-      payoutAmount: v.payout_amount != null ? BigInt(String(v.payout_amount)) : v.payoutAmount != null ? BigInt(String(v.payoutAmount)) : null,
+      rejectionReason: v.rejection_reason
+        ? String(v.rejection_reason)
+        : v.rejectionReason
+        ? String(v.rejectionReason)
+        : null,
+      payoutAmount:
+        v.payout_amount !== null && v.payout_amount !== undefined
+          ? BigInt(String(v.payout_amount))
+          : v.payoutAmount !== null && v.payoutAmount !== undefined
+          ? BigInt(String(v.payoutAmount))
+          : null,
     };
   }
 
@@ -183,77 +202,69 @@ export class InsurancePoolClient {
   }
 
   async getLPCoverage(lp: string): Promise<LPCoverage | null> {
-    const tx = this.buildReadTransaction("get_lp_coverage", [
-      this.toAddress(lp),
-    ]);
-    const sim = await this.simulate(tx, "get_lp_coverage");
-    const raw = this.unwrapResult(this.extractRetval(sim), "get_lp_coverage");
+    const tx = this.buildReadTransaction('get_lp_coverage', [this.toAddress(lp)]);
+    const sim = await this.simulate(tx, 'get_lp_coverage');
+    const raw = this.unwrapResult(this.extractRetval(sim), 'get_lp_coverage');
     return this.parseLPCoverage(raw);
   }
 
   async getPoolBalance(): Promise<PoolBalance> {
-    const tx = this.buildReadTransaction("get_pool_balance", []);
-    const sim = await this.simulate(tx, "get_pool_balance");
-    const raw = this.unwrapResult(this.extractRetval(sim), "get_pool_balance");
+    const tx = this.buildReadTransaction('get_pool_balance', []);
+    const sim = await this.simulate(tx, 'get_pool_balance');
+    const raw = this.unwrapResult(this.extractRetval(sim), 'get_pool_balance');
     return this.parsePoolBalance(raw);
   }
 
   async getClaim(claimId: bigint): Promise<InsuranceClaim> {
-    const tx = this.buildReadTransaction("get_claim", [
-      nativeToScVal(claimId, { type: "u64" }),
-    ]);
-    const sim = await this.simulate(tx, "get_claim");
-    const raw = this.unwrapResult(this.extractRetval(sim), "get_claim");
+    const tx = this.buildReadTransaction('get_claim', [nativeToScVal(claimId, { type: 'u64' })]);
+    const sim = await this.simulate(tx, 'get_claim');
+    const raw = this.unwrapResult(this.extractRetval(sim), 'get_claim');
     return this.parseClaim(raw);
   }
 
-  async listClaims(
-    statusFilter?: ClaimStatus,
-    page = 0,
-    pageSize = 20,
-  ): Promise<InsuranceClaim[]> {
-    const tx = this.buildReadTransaction("list_claims", [
+  async listClaims(statusFilter?: ClaimStatus, page = 0, pageSize = 20): Promise<InsuranceClaim[]> {
+    const tx = this.buildReadTransaction('list_claims', [
       this.toOptionalClaimStatus(statusFilter),
-      nativeToScVal(page, { type: "u32" }),
-      nativeToScVal(pageSize, { type: "u32" }),
+      nativeToScVal(page, { type: 'u32' }),
+      nativeToScVal(pageSize, { type: 'u32' }),
     ]);
-    const sim = await this.simulate(tx, "list_claims");
-    const raw = this.unwrapResult(this.extractRetval(sim), "list_claims");
+    const sim = await this.simulate(tx, 'list_claims');
+    const raw = this.unwrapResult(this.extractRetval(sim), 'list_claims');
     const claims = Array.isArray(raw) ? raw : [];
     return claims.map((c: unknown) => this.parseClaim(c));
   }
 
   async buildEnrollTransaction(params: EnrollParams): Promise<BuiltTransaction> {
-    return this.buildWriteTransaction(params.lp, "enroll", [
+    return this.buildWriteTransaction(params.lp, 'enroll', [
       this.toAddress(params.lp),
-      nativeToScVal(params.coverageAmount, { type: "i128" }),
-      nativeToScVal(params.premiumRateBps, { type: "u32" }),
+      nativeToScVal(params.coverageAmount, { type: 'i128' }),
+      nativeToScVal(params.premiumRateBps, { type: 'u32' }),
     ]);
   }
 
   async buildDepositPremiumTransaction(params: DepositPremiumParams): Promise<BuiltTransaction> {
-    return this.buildWriteTransaction(params.lp, "deposit_premium", [
+    return this.buildWriteTransaction(params.lp, 'deposit_premium', [
       this.toAddress(params.lp),
-      nativeToScVal(params.amount, { type: "i128" }),
+      nativeToScVal(params.amount, { type: 'i128' }),
     ]);
   }
 
   async buildClaimTransaction(params: SubmitClaimParams): Promise<BuiltTransaction> {
-    return this.buildWriteTransaction(params.lp, "claim", [
+    return this.buildWriteTransaction(params.lp, 'claim', [
       this.toAddress(params.lp),
-      nativeToScVal(params.invoiceId, { type: "u64" }),
-      nativeToScVal(params.reason, { type: "string" }),
+      nativeToScVal(params.invoiceId, { type: 'u64' }),
+      nativeToScVal(params.reason, { type: 'string' }),
     ]);
   }
 
   async buildReviewClaimTransaction(params: ReviewClaimParams): Promise<BuiltTransaction> {
     const reasonScVal = params.reason
-      ? nativeToScVal(params.reason, { type: "string" })
+      ? nativeToScVal(params.reason, { type: 'string' })
       : xdr.ScVal.scvVoid();
-    return this.buildWriteTransaction(params.reviewer, "review_claim", [
+    return this.buildWriteTransaction(params.reviewer, 'review_claim', [
       this.toAddress(params.reviewer),
-      nativeToScVal(params.claimId, { type: "u64" }),
-      nativeToScVal(params.approve, { type: "bool" }),
+      nativeToScVal(params.claimId, { type: 'u64' }),
+      nativeToScVal(params.approve, { type: 'bool' }),
       reasonScVal,
     ]);
   }

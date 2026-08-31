@@ -11,6 +11,7 @@
     "test:load:indexer": "ts-node --esm scripts/load-test-indexer.ts",
     "test:load:notifications": "ts-node --esm scripts/load-test-notifications.ts",
     "build": "turbo run build",
+    "changeset:version": "changeset version",
     "licence:check": "node scripts/check-licenses.js",
     "generate:types": "ts-node --esm scripts/generate-types.ts",
     "generate:shared-types": "node --import tsx/esm scripts/generate-shared-types.mts --spec backend/target/spec.json --out packages/shared/src/types.ts",
@@ -45,22 +46,19 @@
     "check:shared-types": "node scripts/check-no-duplicate-types.mjs"
   },
   "devDependencies": {
-    "@changesets/cli": "2.31.0",
+    "@changesets/cli": "^2.31.0",
     "@commitlint/cli": "^17.6.0",
     "@commitlint/config-conventional": "^17.6.0",
-    "@testing-library/dom": "^10.4.1",
-    "@testing-library/jest-dom": "^7.0.0",
-    "@testing-library/react": "^16.3.2",
-    "@vitejs/plugin-react": "^6.0.4",
+    "@stellar/stellar-sdk": "^15.0.1",
     "@vitest/coverage-v8": "^4.1.5",
-    "chromatic": "^17.4.1",
-    "gitleaks-secret-scanner": "^2.1.1",
     "husky": "^8.0.0",
     "jsdom": "^29.1.1",
+    "knip": "^6.15.0",
     "license-checker-rseidelsohn": "^5.0.1",
     "prettier": "^2.8.8",
     "syncpack": "^13.0.0",
     "ts-node": "^10.9.2",
+    "tsx": "^4.15.0",
     "turbo": "^2.5.4",
     "typescript": "^5.9.3",
     "vitest": "^4.1.5"
@@ -78,10 +76,5 @@
     "overrides": {
       "axios": ">=1.16.0"
     }
-  },
-  "dependencies": {
-    "@tanstack/react-query": "^5.101.4",
-    "react": "^19.2.8",
-    "react-dom": "^19.2.8"
   }
 }

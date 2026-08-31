@@ -1,21 +1,13 @@
-import Database from "better-sqlite3";
-import { dbQueryDuration, dbErrorsTotal, lastProcessedLedger, cursorUpdatedAt } from "./metrics";
-import { CONFIG } from "./config";
-import type { ILNEvent, Invoice, InvoiceStatus } from "./types";
+import Database from 'better-sqlite3';
+import { dbQueryDuration, dbErrorsTotal, lastProcessedLedger, cursorUpdatedAt } from './metrics';
+import { CONFIG } from './config';
+import type { ILNEvent, Invoice } from './types';
 
 // ─── Query logging ────────────────────────────────────────────────────────────
 
 const SLOW_QUERY_THRESHOLD_MS = 100;
 let _queryCount = 0;
 let _totalQueryTime = 0;
-
-export function getQueryStats() {
-  return {
-    queryCount: _queryCount,
-    totalQueryTime: _totalQueryTime,
-    avgQueryTime: _queryCount > 0 ? _totalQueryTime / _queryCount : 0,
-  };
-}
 
 /** Wrap a synchronous DB operation with timing and slow-query logging. */
 function measure<T>(label: string, fn: () => T): T {
@@ -47,8 +39,8 @@ export function getDb(): Database.Database {
 /** Create a new database at the given path (use ":memory:" for tests). */
 export function createDb(path: string): Database.Database {
   const db = new Database(path);
-  db.pragma("journal_mode = WAL");
-  db.pragma("foreign_keys = ON");
+  db.pragma('journal_mode = WAL');
+  db.pragma('foreign_keys = ON');
   runMigrations(db);
   return db;
 }
@@ -111,9 +103,7 @@ function runMigrations(db: Database.Database): void {
  * On conflict (same id), only mutable fields are updated.
  * `created_at` is never overwritten.
  */
-export function upsertInvoice(
-  invoice: Omit<Invoice, "created_at" | "updated_at">
-): void {
+export function upsertInvoice(invoice: Omit<Invoice, 'created_at' | 'updated_at'>): void {
   const now = Date.now();
   try {
     const end = dbQueryDuration.startTimer();
@@ -142,32 +132,10 @@ export function upsertInvoice(
   } catch (err) {
     try {
       dbErrorsTotal.inc();
-    } catch {}
+    } catch {
+      /* metrics failure is non-fatal */
+    }
     throw err;
-  }
-}
-
-/** Update only the status (and optionally funder/funded_at) of an existing invoice. */
-export function updateInvoiceStatus(
-  id: number,
-  status: InvoiceStatus,
-  extra?: { funder?: string; funded_at?: number }
-): void {
-  const now = Date.now();
-  if (extra?.funder !== undefined) {
-    getDb()
-      .prepare(
-        `UPDATE invoices
-         SET status = ?, funder = ?, funded_at = ?, updated_at = ?
-         WHERE id = ?`
-      )
-      .run(status, extra.funder, extra.funded_at ?? null, now, id);
-  } else {
-    getDb()
-      .prepare(
-        `UPDATE invoices SET status = ?, updated_at = ? WHERE id = ?`
-      )
-      .run(status, now, id);
   }
 }
 
@@ -175,11 +143,17 @@ export function updateInvoiceStatus(
 export function getInvoiceById(id: number): Invoice | undefined {
   try {
     const end = dbQueryDuration.startTimer();
-    const row = getDb().prepare("SELECT * FROM invoices WHERE id = ?").get(id) as Invoice | undefined;
+    const row = getDb().prepare('SELECT * FROM invoices WHERE id = ?').get(id) as
+      | Invoice
+      | undefined;
     end();
     return row;
   } catch (err) {
-    try { dbErrorsTotal.inc(); } catch {}
+    try {
+      dbErrorsTotal.inc();
+    } catch {
+      /* metrics failure is non-fatal */
+    }
     throw err;
   }
 }
@@ -198,26 +172,24 @@ export function queryInvoices(filter: InvoiceFilter): Invoice[] {
   const params: (string | number)[] = [];
 
   if (filter.status) {
-    clauses.push("status = ?");
+    clauses.push('status = ?');
     params.push(filter.status);
   }
   if (filter.freelancer) {
-    clauses.push("freelancer = ?");
+    clauses.push('freelancer = ?');
     params.push(filter.freelancer);
   }
   if (filter.payer) {
-    clauses.push("payer = ?");
+    clauses.push('payer = ?');
     params.push(filter.payer);
   }
   if (filter.funder) {
-    clauses.push("funder = ?");
+    clauses.push('funder = ?');
     params.push(filter.funder);
   }
 
-  const where = clauses.length > 0 ? `WHERE ${clauses.join(" AND ")}` : "";
-  return db
-    .prepare(`SELECT * FROM invoices ${where} ORDER BY id ASC`)
-    .all(...params) as Invoice[];
+  const where = clauses.length > 0 ? `WHERE ${clauses.join(' AND ')}` : '';
+  return db.prepare(`SELECT * FROM invoices ${where} ORDER BY id ASC`).all(...params) as Invoice[];
 }
 
 /**
@@ -228,26 +200,26 @@ export function queryInvoices(filter: InvoiceFilter): Invoice[] {
 export function queryInvoicesPaginated(
   filter: InvoiceFilter,
   limit: number,
-  cursor?: string,
+  cursor?: string
 ): { invoices: Invoice[]; hasMore: boolean; nextCursor?: string } {
   const db = getDb();
   const clauses: string[] = [];
   const params: (string | number)[] = [];
 
   if (filter.status) {
-    clauses.push("status = ?");
+    clauses.push('status = ?');
     params.push(filter.status);
   }
   if (filter.freelancer) {
-    clauses.push("freelancer = ?");
+    clauses.push('freelancer = ?');
     params.push(filter.freelancer);
   }
   if (filter.payer) {
-    clauses.push("payer = ?");
+    clauses.push('payer = ?');
     params.push(filter.payer);
   }
   if (filter.funder) {
-    clauses.push("funder = ?");
+    clauses.push('funder = ?');
     params.push(filter.funder);
   }
 
@@ -255,7 +227,7 @@ export function queryInvoicesPaginated(
   let cursorId: number | undefined;
   if (cursor) {
     try {
-      const decoded = Buffer.from(cursor, "base64").toString("utf-8");
+      const decoded = Buffer.from(cursor, 'base64').toString('utf-8');
       cursorId = Number(decoded);
       if (Number.isNaN(cursorId)) {
         cursorId = undefined;
@@ -266,11 +238,11 @@ export function queryInvoicesPaginated(
   }
 
   if (cursorId !== undefined) {
-    clauses.push("id > ?");
+    clauses.push('id > ?');
     params.push(cursorId);
   }
 
-  const where = clauses.length > 0 ? `WHERE ${clauses.join(" AND ")}` : "";
+  const where = clauses.length > 0 ? `WHERE ${clauses.join(' AND ')}` : '';
   // Fetch one extra row to determine hasMore
   const rows = db
     .prepare(`SELECT * FROM invoices ${where} ORDER BY id ASC LIMIT ?`)
@@ -281,7 +253,9 @@ export function queryInvoicesPaginated(
 
   const hasMore = rows.length > limit;
   const sliced = hasMore ? rows.slice(0, limit) : rows;
-  const nextCursor = hasMore ? Buffer.from(String(sliced[sliced.length - 1].id)).toString("base64") : undefined;
+  const nextCursor = hasMore
+    ? Buffer.from(String(sliced[sliced.length - 1].id)).toString('base64')
+    : undefined;
 
   return { invoices: sliced, hasMore, nextCursor };
 }
@@ -323,7 +297,7 @@ export interface LPStat {
 
 export function getProtocolStats(): ProtocolStats {
   const db = getDb();
-  const row = measure("getProtocolStats", () =>
+  const row = measure('getProtocolStats', () =>
     db
       .prepare(
         `SELECT
@@ -404,7 +378,7 @@ export function getFreelancerStats(address: string): FreelancerStats {
 
 export function getInvoiceHistory(
   address: string,
-  role: "freelancer" | "payer" | "funder"
+  role: 'freelancer' | 'payer' | 'funder'
 ): Invoice[] {
   return queryInvoices({ [role]: address });
 }
@@ -413,16 +387,16 @@ export function getTopLPs(limit: number, period: string): LPStat[] {
   const db = getDb();
   const now = Date.now();
   const since =
-    period === "week"
+    period === 'week'
       ? now - 7 * 24 * 60 * 60 * 1000
-      : period === "month"
-        ? now - 30 * 24 * 60 * 60 * 1000
-        : 0;
+      : period === 'month'
+      ? now - 30 * 24 * 60 * 60 * 1000
+      : 0;
 
   const whereSince =
     since > 0
-      ? "WHERE funder IS NOT NULL AND (CASE WHEN funded_at IS NOT NULL THEN funded_at * 1000 ELSE created_at END) >= ?"
-      : "WHERE funder IS NOT NULL";
+      ? 'WHERE funder IS NOT NULL AND (CASE WHEN funded_at IS NOT NULL THEN funded_at * 1000 ELSE created_at END) >= ?'
+      : 'WHERE funder IS NOT NULL';
 
   const params: (number | string)[] = since > 0 ? [since, limit] : [limit];
 
@@ -456,23 +430,17 @@ export function getEvents(invoiceId?: number): ILNEvent[] {
   const db = getDb();
   if (invoiceId !== undefined) {
     return db
-      .prepare("SELECT * FROM events WHERE invoice_id = ? ORDER BY ledger ASC")
+      .prepare('SELECT * FROM events WHERE invoice_id = ? ORDER BY ledger ASC')
       .all(invoiceId) as ILNEvent[];
   }
-  return db
-    .prepare("SELECT * FROM events ORDER BY ledger ASC LIMIT 1000")
-    .all() as ILNEvent[];
+  return db.prepare('SELECT * FROM events ORDER BY ledger ASC LIMIT 1000').all() as ILNEvent[];
 }
 
 // ─── Event deduplication ──────────────────────────────────────────────────────
 
 /** Return true if this event has already been processed. */
 export function hasEvent(eventId: string): boolean {
-  return (
-    getDb()
-      .prepare("SELECT 1 FROM events WHERE event_id = ?")
-      .get(eventId) !== undefined
-  );
+  return getDb().prepare('SELECT 1 FROM events WHERE event_id = ?').get(eventId) !== undefined;
 }
 
 /**
@@ -494,17 +462,17 @@ export function insertEvent(event: ILNEvent): void {
 
 /** Return the last processed ledger sequence, or 0 if never set. */
 export function getCursorLedger(): number {
-  const row = getDb()
-    .prepare("SELECT last_ledger FROM cursor WHERE id = 1")
-    .get() as { last_ledger: number } | undefined;
+  const row = getDb().prepare('SELECT last_ledger FROM cursor WHERE id = 1').get() as
+    | { last_ledger: number }
+    | undefined;
   return row?.last_ledger ?? 0;
 }
 
 /** Return the Unix ms timestamp of the last processed ledger, or null if never synced. */
 export function getCursorUpdatedAt(): number | null {
-  const row = getDb()
-    .prepare("SELECT updated_at FROM cursor WHERE id = 1")
-    .get() as { updated_at: number } | undefined;
+  const row = getDb().prepare('SELECT updated_at FROM cursor WHERE id = 1').get() as
+    | { updated_at: number }
+    | undefined;
   return row?.updated_at ?? null;
 }
 
@@ -524,5 +492,7 @@ export function setCursorLedger(ledger: number): void {
   try {
     lastProcessedLedger.set(ledger);
     cursorUpdatedAt.set(updatedAt);
-  } catch {}
+  } catch {
+    /* metrics failure is non-fatal */
+  }
 }

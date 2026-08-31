@@ -103,7 +103,7 @@ export class ReputationClient {
   constructor(
     rpcUrl: string,
     contractId: string,
-    options?: { networkPassphrase?: string; source?: string },
+    options?: { networkPassphrase?: string; source?: string }
   ) {
     this.server = new SorobanRpc.Server(rpcUrl);
     this.contractId = contractId;
@@ -159,9 +159,7 @@ export class ReputationClient {
     return native.map((entry: unknown) => {
       if (entry && typeof entry === 'object') {
         const get = (key: string) =>
-          entry instanceof Map
-            ? entry.get(key)
-            : (entry as Record<string, unknown>)[key];
+          entry instanceof Map ? entry.get(key) : (entry as Record<string, unknown>)[key];
         const addr = String(get('address') ?? '');
         return parseReputationScore(entry, addr);
       }

@@ -2,7 +2,7 @@ name: SDK E2E (local Stellar node)
 
 on:
   push:
-    branches: [ main ]
+    branches: [main]
     paths:
       - 'sdk/**'
       - 'packages/shared/**'
@@ -29,7 +29,7 @@ jobs:
 
   e2e-local:
     needs: pnpm-cache
-    runs-on: namespace-profile-nursca
+    runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -37,7 +37,7 @@ jobs:
       - name: Setup pnpm with store cache
         uses: ./.github/actions/setup-pnpm
         with:
-          node-version: "18"
+          node-version: '18'
 
       - name: Start local Stellar node via Docker Compose
         run: |

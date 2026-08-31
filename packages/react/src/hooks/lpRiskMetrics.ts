@@ -1,4 +1,4 @@
-import type { Invoice, LPPortfolio } from '@invoice-liquidity/sdk';
+import type { Invoice, LPPortfolio } from '@iln/sdk';
 
 export interface LPRiskPayerExposure {
   payer: string;
@@ -125,7 +125,7 @@ function readPortfolioNumber(portfolio: LPPortfolio | undefined, keys: string[])
   if (!portfolio) {
     return 0;
   }
-  const record = portfolio as Record<string, unknown>;
+  const record = portfolio as unknown as Record<string, unknown>;
   for (const key of keys) {
     if (record[key] !== undefined) {
       return toNumberValue(record[key]);
@@ -152,7 +152,7 @@ function giniCoefficient(values: number[]): number {
     weighted += (index + 1) * sorted[index];
   }
 
-  return ((2 * weighted) / (n * sum)) - ((n + 1) / n);
+  return (2 * weighted) / (n * sum) - (n + 1) / n;
 }
 
 function herfindahlHirschmanIndex(shares: number[]): number {
@@ -171,7 +171,7 @@ function standardDeviation(values: number[]): number {
     return 0;
   }
   const avg = mean(values);
-  const variance = values.reduce((acc, value) => acc + ((value - avg) ** 2), 0) / values.length;
+  const variance = values.reduce((acc, value) => acc + (value - avg) ** 2, 0) / values.length;
   return Math.sqrt(variance);
 }
 
@@ -180,7 +180,10 @@ function percentile(values: number[], percentileValue: number): number {
     return 0;
   }
   const sorted = [...values].sort((a, b) => a - b);
-  const index = Math.min(sorted.length - 1, Math.max(0, Math.ceil((percentileValue / 100) * sorted.length) - 1));
+  const index = Math.min(
+    sorted.length - 1,
+    Math.max(0, Math.ceil((percentileValue / 100) * sorted.length) - 1)
+  );
   return sorted[index];
 }
 
@@ -196,7 +199,7 @@ function seedFromString(value: string): number {
 function mulberry32(seed: number): () => number {
   let state = seed >>> 0;
   return () => {
-    state += 0x6D2B79F5;
+    state += 0x6d2b79f5;
     let t = state;
     t = Math.imul(t ^ (t >>> 15), t | 1);
     t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
@@ -206,10 +209,10 @@ function mulberry32(seed: number): () => number {
 
 function estimateDefaultProbability(
   reputationScore: number,
-  historicalDefaultRate: number,
+  historicalDefaultRate: number
 ): number {
   const normalizedRep = normalizeReputationScore(reputationScore);
-  const repPenalty = 1 - (normalizedRep / 100);
+  const repPenalty = 1 - normalizedRep / 100;
   const blended = historicalDefaultRate * (1 + repPenalty);
   return clamp(blended, 0.01, 0.95);
 }
@@ -227,7 +230,11 @@ function calculateBucketLabel(daysUntilDue: number): LPRiskMaturityBucket['label
   return '90d+';
 }
 
-function annualizedReturnRate(amount: bigint, discountRateBps: number, daysUntilDue: number): number {
+function annualizedReturnRate(
+  amount: bigint,
+  discountRateBps: number,
+  daysUntilDue: number
+): number {
   if (amount <= 0n || daysUntilDue <= 0) {
     return 0;
   }
@@ -238,7 +245,7 @@ function annualizedReturnRate(amount: bigint, discountRateBps: number, daysUntil
 function simulateValueAtRisk(
   losses: Array<{ amount: number; probability: number }>,
   seed: string,
-  simulations: number,
+  simulations: number
 ): bigint {
   if (losses.length === 0 || simulations <= 0) {
     return 0n;
@@ -263,13 +270,13 @@ function simulateValueAtRisk(
 export function calculateLPRiskMetrics(input: LPRiskMetricsInput): LPRiskMetrics {
   const nowSeconds = normalizeTimestampSeconds(input.now ?? Date.now());
   const validInvoices = input.invoices.filter((invoice) => {
-    const record = invoice as Record<string, unknown>;
+    const record = invoice as unknown as Record<string, unknown>;
     const fundedBy = String(record.fundedBy ?? record.funder ?? '');
     return fundedBy.length === 0 || fundedBy === input.address;
   });
 
   const positionSummaries = validInvoices.map((invoice) => {
-    const record = invoice as Record<string, unknown>;
+    const record = invoice as unknown as Record<string, unknown>;
     const payer = String(record.payer ?? '');
     const token = normalizeTokenLabel(record.token);
     const amount = toBigIntValue(record.amount);
@@ -293,31 +300,41 @@ export function calculateLPRiskMetrics(input: LPRiskMetricsInput): LPRiskMetrics
   const exposureNumber = Number(totalExposure);
   const totalPositions = positionSummaries.length;
 
-  const payerGroups = new Map<string, {
-    amount: bigint;
-    positionCount: number;
-    reputationScore: number;
-    defaultProbability: number;
-  }>();
-  const tokenGroups = new Map<string, {
-    amount: bigint;
-    positionCount: number;
-  }>();
-  const maturityGroups = new Map<LPRiskMaturityBucket['label'], {
-    amount: bigint;
-    positionCount: number;
-  }>();
+  const payerGroups = new Map<
+    string,
+    {
+      amount: bigint;
+      positionCount: number;
+      reputationScore: number;
+      defaultProbability: number;
+    }
+  >();
+  const tokenGroups = new Map<
+    string,
+    {
+      amount: bigint;
+      positionCount: number;
+    }
+  >();
+  const maturityGroups = new Map<
+    LPRiskMaturityBucket['label'],
+    {
+      amount: bigint;
+      positionCount: number;
+    }
+  >();
 
   const historicalDefaultRate = (() => {
     const totalHistoricalPositions =
       readPortfolioNumber(input.portfolio, ['invoiceCount']) ||
       readPortfolioNumber(input.portfolio, ['activePositions']) +
-      readPortfolioNumber(input.portfolio, ['completedPositions']) +
-      readPortfolioNumber(input.portfolio, ['defaultedPositions']) +
-      readPortfolioNumber(input.portfolio, ['activeInvoices']) +
-      readPortfolioNumber(input.portfolio, ['defaultCount']);
+        readPortfolioNumber(input.portfolio, ['completedPositions']) +
+        readPortfolioNumber(input.portfolio, ['defaultedPositions']) +
+        readPortfolioNumber(input.portfolio, ['activeInvoices']) +
+        readPortfolioNumber(input.portfolio, ['defaultCount']);
 
-    const defaulted = readPortfolioNumber(input.portfolio, ['defaultedPositions']) ||
+    const defaulted =
+      readPortfolioNumber(input.portfolio, ['defaultedPositions']) ||
       readPortfolioNumber(input.portfolio, ['defaultCount']);
 
     if (totalHistoricalPositions <= 0) {
@@ -332,10 +349,11 @@ export function calculateLPRiskMetrics(input: LPRiskMetricsInput): LPRiskMetrics
   const returnRates: number[] = [];
 
   for (const position of positionSummaries) {
-    const reputationScore = normalizeReputationScore(input.reputationByPayer?.get(position.payer) ?? 0);
+    const reputationScore = normalizeReputationScore(
+      input.reputationByPayer?.get(position.payer) ?? 0
+    );
     const defaultProbability = estimateDefaultProbability(reputationScore, historicalDefaultRate);
     const exposureAmount = Number(position.amount);
-    const expectedLoss = exposureAmount * defaultProbability;
 
     expectedLossEntries.push({
       amount: exposureAmount,
@@ -417,20 +435,32 @@ export function calculateLPRiskMetrics(input: LPRiskMetricsInput): LPRiskMetrics
   const topShare = payerExposure[0]?.share ?? 0;
   const herdRisk = topShare > 0.3;
 
-  const giniCoefficientValue = giniCoefficient(positionSummaries.map((position) => Number(position.amount)));
+  const giniCoefficientValue = giniCoefficient(
+    positionSummaries.map((position) => Number(position.amount))
+  );
   const herfindahlValue = herfindahlHirschmanIndex(payerExposure.map((entry) => entry.share));
-  const valueAtRisk95 = simulateValueAtRisk(expectedLossEntries, input.address, input.simulations ?? 5_000);
-  const sharpeRatio = standardDeviation(returnRates) > 0 ? mean(returnRates) / standardDeviation(returnRates) : 0;
+  const valueAtRisk95 = simulateValueAtRisk(
+    expectedLossEntries,
+    input.address,
+    input.simulations ?? 5_000
+  );
+  const sharpeRatio =
+    standardDeviation(returnRates) > 0 ? mean(returnRates) / standardDeviation(returnRates) : 0;
 
-  const totalExpectedLoss = expectedLossEntries.reduce((acc, entry) => acc + (entry.amount * entry.probability), 0);
+  const totalExpectedLoss = expectedLossEntries.reduce(
+    (acc, entry) => acc + entry.amount * entry.probability,
+    0
+  );
   const totalExpectedYield = yieldEntries.reduce((acc, value) => acc + value, 0);
-  const averageDefaultProbability = payerExposure.length > 0
-    ? payerExposure.reduce((acc, entry) => acc + (entry.defaultProbability * entry.share), 0)
-    : 0;
+  const averageDefaultProbability =
+    payerExposure.length > 0
+      ? payerExposure.reduce((acc, entry) => acc + entry.defaultProbability * entry.share, 0)
+      : 0;
   const concentrationPenalty = herdRisk ? (topShare - 0.3) * exposureNumber : 0;
-  const yieldAdjustedRiskScore = totalExpectedLoss + concentrationPenalty > 0
-    ? totalExpectedYield / (totalExpectedLoss + concentrationPenalty)
-    : 0;
+  const yieldAdjustedRiskScore =
+    totalExpectedLoss + concentrationPenalty > 0
+      ? totalExpectedYield / (totalExpectedLoss + concentrationPenalty)
+      : 0;
 
   return {
     totalPositions,
@@ -449,21 +479,4 @@ export function calculateLPRiskMetrics(input: LPRiskMetricsInput): LPRiskMetrics
     expectedLoss: BigInt(Math.round(totalExpectedLoss)),
     expectedYield: BigInt(Math.round(totalExpectedYield)),
   };
-}
-
-export function formatRiskPercent(value: number): string {
-  return `${(value * 100).toFixed(1)}%`;
-}
-
-export function formatRiskScore(value: number): string {
-  return value.toFixed(2);
-}
-
-export function formatRiskBigInt(value: bigint, decimals = 7): string {
-  const scale = 10 ** decimals;
-  const numeric = Number(value) / scale;
-  return numeric.toLocaleString(undefined, {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  });
 }

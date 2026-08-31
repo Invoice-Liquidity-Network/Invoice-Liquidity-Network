@@ -28,7 +28,7 @@ jobs:
   knip:
     name: knip
     needs: pnpm-cache
-    runs-on: namespace-profile-nursca
+    runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v4

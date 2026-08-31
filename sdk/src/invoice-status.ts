@@ -9,11 +9,11 @@
  * NOTE: Keep the member set aligned with @iln/shared's InvoiceStatus.
  */
 export enum InvoiceStatus {
-  Pending = "Pending",
-  Funded = "Funded",
-  Paid = "Paid",
-  Defaulted = "Defaulted",
-  Disputed = "Disputed",
+  Pending = 'Pending',
+  Funded = 'Funded',
+  Paid = 'Paid',
+  Defaulted = 'Defaulted',
+  Disputed = 'Disputed',
 }
 
 /**
@@ -77,9 +77,9 @@ export function isTerminal(status: string): boolean {
  * Useful for UI rendering of invoice status badges.
  */
 export const InvoiceStatusColor: Record<string, string> = {
-  [InvoiceStatus.Pending]: "#F59E0B",
-  [InvoiceStatus.Funded]: "#3B82F6",
-  [InvoiceStatus.Paid]: "#10B981",
-  [InvoiceStatus.Defaulted]: "#EF4444",
-  [InvoiceStatus.Disputed]: "#8B5CF6",
+  [InvoiceStatus.Pending]: '#F59E0B',
+  [InvoiceStatus.Funded]: '#3B82F6',
+  [InvoiceStatus.Paid]: '#10B981',
+  [InvoiceStatus.Defaulted]: '#EF4444',
+  [InvoiceStatus.Disputed]: '#8B5CF6',
 };

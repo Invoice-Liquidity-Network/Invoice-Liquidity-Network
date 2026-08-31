@@ -8,12 +8,12 @@
 // ── Types ──────────────────────────────────────────────────────────────────
 
 export type PaymentStatus =
-  | "pending"
-  | "scheduled"
-  | "processing"
-  | "completed"
-  | "failed"
-  | "cancelled";
+  | 'pending'
+  | 'scheduled'
+  | 'processing'
+  | 'completed'
+  | 'failed'
+  | 'cancelled';
 
 export interface TokenAmount {
   tokenId: string;
@@ -65,7 +65,7 @@ export interface SchedulePaymentParams {
 export interface PaymentRecord {
   id: string;
   invoiceId: bigint;
-  type: "partial" | "full" | "multi-token" | "scheduled";
+  type: 'partial' | 'full' | 'multi-token' | 'scheduled';
   status: PaymentStatus;
   tokens: TokenAmount[];
   totalAmount: bigint;
@@ -92,7 +92,7 @@ export interface PaymentHistoryOptions {
   invoiceId?: bigint;
   address?: string;
   status?: PaymentStatus;
-  type?: PaymentRecord["type"];
+  type?: PaymentRecord['type'];
   fromDate?: number;
   toDate?: number;
   limit?: number;
@@ -147,19 +147,19 @@ export class PaymentProcessor {
     const remaining = invoice.amount - funded;
 
     if (amount <= 0n) {
-      throw new RangeError("Partial payment amount must be greater than zero");
+      throw new RangeError('Partial payment amount must be greater than zero');
     }
     if (amount > remaining) {
       throw new RangeError(
-        `Partial payment amount ${amount} exceeds remaining balance ${remaining}`,
+        `Partial payment amount ${amount} exceeds remaining balance ${remaining}`
       );
     }
 
     const record: PaymentRecord = {
       id: generateId(),
       invoiceId,
-      type: "partial",
-      status: "processing",
+      type: 'partial',
+      status: 'processing',
       tokens: [{ tokenId, amount }],
       totalAmount: amount,
       createdAt: new Date().toISOString(),
@@ -170,11 +170,11 @@ export class PaymentProcessor {
 
     try {
       const result = await this.client.fundInvoice(invoiceId, amount);
-      record.status = "completed";
+      record.status = 'completed';
       record.txHash = result.hash;
       record.completedAt = new Date().toISOString();
     } catch (err) {
-      record.status = "failed";
+      record.status = 'failed';
       record.failureReason = err instanceof Error ? err.message : String(err);
       throw err;
     } finally {
@@ -195,7 +195,7 @@ export class PaymentProcessor {
     const { invoiceId, tokens, memo } = params;
 
     if (tokens.length === 0) {
-      throw new Error("At least one token amount is required for a multi-token payment");
+      throw new Error('At least one token amount is required for a multi-token payment');
     }
 
     const records: PaymentRecord[] = [];
@@ -208,8 +208,8 @@ export class PaymentProcessor {
       const record: PaymentRecord = {
         id: generateId(),
         invoiceId,
-        type: "multi-token",
-        status: "processing",
+        type: 'multi-token',
+        status: 'processing',
         tokens: [{ tokenId, amount, symbol }],
         totalAmount: amount,
         createdAt: new Date().toISOString(),
@@ -220,11 +220,11 @@ export class PaymentProcessor {
 
       try {
         const result = await this.client.fundInvoice(invoiceId, amount);
-        record.status = "completed";
+        record.status = 'completed';
         record.txHash = result.hash;
         record.completedAt = new Date().toISOString();
       } catch (err) {
-        record.status = "failed";
+        record.status = 'failed';
         record.failureReason = err instanceof Error ? err.message : String(err);
         this.history.set(record.id, { ...record });
         throw err;
@@ -249,10 +249,10 @@ export class PaymentProcessor {
       executeAt instanceof Date ? Math.floor(executeAt.getTime() / 1000) : executeAt;
 
     if (executeAtTs <= Math.floor(Date.now() / 1000)) {
-      throw new RangeError("executeAt must be in the future");
+      throw new RangeError('executeAt must be in the future');
     }
     if (amount <= 0n) {
-      throw new RangeError("Scheduled payment amount must be greater than zero");
+      throw new RangeError('Scheduled payment amount must be greater than zero');
     }
 
     const scheduled: ScheduledPayment = {
@@ -262,7 +262,7 @@ export class PaymentProcessor {
       amount,
       scheduledAt: new Date().toISOString(),
       executeAt: executeAtTs,
-      status: "scheduled",
+      status: 'scheduled',
       memo,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
@@ -280,11 +280,11 @@ export class PaymentProcessor {
     if (!payment) {
       throw new Error(`Scheduled payment ${id} not found`);
     }
-    if (payment.status !== "scheduled") {
+    if (payment.status !== 'scheduled') {
       throw new Error(`Cannot cancel payment in status '${payment.status}'`);
     }
 
-    payment.status = "cancelled";
+    payment.status = 'cancelled';
     payment.updatedAt = new Date().toISOString();
     this.scheduledPayments.set(id, payment);
     return payment;
@@ -320,19 +320,19 @@ export class PaymentProcessor {
     const now = Math.floor(Date.now() / 1000);
 
     for (const [id, payment] of this.scheduledPayments) {
-      if (payment.status !== "scheduled" || payment.executeAt > now) continue;
+      if (payment.status !== 'scheduled' || payment.executeAt > now) continue;
 
-      payment.status = "processing";
+      payment.status = 'processing';
       payment.updatedAt = new Date().toISOString();
       this.scheduledPayments.set(id, payment);
 
       try {
         const result = await this.client.fundInvoice(payment.invoiceId, payment.amount);
-        payment.status = "completed";
+        payment.status = 'completed';
         payment.txHash = result.hash;
         payment.executedAt = new Date().toISOString();
       } catch (err) {
-        payment.status = "failed";
+        payment.status = 'failed';
         payment.failureReason = err instanceof Error ? err.message : String(err);
       }
 
@@ -358,13 +358,10 @@ export class PaymentProcessor {
   async verifyPayment(invoiceId: bigint): Promise<PaymentVerificationResult> {
     const invoice = await this.client.getInvoice(invoiceId);
     const invoicePayments = Array.from(this.history.values()).filter(
-      (r) => r.invoiceId === invoiceId && r.status === "completed",
+      (r) => r.invoiceId === invoiceId && r.status === 'completed'
     );
 
-    const paidAmount = invoicePayments.reduce(
-      (sum, r) => sum + r.totalAmount,
-      0n,
-    );
+    const paidAmount = invoicePayments.reduce((sum, r) => sum + r.totalAmount, 0n);
 
     const expectedAmount = invoice.amount;
     const fundedOnChain = invoice.fundedAmount ?? 0n;
@@ -376,7 +373,7 @@ export class PaymentProcessor {
     if (paidAmount !== fundedOnChain) {
       issues.push(
         `Local payment history (${paidAmount}) does not match on-chain funded amount (${fundedOnChain}). ` +
-          "Payments made outside this SDK instance are not tracked locally.",
+          'Payments made outside this SDK instance are not tracked locally.'
       );
     }
 
@@ -412,20 +409,14 @@ export class PaymentProcessor {
     }
     if (options.fromDate !== undefined) {
       const from = options.fromDate;
-      records = records.filter(
-        (r) => new Date(r.createdAt).getTime() / 1000 >= from,
-      );
+      records = records.filter((r) => new Date(r.createdAt).getTime() / 1000 >= from);
     }
     if (options.toDate !== undefined) {
       const to = options.toDate;
-      records = records.filter(
-        (r) => new Date(r.createdAt).getTime() / 1000 <= to,
-      );
+      records = records.filter((r) => new Date(r.createdAt).getTime() / 1000 <= to);
     }
 
-    records.sort(
-      (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
-    );
+    records.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
 
     if (options.limit !== undefined) {
       records = records.slice(0, options.limit);
@@ -447,13 +438,11 @@ export class PaymentProcessor {
     const records = Array.from(this.history.values());
     return {
       total: records.length,
-      completed: records.filter((r) => r.status === "completed").length,
-      failed: records.filter((r) => r.status === "failed").length,
-      pending: records.filter(
-        (r) => r.status === "pending" || r.status === "processing",
-      ).length,
+      completed: records.filter((r) => r.status === 'completed').length,
+      failed: records.filter((r) => r.status === 'failed').length,
+      pending: records.filter((r) => r.status === 'pending' || r.status === 'processing').length,
       totalVolume: records
-        .filter((r) => r.status === "completed")
+        .filter((r) => r.status === 'completed')
         .reduce((sum, r) => sum + r.totalAmount, 0n),
     };
   }

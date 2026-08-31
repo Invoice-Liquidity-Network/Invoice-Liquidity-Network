@@ -1,5 +1,5 @@
-import type { PayerScore, ReputationClient } from "./types.js";
-import { SEED_REPUTATION } from "./seed.js";
+import type { PayerScore, ReputationClient } from './types.js';
+import { SEED_REPUTATION } from './seed.js';
 
 function delay(ms = 60): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -24,9 +24,7 @@ export class MockReputationClient implements ReputationClient {
     return this.scores.get(payerAddress) ?? null;
   }
 
-  async getPayerScoresBatch(
-    addresses: string[]
-  ): Promise<Map<string, PayerScore | null>> {
+  async getPayerScoresBatch(addresses: string[]): Promise<Map<string, PayerScore | null>> {
     await delay();
     const result = new Map<string, PayerScore | null>();
     for (const addr of addresses) {

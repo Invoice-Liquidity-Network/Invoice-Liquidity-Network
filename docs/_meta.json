@@ -32,6 +32,7 @@
   },
   "contracts": "Contract Reference",
   "architecture": "Architecture",
+  "contract-abi-compatibility": "Contract ABI Compatibility",
   "-- Indexer --": {
     "type": "separator",
     "title": "Indexer"
@@ -64,10 +65,22 @@
   "mainnet-launch-checklist": "Mainnet Launch Checklist",
   "deployment": "Deployment",
   "release-process": "Release Process",
+  "release-runbook": "Release Runbook",
+  "migrations": "Database Migrations",
   "scripts": "Scripts Reference",
   "ci-cd": "CI/CD",
   "analytics": "Analytics",
   "mutation-testing": "Mutation Testing",
+  "monorepo-map": "Monorepo Map",
+  "-- Testing & Quality --": {
+    "type": "separator",
+    "title": "Testing & Quality"
+  },
+  "e2e-test-scope": "E2E Test Scope",
+  "flaky-test-quarantine": "Flaky Test Quarantine",
+  "load-test-harness": "Load Test Harness",
+  "test-runtime-budgets": "Test Runtime Budgets",
+  "sdk-integration-fixture-audit": "SDK Integration Fixture Audit",
   "-- Contributing --": {
     "type": "separator",
     "title": "Contributing"
@@ -81,12 +94,15 @@
     "type": "separator",
     "title": "Reference"
   },
+  "versioning": "Documentation Versioning",
   "glossary": "Glossary",
   "errors": "SDK Errors",
   "troubleshooting": "Troubleshooting",
   "threat-model": "Threat Model",
   "security": "Security",
   "security-guide": "Security Guide",
+  "vulnerability-disclosure": "Vulnerability Disclosure",
+  "secrets-baseline-audit": "Secrets Baseline Audit",
   "privacy": "Privacy & Data Retention",
   "next.config": "Next Config",
   "theme.config": "Theme Config"

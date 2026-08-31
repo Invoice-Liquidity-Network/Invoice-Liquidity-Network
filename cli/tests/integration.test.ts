@@ -1,14 +1,14 @@
-import { Keypair } from "@stellar/stellar-sdk";
-import { mkdtempSync, writeFileSync } from "node:fs";
-import os from "node:os";
-import path from "node:path";
-import { Writable } from "node:stream";
+import { Keypair } from '@stellar/stellar-sdk';
+import { mkdtempSync, writeFileSync } from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import { Writable } from 'node:stream';
 
-import { beforeAll, describe, expect, it } from "vitest";
+import { beforeAll, describe, expect, it } from 'vitest';
 
-import { runCli } from "../src/cli";
+import { runCli } from '../src/cli';
 
-const LOCAL_RPC_URL = process.env.ILN_CLI_LOCAL_RPC_URL ?? "http://localhost:8000/soroban/rpc";
+const LOCAL_RPC_URL = process.env.ILN_CLI_LOCAL_RPC_URL ?? 'http://localhost:8000/soroban/rpc';
 const LOCAL_CONTRACT_ID = process.env.ILN_CLI_LOCAL_CONTRACT_ID;
 const LOCAL_TOKEN_ID = process.env.ILN_CLI_LOCAL_TOKEN_ID;
 const FREELANCER_SECRET = process.env.ILN_CLI_LOCAL_FREELANCER_SECRET;
@@ -21,11 +21,11 @@ const hasLocalFixture =
   Boolean(PAYER_SECRET) &&
   Boolean(FUNDER_SECRET);
 
-describe.skipIf(!hasLocalFixture)("CLI local integration", () => {
-  const workdir = mkdtempSync(path.join(os.tmpdir(), "iln-cli-local-"));
-  const freelancerSecretPath = path.join(workdir, "freelancer.secret");
-  const payerSecretPath = path.join(workdir, "payer.secret");
-  const funderSecretPath = path.join(workdir, "funder.secret");
+describe.skipIf(!hasLocalFixture)('CLI local integration', () => {
+  const workdir = mkdtempSync(path.join(os.tmpdir(), 'iln-cli-local-'));
+  const freelancerSecretPath = path.join(workdir, 'freelancer.secret');
+  const payerSecretPath = path.join(workdir, 'payer.secret');
+  const funderSecretPath = path.join(workdir, 'funder.secret');
 
   beforeAll(() => {
     writeFileSync(freelancerSecretPath, `${FREELANCER_SECRET!}\n`);
@@ -33,7 +33,7 @@ describe.skipIf(!hasLocalFixture)("CLI local integration", () => {
     writeFileSync(funderSecretPath, `${FUNDER_SECRET!}\n`);
   });
 
-  it("covers submit, status, list, fund, and pay against a local Soroban instance", async () => {
+  it('covers submit, status, list, fund, and pay against a local Soroban instance', async () => {
     const dueDate = new Date(Date.now() + 24 * 60 * 60 * 1000);
     const due = dueDate.toISOString().slice(0, 10);
     const payerPublic = Keypair.fromSecret(PAYER_SECRET!).publicKey();
@@ -45,24 +45,24 @@ describe.skipIf(!hasLocalFixture)("CLI local integration", () => {
       {
         contractId: LOCAL_CONTRACT_ID!,
         keypairPath: freelancerSecretPath,
-        network: "standalone",
+        network: 'standalone',
         rpcUrl: LOCAL_RPC_URL,
         tokenId: LOCAL_TOKEN_ID!,
       },
-      ["status", "--id", invoiceId.toString()],
+      ['status', '--id', invoiceId.toString()]
     );
-    expect(statusBeforeFund.stdout).toContain("Pending");
+    expect(statusBeforeFund.stdout).toContain('Pending');
 
     const listResult = await invokeWithConfig(
       workdir,
       {
         contractId: LOCAL_CONTRACT_ID!,
         keypairPath: freelancerSecretPath,
-        network: "standalone",
+        network: 'standalone',
         rpcUrl: LOCAL_RPC_URL,
         tokenId: LOCAL_TOKEN_ID!,
       },
-      ["list", "--address", freelancerPublic],
+      ['list', '--address', freelancerPublic]
     );
     expect(listResult.stdout).toContain(invoiceId.toString());
 
@@ -71,11 +71,11 @@ describe.skipIf(!hasLocalFixture)("CLI local integration", () => {
       {
         contractId: LOCAL_CONTRACT_ID!,
         keypairPath: funderSecretPath,
-        network: "standalone",
+        network: 'standalone',
         rpcUrl: LOCAL_RPC_URL,
         tokenId: LOCAL_TOKEN_ID!,
       },
-      ["fund", "--id", invoiceId.toString()],
+      ['fund', '--id', invoiceId.toString()]
     );
     expect(fundResult.stdout).toContain(`Funded invoice ${invoiceId.toString()}`);
 
@@ -84,11 +84,11 @@ describe.skipIf(!hasLocalFixture)("CLI local integration", () => {
       {
         contractId: LOCAL_CONTRACT_ID!,
         keypairPath: payerSecretPath,
-        network: "standalone",
+        network: 'standalone',
         rpcUrl: LOCAL_RPC_URL,
         tokenId: LOCAL_TOKEN_ID!,
       },
-      ["pay", "--id", invoiceId.toString()],
+      ['pay', '--id', invoiceId.toString()]
     );
     expect(payResult.stdout).toContain(`Marked invoice ${invoiceId.toString()} as paid`);
   }, 180_000);
@@ -98,18 +98,18 @@ async function submitInvoice(
   cwd: string,
   keypairPath: string,
   payer: string,
-  due: string,
+  due: string
 ): Promise<number> {
   const result = await invokeWithConfig(
     cwd,
     {
       contractId: LOCAL_CONTRACT_ID!,
       keypairPath,
-      network: "standalone",
+      network: 'standalone',
       rpcUrl: LOCAL_RPC_URL,
       tokenId: LOCAL_TOKEN_ID!,
     },
-    ["submit", "--payer", payer, "--amount", "1", "--due", due, "--rate", "300"],
+    ['submit', '--payer', payer, '--amount', '1', '--due', due, '--rate', '300']
   );
 
   const match = result.stdout.match(/Submitted invoice (\d+)/);
@@ -123,9 +123,9 @@ async function submitInvoice(
 async function invokeWithConfig(
   cwd: string,
   config: Record<string, unknown>,
-  argv: string[],
+  argv: string[]
 ): Promise<{ exitCode: number; stderr: string; stdout: string }> {
-  writeFileSync(path.join(cwd, ".iln.json"), JSON.stringify(config, null, 2));
+  writeFileSync(path.join(cwd, '.iln.json'), JSON.stringify(config, null, 2));
   const stdout = createMemoryStream();
   const stderr = createMemoryStream();
   const previous = process.cwd();
@@ -144,7 +144,7 @@ async function invokeWithConfig(
 }
 
 function createMemoryStream(): Writable & { toString(): string } {
-  let output = "";
+  let output = '';
   return Object.assign(
     new Writable({
       write(chunk, _encoding, callback) {
@@ -156,6 +156,6 @@ function createMemoryStream(): Writable & { toString(): string } {
       toString() {
         return output;
       },
-    },
+    }
   );
 }

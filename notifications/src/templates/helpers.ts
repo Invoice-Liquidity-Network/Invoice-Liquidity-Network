@@ -6,7 +6,7 @@
 export function formatAmount(rawAmount: string): string {
   const n = BigInt(rawAmount);
   const whole = n / 10_000_000n;
-  const frac = (n % 10_000_000n).toString().padStart(7, "0").replace(/0+$/, "");
+  const frac = (n % 10_000_000n).toString().padStart(7, '0').replace(/0+$/, '');
   return frac ? `${whole}.${frac}` : `${whole}`;
 }
 
@@ -24,11 +24,11 @@ export function shortAddress(address: string): string {
 /** Escape HTML special characters to prevent injection in templates. */
 export function escapeHtml(str: string): string {
   return str
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#39;");
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
 }
 
 /** Shared email wrapper: responsive, inbox-safe HTML shell.
@@ -43,14 +43,14 @@ export function escapeHtml(str: string): string {
 export function emailShell(
   title: string,
   bodyHtml: string,
-  options: { unsubscribeUrl?: string } = {},
+  options: { unsubscribeUrl?: string } = {}
 ): string {
   const { unsubscribeUrl } = options;
-  const unsubHref = unsubscribeUrl ?? "https://iln.finance/unsubscribe";
+  const unsubHref = unsubscribeUrl ?? 'https://iln.finance/unsubscribe';
   // The visible label is always "Unsubscribe" for consistency with established
   // email conventions (and to keep the existing snapshot tests passing). Only
   // the destination URL changes when a tokenized link is supplied.
-  const unsubLabel = "Unsubscribe";
+  const unsubLabel = 'Unsubscribe';
   return `<!DOCTYPE html>
 <html lang="en">
 <head>

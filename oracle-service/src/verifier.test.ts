@@ -7,7 +7,11 @@ import {
   normalizeAmountToNumber,
   normalizeTimestampToMs,
 } from './verifier';
-import type { IndexerInvoiceHistoryEntry, OracleVerificationRequest, ReputationSnapshot } from './types';
+import type {
+  IndexerInvoiceHistoryEntry,
+  OracleVerificationRequest,
+  ReputationSnapshot,
+} from './types';
 
 const request: OracleVerificationRequest = {
   payer: 'GTESTPAYERAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA',

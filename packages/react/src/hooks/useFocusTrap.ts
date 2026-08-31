@@ -8,7 +8,7 @@ export function useFocusTrap(active: boolean): React.RefObject<HTMLDivElement | 
 
     const container = ref.current;
     const focusable = container.querySelectorAll<HTMLElement>(
-      'a[href], button:not([disabled]), textarea:not([disabled]), input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])',
+      'a[href], button:not([disabled]), textarea:not([disabled]), input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])'
     );
 
     const first = focusable[0];

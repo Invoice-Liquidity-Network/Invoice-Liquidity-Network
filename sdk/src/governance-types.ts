@@ -3,13 +3,13 @@
  */
 export enum ProposalActionKind {
   /** Update the protocol fee rate. */
-  UpdateFeeRate = "UpdateFeeRate",
+  UpdateFeeRate = 'UpdateFeeRate',
   /** Add a new token to the protocol. */
-  AddToken = "AddToken",
+  AddToken = 'AddToken',
   /** Remove a token from the protocol. */
-  RemoveToken = "RemoveToken",
+  RemoveToken = 'RemoveToken',
   /** Update the maximum discount rate. */
-  UpdateMaxDiscountRate = "UpdateMaxDiscountRate",
+  UpdateMaxDiscountRate = 'UpdateMaxDiscountRate',
 }
 
 /**
@@ -33,11 +33,11 @@ export type ProposalAction =
  * runtime values. Keep in sync with @iln/shared's ProposalStatus.
  */
 export enum ProposalStatus {
-  Active = "Active",
-  Passed = "Passed",
-  Rejected = "Rejected",
-  Executed = "Executed",
-  Vetoed = "Vetoed",
+  Active = 'Active',
+  Passed = 'Passed',
+  Rejected = 'Rejected',
+  Executed = 'Executed',
+  Vetoed = 'Vetoed',
 }
 
 /**
@@ -165,7 +165,7 @@ export interface VotingResult {
 /**
  * Configuration for the GovernanceClient.
  */
-import type { RpcServerLike } from "./types";
+import type { RpcServerLike } from './types';
 
 export interface GovernanceClientConfig {
   contractId: string;

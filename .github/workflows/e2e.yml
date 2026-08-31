@@ -1,6 +1,9 @@
 name: E2E Integration
 
-on: [push, pull_request]
+on:
+  workflow_dispatch:
+# Manual trigger only: push/PR runs duplicated "SDK E2E (local Stellar node)"
+# on main and "E2E Nightly" (scheduled), and fired on every branch push.
 
 # Least-privilege: read code to run the E2E smoke test.
 permissions:
@@ -12,22 +15,22 @@ concurrency:
 
 jobs:
   e2e-tests:
-    runs-on: namespace-profile-nursca
+    runs-on: ubuntu-latest
     if: vars.RUN_E2E == 'true'
     steps:
       - uses: actions/checkout@v4
-      
+
       - name: Start Local Stellar Node
         run: docker compose up -d
-        
+
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
           node-version: 18
-          
+
       - name: Wait for RPC
-        run: sleep 15 
-        
+        run: sleep 15
+
       - name: Install & Run
         run: |
           npm install

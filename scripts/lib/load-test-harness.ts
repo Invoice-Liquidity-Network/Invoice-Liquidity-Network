@@ -11,15 +11,15 @@
  *   - scripts/load-test-notifications.ts (thin wrapper)
  */
 
-import { writeFileSync } from "fs";
-import { resolve } from "path";
+import { writeFileSync } from 'fs';
+import { resolve } from 'path';
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
 export interface TestRequest {
   name: string;
   path: string;
-  method: "GET" | "POST";
+  method: 'GET' | 'POST';
   body?: string;
   headers?: Record<string, string>;
 }
@@ -94,7 +94,7 @@ export interface LoadTestReport {
 }
 
 export interface LoadTestConfig {
-  service: "indexer" | "notifications" | "both";
+  service: 'indexer' | 'notifications' | 'both';
   duration: number;
   concurrency: number;
   indexerUrl: string;
@@ -108,21 +108,21 @@ export interface LoadTestConfig {
 // ── Colors ───────────────────────────────────────────────────────────────────
 
 export const colors = {
-  reset: "\x1b[0m",
-  bright: "\x1b[1m",
-  green: "\x1b[32m",
-  yellow: "\x1b[33m",
-  red: "\x1b[31m",
-  cyan: "\x1b[36m",
-  magenta: "\x1b[35m",
-  dim: "\x1b[2m",
+  reset: '\x1b[0m',
+  bright: '\x1b[1m',
+  green: '\x1b[32m',
+  yellow: '\x1b[33m',
+  red: '\x1b[31m',
+  cyan: '\x1b[36m',
+  magenta: '\x1b[35m',
+  dim: '\x1b[2m',
 };
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
 export function getRandomStellarAddress(): string {
-  const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
-  let result = "G";
+  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
+  let result = 'G';
   for (let i = 0; i < 55; i++) {
     result += chars.charAt(Math.floor(Math.random() * chars.length));
   }
@@ -134,34 +134,50 @@ export function getIndexerRequests(baseUrl: string): TestRequest[] {
   const randomInvoiceId = Math.floor(Math.random() * 50) + 1;
 
   return [
-    { name: "Indexer Health", method: "GET", path: `${baseUrl}/v1/health` },
-    { name: "Indexer Invoices List", method: "GET", path: `${baseUrl}/v1/invoices?limit=10` },
-    { name: "Indexer Stats", method: "GET", path: `${baseUrl}/v1/stats` },
-    { name: "Indexer Top LPs", method: "GET", path: `${baseUrl}/v1/lps/top?limit=5` },
-    { name: "Indexer LP Stats", method: "GET", path: `${baseUrl}/v1/lps/${randomAddress}/stats` },
-    { name: "Indexer Freelancer Stats", method: "GET", path: `${baseUrl}/v1/freelancers/${randomAddress}/stats` },
-    { name: "Indexer Invoice History", method: "GET", path: `${baseUrl}/v1/history/${randomAddress}` },
-    { name: "Indexer Get Invoice by ID", method: "GET", path: `${baseUrl}/v1/invoice/${randomInvoiceId}` },
+    { name: 'Indexer Health', method: 'GET', path: `${baseUrl}/v1/health` },
+    { name: 'Indexer Invoices List', method: 'GET', path: `${baseUrl}/v1/invoices?limit=10` },
+    { name: 'Indexer Stats', method: 'GET', path: `${baseUrl}/v1/stats` },
+    { name: 'Indexer Top LPs', method: 'GET', path: `${baseUrl}/v1/lps/top?limit=5` },
+    { name: 'Indexer LP Stats', method: 'GET', path: `${baseUrl}/v1/lps/${randomAddress}/stats` },
     {
-      name: "Indexer GraphQL Health",
-      method: "POST",
-      path: `${baseUrl}/graphql`,
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ query: "query { health { status db uptime } }" }),
+      name: 'Indexer Freelancer Stats',
+      method: 'GET',
+      path: `${baseUrl}/v1/freelancers/${randomAddress}/stats`,
     },
     {
-      name: "Indexer GraphQL Protocol Stats",
-      method: "POST",
-      path: `${baseUrl}/graphql`,
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ query: "query { protocolStats { totalInvoices totalVolume totalYield defaultRate } }" }),
+      name: 'Indexer Invoice History',
+      method: 'GET',
+      path: `${baseUrl}/v1/history/${randomAddress}`,
     },
     {
-      name: "Indexer GraphQL Top LPs",
-      method: "POST",
+      name: 'Indexer Get Invoice by ID',
+      method: 'GET',
+      path: `${baseUrl}/v1/invoice/${randomInvoiceId}`,
+    },
+    {
+      name: 'Indexer GraphQL Health',
+      method: 'POST',
       path: `${baseUrl}/graphql`,
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ query: "query { topLPs(limit: 5, period: \"all\") { address yield invoiceCount } }" }),
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ query: 'query { health { status db uptime } }' }),
+    },
+    {
+      name: 'Indexer GraphQL Protocol Stats',
+      method: 'POST',
+      path: `${baseUrl}/graphql`,
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        query: 'query { protocolStats { totalInvoices totalVolume totalYield defaultRate } }',
+      }),
+    },
+    {
+      name: 'Indexer GraphQL Top LPs',
+      method: 'POST',
+      path: `${baseUrl}/graphql`,
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        query: 'query { topLPs(limit: 5, period: "all") { address yield invoiceCount } }',
+      }),
     },
   ];
 }
@@ -172,48 +188,63 @@ export function getNotificationRequests(baseUrl: string): TestRequest[] {
   const randomEmail = `loadtest_${Math.floor(Math.random() * 100000)}@iln-test.com`;
 
   return [
-    { name: "Notifications Health", method: "GET", path: `${baseUrl}/health` },
-    { name: "Notifications Analytics", method: "GET", path: `${baseUrl}/analytics` },
-    { name: "Notifications Channel Comparison", method: "GET", path: `${baseUrl}/analytics/channel-comparison` },
-    { name: "Notifications Trends", method: "GET", path: `${baseUrl}/analytics/trends?days=7` },
-    { name: "Notifications Get Subscriptions", method: "GET", path: `${baseUrl}/subscriptions/${randomAddress}` },
-    { name: "Notifications Get Subscription Logs", method: "GET", path: `${baseUrl}/subscriptions/${randomSubId}/logs` },
+    { name: 'Notifications Health', method: 'GET', path: `${baseUrl}/health` },
+    { name: 'Notifications Analytics', method: 'GET', path: `${baseUrl}/analytics` },
     {
-      name: "Notifications Subscribe Webhook",
-      method: "POST",
+      name: 'Notifications Channel Comparison',
+      method: 'GET',
+      path: `${baseUrl}/analytics/channel-comparison`,
+    },
+    { name: 'Notifications Trends', method: 'GET', path: `${baseUrl}/analytics/trends?days=7` },
+    {
+      name: 'Notifications Get Subscriptions',
+      method: 'GET',
+      path: `${baseUrl}/subscriptions/${randomAddress}`,
+    },
+    {
+      name: 'Notifications Get Subscription Logs',
+      method: 'GET',
+      path: `${baseUrl}/subscriptions/${randomSubId}/logs`,
+    },
+    {
+      name: 'Notifications Subscribe Webhook',
+      method: 'POST',
       path: `${baseUrl}/subscribe`,
-      headers: { "Content-Type": "application/json" },
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         stellar_address: randomAddress,
-        channel: "webhook",
+        channel: 'webhook',
         destination: `https://example.com/webhook/${Math.random().toString(36).substring(7)}`,
-        triggers: ["invoice_funded", "invoice_paid"],
-        webhook_secret: "loadtest-secret-key",
+        triggers: ['invoice_funded', 'invoice_paid'],
+        webhook_secret: 'loadtest-secret-key',
       }),
     },
     {
-      name: "Notifications Subscribe Email",
-      method: "POST",
+      name: 'Notifications Subscribe Email',
+      method: 'POST',
       path: `${baseUrl}/subscribe`,
-      headers: { "Content-Type": "application/json" },
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         stellar_address: randomAddress,
-        channel: "email",
+        channel: 'email',
         destination: randomEmail,
-        triggers: ["invoice_funded", "invoice_due_soon"],
+        triggers: ['invoice_funded', 'invoice_due_soon'],
       }),
     },
     {
-      name: "Notifications Test Webhook",
-      method: "POST",
+      name: 'Notifications Test Webhook',
+      method: 'POST',
       path: `${baseUrl}/test-webhook`,
-      headers: { "Content-Type": "application/json" },
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ id: randomSubId }),
     },
   ];
 }
 
-export async function executeRequest(req: TestRequest, timeoutMs = 5000): Promise<{ status: number; ok: boolean; error?: string }> {
+export async function executeRequest(
+  req: TestRequest,
+  timeoutMs = 5000
+): Promise<{ status: number; ok: boolean; error?: string }> {
   const controller = new AbortController();
   const id = setTimeout(() => controller.abort(), timeoutMs);
 
@@ -237,7 +268,7 @@ export async function executeRequest(req: TestRequest, timeoutMs = 5000): Promis
     return {
       status: 0,
       ok: false,
-      error: err.name === "AbortError" ? "Timeout" : err.message || String(err),
+      error: err.name === 'AbortError' ? 'Timeout' : err.message || String(err),
     };
   } finally {
     clearTimeout(id);
@@ -280,15 +311,15 @@ export async function runLoadTest(config: LoadTestConfig): Promise<LoadTestRepor
   const runWorker = async (workerId: number) => {
     while (Date.now() < testEndTime) {
       const pool: TestRequest[] = [];
-      if (config.service === "indexer" || config.service === "both") {
+      if (config.service === 'indexer' || config.service === 'both') {
         pool.push(...getIndexerRequests(config.indexerUrl));
       }
-      if (config.service === "notifications" || config.service === "both") {
+      if (config.service === 'notifications' || config.service === 'both') {
         pool.push(...getNotificationRequests(config.notificationsUrl));
       }
 
       if (pool.length === 0) {
-        throw new Error("Empty request pool configured");
+        throw new Error('Empty request pool configured');
       }
 
       const target = pool[Math.floor(Math.random() * pool.length)];
@@ -327,10 +358,19 @@ export async function runLoadTest(config: LoadTestConfig): Promise<LoadTestRepor
   const allLatencies = results.map((r) => r.latency);
   const globalPercentiles = calculatePercentiles(allLatencies);
 
-  const endpointGroups = new Map<string, { latencies: number[]; success: number; failed: number; method: string; url: string }>();
+  const endpointGroups = new Map<
+    string,
+    { latencies: number[]; success: number; failed: number; method: string; url: string }
+  >();
   for (const r of results) {
     if (!endpointGroups.has(r.name)) {
-      endpointGroups.set(r.name, { latencies: [], success: 0, failed: 0, method: r.method, url: r.url });
+      endpointGroups.set(r.name, {
+        latencies: [],
+        success: 0,
+        failed: 0,
+        method: r.method,
+        url: r.url,
+      });
     }
     const g = endpointGroups.get(r.name)!;
     g.latencies.push(r.latency);
@@ -374,19 +414,31 @@ export async function runLoadTest(config: LoadTestConfig): Promise<LoadTestRepor
 
   if (globalPercentiles.avg > config.avgThreshold) {
     thresholdsPassed.avgLatency = false;
-    alerts.push(`Average response time (${globalPercentiles.avg.toFixed(2)}ms) exceeded threshold of ${config.avgThreshold}ms`);
+    alerts.push(
+      `Average response time (${globalPercentiles.avg.toFixed(2)}ms) exceeded threshold of ${
+        config.avgThreshold
+      }ms`
+    );
   }
   if (globalPercentiles.p95 > config.p95Threshold) {
     thresholdsPassed.p95Latency = false;
-    alerts.push(`95th percentile latency (${globalPercentiles.p95.toFixed(2)}ms) exceeded threshold of ${config.p95Threshold}ms`);
+    alerts.push(
+      `95th percentile latency (${globalPercentiles.p95.toFixed(2)}ms) exceeded threshold of ${
+        config.p95Threshold
+      }ms`
+    );
   }
   if (errorRate > config.errorThreshold) {
     thresholdsPassed.errorRate = false;
-    alerts.push(`Error rate (${errorRate.toFixed(2)}%) exceeded threshold of ${config.errorThreshold}%`);
+    alerts.push(
+      `Error rate (${errorRate.toFixed(2)}%) exceeded threshold of ${config.errorThreshold}%`
+    );
   }
   if (rps < config.rpsThreshold) {
     thresholdsPassed.rps = false;
-    alerts.push(`Throughput (${rps.toFixed(2)} RPS) was below threshold of ${config.rpsThreshold} RPS`);
+    alerts.push(
+      `Throughput (${rps.toFixed(2)} RPS) was below threshold of ${config.rpsThreshold} RPS`
+    );
   }
 
   return {
@@ -454,14 +506,14 @@ export function printReport(report: LoadTestReport): void {
       const len = parseInt(m.match(/\d+/)![0], 10);
       return `%- ${len}s`;
     }),
-    "Endpoint Name",
-    "Method",
-    "Requests",
-    "Success Rate",
-    "Avg Latency",
-    "p95 Latency"
+    'Endpoint Name',
+    'Method',
+    'Requests',
+    'Success Rate',
+    'Avg Latency',
+    'p95 Latency'
   );
-  console.log("-".repeat(88));
+  console.log('-'.repeat(88));
   for (const s of endpoints) {
     console.log(
       `%-35s %-6s %-8d %-12s %-10s %-10s`,
@@ -482,7 +534,9 @@ export function printReport(report: LoadTestReport): void {
     }
     console.log();
   } else {
-    console.log(`${colors.bright}${colors.green}✅ All performance thresholds satisfied successfully!${colors.reset}\n`);
+    console.log(
+      `${colors.bright}${colors.green}✅ All performance thresholds satisfied successfully!${colors.reset}\n`
+    );
   }
 }
 
@@ -494,7 +548,7 @@ export function writeMarkdownReport(report: LoadTestReport, reportPath: string):
       ? `> [!WARNING]
 > **Performance thresholds breached!**
 > The following SLA thresholds were violated during stress testing:
-${thresholds.violations.map((a) => `> - ⚠️ ${a}`).join("\n")}`
+${thresholds.violations.map((a) => `> - ⚠️ ${a}`).join('\n')}`
       : `> [!NOTE]
 > **Performance SLA validation passed!**
 > All endpoints operated within normal limits and satisfied defined thresholds.`;
@@ -506,7 +560,7 @@ This report summarizes stress testing metrics collected during simulated client 
 ## Test Metadata
 - **Date/Time:** ${metadata.timestamp}
 - **Target Service:** \`${metadata.service}\`
-- **Configured Duration:** ${(metadata.durationSeconds).toFixed(2)} seconds
+- **Configured Duration:** ${metadata.durationSeconds.toFixed(2)} seconds
 - **Concurrent Workers (VUs):** ${metadata.concurrency}
 - **Total Requests Sent:** ${metadata.totalRequests}
 
@@ -520,10 +574,18 @@ ${statusBox}
 
 | Metric | Measured Value | Threshold | Status |
 |---|---|---|---|
-| **Throughput** | ${metadata.rps.toFixed(2)} RPS | &ge; ${thresholds.minRps} RPS | ${thresholds.passed ? "✅ PASS" : "❌ FAIL"} |
-| **Average Latency** | ${latencies.avg.toFixed(2)} ms | &le; ${thresholds.avgLatencyMs} ms | ${thresholds.passed ? "✅ PASS" : "❌ FAIL"} |
-| **p95 Latency** | ${latencies.p95.toFixed(2)} ms | &le; ${thresholds.p95LatencyMs} ms | ${thresholds.passed ? "✅ PASS" : "❌ FAIL"} |
-| **Error Rate** | ${metadata.errorRate.toFixed(2)}% | &le; ${thresholds.errorRatePercent}% | ${thresholds.passed ? "✅ PASS" : "❌ FAIL"} |
+| **Throughput** | ${metadata.rps.toFixed(2)} RPS | &ge; ${thresholds.minRps} RPS | ${
+    thresholds.passed ? '✅ PASS' : '❌ FAIL'
+  } |
+| **Average Latency** | ${latencies.avg.toFixed(2)} ms | &le; ${thresholds.avgLatencyMs} ms | ${
+    thresholds.passed ? '✅ PASS' : '❌ FAIL'
+  } |
+| **p95 Latency** | ${latencies.p95.toFixed(2)} ms | &le; ${thresholds.p95LatencyMs} ms | ${
+    thresholds.passed ? '✅ PASS' : '❌ FAIL'
+  } |
+| **Error Rate** | ${metadata.errorRate.toFixed(2)}% | &le; ${thresholds.errorRatePercent}% | ${
+    thresholds.passed ? '✅ PASS' : '❌ FAIL'
+  } |
 
 ## Latency Percentiles
 
@@ -543,9 +605,11 @@ ${statusBox}
 ${endpoints
   .map(
     (s) =>
-      `| ${s.name} | \`${s.method}\` | ${s.total} | ${s.successRate.toFixed(2)}% | ${s.avg.toFixed(2)} ms | ${s.p95.toFixed(2)} ms |`
+      `| ${s.name} | \`${s.method}\` | ${s.total} | ${s.successRate.toFixed(2)}% | ${s.avg.toFixed(
+        2
+      )} ms | ${s.p95.toFixed(2)} ms |`
   )
-  .join("\n")}
+  .join('\n')}
 
 ${
   errors.length > 0
@@ -553,8 +617,8 @@ ${
 
 | Error Description / Status Code | Frequency |
 |---|---|
-${errors.map(({ error, count }) => `| ${error} | ${count} |`).join("\n")}`
-    : ""
+${errors.map(({ error, count }) => `| ${error} | ${count} |`).join('\n')}`
+    : ''
 }
 
 ---
@@ -562,7 +626,7 @@ ${errors.map(({ error, count }) => `| ${error} | ${count} |`).join("\n")}`
 `;
 
   try {
-    writeFileSync(resolve(process.cwd(), reportPath), mdReport, "utf-8");
+    writeFileSync(resolve(process.cwd(), reportPath), mdReport, 'utf-8');
     console.log(`${colors.bright}Markdown report saved to: ${reportPath}${colors.reset}`);
   } catch (err: any) {
     console.error(`${colors.red}Failed to write markdown report: ${err.message}${colors.reset}`);
@@ -571,7 +635,7 @@ ${errors.map(({ error, count }) => `| ${error} | ${count} |`).join("\n")}`
 
 export function writeJsonReport(report: LoadTestReport, jsonPath: string): void {
   try {
-    writeFileSync(jsonPath, JSON.stringify(report, null, 2), "utf-8");
+    writeFileSync(jsonPath, JSON.stringify(report, null, 2), 'utf-8');
     console.log(`${colors.bright}JSON raw log saved to:    ${jsonPath}${colors.reset}`);
   } catch (err: any) {
     console.error(`${colors.red}Failed to write JSON raw log: ${err.message}${colors.reset}`);

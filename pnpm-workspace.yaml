@@ -41,7 +41,7 @@ packages:
   - docs
 
   # All packages/* subdirectories (covers packages/shared and every other package)
-  - "packages/*"
+  - 'packages/*'
 
   # Example applications
-  - "examples/*"
+  - 'examples/*'

@@ -2,8 +2,6 @@ import React, { useState } from 'react';
 import { useLPCoverage, usePoolBalance, useEnroll, useDepositPremium } from '../hooks/useInsurance';
 import { useInvoices } from '../hooks/useInvoices';
 import { StatsCard } from './StatsCard';
-import { AddressDisplay } from './AddressDisplay';
-import { AmountDisplay } from './AmountDisplay';
 
 export interface InsurancePoolPanelProps {
   address: string;
@@ -12,12 +10,15 @@ export interface InsurancePoolPanelProps {
 }
 
 function formatCurrency(value: bigint | undefined): string {
-  if (value == null) return '$0.00';
-  return `$${(Number(value) / 10_000_000).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  if (value === null || value === undefined) return '$0.00';
+  return `$${(Number(value) / 10_000_000).toLocaleString(undefined, {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })}`;
 }
 
 function formatPercent(value: number | undefined): string {
-  if (value == null) return '0%';
+  if (value === null || value === undefined) return '0%';
   return `${(value / 100).toFixed(2)}%`;
 }
 
@@ -32,12 +33,21 @@ const WARNING = '#B45309';
 const DANGER = '#B91C1C';
 const ACCENT = '#8B5E34';
 
-export function InsurancePoolPanel({ address, className, style }: InsurancePoolPanelProps): JSX.Element {
-  const { data: coverage, isLoading: coverageLoading, error: coverageError } = useLPCoverage(address);
-  const { data: poolBalance, isLoading: poolLoading } = usePoolBalance();
-  const { invoices, isLoading: invoicesLoading } = useInvoices(address, 'funder');
+export function InsurancePoolPanel({ address, className, style }: InsurancePoolPanelProps) {
+  const {
+    data: coverage,
+    isLoading: coverageLoading,
+    error: coverageError,
+  } = useLPCoverage(address);
+  const { data: poolBalance } = usePoolBalance();
+  const { data: invoices } = useInvoices(address, { role: 'lp' });
   const { enroll, isPending: enrolling, error: enrollError, reset: resetEnroll } = useEnroll();
-  const { depositPremium, isPending: depositing, error: depositError, reset: resetDeposit } = useDepositPremium();
+  const {
+    depositPremium,
+    isPending: depositing,
+    error: depositError,
+    reset: resetDeposit,
+  } = useDepositPremium();
 
   const [showEnrollForm, setShowEnrollForm] = useState(false);
   const [showPremiumForm, setShowPremiumForm] = useState(false);
@@ -58,7 +68,9 @@ export function InsurancePoolPanel({ address, className, style }: InsurancePoolP
       });
       setShowEnrollForm(false);
       resetEnroll();
-    } catch { }
+    } catch {
+      // surfaced via useEnroll's own error state
+    }
   };
 
   const handleDeposit = async (e: React.FormEvent) => {
@@ -70,7 +82,9 @@ export function InsurancePoolPanel({ address, className, style }: InsurancePoolP
       });
       setShowPremiumForm(false);
       resetDeposit();
-    } catch { }
+    } catch {
+      // surfaced via useDepositPremium's own error state
+    }
   };
 
   return (
@@ -86,24 +100,60 @@ export function InsurancePoolPanel({ address, className, style }: InsurancePoolP
         ...style,
       }}
     >
-      <div style={{ fontSize: 12, letterSpacing: '0.18em', textTransform: 'uppercase', color: ACCENT, fontWeight: 800, marginBottom: 8 }}>
+      <div
+        style={{
+          fontSize: 12,
+          letterSpacing: '0.18em',
+          textTransform: 'uppercase',
+          color: ACCENT,
+          fontWeight: 800,
+          marginBottom: 8,
+        }}
+      >
         Insurance Pool
       </div>
-      <h2 style={{ fontFamily: '"Newsreader", Georgia, serif', fontSize: 'clamp(1.6rem, 3vw, 2.4rem)', lineHeight: 1.1, margin: '0 0 8px 0' }}>
+      <h2
+        style={{
+          fontFamily: '"Newsreader", Georgia, serif',
+          fontSize: 'clamp(1.6rem, 3vw, 2.4rem)',
+          lineHeight: 1.1,
+          margin: '0 0 8px 0',
+        }}
+      >
         LP Coverage & Claims
       </h2>
-      <p style={{ margin: '0 0 20px 0', maxWidth: 600, color: MUTED, fontSize: 14, lineHeight: 1.6 }}>
+      <p
+        style={{ margin: '0 0 20px 0', maxWidth: 600, color: MUTED, fontSize: 14, lineHeight: 1.6 }}
+      >
         Enroll in the insurance pool to protect your funded positions against payer defaults.
         Premiums are paid periodically and claims are reviewed by the pool admin.
       </p>
 
       {!isEnrolled && !coverageLoading && (
-        <div style={{ marginBottom: 20, padding: 16, borderRadius: 18, border: `1px dashed ${BORDER}`, background: PANEL }}>
-          <p style={{ margin: '0 0 12px 0', fontWeight: 600 }}>You are not enrolled in the insurance pool.</p>
+        <div
+          style={{
+            marginBottom: 20,
+            padding: 16,
+            borderRadius: 18,
+            border: `1px dashed ${BORDER}`,
+            background: PANEL,
+          }}
+        >
+          <p style={{ margin: '0 0 12px 0', fontWeight: 600 }}>
+            You are not enrolled in the insurance pool.
+          </p>
           {showEnrollForm ? (
-            <form onSubmit={handleEnroll} style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+            <form
+              onSubmit={handleEnroll}
+              style={{ display: 'flex', flexDirection: 'column', gap: 12 }}
+            >
               <div>
-                <label htmlFor="coverage-amount" style={{ display: 'block', fontSize: 12, color: MUTED, marginBottom: 4 }}>Coverage Amount (USD)</label>
+                <label
+                  htmlFor="coverage-amount"
+                  style={{ display: 'block', fontSize: 12, color: MUTED, marginBottom: 4 }}
+                >
+                  Coverage Amount (USD)
+                </label>
                 <input
                   id="coverage-amount"
                   type="number"
@@ -117,7 +167,12 @@ export function InsurancePoolPanel({ address, className, style }: InsurancePoolP
                 />
               </div>
               <div>
-                <label htmlFor="premium-rate" style={{ display: 'block', fontSize: 12, color: MUTED, marginBottom: 4 }}>Premium Rate (bps, e.g. 500 = 5%)</label>
+                <label
+                  htmlFor="premium-rate"
+                  style={{ display: 'block', fontSize: 12, color: MUTED, marginBottom: 4 }}
+                >
+                  Premium Rate (bps, e.g. 500 = 5%)
+                </label>
                 <input
                   id="premium-rate"
                   type="number"
@@ -129,16 +184,33 @@ export function InsurancePoolPanel({ address, className, style }: InsurancePoolP
                   style={inputStyle}
                 />
               </div>
-              {enrollError && <p role="alert" style={{ color: DANGER, fontSize: 13, margin: 0 }}>{enrollError.message}</p>}
+              {enrollError && (
+                <p role="alert" style={{ color: DANGER, fontSize: 13, margin: 0 }}>
+                  {enrollError.message}
+                </p>
+              )}
               <div style={{ display: 'flex', gap: 8 }}>
-                <button type="submit" disabled={enrolling} style={{ ...btnStyle, background: ACCENT, color: '#fff' }}>
+                <button
+                  type="submit"
+                  disabled={enrolling}
+                  style={{ ...btnStyle, background: ACCENT, color: '#fff' }}
+                >
                   {enrolling ? 'Enrolling…' : 'Enroll'}
                 </button>
-                <button type="button" onClick={() => setShowEnrollForm(false)} style={{ ...btnStyle, background: PANEL_ALT, color: TEXT }}>Cancel</button>
+                <button
+                  type="button"
+                  onClick={() => setShowEnrollForm(false)}
+                  style={{ ...btnStyle, background: PANEL_ALT, color: TEXT }}
+                >
+                  Cancel
+                </button>
               </div>
             </form>
           ) : (
-            <button onClick={() => setShowEnrollForm(true)} style={{ ...btnStyle, background: ACCENT, color: '#fff' }}>
+            <button
+              onClick={() => setShowEnrollForm(true)}
+              style={{ ...btnStyle, background: ACCENT, color: '#fff' }}
+            >
               Enroll Now
             </button>
           )}
@@ -150,39 +222,125 @@ export function InsurancePoolPanel({ address, className, style }: InsurancePoolP
       )}
 
       {coverageError && (
-        <div role="alert" style={{ marginBottom: 20, padding: '12px 16px', borderRadius: 18, border: `1px solid #FCA5A5`, background: '#FEF2F2', color: DANGER, fontWeight: 600 }}>
+        <div
+          role="alert"
+          style={{
+            marginBottom: 20,
+            padding: '12px 16px',
+            borderRadius: 18,
+            border: `1px solid #FCA5A5`,
+            background: '#FEF2F2',
+            color: DANGER,
+            fontWeight: 600,
+          }}
+        >
           Failed to load coverage: {coverageError.message}
         </div>
       )}
 
       {isEnrolled && coverage && (
         <div style={{ display: 'grid', gap: 16 }}>
-          <div style={{ display: 'grid', gap: 16, gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))' }}>
-            <StatsCard title="Coverage Amount" value={formatCurrency(coverage.coverageAmount)} accentColor={ACCENT} style={{ background: PANEL }} />
-            <StatsCard title="Premium Rate" value={formatPercent(coverage.premiumRateBps)} accentColor={ACCENT} style={{ background: PANEL }} />
-            <StatsCard title="Premiums Paid" value={formatCurrency(coverage.totalPremiumsPaid)} accentColor={ACCENT} style={{ background: PANEL }} />
-            <StatsCard title="Total Payout Received" value={formatCurrency(coverage.totalPayoutReceived)} accentColor={POSITIVE} style={{ background: PANEL }} />
+          <div
+            style={{
+              display: 'grid',
+              gap: 16,
+              gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))',
+            }}
+          >
+            <StatsCard
+              title="Coverage Amount"
+              value={formatCurrency(coverage.coverageAmount)}
+              accentColor={ACCENT}
+              style={{ background: PANEL }}
+            />
+            <StatsCard
+              title="Premium Rate"
+              value={formatPercent(coverage.premiumRateBps)}
+              accentColor={ACCENT}
+              style={{ background: PANEL }}
+            />
+            <StatsCard
+              title="Premiums Paid"
+              value={formatCurrency(coverage.totalPremiumsPaid)}
+              accentColor={ACCENT}
+              style={{ background: PANEL }}
+            />
+            <StatsCard
+              title="Total Payout Received"
+              value={formatCurrency(coverage.totalPayoutReceived)}
+              accentColor={POSITIVE}
+              style={{ background: PANEL }}
+            />
           </div>
 
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12 }}>
-            <div style={{ padding: '10px 14px', borderRadius: 14, background: PANEL_ALT, border: `1px solid ${BORDER}` }}>
+            <div
+              style={{
+                padding: '10px 14px',
+                borderRadius: 14,
+                background: PANEL_ALT,
+                border: `1px solid ${BORDER}`,
+              }}
+            >
               <span style={{ fontSize: 12, color: MUTED, fontWeight: 600 }}>Active Claims</span>
-              <div style={{ fontSize: 22, fontWeight: 700, color: coverage.activeClaims > 0 ? WARNING : TEXT }}>{coverage.activeClaims}</div>
+              <div
+                style={{
+                  fontSize: 22,
+                  fontWeight: 700,
+                  color: coverage.activeClaims > 0 ? WARNING : TEXT,
+                }}
+              >
+                {coverage.activeClaims}
+              </div>
             </div>
-            <div style={{ padding: '10px 14px', borderRadius: 14, background: PANEL_ALT, border: `1px solid ${BORDER}` }}>
+            <div
+              style={{
+                padding: '10px 14px',
+                borderRadius: 14,
+                background: PANEL_ALT,
+                border: `1px solid ${BORDER}`,
+              }}
+            >
               <span style={{ fontSize: 12, color: MUTED, fontWeight: 600 }}>Approved</span>
-              <div style={{ fontSize: 22, fontWeight: 700, color: POSITIVE }}>{coverage.claimsApproved}</div>
+              <div style={{ fontSize: 22, fontWeight: 700, color: POSITIVE }}>
+                {coverage.claimsApproved}
+              </div>
             </div>
-            <div style={{ padding: '10px 14px', borderRadius: 14, background: PANEL_ALT, border: `1px solid ${BORDER}` }}>
+            <div
+              style={{
+                padding: '10px 14px',
+                borderRadius: 14,
+                background: PANEL_ALT,
+                border: `1px solid ${BORDER}`,
+              }}
+            >
               <span style={{ fontSize: 12, color: MUTED, fontWeight: 600 }}>Rejected</span>
-              <div style={{ fontSize: 22, fontWeight: 700, color: DANGER }}>{coverage.claimsRejected}</div>
+              <div style={{ fontSize: 22, fontWeight: 700, color: DANGER }}>
+                {coverage.claimsRejected}
+              </div>
             </div>
           </div>
 
           {showPremiumForm ? (
-            <form onSubmit={handleDeposit} style={{ padding: 16, borderRadius: 18, border: `1px solid ${BORDER}`, background: PANEL, display: 'flex', flexDirection: 'column', gap: 12 }}>
+            <form
+              onSubmit={handleDeposit}
+              style={{
+                padding: 16,
+                borderRadius: 18,
+                border: `1px solid ${BORDER}`,
+                background: PANEL,
+                display: 'flex',
+                flexDirection: 'column',
+                gap: 12,
+              }}
+            >
               <div>
-                <label htmlFor="premium-amount" style={{ display: 'block', fontSize: 12, color: MUTED, marginBottom: 4 }}>Premium Amount (USD)</label>
+                <label
+                  htmlFor="premium-amount"
+                  style={{ display: 'block', fontSize: 12, color: MUTED, marginBottom: 4 }}
+                >
+                  Premium Amount (USD)
+                </label>
                 <input
                   id="premium-amount"
                   type="number"
@@ -195,36 +353,99 @@ export function InsurancePoolPanel({ address, className, style }: InsurancePoolP
                   placeholder="e.g. 500"
                 />
               </div>
-              {depositError && <p role="alert" style={{ color: DANGER, fontSize: 13, margin: 0 }}>{depositError.message}</p>}
+              {depositError && (
+                <p role="alert" style={{ color: DANGER, fontSize: 13, margin: 0 }}>
+                  {depositError.message}
+                </p>
+              )}
               <div style={{ display: 'flex', gap: 8 }}>
-                <button type="submit" disabled={depositing} style={{ ...btnStyle, background: POSITIVE, color: '#fff' }}>
+                <button
+                  type="submit"
+                  disabled={depositing}
+                  style={{ ...btnStyle, background: POSITIVE, color: '#fff' }}
+                >
                   {depositing ? 'Depositing…' : 'Deposit Premium'}
                 </button>
-                <button type="button" onClick={() => setShowPremiumForm(false)} style={{ ...btnStyle, background: PANEL_ALT, color: TEXT }}>Cancel</button>
+                <button
+                  type="button"
+                  onClick={() => setShowPremiumForm(false)}
+                  style={{ ...btnStyle, background: PANEL_ALT, color: TEXT }}
+                >
+                  Cancel
+                </button>
               </div>
             </form>
           ) : (
-            <button onClick={() => setShowPremiumForm(true)} style={{ ...btnStyle, background: POSITIVE, color: '#fff', alignSelf: 'flex-start' }}>
+            <button
+              onClick={() => setShowPremiumForm(true)}
+              style={{ ...btnStyle, background: POSITIVE, color: '#fff', alignSelf: 'flex-start' }}
+            >
               Deposit Premium
             </button>
           )}
 
-          <div style={{ marginTop: 8, display: 'grid', gap: 12, gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))' }}>
-            <div style={{ padding: 14, borderRadius: 18, border: `1px solid ${BORDER}`, background: PANEL }}>
-              <div style={{ fontSize: 12, color: MUTED, fontWeight: 600, marginBottom: 4 }}>Defaulted Invoices</div>
+          <div
+            style={{
+              marginTop: 8,
+              display: 'grid',
+              gap: 12,
+              gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
+            }}
+          >
+            <div
+              style={{
+                padding: 14,
+                borderRadius: 18,
+                border: `1px solid ${BORDER}`,
+                background: PANEL,
+              }}
+            >
+              <div style={{ fontSize: 12, color: MUTED, fontWeight: 600, marginBottom: 4 }}>
+                Defaulted Invoices
+              </div>
               <div style={{ fontSize: 20, fontWeight: 700 }}>{eligibleCount}</div>
               <div style={{ fontSize: 11, color: MUTED, marginTop: 4 }}>Eligible for claims</div>
             </div>
             {poolBalance && (
               <>
-                <div style={{ padding: 14, borderRadius: 18, border: `1px solid ${BORDER}`, background: PANEL }}>
-                  <div style={{ fontSize: 12, color: MUTED, fontWeight: 600, marginBottom: 4 }}>Pool Reserve</div>
-                  <div style={{ fontSize: 20, fontWeight: 700 }}>{formatCurrency(poolBalance.reserveBalance)}</div>
-                  <div style={{ fontSize: 11, color: MUTED, marginTop: 4 }}>{poolBalance.enrolledLps} LPs enrolled</div>
+                <div
+                  style={{
+                    padding: 14,
+                    borderRadius: 18,
+                    border: `1px solid ${BORDER}`,
+                    background: PANEL,
+                  }}
+                >
+                  <div style={{ fontSize: 12, color: MUTED, fontWeight: 600, marginBottom: 4 }}>
+                    Pool Reserve
+                  </div>
+                  <div style={{ fontSize: 20, fontWeight: 700 }}>
+                    {formatCurrency(poolBalance.reserveBalance)}
+                  </div>
+                  <div style={{ fontSize: 11, color: MUTED, marginTop: 4 }}>
+                    {poolBalance.enrolledLps} LPs enrolled
+                  </div>
                 </div>
-                <div style={{ padding: 14, borderRadius: 18, border: `1px solid ${BORDER}`, background: PANEL }}>
-                  <div style={{ fontSize: 12, color: MUTED, fontWeight: 600, marginBottom: 4 }}>Pending Claims</div>
-                  <div style={{ fontSize: 20, fontWeight: 700, color: poolBalance.pendingClaims > 0 ? WARNING : TEXT }}>{poolBalance.pendingClaims}</div>
+                <div
+                  style={{
+                    padding: 14,
+                    borderRadius: 18,
+                    border: `1px solid ${BORDER}`,
+                    background: PANEL,
+                  }}
+                >
+                  <div style={{ fontSize: 12, color: MUTED, fontWeight: 600, marginBottom: 4 }}>
+                    Pending Claims
+                  </div>
+                  <div
+                    style={{
+                      fontSize: 20,
+                      fontWeight: 700,
+                      color: poolBalance.pendingClaims > 0 ? WARNING : TEXT,
+                    }}
+                  >
+                    {poolBalance.pendingClaims}
+                  </div>
                 </div>
               </>
             )}
@@ -233,7 +454,16 @@ export function InsurancePoolPanel({ address, className, style }: InsurancePoolP
       )}
 
       {!isEnrolled && !coverageLoading && !coverageError && (
-        <div style={{ padding: 18, borderRadius: 18, border: `1px dashed ${BORDER}`, background: PANEL, color: MUTED, textAlign: 'center' }}>
+        <div
+          style={{
+            padding: 18,
+            borderRadius: 18,
+            border: `1px dashed ${BORDER}`,
+            background: PANEL,
+            color: MUTED,
+            textAlign: 'center',
+          }}
+        >
           Connect your wallet and enroll to view coverage details.
         </div>
       )}

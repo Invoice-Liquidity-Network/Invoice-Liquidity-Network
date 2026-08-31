@@ -1,9 +1,9 @@
-import http from "http";
-import { createApp } from "./api";
-import { startPolling } from "./poller";
-import { NotificationWebSocketServer } from "./websocket";
-import { CONFIG } from "./config";
-import { TemplateEngine } from "./template-engine";
+import http from 'http';
+import { createApp } from './api';
+import { startPolling } from './poller';
+import { NotificationWebSocketServer } from './websocket';
+import { CONFIG } from './config';
+import { TemplateEngine } from './template-engine';
 
 const app = createApp();
 const server = http.createServer(app);
@@ -17,9 +17,14 @@ server.listen(CONFIG.port, () => {
 });
 
 startPolling().catch((err) => {
-  console.error("[notifications] Failed to start poller:", err);
+  console.error('[notifications] Failed to start poller:', err);
   process.exit(1);
 });
 
 export { app, server, wsServer, TemplateEngine };
-export type { Template, TemplateContext, RenderResult, TemplateTestResult } from "./template-engine";
+export type {
+  Template,
+  TemplateContext,
+  RenderResult,
+  TemplateTestResult,
+} from './template-engine';

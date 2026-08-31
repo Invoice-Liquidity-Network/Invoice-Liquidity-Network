@@ -20,5 +20,6 @@
     "lib": ["ES2020", "DOM"],
     "types": ["node"]
   },
-  "include": ["src", "tsup.config.ts"]
+  "include": ["src", "tsup.config.ts"],
+  "exclude": ["src/e2e"]
 }

@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
 import { useQueries } from '@tanstack/react-query';
-import type { Invoice, LPPortfolio } from '@invoice-liquidity/sdk';
+import type { Invoice, LPPortfolio } from '@iln/sdk';
 import { useILNClient } from '../context';
 import { useInvoiceList } from './useInvoiceList';
 import { useLPPortfolio } from './useLPPortfolio';
@@ -26,7 +26,7 @@ const riskMetricsKeys = {
 
 export function useLPRiskMetrics(
   address: string,
-  options: UseLPRiskMetricsOptions = {},
+  options: UseLPRiskMetricsOptions = {}
 ): UseLPRiskMetricsResult {
   const client = useILNClient();
   const portfolioAddress = options.portfolio ? '' : address;
@@ -41,7 +41,7 @@ export function useLPRiskMetrics(
   const invoicePositions = useMemo(() => {
     const invoices = rawInvoices ?? [];
     return invoices.filter((invoice) => {
-      const record = invoice as Record<string, unknown>;
+      const record = invoice as unknown as Record<string, unknown>;
       const fundedBy = String(record.fundedBy ?? record.funder ?? '');
       return fundedBy.length === 0 || fundedBy === address;
     });
@@ -50,7 +50,7 @@ export function useLPRiskMetrics(
   const payerAddresses = useMemo(() => {
     const unique = new Set<string>();
     for (const invoice of invoicePositions) {
-      const payer = String((invoice as Record<string, unknown>).payer ?? '');
+      const payer = String((invoice as unknown as Record<string, unknown>).payer ?? '');
       if (payer) {
         unique.add(payer);
       }
@@ -62,7 +62,8 @@ export function useLPRiskMetrics(
     return new Map(Object.entries(options.reputationByPayer ?? {}));
   }, [options.reputationByPayer]);
 
-  const shouldFetchReputation = payerAddresses.length > 0 && reputationByPayer.size !== payerAddresses.length;
+  const shouldFetchReputation =
+    payerAddresses.length > 0 && reputationByPayer.size !== payerAddresses.length;
   const reputationQueries = useQueries({
     queries: shouldFetchReputation
       ? payerAddresses.map((payer) => ({
@@ -80,7 +81,7 @@ export function useLPRiskMetrics(
       payerAddresses.forEach((payer, index) => {
         const query = reputationQueries[index];
         if (query?.data !== undefined) {
-          next.set(payer, query.data);
+          next.set(payer, query.data.score);
         }
       });
     }
@@ -99,7 +100,13 @@ export function useLPRiskMetrics(
       reputationByPayer: resolvedReputationByPayer,
       simulations: options.simulations,
     });
-  }, [address, invoicePositions, options.simulations, resolvedPortfolio, resolvedReputationByPayer]);
+  }, [
+    address,
+    invoicePositions,
+    options.simulations,
+    resolvedPortfolio,
+    resolvedReputationByPayer,
+  ]);
 
   const error =
     portfolioQuery.error ??
@@ -110,7 +117,7 @@ export function useLPRiskMetrics(
   const isLoading =
     Boolean(portfolioAddress && portfolioQuery.isLoading) ||
     Boolean(invoiceAddress && invoiceListQuery.isLoading) ||
-    shouldFetchReputation && reputationQueries.some((query) => query.isLoading);
+    (shouldFetchReputation && reputationQueries.some((query) => query.isLoading));
 
   return {
     data,

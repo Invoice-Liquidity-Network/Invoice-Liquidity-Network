@@ -1,9 +1,9 @@
-import type { rpc } from "@stellar/stellar-sdk";
-import { CONFIG } from "./config";
-import { getCursorLedger, setCursorLedger } from "./db";
-import { processEvent, processScheduledNotifications } from "./processor";
-import { server } from "./rpc";
-import { isRetryableError, normalizeError } from "./errors";
+import type { rpc } from '@stellar/stellar-sdk';
+import { CONFIG } from './config';
+import { getCursorLedger, setCursorLedger } from './db';
+import { processEvent, processScheduledNotifications } from './processor';
+import { server } from './rpc';
+import { isRetryableError, normalizeError } from './errors';
 
 const BATCH_SIZE = 200;
 
@@ -28,9 +28,7 @@ export async function pollOnce(): Promise<void> {
     startLedger = stored;
   }
 
-  const filters: rpc.Api.EventFilter[] = [
-    { type: "contract", contractIds: [CONFIG.contractId] },
-  ];
+  const filters: rpc.Api.EventFilter[] = [{ type: 'contract', contractIds: [CONFIG.contractId] }];
   let paginationCursor: string | undefined;
   let highestEventLedger = stored;
   let latestKnownLedger = stored;
@@ -44,7 +42,7 @@ export async function pollOnce(): Promise<void> {
     try {
       response = await server.getEvents(request);
     } catch (err) {
-      const ilnErr = normalizeError(err, "RPC_ERROR", "Failed to fetch events");
+      const ilnErr = normalizeError(err, 'RPC_ERROR', 'Failed to fetch events');
       console.error(`[poller] ${ilnErr.code}: ${ilnErr.message}`, {
         retryable: ilnErr.retryable,
         startLedger,
@@ -62,14 +60,10 @@ export async function pollOnce(): Promise<void> {
       }
     }
 
-    paginationCursor =
-      response.events.length === BATCH_SIZE ? response.cursor : undefined;
+    paginationCursor = response.events.length === BATCH_SIZE ? response.cursor : undefined;
   } while (paginationCursor);
 
-  const newCursor = Math.max(
-    highestEventLedger,
-    Math.max(0, latestKnownLedger - 1)
-  );
+  const newCursor = Math.max(highestEventLedger, Math.max(0, latestKnownLedger - 1));
   if (newCursor > stored) {
     setCursorLedger(newCursor);
   }
@@ -104,8 +98,7 @@ export async function startPolling(): Promise<void> {
           return;
         }
 
-        const backoffMs =
-          RETRY_BASE_DELAY_MS * Math.pow(2, consecutiveRetryableErrors - 1);
+        const backoffMs = RETRY_BASE_DELAY_MS * Math.pow(2, consecutiveRetryableErrors - 1);
         console.warn(
           `[poller] Retryable error (${consecutiveRetryableErrors}/${MAX_CONSECUTIVE_RETRIES}). Retrying in ${backoffMs}ms.`,
           { code: ilnErr.code, message: ilnErr.message }
@@ -115,11 +108,7 @@ export async function startPolling(): Promise<void> {
       }
 
       // Non-retryable error: log and continue with normal interval
-      console.error(
-        "[poller] Non-retryable error during poll:",
-        ilnErr.code,
-        ilnErr.message
-      );
+      console.error('[poller] Non-retryable error during poll:', ilnErr.code, ilnErr.message);
       consecutiveRetryableErrors = 0;
     }
     setTimeout(tick, CONFIG.pollIntervalMs);

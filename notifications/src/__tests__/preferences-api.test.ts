@@ -8,28 +8,24 @@
  *  - Invalid tokens are rejected
  */
 
-import { afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
-import request from "supertest";
-import express from "express";
-import Database from "better-sqlite3";
-import { createDb, setDb } from "../db";
-import { createPreferencesRouter } from "../preferences-api";
-import {
-  mintUnsubscribeToken,
-  verifyUnsubscribeToken,
-} from "../preferences-api";
-import { preferencesService } from "../preferences";
+import { afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import request from 'supertest';
+import express from 'express';
+import Database from 'better-sqlite3';
+import { createDb, setDb } from '../db';
+import { createPreferencesRouter } from '../preferences-api';
+import { mintUnsubscribeToken, verifyUnsubscribeToken } from '../preferences-api';
+import { preferencesService } from '../preferences';
 
 // Round-3 reviewer feedback: set the unsubscribe secret in `beforeAll`
 // (not at module-load time) so per-worker module evaluation order cannot
 // leave it unset when mint/verify is first invoked.
-const UNSUBSCRIBE_SECRET =
-  "test-secret-do-not-use-anywhere-else-32-bytes-long";
+const UNSUBSCRIBE_SECRET = 'test-secret-do-not-use-anywhere-else-32-bytes-long';
 
 function makeApp() {
   const app = express();
   app.use(express.json());
-  app.use("/preferences", createPreferencesRouter());
+  app.use('/preferences', createPreferencesRouter());
   return app;
 }
 
@@ -37,8 +33,8 @@ function makeApp() {
 // Stellar's base32 alphabet `A-Z2-7`) and were 54 chars instead of 56. The
 // new export-endpoint validation `/^G[A-Z2-7]{55}$/` therefore rejected
 // them. Use valid 56-char Stellar-shaped addresses that match the regex.
-const ADDRESS_A = "G" + "A".repeat(55); // 56 chars, base32-clean
-const ADDRESS_B = "G" + "B".repeat(55); // distinct address for cross-tenant tests
+const ADDRESS_A = 'G' + 'A'.repeat(55); // 56 chars, base32-clean
+const ADDRESS_B = 'G' + 'B'.repeat(55); // distinct address for cross-tenant tests
 
 let db: InstanceType<typeof Database>;
 
@@ -47,7 +43,7 @@ beforeAll(() => {
 });
 
 beforeEach(() => {
-  db = createDb(":memory:");
+  db = createDb(':memory:');
   setDb(db);
 });
 
@@ -67,54 +63,54 @@ afterEach(() => {
   preferencesService.delete(ADDRESS_B);
 });
 
-describe("GET /preferences/:address/export (#741)", () => {
-  it("returns preferences, subscriptions, and delivery log", async () => {
+describe('GET /preferences/:address/export (#741)', () => {
+  it('returns preferences, subscriptions, and delivery log', async () => {
     // Seed: build a subscription + a delivery log row + set preferences.
     db.prepare(
       `INSERT INTO subscriptions (stellar_address, channel, destination, triggers, created_at)
-       VALUES (?, 'email', ?, ?, ?)`,
-    ).run(ADDRESS_A, "user@example.com", JSON.stringify(["invoice_funded"]), Date.now());
+       VALUES (?, 'email', ?, ?, ?)`
+    ).run(ADDRESS_A, 'user@example.com', JSON.stringify(['invoice_funded']), Date.now());
 
     db.prepare(
       `INSERT INTO sent_notifications
        (invoice_id, trigger, recipient_address, channel, destination, sent_at)
-       VALUES (?, ?, ?, ?, ?, ?)`,
-    ).run(42, "invoice_funded", ADDRESS_A, "email", "user@example.com", Date.now());
+       VALUES (?, ?, ?, ?, ?, ?)`
+    ).run(42, 'invoice_funded', ADDRESS_A, 'email', 'user@example.com', Date.now());
 
     preferencesService.upsert(ADDRESS_A, {
-      enabledChannels: ["email"],
-      frequency: "daily",
+      enabledChannels: ['email'],
+      frequency: 'daily',
     });
 
     const res = await request(makeApp()).get(`/preferences/${ADDRESS_A}/export`);
     expect(res.status).toBe(200);
     expect(res.body.schemaVersion).toBe(1);
     expect(res.body.address).toBe(ADDRESS_A);
-    expect(res.body.preferences.enabledChannels).toEqual(["email"]);
-    expect(res.body.preferences.frequency).toBe("daily");
+    expect(res.body.preferences.enabledChannels).toEqual(['email']);
+    expect(res.body.preferences.frequency).toBe('daily');
     expect(res.body.subscriptions).toHaveLength(1);
-    expect(res.body.subscriptions[0].destination).toBe("user@example.com");
+    expect(res.body.subscriptions[0].destination).toBe('user@example.com');
     expect(res.body.sentLog).toHaveLength(1);
-    expect(res.body.sentLog[0].trigger).toBe("invoice_funded");
-    expect(res.headers["content-disposition"]).toMatch(/attachment/);
-    expect(res.headers["content-disposition"]).toContain(ADDRESS_A);
+    expect(res.body.sentLog[0].trigger).toBe('invoice_funded');
+    expect(res.headers['content-disposition']).toMatch(/attachment/);
+    expect(res.headers['content-disposition']).toContain(ADDRESS_A);
   });
 
-  it("returns defaults when the address has never set preferences", async () => {
+  it('returns defaults when the address has never set preferences', async () => {
     const res = await request(makeApp()).get(`/preferences/${ADDRESS_B}/export`);
     expect(res.status).toBe(200);
-    expect(res.body.preferences.frequency).toBe("realtime");
-    expect(res.body.preferences.enabledChannels).toEqual(["email", "webhook"]);
+    expect(res.body.preferences.frequency).toBe('realtime');
+    expect(res.body.preferences.enabledChannels).toEqual(['email', 'webhook']);
     expect(res.body.subscriptions).toEqual([]);
     expect(res.body.sentLog).toEqual([]);
   });
 });
 
-describe("POST /preferences/:address/unsubscribe (#741)", () => {
-  it("immediately clears all channels", async () => {
+describe('POST /preferences/:address/unsubscribe (#741)', () => {
+  it('immediately clears all channels', async () => {
     preferencesService.upsert(ADDRESS_A, {
-      enabledChannels: ["email", "sms"],
-      frequency: "daily",
+      enabledChannels: ['email', 'sms'],
+      frequency: 'daily',
     });
 
     const res = await request(makeApp()).post(`/preferences/${ADDRESS_A}/unsubscribe`);
@@ -126,7 +122,7 @@ describe("POST /preferences/:address/unsubscribe (#741)", () => {
     expect(after.body.preferences.enabledChannels).toEqual([]);
   });
 
-  it("is idempotent (calling twice is safe)", async () => {
+  it('is idempotent (calling twice is safe)', async () => {
     const app = makeApp();
     const r1 = await request(app).post(`/preferences/${ADDRESS_A}/unsubscribe`);
     const r2 = await request(app).post(`/preferences/${ADDRESS_A}/unsubscribe`);
@@ -136,10 +132,10 @@ describe("POST /preferences/:address/unsubscribe (#741)", () => {
   });
 });
 
-describe("POST /preferences/unsubscribe/token/:token (#741)", () => {
-  it("mints and redeems a token that clears channels", async () => {
+describe('POST /preferences/unsubscribe/token/:token (#741)', () => {
+  it('mints and redeems a token that clears channels', async () => {
     preferencesService.upsert(ADDRESS_A, {
-      enabledChannels: ["email", "webhook"],
+      enabledChannels: ['email', 'webhook'],
     });
 
     const token = mintUnsubscribeToken(ADDRESS_A);
@@ -154,18 +150,20 @@ describe("POST /preferences/unsubscribe/token/:token (#741)", () => {
     expect(res.body.preferences.enabledChannels).toEqual([]);
   });
 
-  it("a round-tripped unmodified token is accepted (positive control)", async () => {
-    preferencesService.upsert(ADDRESS_A, { enabledChannels: ["email"] });
+  it('a round-tripped unmodified token is accepted (positive control)', async () => {
+    preferencesService.upsert(ADDRESS_A, { enabledChannels: ['email'] });
     const token = mintUnsubscribeToken(ADDRESS_A);
     const res = await request(makeApp()).post(`/preferences/unsubscribe/token/${token}`);
     expect(res.status).toBe(200);
   });
 
-  it("rejects a token whose HMAC signature is tampered", async () => {
+  it('rejects a token whose HMAC signature is tampered', async () => {
     const token = mintUnsubscribeToken(ADDRESS_A);
-    const parts = token.split(".");
+    const parts = token.split('.');
     // Flip the first hex char of the HMAC digset.
-    const tamperedSig = parts[2].startsWith("0") ? `1${parts[2].slice(1)}` : `0${parts[2].slice(1)}`;
+    const tamperedSig = parts[2].startsWith('0')
+      ? `1${parts[2].slice(1)}`
+      : `0${parts[2].slice(1)}`;
     const tampered = `${parts[0]}.${parts[1]}.${tamperedSig}`;
     // Tampered tokens MUST verify as null …
     expect(verifyUnsubscribeToken(tampered)).toBeNull();
@@ -174,19 +172,19 @@ describe("POST /preferences/unsubscribe/token/:token (#741)", () => {
     expect(res.status).toBe(400);
   });
 
-  it("rejects a token whose address segment is tampered", async () => {
+  it('rejects a token whose address segment is tampered', async () => {
     const token = mintUnsubscribeToken(ADDRESS_A);
-    const parts = token.split(".");
+    const parts = token.split('.');
     // Replace base64url address bytes; signature will no longer match.
-    const addressBytes = Buffer.from(ADDRESS_B).toString("base64url");
+    const addressBytes = Buffer.from(ADDRESS_B).toString('base64url');
     const tampered = `${addressBytes}.${parts[1]}.${parts[2]}`;
     expect(verifyUnsubscribeToken(tampered)).toBeNull();
     const res = await request(makeApp()).post(`/preferences/unsubscribe/token/${tampered}`);
     expect(res.status).toBe(400);
   });
 
-  it("enforces single-use — replays return HTTP 409", async () => {
-    preferencesService.upsert(ADDRESS_A, { enabledChannels: ["email"] });
+  it('enforces single-use — replays return HTTP 409', async () => {
+    preferencesService.upsert(ADDRESS_A, { enabledChannels: ['email'] });
     const token = mintUnsubscribeToken(ADDRESS_A);
     const r1 = await request(makeApp()).post(`/preferences/unsubscribe/token/${token}`);
     expect(r1.status).toBe(200);
@@ -194,51 +192,49 @@ describe("POST /preferences/unsubscribe/token/:token (#741)", () => {
     expect(r2.status).toBe(409);
   });
 
-  it("rejects a malformed token", async () => {
-    const res = await request(makeApp()).post("/preferences/unsubscribe/token/garbage");
+  it('rejects a malformed token', async () => {
+    const res = await request(makeApp()).post('/preferences/unsubscribe/token/garbage');
     expect(res.status).toBe(400);
-    const res2 = await request(makeApp()).post("/preferences/unsubscribe/token/only.two-parts");
+    const res2 = await request(makeApp()).post('/preferences/unsubscribe/token/only.two-parts');
     expect(res2.status).toBe(400);
   });
 
-  it("returns an HTML acknowledgement for browser clicks", async () => {
-    preferencesService.upsert(ADDRESS_A, { enabledChannels: ["email"] });
+  it('returns an HTML acknowledgement for browser clicks', async () => {
+    preferencesService.upsert(ADDRESS_A, { enabledChannels: ['email'] });
     const token = mintUnsubscribeToken(ADDRESS_A);
 
     const res = await request(makeApp())
       .post(`/preferences/unsubscribe/token/${token}`)
-      .set("Accept", "text/html");
+      .set('Accept', 'text/html');
 
     expect(res.status).toBe(200);
-    expect(res.headers["content-type"]).toMatch(/text\/html/);
-    expect(res.text).toContain("You have been unsubscribed");
+    expect(res.headers['content-type']).toMatch(/text\/html/);
+    expect(res.text).toContain('You have been unsubscribed');
     expect(res.text).toContain(ADDRESS_A);
   });
 });
 
-describe("GET /preferences/:address/export — input validation (#741)", () => {
-  it("rejects an address that does not match the Stellar base32 pattern", async () => {
-    const res = await request(makeApp()).get("/preferences/not-a-stellar-address/export");
+describe('GET /preferences/:address/export — input validation (#741)', () => {
+  it('rejects an address that does not match the Stellar base32 pattern', async () => {
+    const res = await request(makeApp()).get('/preferences/not-a-stellar-address/export');
     expect(res.status).toBe(400);
     expect(res.body.error).toMatch(/Stellar G-address/);
   });
 });
 
-describe("Existing CRUD endpoints still work (#741 regression)", () => {
-  it("GET/PATCH/DELETE round-trip", async () => {
+describe('Existing CRUD endpoints still work (#741 regression)', () => {
+  it('GET/PATCH/DELETE round-trip', async () => {
     const app = makeApp();
     const get1 = await request(app).get(`/preferences/${ADDRESS_A}`);
-    expect(get1.body.preferences.frequency).toBe("realtime");
+    expect(get1.body.preferences.frequency).toBe('realtime');
 
-    await request(app)
-      .patch(`/preferences/${ADDRESS_A}`)
-      .send({ frequency: "weekly" });
+    await request(app).patch(`/preferences/${ADDRESS_A}`).send({ frequency: 'weekly' });
 
     const get2 = await request(app).get(`/preferences/${ADDRESS_A}`);
-    expect(get2.body.preferences.frequency).toBe("weekly");
+    expect(get2.body.preferences.frequency).toBe('weekly');
 
     await request(app).delete(`/preferences/${ADDRESS_A}`);
     const get3 = await request(app).get(`/preferences/${ADDRESS_A}`);
-    expect(get3.body.preferences.frequency).toBe("realtime"); // back to defaults
+    expect(get3.body.preferences.frequency).toBe('realtime'); // back to defaults
   });
 });

@@ -1,5 +1,5 @@
-import Database from "better-sqlite3";
-import { CONFIG } from "./config";
+import Database from 'better-sqlite3';
+import { CONFIG } from './config';
 import type {
   ILNEventType,
   Invoice,
@@ -7,7 +7,7 @@ import type {
   Subscription,
   SubscriptionChannel,
   WebhookDeliveryLog,
-} from "./types";
+} from './types';
 
 type SQLiteDatabase = InstanceType<typeof Database>;
 
@@ -22,8 +22,8 @@ export function getDb(): SQLiteDatabase {
 
 export function createDb(path: string): SQLiteDatabase {
   const db = new Database(path);
-  db.pragma("journal_mode = WAL");
-  db.pragma("foreign_keys = ON");
+  db.pragma('journal_mode = WAL');
+  db.pragma('foreign_keys = ON');
   runMigrations(db);
   return db;
 }
@@ -111,7 +111,7 @@ function runMigrations(db: SQLiteDatabase): void {
 
     -- Issue #741 compliance: ensure one-click unsubscribe tokens are
     -- single-use. The nonce is recorded here on successful verify; a
-    -- replay attempts an INSERT OR IGNORE that returns `changes = 0`
+    -- replay attempts an INSERT OR IGNORE that returns changes = 0
     -- and is rejected with HTTP 409.
     CREATE TABLE IF NOT EXISTS redeemed_unsubscribe_tokens (
       nonce       TEXT    PRIMARY KEY,
@@ -120,9 +120,7 @@ function runMigrations(db: SQLiteDatabase): void {
   `);
 }
 
-export function upsertInvoice(
-  invoice: Omit<Invoice, "created_at" | "updated_at">,
-): void {
+export function upsertInvoice(invoice: Omit<Invoice, 'created_at' | 'updated_at'>): void {
   const now = Date.now();
   getDb()
     .prepare(
@@ -136,7 +134,7 @@ export function upsertInvoice(
          status    = excluded.status,
          funder    = excluded.funder,
          funded_at = excluded.funded_at,
-         updated_at = excluded.updated_at`,
+         updated_at = excluded.updated_at`
     )
     .run({
       ...invoice,
@@ -147,23 +145,14 @@ export function upsertInvoice(
     });
 }
 
-export function getInvoiceById(id: number): Invoice | undefined {
-  return getDb().prepare("SELECT * FROM invoices WHERE id = ?").get(id) as
-    | Invoice
-    | undefined;
-}
-
 export function queryInvoicesByStatus(status: string): Invoice[] {
   return getDb()
-    .prepare("SELECT * FROM invoices WHERE status = ? ORDER BY id ASC")
+    .prepare('SELECT * FROM invoices WHERE status = ? ORDER BY id ASC')
     .all(status) as Invoice[];
 }
 
 export function hasEvent(eventId: string): boolean {
-  return (
-    getDb().prepare("SELECT 1 FROM events WHERE event_id = ?").get(eventId) !==
-    undefined
-  );
+  return getDb().prepare('SELECT 1 FROM events WHERE event_id = ?').get(eventId) !== undefined;
 }
 
 export function insertEvent(event: {
@@ -179,15 +168,15 @@ export function insertEvent(event: {
       `INSERT OR IGNORE INTO events
          (event_id, event_type, invoice_id, ledger, ledger_closed_at, created_at)
        VALUES
-         (@event_id, @event_type, @invoice_id, @ledger, @ledger_closed_at, @created_at)`,
+         (@event_id, @event_type, @invoice_id, @ledger, @ledger_closed_at, @created_at)`
     )
     .run(event);
 }
 
 export function getCursorLedger(): number {
-  const row = getDb()
-    .prepare("SELECT last_ledger FROM cursor WHERE id = 1")
-    .get() as { last_ledger: number } | undefined;
+  const row = getDb().prepare('SELECT last_ledger FROM cursor WHERE id = 1').get() as
+    | { last_ledger: number }
+    | undefined;
   return row?.last_ledger ?? 0;
 }
 
@@ -198,20 +187,20 @@ export function setCursorLedger(ledger: number): void {
        VALUES (1, ?, ?)
        ON CONFLICT(id) DO UPDATE SET
          last_ledger = excluded.last_ledger,
-         updated_at  = excluded.updated_at`,
+         updated_at  = excluded.updated_at`
     )
     .run(ledger, Date.now());
 }
 
 export function createSubscription(
-  subscription: Omit<Subscription, "id" | "created_at">,
+  subscription: Omit<Subscription, 'id' | 'created_at'>
 ): Subscription {
   const now = Date.now();
   const result = getDb()
     .prepare(
       `INSERT INTO subscriptions
          (stellar_address, channel, destination, triggers, webhook_secret, created_at)
-       VALUES (?, ?, ?, ?, ?, ?)`,
+       VALUES (?, ?, ?, ?, ?, ?)`
     )
     .run(
       subscription.stellar_address,
@@ -219,7 +208,7 @@ export function createSubscription(
       subscription.destination,
       JSON.stringify(subscription.triggers),
       subscription.webhook_secret ?? null,
-      now,
+      now
     );
 
   return {
@@ -231,9 +220,7 @@ export function createSubscription(
 
 export function getSubscriptionsByAddress(address: string): Subscription[] {
   return getDb()
-    .prepare(
-      "SELECT * FROM subscriptions WHERE stellar_address = ? ORDER BY id ASC",
-    )
+    .prepare('SELECT * FROM subscriptions WHERE stellar_address = ? ORDER BY id ASC')
     .all(address)
     .map((row: any) => ({
       id: row.id,
@@ -247,9 +234,7 @@ export function getSubscriptionsByAddress(address: string): Subscription[] {
 }
 
 export function getSubscriptionById(id: number): Subscription | undefined {
-  const row = getDb()
-    .prepare("SELECT * FROM subscriptions WHERE id = ?")
-    .get(id) as any;
+  const row = getDb().prepare('SELECT * FROM subscriptions WHERE id = ?').get(id) as any;
 
   if (!row) {
     return undefined;
@@ -267,44 +252,17 @@ export function getSubscriptionById(id: number): Subscription | undefined {
 }
 
 export function deleteSubscriptionById(id: number): boolean {
-  const result = getDb()
-    .prepare("DELETE FROM subscriptions WHERE id = ?")
-    .run(id);
+  const result = getDb().prepare('DELETE FROM subscriptions WHERE id = ?').run(id);
   return result.changes > 0;
 }
 
 export function deleteSubscriptionByAddressAndDestination(
   address: string,
-  destination: string,
+  destination: string
 ): boolean {
   const result = getDb()
-    .prepare(
-      "DELETE FROM subscriptions WHERE stellar_address = ? AND destination = ?",
-    )
+    .prepare('DELETE FROM subscriptions WHERE stellar_address = ? AND destination = ?')
     .run(address, destination);
-  return result.changes > 0;
-}
-
-export function updateSubscription(
-  id: number,
-  updates: Partial<Pick<Subscription, "webhook_secret">>,
-): boolean {
-  const fields: string[] = [];
-  const params: any[] = [];
-
-  if (updates.webhook_secret !== undefined) {
-    fields.push("webhook_secret = ?");
-    params.push(updates.webhook_secret);
-  }
-
-  if (fields.length === 0) {
-    return false;
-  }
-
-  params.push(id);
-  const result = getDb()
-    .prepare(`UPDATE subscriptions SET ${fields.join(", ")} WHERE id = ?`)
-    .run(...params);
   return result.changes > 0;
 }
 
@@ -314,7 +272,7 @@ export function createWebhookDeliveryLog(log: {
   trigger: NotificationTrigger;
   invoice_id: number;
   recipient_address: string;
-  status: "pending" | "success" | "failed";
+  status: 'pending' | 'success' | 'failed';
   attempts: number;
   response_status: number | null;
   error: string | null;
@@ -325,7 +283,7 @@ export function createWebhookDeliveryLog(log: {
       `INSERT INTO webhook_delivery_logs
          (subscription_id, event_id, trigger, invoice_id, recipient_address,
           status, attempts, response_status, error, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     )
     .run(
       log.subscription_id,
@@ -338,7 +296,7 @@ export function createWebhookDeliveryLog(log: {
       log.response_status,
       log.error,
       now,
-      now,
+      now
     );
 
   return {
@@ -351,30 +309,25 @@ export function createWebhookDeliveryLog(log: {
 
 export function updateWebhookDeliveryLog(
   id: number,
-  updates: Partial<
-    Pick<
-      WebhookDeliveryLog,
-      "status" | "attempts" | "response_status" | "error"
-    >
-  >,
+  updates: Partial<Pick<WebhookDeliveryLog, 'status' | 'attempts' | 'response_status' | 'error'>>
 ): void {
   const fields: string[] = [];
   const params: any[] = [];
 
   if (updates.status !== undefined) {
-    fields.push("status = ?");
+    fields.push('status = ?');
     params.push(updates.status);
   }
   if (updates.attempts !== undefined) {
-    fields.push("attempts = ?");
+    fields.push('attempts = ?');
     params.push(updates.attempts);
   }
   if (updates.response_status !== undefined) {
-    fields.push("response_status = ?");
+    fields.push('response_status = ?');
     params.push(updates.response_status);
   }
   if (updates.error !== undefined) {
-    fields.push("error = ?");
+    fields.push('error = ?');
     params.push(updates.error);
   }
 
@@ -382,23 +335,19 @@ export function updateWebhookDeliveryLog(
     return;
   }
 
-  fields.push("updated_at = ?");
+  fields.push('updated_at = ?');
   params.push(Date.now());
   params.push(id);
 
   getDb()
-    .prepare(
-      `UPDATE webhook_delivery_logs SET ${fields.join(", ")} WHERE id = ?`,
-    )
+    .prepare(`UPDATE webhook_delivery_logs SET ${fields.join(', ')} WHERE id = ?`)
     .run(...params);
 }
 
-export function getWebhookDeliveryLogs(
-  subscriptionId: number,
-): WebhookDeliveryLog[] {
+export function getWebhookDeliveryLogs(subscriptionId: number): WebhookDeliveryLog[] {
   return getDb()
     .prepare(
-      "SELECT * FROM webhook_delivery_logs WHERE subscription_id = ? ORDER BY created_at DESC",
+      'SELECT * FROM webhook_delivery_logs WHERE subscription_id = ? ORDER BY created_at DESC'
     )
     .all(subscriptionId)
     .map((row: any) => ({
@@ -422,7 +371,7 @@ export function hasSentNotification(
   trigger: NotificationTrigger,
   recipientAddress: string,
   channel: SubscriptionChannel,
-  destination: string,
+  destination: string
 ): boolean {
   return (
     getDb()
@@ -432,10 +381,9 @@ export function hasSentNotification(
            AND trigger = ?
            AND recipient_address = ?
            AND channel = ?
-           AND destination = ?`,
+           AND destination = ?`
       )
-      .get(invoiceId, trigger, recipientAddress, channel, destination) !==
-    undefined
+      .get(invoiceId, trigger, recipientAddress, channel, destination) !== undefined
   );
 }
 
@@ -445,23 +393,15 @@ export function logSentNotification(
   recipientAddress: string,
   channel: SubscriptionChannel,
   destination: string,
-  eventId?: string,
+  eventId?: string
 ): void {
   getDb()
     .prepare(
       `INSERT OR IGNORE INTO sent_notifications
          (invoice_id, trigger, recipient_address, channel, destination, event_id, sent_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+       VALUES (?, ?, ?, ?, ?, ?, ?)`
     )
-    .run(
-      invoiceId,
-      trigger,
-      recipientAddress,
-      channel,
-      destination,
-      eventId ?? null,
-      Date.now(),
-    );
+    .run(invoiceId, trigger, recipientAddress, channel, destination, eventId ?? null, Date.now());
 }
 
 export interface DeliveryAnalytics {
@@ -472,15 +412,15 @@ export interface DeliveryAnalytics {
 
 export function getDeliveryAnalytics(): DeliveryAnalytics {
   const { count: total } = getDb()
-    .prepare("SELECT COUNT(*) as count FROM sent_notifications")
+    .prepare('SELECT COUNT(*) as count FROM sent_notifications')
     .get() as { count: number };
 
   const channelRows = getDb()
-    .prepare("SELECT channel, COUNT(*) as count FROM sent_notifications GROUP BY channel")
+    .prepare('SELECT channel, COUNT(*) as count FROM sent_notifications GROUP BY channel')
     .all() as { channel: string; count: number }[];
 
   const triggerRows = getDb()
-    .prepare("SELECT trigger, COUNT(*) as count FROM sent_notifications GROUP BY trigger")
+    .prepare('SELECT trigger, COUNT(*) as count FROM sent_notifications GROUP BY trigger')
     .all() as { trigger: string; count: number }[];
 
   const byChannel: Record<string, number> = {};
@@ -501,7 +441,7 @@ export interface ChannelComparisonRow {
 
 export function getChannelComparison(): ChannelComparisonRow[] {
   const sentRows = getDb()
-    .prepare("SELECT channel, COUNT(*) as sent FROM sent_notifications GROUP BY channel")
+    .prepare('SELECT channel, COUNT(*) as sent FROM sent_notifications GROUP BY channel')
     .all() as { channel: string; sent: number }[];
 
   const { count: failedWebhook } = getDb()
@@ -509,7 +449,7 @@ export function getChannelComparison(): ChannelComparisonRow[] {
     .get() as { count: number };
 
   return sentRows.map((row) => {
-    const failed = row.channel === "webhook" ? failedWebhook : 0;
+    const failed = row.channel === 'webhook' ? failedWebhook : 0;
     const successRate = row.sent > 0 ? (row.sent - failed) / row.sent : 1;
     return { channel: row.channel, sent: row.sent, failed, successRate };
   });
@@ -528,7 +468,7 @@ export function getTrendAnalytics(days: number): TrendRow[] {
        FROM sent_notifications
        WHERE sent_at >= ?
        GROUP BY date
-       ORDER BY date ASC`,
+       ORDER BY date ASC`
     )
     .all(cutoffMs) as TrendRow[];
 }

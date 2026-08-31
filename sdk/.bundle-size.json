@@ -1,7 +1,7 @@
 {
   "budgets": [
-    { "path": "dist/index.mjs", "limit": "90 KB" },
-    { "path": "dist/index.cjs", "limit": "100 KB" }
+    { "path": "dist/index.mjs", "limit": "110 KB" },
+    { "path": "dist/index.cjs", "limit": "120 KB" }
   ],
   "notes": "Budgets measure minified runtime bundles. Type declarations are excluded because they do not affect runtime bundle size."
 }

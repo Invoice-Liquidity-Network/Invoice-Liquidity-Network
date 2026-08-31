@@ -8,7 +8,7 @@ vi.mock('@opentelemetry/api', () => {
     setStatus: vi.fn(),
     end: vi.fn(),
   });
-  
+
   const record = vi.fn();
   const add = vi.fn();
 
@@ -35,11 +35,11 @@ class MockClient {
   async submitInvoice(params: any) {
     return { success: true };
   }
-  
+
   async simulateTransaction(params: any) {
     return { success: true };
   }
-  
+
   async fundInvoice(params: any) {
     throw Object.assign(new Error('Insufficient balance'), { code: 'INSUFFICIENT_BALANCE' });
   }
@@ -59,7 +59,7 @@ describe('ILNInstrumentation', () => {
 
     const tracer = trace.getTracer('test');
     expect(tracer.startSpan).toHaveBeenCalledWith('ILNClient.submitInvoice');
-    
+
     // Check that histogram was recorded
     const meter = metrics.getMeter('test');
     const histogram = meter.createHistogram('iln.transaction.duration');
@@ -83,10 +83,15 @@ describe('ILNInstrumentation', () => {
     const client = new MockClient();
     const instrumented = instrumentation.instrumentClient(client);
 
-    await expect(instrumented.fundInvoice({ invoiceId: '789' })).rejects.toThrow('Insufficient balance');
+    await expect(instrumented.fundInvoice({ invoiceId: '789' })).rejects.toThrow(
+      'Insufficient balance'
+    );
 
     const meter = metrics.getMeter('test');
     const counter = meter.createCounter('iln.error.count');
-    expect(counter.add).toHaveBeenCalledWith(1, { method: 'fundInvoice', code: 'INSUFFICIENT_BALANCE' });
+    expect(counter.add).toHaveBeenCalledWith(1, {
+      method: 'fundInvoice',
+      code: 'INSUFFICIENT_BALANCE',
+    });
   });
 });

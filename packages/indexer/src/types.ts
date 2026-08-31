@@ -47,16 +47,16 @@ export interface IndexerOptions {
  * preserves forward-compatibility for unknown future event types.
  */
 export type ILNEventType =
-  | "InvoiceSubmitted"
-  | "InvoiceFunded"
-  | "InvoicePaid"
-  | "InvoiceDefaulted"
-  | "ProposalCreated"
-  | "VoteCast"
-  | "ProposalExecuted"
-  | "TokenAdded"
-  | "TokenRemoved"
-  | "ReputationUpdated"
+  | 'InvoiceSubmitted'
+  | 'InvoiceFunded'
+  | 'InvoicePaid'
+  | 'InvoiceDefaulted'
+  | 'ProposalCreated'
+  | 'VoteCast'
+  | 'ProposalExecuted'
+  | 'TokenAdded'
+  | 'TokenRemoved'
+  | 'ReputationUpdated'
   | string; // allow arbitrary strings for forward-compat
 
 /**

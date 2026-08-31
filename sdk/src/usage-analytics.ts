@@ -2,7 +2,16 @@ const SDK_VERSION = '0.1.0';
 const DEFAULT_ENDPOINT = 'https://analytics.iln.finance/event';
 
 // Fields that must never appear in an analytics payload
-const PII_FIELDS = ['address', 'freelancer', 'payer', 'funder', 'secretKey', 'publicKey', 'amount', 'invoiceId'];
+const PII_FIELDS = [
+  'address',
+  'freelancer',
+  'payer',
+  'funder',
+  'secretKey',
+  'publicKey',
+  'amount',
+  'invoiceId',
+];
 
 export interface UsageEvent {
   method: string;

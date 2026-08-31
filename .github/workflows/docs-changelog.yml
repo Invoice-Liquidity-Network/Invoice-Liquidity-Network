@@ -17,7 +17,7 @@ permissions:
 jobs:
   aggregate-changelog:
     name: Aggregate and Update Changelog
-    runs-on: namespace-profile-nursca
+    runs-on: ubuntu-latest
 
     steps:
       - name: Checkout repository

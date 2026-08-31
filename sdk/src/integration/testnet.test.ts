@@ -13,21 +13,20 @@
  * In CI this job runs on push to main only (see .github/workflows/ci.yml).
  */
 
-import { beforeAll, describe, expect, it } from "vitest";
+import { beforeAll, describe, expect, it } from 'vitest';
 import {
   Account,
   Address,
   BASE_FEE,
-  nativeToScVal,
   Operation,
   rpc,
   scValToNative,
   TransactionBuilder,
   xdr,
-} from "@stellar/stellar-sdk";
+} from '@stellar/stellar-sdk';
 
-import { ILNSdk } from "../client";
-import { createKeypairSigner, ILN_TESTNET } from "../signers";
+import { ILNSdk } from '../client';
+import { createKeypairSigner, ILN_TESTNET } from '../signers';
 
 // ── Secrets ──────────────────────────────────────────────────────────────────
 
@@ -57,7 +56,7 @@ const canRun = isTestnetAvailable && hasRequiredSecrets;
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
-const READ_ACCOUNT = "GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF";
+const READ_ACCOUNT = 'GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF';
 const TX_TIMEOUT_MS = 60_000;
 const INVOICE_AMOUNT = 10_000_000n; // 1 USDC (7 decimal stroops)
 const DISCOUNT_RATE = 300; // 3%
@@ -71,7 +70,7 @@ type SimulationResultLike = {
 
 async function readContract(method: string, args: xdr.ScVal[]): Promise<unknown> {
   const server = new rpc.Server(ILN_TESTNET.rpcUrl);
-  const tx = new TransactionBuilder(new Account(READ_ACCOUNT, "0"), {
+  const tx = new TransactionBuilder(new Account(READ_ACCOUNT, '0'), {
     fee: BASE_FEE,
     networkPassphrase: ILN_TESTNET.networkPassphrase,
   })
@@ -80,7 +79,7 @@ async function readContract(method: string, args: xdr.ScVal[]): Promise<unknown>
         contract: ILN_TESTNET.contractId,
         function: method,
         args,
-      }),
+      })
     )
     .setTimeout(60)
     .build();
@@ -98,10 +97,10 @@ async function readContract(method: string, args: xdr.ScVal[]): Promise<unknown>
 }
 
 function unwrapResult(value: unknown): unknown {
-  if (!value || typeof value !== "object") return value;
-  if ("ok" in value) return (value as { ok: unknown }).ok;
-  if ("Ok" in value) return (value as { Ok: unknown }).Ok;
-  if ("err" in value || "Err" in value) {
+  if (!value || typeof value !== 'object') return value;
+  if ('ok' in value) return (value as { ok: unknown }).ok;
+  if ('Ok' in value) return (value as { Ok: unknown }).Ok;
+  if ('err' in value || 'Err' in value) {
     throw new Error(`Contract returned an error: ${JSON.stringify(value)}`);
   }
   return value;
@@ -109,7 +108,7 @@ function unwrapResult(value: unknown): unknown {
 
 // ── Test suite ────────────────────────────────────────────────────────────────
 
-describe.skipIf(!canRun)("SDK testnet integration (#233)", () => {
+describe.skipIf(!canRun)('SDK testnet integration (#233)', () => {
   let freelancerAddress: string;
   let payerAddress: string;
   let funderAddress: string;
@@ -142,129 +141,153 @@ describe.skipIf(!canRun)("SDK testnet integration (#233)", () => {
 
   // ── submit_invoice ──────────────────────────────────────────────────────────
 
-  it("submit_invoice — returns a valid bigint invoice ID", async () => {
-    const dueDate = Math.floor(Date.now() / 1000) + 300; // 5 min window
+  it(
+    'submit_invoice — returns a valid bigint invoice ID',
+    async () => {
+      const dueDate = Math.floor(Date.now() / 1000) + 300; // 5 min window
 
-    sharedInvoiceId = await freelancerSdk.submitInvoice({
-      freelancer: freelancerAddress,
-      payer: payerAddress,
-      amount: INVOICE_AMOUNT,
-      dueDate,
-      discountRate: DISCOUNT_RATE,
-    });
+      sharedInvoiceId = await freelancerSdk.submitInvoice({
+        freelancer: freelancerAddress,
+        payer: payerAddress,
+        amount: INVOICE_AMOUNT,
+        dueDate,
+        discountRate: DISCOUNT_RATE,
+      });
 
-    expect(typeof sharedInvoiceId).toBe("bigint");
-    expect(sharedInvoiceId).toBeGreaterThan(0n);
-  }, TX_TIMEOUT_MS);
+      expect(typeof sharedInvoiceId).toBe('bigint');
+      expect(sharedInvoiceId).toBeGreaterThan(0n);
+    },
+    TX_TIMEOUT_MS
+  );
 
   // ── get_invoice (Pending) ───────────────────────────────────────────────────
 
-  it("get_invoice — submitted invoice is Pending with correct fields", async () => {
-    const invoice = await freelancerSdk.getInvoice(sharedInvoiceId);
+  it(
+    'get_invoice — submitted invoice is Pending with correct fields',
+    async () => {
+      const invoice = await freelancerSdk.getInvoice(sharedInvoiceId);
 
-    expect(invoice.id).toBe(sharedInvoiceId);
-    expect(invoice.freelancer).toBe(freelancerAddress);
-    expect(invoice.payer).toBe(payerAddress);
-    expect(invoice.amount).toBe(INVOICE_AMOUNT);
-    expect(invoice.discountRate).toBe(DISCOUNT_RATE);
-    expect(invoice.status).toBe("Pending");
-    expect(invoice.funder).toBeNull();
-    expect(invoice.fundedAt).toBeNull();
-  }, TX_TIMEOUT_MS);
+      expect(invoice.id).toBe(sharedInvoiceId);
+      expect(invoice.freelancer).toBe(freelancerAddress);
+      expect(invoice.payer).toBe(payerAddress);
+      expect(invoice.amount).toBe(INVOICE_AMOUNT);
+      expect(invoice.discountRate).toBe(DISCOUNT_RATE);
+      expect(invoice.status).toBe('Pending');
+      expect(invoice.funder).toBeNull();
+      expect(invoice.fundedAt).toBeNull();
+    },
+    TX_TIMEOUT_MS
+  );
 
   // ── fund_invoice ────────────────────────────────────────────────────────────
 
-  it("fund_invoice — invoice transitions to Funded; funder and fundedAt are set", async () => {
-    await funderSdk.fundInvoice({
-      funder: funderAddress,
-      invoiceId: sharedInvoiceId,
-    });
+  it(
+    'fund_invoice — invoice transitions to Funded; funder and fundedAt are set',
+    async () => {
+      await funderSdk.fundInvoice({
+        funder: funderAddress,
+        invoiceId: sharedInvoiceId,
+      });
 
-    const invoice = await freelancerSdk.getInvoice(sharedInvoiceId);
+      const invoice = await freelancerSdk.getInvoice(sharedInvoiceId);
 
-    expect(invoice.status).toBe("Funded");
-    expect(invoice.funder).toBe(funderAddress);
-    expect(invoice.fundedAt).not.toBeNull();
-    expect(typeof invoice.fundedAt).toBe("number");
-  }, TX_TIMEOUT_MS);
+      expect(invoice.status).toBe('Funded');
+      expect(invoice.funder).toBe(funderAddress);
+      expect(invoice.fundedAt).not.toBeNull();
+      expect(typeof invoice.fundedAt).toBe('number');
+    },
+    TX_TIMEOUT_MS
+  );
 
   // ── mark_paid ───────────────────────────────────────────────────────────────
 
-  it("mark_paid — invoice transitions from Funded to Paid", async () => {
-    await payerSdk.markPaid({ invoiceId: sharedInvoiceId });
+  it(
+    'mark_paid — invoice transitions from Funded to Paid',
+    async () => {
+      await payerSdk.markPaid({ invoiceId: sharedInvoiceId });
 
-    const invoice = await freelancerSdk.getInvoice(sharedInvoiceId);
+      const invoice = await freelancerSdk.getInvoice(sharedInvoiceId);
 
-    expect(invoice.status).toBe("Paid");
-    // Funder and amount should be preserved after payment.
-    expect(invoice.funder).toBe(funderAddress);
-    expect(invoice.amount).toBe(INVOICE_AMOUNT);
-  }, TX_TIMEOUT_MS);
+      expect(invoice.status).toBe('Paid');
+      // Funder and amount should be preserved after payment.
+      expect(invoice.funder).toBe(funderAddress);
+      expect(invoice.amount).toBe(INVOICE_AMOUNT);
+    },
+    TX_TIMEOUT_MS
+  );
 
   // ── get_contract_stats ──────────────────────────────────────────────────────
 
-  it("get_contract_stats — returns an object with non-negative numeric counters", async () => {
-    const raw = await readContract("get_contract_stats", []);
-    const stats = unwrapResult(raw) as Record<string, unknown>;
+  it(
+    'get_contract_stats — returns an object with non-negative numeric counters',
+    async () => {
+      const raw = await readContract('get_contract_stats', []);
+      const stats = unwrapResult(raw) as Record<string, unknown>;
 
-    expect(typeof stats).toBe("object");
-    expect(stats).not.toBeNull();
+      expect(typeof stats).toBe('object');
+      expect(stats).not.toBeNull();
 
-    // At least one counter field should be a number/bigint.
-    const numericValues = Object.values(stats).filter(
-      (v) => typeof v === "bigint" || typeof v === "number",
-    );
-    expect(numericValues.length).toBeGreaterThan(0);
+      // At least one counter field should be a number/bigint.
+      const numericValues = Object.values(stats).filter(
+        (v) => typeof v === 'bigint' || typeof v === 'number'
+      );
+      expect(numericValues.length).toBeGreaterThan(0);
 
-    // Regardless of exact field name, every numeric counter must be non-negative.
-    for (const v of numericValues) {
-      expect(Number(v)).toBeGreaterThanOrEqual(0);
-    }
+      // Regardless of exact field name, every numeric counter must be non-negative.
+      for (const v of numericValues) {
+        expect(Number(v)).toBeGreaterThanOrEqual(0);
+      }
 
-    // Total invoices should reflect at least the one we just processed.
-    const total =
-      stats["total_invoices"] ??
-      stats["totalInvoices"] ??
-      stats["invoices_submitted"] ??
-      stats["total"];
-    if (total != null) {
-      expect(Number(total)).toBeGreaterThanOrEqual(1);
-    }
-  }, TX_TIMEOUT_MS);
+      // Total invoices should reflect at least the one we just processed.
+      const total =
+        stats['total_invoices'] ??
+        stats['totalInvoices'] ??
+        stats['invoices_submitted'] ??
+        stats['total'];
+      if (total !== null && total !== undefined) {
+        expect(Number(total)).toBeGreaterThanOrEqual(1);
+      }
+    },
+    TX_TIMEOUT_MS
+  );
 
   // ── get_reputation ──────────────────────────────────────────────────────────
 
-  it("get_reputation — returns a reputation record for a known address", async () => {
-    const raw = await readContract("get_reputation", [
-      Address.fromString(freelancerAddress).toScVal(),
-    ]);
-    const reputation = unwrapResult(raw) as Record<string, unknown>;
+  it(
+    'get_reputation — returns a reputation record for a known address',
+    async () => {
+      const raw = await readContract('get_reputation', [
+        Address.fromString(freelancerAddress).toScVal(),
+      ]);
+      const reputation = unwrapResult(raw) as Record<string, unknown>;
 
-    expect(typeof reputation).toBe("object");
-    expect(reputation).not.toBeNull();
+      expect(typeof reputation).toBe('object');
+      expect(reputation).not.toBeNull();
 
-    // Score-like field must be a non-negative number.
-    const score =
-      reputation["score"] ??
-      reputation["payer_score"] ??
-      reputation["lp_score"] ??
-      reputation["reputation_score"];
+      // Score-like field must be a non-negative number.
+      const score =
+        reputation['score'] ??
+        reputation['payer_score'] ??
+        reputation['lp_score'] ??
+        reputation['reputation_score'];
 
-    if (score != null) {
-      expect(Number(score)).toBeGreaterThanOrEqual(0);
-    }
-
-    // Invoice-count fields should be non-negative if present.
-    for (const key of [
-      "invoices_submitted",
-      "invoices_paid",
-      "invoices_defaulted",
-      "invoicesSubmitted",
-      "invoicesPaid",
-    ]) {
-      if (reputation[key] != null) {
-        expect(Number(reputation[key])).toBeGreaterThanOrEqual(0);
+      if (score !== null && score !== undefined) {
+        expect(Number(score)).toBeGreaterThanOrEqual(0);
       }
-    }
-  }, TX_TIMEOUT_MS);
+
+      // Invoice-count fields should be non-negative if present.
+      for (const key of [
+        'invoices_submitted',
+        'invoices_paid',
+        'invoices_defaulted',
+        'invoicesSubmitted',
+        'invoicesPaid',
+      ]) {
+        if (reputation[key] !== null && reputation[key] !== undefined) {
+          expect(Number(reputation[key])).toBeGreaterThanOrEqual(0);
+        }
+      }
+    },
+    TX_TIMEOUT_MS
+  );
 });

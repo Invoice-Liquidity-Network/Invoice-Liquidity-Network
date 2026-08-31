@@ -28,7 +28,7 @@ concurrency:
 jobs:
   changeset-check:
     name: Require changeset for package changes
-    runs-on: namespace-profile-nursca
+    runs-on: ubuntu-latest
 
     steps:
       - name: Checkout

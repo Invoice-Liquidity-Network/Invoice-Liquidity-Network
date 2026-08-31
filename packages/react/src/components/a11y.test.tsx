@@ -6,7 +6,12 @@ import { ILNProvider } from '../context';
 
 expect.extend(toHaveNoViolations);
 import { TestWrapper } from '../test/wrapper';
-import { createMockILNClient, mockLPCoverage, mockPoolBalance, mockInsuranceClaim, mockInvoiceList } from '../test/mocks';
+import {
+  createMockILNClient,
+  mockLPCoverage,
+  mockPoolBalance,
+  mockInsuranceClaim,
+} from '../test/mocks';
 import { InvoiceDashboard } from './InvoiceDashboard';
 import { InvoiceCard } from './InvoiceCard';
 import { BatchInvoiceForm } from './BatchInvoiceForm';
@@ -19,7 +24,7 @@ import { LPRiskDashboard } from './LPRiskDashboard';
 import { StatsCard } from './StatsCard';
 import { StatusBadge } from './StatusBadge';
 import { AddressDisplay } from './AddressDisplay';
-import type { Invoice, LPPortfolio } from '@invoice-liquidity/sdk';
+import type { Invoice, LPPortfolio } from '@iln/sdk';
 
 const LP_ADDRESS = 'GLPADDR00000000000000000000000000000000000000000000000';
 
@@ -47,9 +52,7 @@ const mockPortfolio: LPPortfolio = {
 
 describe('InvoiceDashboard a11y', () => {
   it('has no axe violations', async () => {
-    const { container } = render(
-      <InvoiceDashboard websocketUrl="wss://example.com/ws" />,
-    );
+    const { container } = render(<InvoiceDashboard websocketUrl="wss://example.com/ws" />);
     const results = await axe(container);
     expect(results).toHaveNoViolations();
   });
@@ -58,7 +61,9 @@ describe('InvoiceDashboard a11y', () => {
 describe('InvoiceCard a11y', () => {
   it('has no axe violations', async () => {
     const { container } = render(
-      <TestWrapper><InvoiceCard invoice={mockInvoice} /></TestWrapper>,
+      <TestWrapper>
+        <InvoiceCard invoice={mockInvoice} />
+      </TestWrapper>
     );
     const results = await axe(container);
     expect(results).toHaveNoViolations();
@@ -66,7 +71,9 @@ describe('InvoiceCard a11y', () => {
 
   it('has no axe violations when clickable', async () => {
     const { container } = render(
-      <TestWrapper><InvoiceCard invoice={mockInvoice} onClick={vi.fn()} /></TestWrapper>,
+      <TestWrapper>
+        <InvoiceCard invoice={mockInvoice} onClick={vi.fn()} />
+      </TestWrapper>
     );
     const results = await axe(container);
     expect(results).toHaveNoViolations();
@@ -81,7 +88,7 @@ describe('BatchInvoiceForm a11y', () => {
     const { container } = render(
       <ILNProvider client={mockClient}>
         <BatchInvoiceForm freelancer={LP_ADDRESS} />
-      </ILNProvider>,
+      </ILNProvider>
     );
     const results = await axe(container);
     expect(results).toHaveNoViolations();
@@ -105,7 +112,7 @@ describe('InsurancePoolPanel a11y', () => {
     const { container } = render(
       <TestWrapper client={mockClient}>
         <InsurancePoolPanel address={LP_ADDRESS} />
-      </TestWrapper>,
+      </TestWrapper>
     );
     const results = await axe(container);
     expect(results).toHaveNoViolations();
@@ -116,15 +123,17 @@ describe('ClaimForm a11y', () => {
   it('has no axe violations when enrolled', async () => {
     const mockClient = createMockILNClient({
       getLPCoverage: vi.fn().mockResolvedValue(mockLPCoverage),
-      getInvoicesByIssuer: vi.fn().mockResolvedValue([
-        { id: 42, payer: 'GPAYER_A', amount: 5_000_000_000n, status: 'Defaulted' },
-      ]),
+      getInvoicesByIssuer: vi
+        .fn()
+        .mockResolvedValue([
+          { id: 42, payer: 'GPAYER_A', amount: 5_000_000_000n, status: 'Defaulted' },
+        ]),
       submitClaim: vi.fn().mockResolvedValue(3n),
     });
     const { container } = render(
       <TestWrapper client={mockClient}>
         <ClaimForm lp={LP_ADDRESS} />
-      </TestWrapper>,
+      </TestWrapper>
     );
     const results = await axe(container);
     expect(results).toHaveNoViolations();
@@ -140,7 +149,7 @@ describe('AdminReviewDashboard a11y', () => {
     const { container } = render(
       <TestWrapper client={mockClient}>
         <AdminReviewDashboard adminAddress={LP_ADDRESS} />
-      </TestWrapper>,
+      </TestWrapper>
     );
     const results = await axe(container);
     expect(results).toHaveNoViolations();
@@ -156,7 +165,7 @@ describe('InsuranceAnalytics a11y', () => {
     const { container } = render(
       <TestWrapper client={mockClient}>
         <InsuranceAnalytics />
-      </TestWrapper>,
+      </TestWrapper>
     );
     const results = await axe(container);
     expect(results).toHaveNoViolations();
@@ -173,7 +182,7 @@ describe('LPRiskDashboard a11y', () => {
           invoices={[mockInvoice]}
           reputationByPayer={{ GPAYERADDR: 85 }}
         />
-      </ILNProvider>,
+      </ILNProvider>
     );
     const results = await axe(container);
     expect(results).toHaveNoViolations();
@@ -183,7 +192,7 @@ describe('LPRiskDashboard a11y', () => {
 describe('StatsCard a11y', () => {
   it('has no axe violations', async () => {
     const { container } = render(
-      <StatsCard title="Test Metric" value="$1,000" accentColor="#8B5E34" />,
+      <StatsCard title="Test Metric" value="$1,000" accentColor="#8B5E34" />
     );
     const results = await axe(container);
     expect(results).toHaveNoViolations();
@@ -201,7 +210,7 @@ describe('StatusBadge a11y', () => {
 describe('AddressDisplay a11y', () => {
   it('has no axe violations', async () => {
     const { container } = render(
-      <AddressDisplay address="GDRMKYQMTNZ3XPRF7K7L3PFBJQI2S2Y2E3KJQF3KHKY3XT3LZXG3G5X2" />,
+      <AddressDisplay address="GDRMKYQMTNZ3XPRF7K7L3PFBJQI2S2Y2E3KJQF3KHKY3XT3LZXG3G5X2" />
     );
     const results = await axe(container);
     expect(results).toHaveNoViolations();

@@ -6,8 +6,15 @@
  * Delegates to the shared `runLoadTest()` function in `scripts/lib/load-test-harness.ts`.
  */
 
-import { parseArgs } from "util";
-import { LoadTestConfig, colors, runLoadTest, printReport, writeMarkdownReport, writeJsonReport } from "./lib/load-test-harness";
+import { parseArgs } from 'util';
+import {
+  LoadTestConfig,
+  colors,
+  runLoadTest,
+  printReport,
+  writeMarkdownReport,
+  writeJsonReport,
+} from './lib/load-test-harness';
 
 function printUsage(): void {
   console.log(`
@@ -37,18 +44,18 @@ async function main(): Promise<void> {
   try {
     args = parseArgs({
       options: {
-        service: { type: "string", default: "both" },
-        duration: { type: "string", default: "10" },
-        concurrency: { type: "string", default: "5" },
-        "indexer-url": { type: "string", default: "http://localhost:3001" },
-        "notifications-url": { type: "string", default: "http://localhost:4001" },
-        report: { type: "string", default: "load-test-report.md" },
-        json: { type: "string", default: "load-test-results.json" },
-        "p95-threshold": { type: "string", default: "500" },
-        "error-threshold": { type: "string", default: "2" },
-        "avg-threshold": { type: "string", default: "200" },
-        "rps-threshold": { type: "string", default: "10" },
-        help: { type: "boolean", short: "h" },
+        service: { type: 'string', default: 'both' },
+        duration: { type: 'string', default: '10' },
+        concurrency: { type: 'string', default: '5' },
+        'indexer-url': { type: 'string', default: 'http://localhost:3001' },
+        'notifications-url': { type: 'string', default: 'http://localhost:4001' },
+        report: { type: 'string', default: 'load-test-report.md' },
+        json: { type: 'string', default: 'load-test-results.json' },
+        'p95-threshold': { type: 'string', default: '500' },
+        'error-threshold': { type: 'string', default: '2' },
+        'avg-threshold': { type: 'string', default: '200' },
+        'rps-threshold': { type: 'string', default: '10' },
+        help: { type: 'boolean', short: 'h' },
       },
     });
   } catch (err: any) {
@@ -63,43 +70,55 @@ async function main(): Promise<void> {
   }
 
   const config: LoadTestConfig = {
-    service: (args.values.service || "both") as any,
-    duration: parseInt(args.values.duration || "10", 10),
-    concurrency: parseInt(args.values.concurrency || "5", 10),
-    indexerUrl: args.values["indexer-url"] || "http://localhost:3001",
-    notificationsUrl: args.values["notifications-url"] || "http://localhost:4001",
-    p95Threshold: parseFloat(args.values["p95-threshold"] || "500"),
-    errorThreshold: parseFloat(args.values["error-threshold"] || "2"),
-    avgThreshold: parseFloat(args.values["avg-threshold"] || "200"),
-    rpsThreshold: parseFloat(args.values["rps-threshold"] || "10"),
+    service: (args.values.service || 'both') as any,
+    duration: parseInt(args.values.duration || '10', 10),
+    concurrency: parseInt(args.values.concurrency || '5', 10),
+    indexerUrl: args.values['indexer-url'] || 'http://localhost:3001',
+    notificationsUrl: args.values['notifications-url'] || 'http://localhost:4001',
+    p95Threshold: parseFloat(args.values['p95-threshold'] || '500'),
+    errorThreshold: parseFloat(args.values['error-threshold'] || '2'),
+    avgThreshold: parseFloat(args.values['avg-threshold'] || '200'),
+    rpsThreshold: parseFloat(args.values['rps-threshold'] || '10'),
   };
 
-  if (!["indexer", "notifications", "both"].includes(config.service)) {
-    console.error(`${colors.red}Invalid service value: ${config.service}. Must be "indexer", "notifications", or "both".${colors.reset}`);
+  if (!['indexer', 'notifications', 'both'].includes(config.service)) {
+    console.error(
+      `${colors.red}Invalid service value: ${config.service}. Must be "indexer", "notifications", or "both".${colors.reset}`
+    );
     process.exit(1);
   }
 
-  console.log(`\n${colors.bright}${colors.magenta}=== INITIATING INVOICE LIQUIDITY NETWORK LOAD TEST ===${colors.reset}`);
+  console.log(
+    `\n${colors.bright}${colors.magenta}=== INITIATING INVOICE LIQUIDITY NETWORK LOAD TEST ===${colors.reset}`
+  );
   console.log(`${colors.bright}Target Service:${colors.reset}   ${config.service.toUpperCase()}`);
   console.log(`${colors.bright}Duration:${colors.reset}         ${config.duration} seconds`);
-  console.log(`${colors.bright}Concurrency:${colors.reset}      ${config.concurrency} concurrent workers`);
-  if (config.service === "indexer" || config.service === "both") {
+  console.log(
+    `${colors.bright}Concurrency:${colors.reset}      ${config.concurrency} concurrent workers`
+  );
+  if (config.service === 'indexer' || config.service === 'both') {
     console.log(`${colors.bright}Indexer URL:${colors.reset}      ${config.indexerUrl}`);
   }
-  if (config.service === "notifications" || config.service === "both") {
+  if (config.service === 'notifications' || config.service === 'both') {
     console.log(`${colors.bright}Notifications URL:${colors.reset} ${config.notificationsUrl}`);
   }
-  console.log(`${colors.bright}Thresholds:${colors.reset}       Avg: ${config.avgThreshold}ms | p95: ${config.p95Threshold}ms | Error: ${config.errorThreshold}% | Min RPS: ${config.rpsThreshold}\n`);
+  console.log(
+    `${colors.bright}Thresholds:${colors.reset}       Avg: ${config.avgThreshold}ms | p95: ${config.p95Threshold}ms | Error: ${config.errorThreshold}% | Min RPS: ${config.rpsThreshold}\n`
+  );
 
   const report = await runLoadTest(config);
   printReport(report);
-  writeMarkdownReport(report, args.values.report || "load-test-report.md");
-  writeJsonReport(report, args.values.json || "load-test-results.json");
+  writeMarkdownReport(report, args.values.report || 'load-test-report.md');
+  writeJsonReport(report, args.values.json || 'load-test-results.json');
 
   process.exitCode = report.thresholds.passed ? 0 : 1;
 }
 
 main().catch((err) => {
-  console.error(`${colors.red}Load test failed unexpectedly: ${err instanceof Error ? err.message : String(err)}${colors.reset}`);
+  console.error(
+    `${colors.red}Load test failed unexpectedly: ${
+      err instanceof Error ? err.message : String(err)
+    }${colors.reset}`
+  );
   process.exit(1);
 });

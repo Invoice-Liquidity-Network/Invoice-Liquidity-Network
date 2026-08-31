@@ -16,24 +16,22 @@
  *   export enum Foo { ... }
  */
 
-import { readFileSync, readdirSync, statSync } from "node:fs";
-import { join, relative } from "node:path";
+import { readFileSync, readdirSync, statSync } from 'node:fs';
+import { join, relative } from 'node:path';
 
 // ── 1. Extract exported type names from packages/shared/src ────────────────
 
-const SHARED_DIR = join(import.meta.dirname, "..", "packages", "shared", "src");
+const SHARED_DIR = join(import.meta.dirname, '..', 'packages', 'shared', 'src');
 
 function extractExportedNames(dir) {
   const names = new Set();
   for (const entry of readdirSync(dir)) {
     const full = join(dir, entry);
     if (statSync(full).isFile() && /\.(ts|mts|cts)$/.test(entry)) {
-      const src = readFileSync(full, "utf8");
+      const src = readFileSync(full, 'utf8');
       // Match: export type Foo, export interface Foo, export enum Foo
       // Also matches: export type Foo = (deprecated alias re-exports)
-      for (const m of src.matchAll(
-        /^export\s+(type|interface|enum)\s+(\w+)/gm,
-      )) {
+      for (const m of src.matchAll(/^export\s+(type|interface|enum)\s+(\w+)/gm)) {
         names.add(m[2]);
       }
     }
@@ -44,20 +42,20 @@ function extractExportedNames(dir) {
 const sharedNames = extractExportedNames(SHARED_DIR);
 
 if (sharedNames.size === 0) {
-  console.error("❌ Could not extract any exported types from packages/shared/src");
+  console.error('❌ Could not extract any exported types from packages/shared/src');
   process.exit(2);
 }
 
 // ── 2. Scan consuming packages for local definitions with the same names ───
 
 const CONSUMING_DIRS = [
-  join(import.meta.dirname, "..", "sdk", "src"),
-  join(import.meta.dirname, "..", "cli", "src"),
-  join(import.meta.dirname, "..", "indexer", "src"),
-  join(import.meta.dirname, "..", "notifications", "src"),
-  join(import.meta.dirname, "..", "packages", "sdk", "src"),
-  join(import.meta.dirname, "..", "packages", "cli", "src"),
-  join(import.meta.dirname, "..", "packages", "indexer", "src"),
+  join(import.meta.dirname, '..', 'sdk', 'src'),
+  join(import.meta.dirname, '..', 'cli', 'src'),
+  join(import.meta.dirname, '..', 'indexer', 'src'),
+  join(import.meta.dirname, '..', 'notifications', 'src'),
+  join(import.meta.dirname, '..', 'packages', 'sdk', 'src'),
+  join(import.meta.dirname, '..', 'packages', 'cli', 'src'),
+  join(import.meta.dirname, '..', 'packages', 'indexer', 'src'),
 ];
 
 // Skip patterns: test files, declaration files, auto-generated files, re-exports from @iln/shared
@@ -83,26 +81,29 @@ function scanDir(dir, sharedNames) {
         walk(full);
       } else if (/\.(ts|mts|cts|tsx)$/.test(entry) && !SKIP.test(entry)) {
         filesScanned++;
-        const src = readFileSync(full, "utf8");
+        const src = readFileSync(full, 'utf8');
 
         // Skip auto-generated files
         if (AUTO_GENERATED.test(src.slice(0, 200))) continue;
         const relPath = relative(process.cwd(), full);
 
         // Skip files that only re-export from @iln/shared
-        if (SHARED_IMPORT.test(src) && !/^export\s+(type|interface|enum)\s+\w+/m.test(src.replace(/^.*from\s+["']@iln\/shared["'].*$/gm, ""))) {
+        if (
+          SHARED_IMPORT.test(src) &&
+          !/^export\s+(type|interface|enum)\s+\w+/m.test(
+            src.replace(/^.*from\s+["']@iln\/shared["'].*$/gm, '')
+          )
+        ) {
           continue;
         }
 
         // Check for local type definitions matching shared names
-        const typeDefs = src.matchAll(
-          /^(?:export\s+)?(type|interface|enum)\s+(\w+)/gm,
-        );
+        const typeDefs = src.matchAll(/^(?:export\s+)?(type|interface|enum)\s+(\w+)/gm);
         for (const m of typeDefs) {
           if (sharedNames.has(m[2])) {
             // Find the line number
             const idx = m.index;
-            const lineNum = src.slice(0, idx).split("\n").length;
+            const lineNum = src.slice(0, idx).split('\n').length;
 
             // Check if there's a JSDoc/block comment above explaining
             // why this type is intentionally different from @iln/shared
@@ -149,21 +150,21 @@ for (const dir of CONSUMING_DIRS) {
 
 if (totalViolations.length === 0) {
   console.log(
-    `✅ No duplicate type definitions found (scanned ${CONSUMING_DIRS.length} package roots against ${sharedNames.size} shared type names).`,
+    `✅ No duplicate type definitions found (scanned ${CONSUMING_DIRS.length} package roots against ${sharedNames.size} shared type names).`
   );
   process.exit(0);
 }
 
 console.error(
-  `\n❌ Found ${totalViolations.length} local type definition(s) that duplicate @iln/shared exports:\n`,
+  `\n❌ Found ${totalViolations.length} local type definition(s) that duplicate @iln/shared exports:\n`
 );
 for (const v of totalViolations) {
   console.error(`  ${v.file}:${v.line}  ${v.kind} ${v.name}`);
 }
 console.error(
-  "\nThese should either:\n" +
-    "  1. Import from @iln/shared, or\n" +
-    "  2. Be renamed to avoid the collision (e.g. ParsedHorizonEvent instead of ContractEvent).\n" +
-    "  3. Add an inline comment explaining why the local definition is intentionally different.\n",
+  '\nThese should either:\n' +
+    '  1. Import from @iln/shared, or\n' +
+    '  2. Be renamed to avoid the collision (e.g. ParsedHorizonEvent instead of ContractEvent).\n' +
+    '  3. Add an inline comment explaining why the local definition is intentionally different.\n'
 );
 process.exit(1);

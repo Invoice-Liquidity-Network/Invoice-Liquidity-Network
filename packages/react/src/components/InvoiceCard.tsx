@@ -1,5 +1,5 @@
 import React from 'react';
-import type { Invoice } from '@invoice-liquidity/sdk';
+import type { Invoice } from '@iln/sdk';
 import { StatusBadge } from './StatusBadge';
 import { AddressDisplay } from './AddressDisplay';
 import { AmountDisplay } from './AmountDisplay';
@@ -15,7 +15,11 @@ export interface InvoiceCardProps {
   /** Whether to show the Dutch auction rate panel for pending auction invoices. */
   showAuctionTicker?: boolean;
   /** Optional custom funding handler for the embedded Dutch auction button. */
-  onAuctionFund?: (params: { invoiceId: number; currentDiscountBps: number; funder?: string }) => Promise<void> | void;
+  onAuctionFund?: (params: {
+    invoiceId: number;
+    currentDiscountBps: number;
+    funder?: string;
+  }) => Promise<void> | void;
   className?: string;
 }
 
@@ -85,10 +89,25 @@ export const InvoiceCard: React.FC<InvoiceCardProps> = ({
       onClick={isClickable ? () => onClick(invoice) : undefined}
       role={isClickable ? 'button' : undefined}
       tabIndex={isClickable ? 0 : undefined}
-      aria-label={isClickable ? `Invoice #${String(invoice.id)} — click to view details` : undefined}
-      onKeyDown={isClickable ? (e) => { if (e.key === 'Enter' || e.key === ' ') onClick(invoice); } : undefined}
+      aria-label={
+        isClickable ? `Invoice #${String(invoice.id)} — click to view details` : undefined
+      }
+      onKeyDown={
+        isClickable
+          ? (e) => {
+              if (e.key === 'Enter' || e.key === ' ') onClick(invoice);
+            }
+          : undefined
+      }
     >
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12 }}>
+      <div
+        style={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'flex-start',
+          marginBottom: 12,
+        }}
+      >
         <span style={{ fontSize: 16, fontWeight: 700 }}>Invoice #{String(invoice.id)}</span>
         <StatusBadge status={invoice.status as any} />
       </div>
@@ -97,14 +116,20 @@ export const InvoiceCard: React.FC<InvoiceCardProps> = ({
         <div>
           <div style={labelStyle}>Issuer</div>
           <div style={valueStyle}>
-            <AddressDisplay address={invoice.issuer as unknown as string ?? ''} copyable={!isClickable} />
+            <AddressDisplay
+              address={(invoice.freelancer as unknown as string) ?? ''}
+              copyable={!isClickable}
+            />
           </div>
         </div>
 
         <div>
           <div style={labelStyle}>Payer</div>
           <div style={valueStyle}>
-            <AddressDisplay address={invoice.payer as unknown as string ?? ''} copyable={!isClickable} />
+            <AddressDisplay
+              address={(invoice.payer as unknown as string) ?? ''}
+              copyable={!isClickable}
+            />
           </div>
         </div>
 

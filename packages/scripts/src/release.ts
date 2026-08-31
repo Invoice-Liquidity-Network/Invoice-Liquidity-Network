@@ -10,7 +10,9 @@ function runCmd(cmd: string, cwd = process.cwd()) {
 
 function getLatestTag(): string | null {
   try {
-    const stdout = execSync('git describe --tags --abbrev=0 --match "@iln/scripts@*"', { encoding: 'utf-8' });
+    const stdout = execSync('git describe --tags --abbrev=0 --match "@iln/scripts@*"', {
+      encoding: 'utf-8',
+    });
     return stdout.trim();
   } catch {
     return null;
@@ -20,14 +22,13 @@ function getLatestTag(): string | null {
 function getCommitsSinceLastTag(lastTag: string | null): string[] {
   try {
     const range = lastTag ? `${lastTag}..HEAD` : 'HEAD';
-    const stdout = execSync(
-      `git log ${range} --format="%s" -- packages/scripts`,
-      { encoding: 'utf-8' }
-    );
+    const stdout = execSync(`git log ${range} --format="%s" -- packages/scripts`, {
+      encoding: 'utf-8',
+    });
     return stdout
       .split('\n')
-      .map(line => line.trim())
-      .filter(line => line.length > 0 && !line.startsWith('chore(release):'));
+      .map((line) => line.trim())
+      .filter((line) => line.length > 0 && !line.startsWith('chore(release):'));
   } catch (error) {
     console.error('Failed to get git log:', error);
     return [];
@@ -64,10 +65,10 @@ export async function runRelease(bumpType: 'major' | 'minor' | 'patch') {
     Added: [],
     Changed: [],
     Fixed: [],
-    Security: []
+    Security: [],
   };
 
-  commits.forEach(commit => {
+  commits.forEach((commit) => {
     if (commit.toLowerCase().startsWith('feat')) {
       groups.Added.push(commit);
     } else if (commit.toLowerCase().startsWith('fix')) {
@@ -86,7 +87,7 @@ export async function runRelease(bumpType: 'major' | 'minor' | 'patch') {
   for (const [groupName, items] of Object.entries(groups)) {
     if (items.length > 0) {
       changelogSection += `### ${groupName}\n`;
-      items.forEach(item => {
+      items.forEach((item) => {
         changelogSection += `- ${item}\n`;
       });
       changelogSection += '\n';
@@ -120,9 +121,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     if (firstHeaderIndex === -1) {
       changelogContent = changelogContent.trimEnd() + '\n\n' + changelogSection;
     } else {
-      changelogContent = 
-        changelogContent.substring(0, firstHeaderIndex) + 
-        changelogSection + 
+      changelogContent =
+        changelogContent.substring(0, firstHeaderIndex) +
+        changelogSection +
         changelogContent.substring(firstHeaderIndex);
     }
   }
@@ -139,7 +140,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     runCmd(`git tag -a "${tag}" -m "Release ${tag}"`, packageScriptsDir);
     console.log(`✓ Committed and tagged release as ${tag}.`);
   } catch (err) {
-    console.error('Failed to commit/tag in Git. Make sure your git working directory is clean or repository is initialized.');
+    console.error(
+      'Failed to commit/tag in Git. Make sure your git working directory is clean or repository is initialized.'
+    );
   }
 
   // 4. Git Push

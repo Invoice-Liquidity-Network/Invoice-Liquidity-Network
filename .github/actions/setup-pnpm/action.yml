@@ -6,11 +6,11 @@ inputs:
   node-version:
     description: Node.js version
     required: false
-    default: "20"
+    default: '20'
   pnpm-version:
     description: pnpm version
     required: false
-    default: "9.0.0"
+    default: '9.0.0'
   lockfile-path:
     description: Path to pnpm-lock.yaml
     required: false

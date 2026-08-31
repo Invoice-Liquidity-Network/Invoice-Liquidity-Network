@@ -14,20 +14,12 @@
  *   GET    /preferences/:address/export                export stored contact / preference data for an address (GDPR-style data export)
  */
 
-import crypto from "node:crypto";
-import { Router, type Request, type Response } from "express";
-import { preferencesService } from "./preferences";
-import type {
-  NotificationFrequency,
-  QuietHours,
-  TriggerPreference,
-} from "./preferences";
-import type { SubscriptionChannel, NotificationTrigger } from "./types";
-import {
-  getSubscriptionsByAddress,
-  getWebhookDeliveryLogs,
-  getDb,
-} from "./db";
+import crypto from 'node:crypto';
+import { Router, type Request, type Response } from 'express';
+import { preferencesService } from './preferences';
+import type { NotificationFrequency, QuietHours, TriggerPreference } from './preferences';
+import type { SubscriptionChannel, NotificationTrigger } from './types';
+import { getSubscriptionsByAddress, getWebhookDeliveryLogs, getDb } from './db';
 
 // Stellar public-key shape: `G` + 55 base32 chars (RFC 4648 alphabet
 // A-Z, 2-7). Used to validate address-shaped URL params before any DB
@@ -44,10 +36,10 @@ function unsubscribeSecret(): string {
   const s = process.env.PREFERENCES_UNSUBSCRIBE_SECRET;
   if (!s || s.length < 16) {
     throw new Error(
-      "PREFERENCES_UNSUBSCRIBE_SECRET must be set to a high-entropy value " +
-        "(>=16 chars) before minting or redeeming unsubscribe tokens. " +
-        "Set this in your deployment environment; the service refuses to " +
-        "operate with a guessed/derived secret.",
+      'PREFERENCES_UNSUBSCRIBE_SECRET must be set to a high-entropy value ' +
+        '(>=16 chars) before minting or redeeming unsubscribe tokens. ' +
+        'Set this in your deployment environment; the service refuses to ' +
+        'operate with a guessed/derived secret.'
     );
   }
   return s;
@@ -59,12 +51,9 @@ function unsubscribeSecret(): string {
  */
 export function mintUnsubscribeToken(address: string): string {
   const secret = unsubscribeSecret();
-  const nonce = crypto.randomBytes(16).toString("hex");
-  const sig = crypto
-    .createHmac("sha256", secret)
-    .update(`${address}.${nonce}`)
-    .digest("hex");
-  return `${Buffer.from(address).toString("base64url")}.${nonce}.${sig}`;
+  const nonce = crypto.randomBytes(16).toString('hex');
+  const sig = crypto.createHmac('sha256', secret).update(`${address}.${nonce}`).digest('hex');
+  return `${Buffer.from(address).toString('base64url')}.${nonce}.${sig}`;
 }
 
 /**
@@ -75,24 +64,21 @@ export function mintUnsubscribeToken(address: string): string {
  */
 export function verifyUnsubscribeToken(token: string): string | null {
   const secret = unsubscribeSecret();
-  const parts = token.split(".");
+  const parts = token.split('.');
   if (parts.length !== 3) return null;
   const [addressB64, nonce, sig] = parts;
   let address: string;
   try {
-    address = Buffer.from(addressB64, "base64url").toString("utf8");
+    address = Buffer.from(addressB64, 'base64url').toString('utf8');
   } catch {
     return null;
   }
-  const expected = crypto
-    .createHmac("sha256", secret)
-    .update(`${address}.${nonce}`)
-    .digest("hex");
+  const expected = crypto.createHmac('sha256', secret).update(`${address}.${nonce}`).digest('hex');
   // Hex decode — `Buffer.from(str, "hex")` silently truncates on bad input,
   // so we guard the length before the constant-time compare (timingSafeEqual
   // would otherwise throw on length-mismatched buffers).
-  const a = Buffer.from(sig, "hex");
-  const b = Buffer.from(expected, "hex");
+  const a = Buffer.from(sig, 'hex');
+  const b = Buffer.from(expected, 'hex');
   if (a.length !== b.length || a.length === 0) return null;
   if (!crypto.timingSafeEqual(a, b)) return null;
   return address;
@@ -107,7 +93,7 @@ export function tryMarkNonceConsumed(nonce: string): boolean {
     const result = getDb()
       .prepare(
         `INSERT OR IGNORE INTO redeemed_unsubscribe_tokens (nonce, redeemed_at)
-         VALUES (?, ?)`,
+         VALUES (?, ?)`
       )
       .run(nonce, Date.now());
     return result.changes > 0;
@@ -156,7 +142,7 @@ function exportAddressData(address: string, limit = 100) {
              SELECT destination FROM subscriptions WHERE stellar_address = ?
            )
          ORDER BY sent_at DESC
-         LIMIT ?`,
+         LIMIT ?`
       )
       .all(address, address, limit);
     sentLog = rows as typeof sentLog;
@@ -191,7 +177,7 @@ function exportAddressData(address: string, limit = 100) {
  */
 function exportWebhookLogsForAddress(
   address: string,
-  limit = 100,
+  limit = 100
 ): {
   available: boolean;
   entries: Array<{
@@ -201,9 +187,7 @@ function exportWebhookLogsForAddress(
   }>;
 } {
   try {
-    const subs = getSubscriptionsByAddress(address).filter(
-      (s) => s.channel === "webhook",
-    );
+    const subs = getSubscriptionsByAddress(address).filter((s) => s.channel === 'webhook');
     return {
       available: true,
       entries: subs.map((s) => ({
@@ -219,14 +203,14 @@ function exportWebhookLogsForAddress(
 
 // ── Validation helpers ─────────────────────────────────────────────────────
 
-const VALID_CHANNELS: SubscriptionChannel[] = ["email", "sms", "webhook", "websocket"];
-const VALID_FREQUENCIES: NotificationFrequency[] = ["realtime", "daily", "weekly"];
+const VALID_CHANNELS: SubscriptionChannel[] = ['email', 'sms', 'webhook', 'websocket'];
+const VALID_FREQUENCIES: NotificationFrequency[] = ['realtime', 'daily', 'weekly'];
 const VALID_TRIGGERS: NotificationTrigger[] = [
-  "invoice_funded",
-  "invoice_paid",
-  "invoice_defaulted",
-  "invoice_due_soon",
-  "invoice_overdue",
+  'invoice_funded',
+  'invoice_paid',
+  'invoice_defaulted',
+  'invoice_due_soon',
+  'invoice_overdue',
 ];
 
 function isValidChannels(v: unknown): v is SubscriptionChannel[] {
@@ -239,16 +223,16 @@ function isValidFrequency(v: unknown): v is NotificationFrequency {
 
 function isValidQuietHours(v: unknown): v is QuietHours | null {
   if (v === null) return true;
-  if (typeof v !== "object" || v === null) return false;
+  if (typeof v !== 'object' || v === null) return false;
   const q = v as Record<string, unknown>;
   return (
-    typeof q.startHour === "number" &&
+    typeof q.startHour === 'number' &&
     q.startHour >= 0 &&
     q.startHour <= 23 &&
-    typeof q.endHour === "number" &&
+    typeof q.endHour === 'number' &&
     q.endHour >= 0 &&
     q.endHour <= 23 &&
-    typeof q.timezone === "string" &&
+    typeof q.timezone === 'string' &&
     q.timezone.length > 0
   );
 }
@@ -256,11 +240,11 @@ function isValidQuietHours(v: unknown): v is QuietHours | null {
 function isValidTriggerPreferences(v: unknown): v is TriggerPreference[] {
   if (!Array.isArray(v)) return false;
   return v.every((item) => {
-    if (typeof item !== "object" || item === null) return false;
+    if (typeof item !== 'object' || item === null) return false;
     const p = item as Record<string, unknown>;
     return (
       VALID_TRIGGERS.includes(p.trigger as NotificationTrigger) &&
-      typeof p.enabled === "boolean" &&
+      typeof p.enabled === 'boolean' &&
       isValidChannels(p.channels)
     );
   });
@@ -276,29 +260,24 @@ export function createPreferencesRouter(): Router {
   const router = Router();
 
   // GET /preferences/:address
-  router.get("/:address", (req: Request, res: Response) => {
+  router.get('/:address', (req: Request, res: Response) => {
     const prefs = preferencesService.get(req.params.address);
     res.json({ preferences: prefs });
   });
 
   // PUT /preferences/:address — full replacement
-  router.put("/:address", (req: Request, res: Response) => {
+  router.put('/:address', (req: Request, res: Response) => {
     const body = req.body as Record<string, unknown>;
-    const {
-      enabledChannels,
-      frequency,
-      quietHours = null,
-      triggerPreferences = [],
-    } = body;
+    const { enabledChannels, frequency, quietHours = null, triggerPreferences = [] } = body;
 
     if (!isValidChannels(enabledChannels))
-      return reject(res, `enabledChannels must be an array of: ${VALID_CHANNELS.join(", ")}`);
+      return reject(res, `enabledChannels must be an array of: ${VALID_CHANNELS.join(', ')}`);
     if (!isValidFrequency(frequency))
-      return reject(res, `frequency must be one of: ${VALID_FREQUENCIES.join(", ")}`);
+      return reject(res, `frequency must be one of: ${VALID_FREQUENCIES.join(', ')}`);
     if (!isValidQuietHours(quietHours))
-      return reject(res, "quietHours must be null or { startHour, endHour, timezone }");
+      return reject(res, 'quietHours must be null or { startHour, endHour, timezone }');
     if (!isValidTriggerPreferences(triggerPreferences))
-      return reject(res, "triggerPreferences must be an array of { trigger, enabled, channels }");
+      return reject(res, 'triggerPreferences must be an array of { trigger, enabled, channels }');
 
     const updated = preferencesService.upsert(req.params.address, {
       enabledChannels,
@@ -310,31 +289,31 @@ export function createPreferencesRouter(): Router {
   });
 
   // PATCH /preferences/:address — partial update
-  router.patch("/:address", (req: Request, res: Response) => {
+  router.patch('/:address', (req: Request, res: Response) => {
     const body = req.body as Record<string, unknown>;
     const patch: Parameters<typeof preferencesService.upsert>[1] = {};
 
-    if ("enabledChannels" in body) {
+    if ('enabledChannels' in body) {
       if (!isValidChannels(body.enabledChannels))
-        return reject(res, `enabledChannels must be an array of: ${VALID_CHANNELS.join(", ")}`);
+        return reject(res, `enabledChannels must be an array of: ${VALID_CHANNELS.join(', ')}`);
       patch.enabledChannels = body.enabledChannels as SubscriptionChannel[];
     }
 
-    if ("frequency" in body) {
+    if ('frequency' in body) {
       if (!isValidFrequency(body.frequency))
-        return reject(res, `frequency must be one of: ${VALID_FREQUENCIES.join(", ")}`);
+        return reject(res, `frequency must be one of: ${VALID_FREQUENCIES.join(', ')}`);
       patch.frequency = body.frequency as NotificationFrequency;
     }
 
-    if ("quietHours" in body) {
+    if ('quietHours' in body) {
       if (!isValidQuietHours(body.quietHours))
-        return reject(res, "quietHours must be null or { startHour, endHour, timezone }");
+        return reject(res, 'quietHours must be null or { startHour, endHour, timezone }');
       patch.quietHours = body.quietHours as QuietHours | null;
     }
 
-    if ("triggerPreferences" in body) {
+    if ('triggerPreferences' in body) {
       if (!isValidTriggerPreferences(body.triggerPreferences))
-        return reject(res, "triggerPreferences must be an array of { trigger, enabled, channels }");
+        return reject(res, 'triggerPreferences must be an array of { trigger, enabled, channels }');
       patch.triggerPreferences = body.triggerPreferences as TriggerPreference[];
     }
 
@@ -343,7 +322,7 @@ export function createPreferencesRouter(): Router {
   });
 
   // DELETE /preferences/:address — reset to defaults
-  router.delete("/:address", (req: Request, res: Response) => {
+  router.delete('/:address', (req: Request, res: Response) => {
     preferencesService.delete(req.params.address);
     res.status(204).end();
   });
@@ -353,11 +332,11 @@ export function createPreferencesRouter(): Router {
   // no further notifications will be sent to this address until preferences
   // are explicitly re-enabled via PUT/PATCH. This satisfies the requirement
   // that unsubscribe takes effect immediately, not on the next digest window.
-  router.post("/:address/unsubscribe", (req: Request, res: Response) => {
+  router.post('/:address/unsubscribe', (req: Request, res: Response) => {
     const address = req.params.address;
     if (!STELLAR_ADDRESS_RE.test(address)) {
       return res.status(400).json({
-        error: "address must be a valid Stellar G-address (56 base32 chars).",
+        error: 'address must be a valid Stellar G-address (56 base32 chars).',
       });
     }
     // Idempotent: re-setting enabledChannels=[] is a safe no-op. Doing this
@@ -371,7 +350,7 @@ export function createPreferencesRouter(): Router {
       success: true,
       preferences: updated,
       message:
-        "All notification channels disabled. You will not receive further notifications at this address until you re-enable them.",
+        'All notification channels disabled. You will not receive further notifications at this address until you re-enable them.',
     });
   });
 
@@ -381,11 +360,11 @@ export function createPreferencesRouter(): Router {
   // with HMAC so it cannot be forged. Each token is single-use: the (nonce)
   // is recorded in `redeemed_unsubscribe_tokens` after a successful verify,
   // and a replay returns HTTP 409.
-  router.post("/unsubscribe/token/:token", (req: Request, res: Response) => {
+  router.post('/unsubscribe/token/:token', (req: Request, res: Response) => {
     let address: string | null = null;
     let nonce: string | null = null;
     try {
-      const parts = req.params.token.split(".");
+      const parts = req.params.token.split('.');
       if (parts.length === 3) {
         address = verifyUnsubscribeToken(req.params.token);
         nonce = parts[1];
@@ -396,20 +375,20 @@ export function createPreferencesRouter(): Router {
       return res.status(503).json({
         success: false,
         error:
-          "Unsubscribe service is not configured. Set PREFERENCES_UNSUBSCRIBE_SECRET on the deployment.",
+          'Unsubscribe service is not configured. Set PREFERENCES_UNSUBSCRIBE_SECRET on the deployment.',
       });
     }
     if (!address || !nonce) {
       return res.status(400).json({
         success: false,
-        error: "Invalid or expired unsubscribe token.",
+        error: 'Invalid or expired unsubscribe token.',
       });
     }
     if (!tryMarkNonceConsumed(nonce)) {
       return res.status(409).json({
         success: false,
         error:
-          "This unsubscribe link has already been redeemed. Use the preferences page to update your settings directly.",
+          'This unsubscribe link has already been redeemed. Use the preferences page to update your settings directly.',
       });
     }
     const updated = preferencesService.upsert(address, {
@@ -419,28 +398,32 @@ export function createPreferencesRouter(): Router {
     // Return a minimal HTML acknowledgement so an `Accept: text/html`
     // browser click on the unsubscribe link shows a real status page rather
     // than raw JSON. The JSON body is still correct for API consumers.
-    if (req.accepts(["html", "json"]) === "html") {
-      res.setHeader("Content-Type", "text/html; charset=utf-8");
+    if (req.accepts(['html', 'json']) === 'html') {
+      res.setHeader('Content-Type', 'text/html; charset=utf-8');
       return res.send(
         `<!doctype html><html lang="en"><head><meta charset="utf-8" />` +
           `<title>Unsubscribed — ILN</title></head><body style="font-family:Arial,sans-serif;max-width:520px;margin:80px auto;padding:24px;color:#1f2937">` +
           `<h1 style="margin:0 0 12px">You have been unsubscribed</h1>` +
-          `<p>The Stellar address <strong>${escapeHtml(address)}</strong> will not receive further ILN notifications.</p>` +
-          `<p>You can <a href="https://iln.finance/preferences/${encodeURIComponent(address)}">re-enable notifications</a> at any time.</p>` +
-          `</body></html>`,
+          `<p>The Stellar address <strong>${escapeHtml(
+            address
+          )}</strong> will not receive further ILN notifications.</p>` +
+          `<p>You can <a href="https://iln.finance/preferences/${encodeURIComponent(
+            address
+          )}">re-enable notifications</a> at any time.</p>` +
+          `</body></html>`
       );
     }
     return res.json({
       success: true,
       preferences: updated,
-      message: "Unsubscribed. Token has been redeemed.",
+      message: 'Unsubscribed. Token has been redeemed.',
     });
   });
 
   // GET /preferences/:address/export — full data export for an address.
   // Returns preferences, active subscriptions, and the recent delivery log.
   // Designed to satisfy GDPR / data-export requests in under one API call.
-  router.get("/:address/export", (req: Request, res: Response) => {
+  router.get('/:address/export', (req: Request, res: Response) => {
     const address = req.params.address;
     // Defense in depth — Stellar addresses are tightly constrained.
     // Reject malformed inputs before composing the Content-Disposition
@@ -448,22 +431,16 @@ export function createPreferencesRouter(): Router {
     // headers.
     if (!STELLAR_ADDRESS_RE.test(address)) {
       return res.status(400).json({
-        error: "address must be a valid Stellar G-address (56 base32 chars).",
+        error: 'address must be a valid Stellar G-address (56 base32 chars).',
       });
     }
-    const rawLimit =
-      typeof req.query.limit === "string" ? parseInt(req.query.limit, 10) : 100;
-    const limit = Number.isFinite(rawLimit) && rawLimit > 0
-      ? Math.min(rawLimit, 1000)
-      : 100;
+    const rawLimit = typeof req.query.limit === 'string' ? parseInt(req.query.limit, 10) : 100;
+    const limit = Number.isFinite(rawLimit) && rawLimit > 0 ? Math.min(rawLimit, 1000) : 100;
 
     const payload = exportAddressData(address, limit);
     const webhookLogs = exportWebhookLogsForAddress(address, limit);
 
-    res.setHeader(
-      "Content-Disposition",
-      `attachment; filename=\"iln-preferences-${address}.json\"`,
-    );
+    res.setHeader('Content-Disposition', `attachment; filename="iln-preferences-${address}.json"`);
     return res.json({
       ...payload,
       webhookLogsAvailable: webhookLogs.available,
@@ -477,9 +454,9 @@ export function createPreferencesRouter(): Router {
 /** Minimal HTML escape for the unsubscribe acknowledgement page. */
 function escapeHtml(str: string): string {
   return str
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#39;");
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
 }

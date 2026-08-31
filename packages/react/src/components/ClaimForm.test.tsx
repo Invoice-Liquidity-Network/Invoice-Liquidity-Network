@@ -21,7 +21,7 @@ async function renderForm(overrides: Record<string, unknown> = {}) {
   return render(
     <TestWrapper client={mockClient}>
       <ClaimForm lp={LP_ADDRESS} />
-    </TestWrapper>,
+    </TestWrapper>
   );
 }
 
@@ -56,7 +56,9 @@ describe('ClaimForm', () => {
     });
 
     fireEvent.change(screen.getByRole('combobox'), { target: { value: '42' } });
-    fireEvent.change(screen.getByPlaceholderText(/Describe why this claim/), { target: { value: 'The payer did not settle by the due date despite multiple reminders.' } });
+    fireEvent.change(screen.getByPlaceholderText(/Describe why this claim/), {
+      target: { value: 'The payer did not settle by the due date despite multiple reminders.' },
+    });
     fireEvent.click(screen.getByText('Submit Claim'));
 
     await vi.waitFor(() => {
@@ -75,7 +77,9 @@ describe('ClaimForm', () => {
     });
 
     fireEvent.change(screen.getByRole('combobox'), { target: { value: '42' } });
-    fireEvent.change(screen.getByPlaceholderText(/Describe why this claim/), { target: { value: 'The payer defaulted on invoice payment.' } });
+    fireEvent.change(screen.getByPlaceholderText(/Describe why this claim/), {
+      target: { value: 'The payer defaulted on invoice payment.' },
+    });
     fireEvent.click(screen.getByText('Submit Claim'));
 
     await vi.waitFor(() => {
@@ -100,7 +104,7 @@ describe('ClaimForm', () => {
     render(
       <TestWrapper client={mockClient}>
         <ClaimForm lp={LP_ADDRESS} />
-      </TestWrapper>,
+      </TestWrapper>
     );
     await vi.waitFor(() => {
       expect(screen.getByText(/must enroll/)).toBeTruthy();

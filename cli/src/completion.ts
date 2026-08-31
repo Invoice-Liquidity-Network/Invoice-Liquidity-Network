@@ -1,4 +1,4 @@
-import { Command } from "commander";
+import { Command } from 'commander';
 
 const BASH_COMPLETION_SCRIPT = `#!/usr/bin/env bash
 # ILN CLI bash completion script
@@ -245,21 +245,19 @@ export function generateZshCompletion(): string {
 
 export function registerCompletionCommand(program: Command): void {
   program
-    .command("completion")
-    .description("Generate shell completion scripts")
-    .argument("[shell]", "shell type: bash or zsh", "bash")
+    .command('completion')
+    .description('Generate shell completion scripts')
+    .argument('[shell]', 'shell type: bash or zsh', 'bash')
     .action((shell: string) => {
       switch (shell) {
-        case "bash":
+        case 'bash':
           process.stdout.write(generateBashCompletion());
           break;
-        case "zsh":
+        case 'zsh':
           process.stdout.write(generateZshCompletion());
           break;
         default:
-          throw new Error(
-            `Unsupported shell: ${shell}. Supported shells: bash, zsh`
-          );
+          throw new Error(`Unsupported shell: ${shell}. Supported shells: bash, zsh`);
       }
     });
 }

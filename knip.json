@@ -1,111 +1,88 @@
 {
+  "ignore": ["frontend/**", "backend/**", "oracle-service/**"],
+  "ignoreBinaries": ["playwright", "sqlite3", "sha256sum", "gsutil", "gitleaks", "less"],
+  "rules": {
+    "optionalPeerDependencies": "off",
+    "duplicates": "off"
+  },
+  "ignoreIssues": {
+    "packages/docs/lib/docs-version.ts": ["exports"],
+    "sdk/src/logger.ts": ["enumMembers"]
+  },
   "workspaces": {
+    "sdk": {
+      "entry": ["src/**/*.test.ts"],
+      "project": ["src/**/*.ts"],
+      "ignoreDependencies": ["@commitlint/cli", "@commitlint/config-conventional"]
+    },
     ".": {
-      "entry": [
-        "scripts/*.ts"
-      ],
-      "project": [
-        "scripts/**/*.ts"
-      ],
-      "ignoreDependencies": [
-        "husky"
-      ]
+      "entry": ["scripts/*.ts", "scripts/migrations/*.ts"],
+      "project": ["scripts/**/*.ts"],
+      "ignoreDependencies": ["husky"]
     },
     "packages/sdk": {
       "entry": [
-        "index.ts",
-        "__tests__/**/*.test.ts",
-        "src/index.browser.ts"
+        "src/index.ts",
+        "src/tokens.ts",
+        "src/events.ts",
+        "src/errors.ts",
+        "src/xdr.ts",
+        "src/**/*.test.ts",
+        "src/crypto-browser.ts"
       ],
-      "project": [
-        "src/**/*.ts",
-        "*.ts"
-      ],
-      "ignoreDependencies": [
-        "@commitlint/cli",
-        "@commitlint/config-conventional",
-        "@playwright/test",
-        "jest",
-        "ts-jest",
-        "tsup",
-        "tsx",
-        "vite",
-        "vite-plugin-wasm"
-      ],
-      "ignoreExports": [
-        "src/crypto-browser.ts",
-        "src/index.browser.ts"
-      ]
+      "project": ["src/**/*.ts", "*.ts"]
     },
     "cli": {
-      "entry": [
-        "src/bin.ts",
-        "src/cli.ts"
-      ],
-      "project": [
-        "src/**/*.ts"
-      ],
-      "ignoreDependencies": [
-        "@commitlint/cli",
-        "@commitlint/config-conventional"
-      ]
+      "entry": ["src/bin.ts", "src/cli.ts", "src/index.ts"],
+      "project": ["src/**/*.ts"],
+      "ignoreDependencies": ["@commitlint/cli", "@commitlint/config-conventional"]
     },
     "indexer": {
-      "project": [
-        "src/**/*.ts"
-      ],
-      "ignoreDependencies": [
-        "@commitlint/cli",
-        "@commitlint/config-conventional"
-      ]
+      "project": ["src/**/*.ts"],
+      "ignoreDependencies": ["@commitlint/cli", "@commitlint/config-conventional"]
     },
     "notifications": {
-      "entry": [
-        "src/index.ts",
-        "src/service.ts"
-      ],
-      "project": [
-        "src/**/*.ts"
-      ],
-      "ignoreDependencies": [
-        "@commitlint/cli",
-        "@commitlint/config-conventional"
-      ]
+      "entry": ["src/service.ts"],
+      "project": ["src/**/*.ts"],
+      "ignoreDependencies": ["@commitlint/cli", "@commitlint/config-conventional"]
     },
     "docs": {
-      "entry": [
-        "pages/**/*.{ts,tsx,mdx}",
-        "theme.config.jsx",
-        "next.config.{js,mjs}"
-      ],
-      "project": [
-        "**/*.{ts,tsx,jsx}"
-      ]
+      "entry": ["pages/**/*.{ts,tsx,mdx}", "theme.config.jsx", "next.config.{js,mjs}"],
+      "project": ["**/*.{ts,tsx,jsx}"]
     },
     "packages/indexer": {
-      "project": [
-        "src/**/*.ts"
-      ],
-      "ignoreDependencies": [
-        "@commitlint/cli",
-        "@commitlint/config-conventional"
-      ]
+      "project": ["src/**/*.ts"],
+      "ignoreDependencies": ["@commitlint/cli", "@commitlint/config-conventional"]
     },
     "packages/opentelemetry": {
-      "entry": [
-        "tests/**/*.test.ts"
-      ],
-      "project": [
-        "src/**/*.ts"
+      "entry": ["tests/**/*.test.ts"],
+      "project": ["src/**/*.ts"],
+      "ignoreDependencies": ["@iln/sdk"]
+    },
+    "packages/docs": {
+      "entry": ["mdx-components.ts", "app/**/*.{ts,tsx}", "content/**/_meta.ts"],
+      "project": ["**/*.{ts,tsx}"],
+      "ignoreUnresolved": [],
+      "ignoreDependencies": [
+        "@iln/eslint-config",
+        "@typescript-eslint/eslint-plugin",
+        "@typescript-eslint/parser",
+        "eslint-config-prettier",
+        "eslint-plugin-jsx-a11y",
+        "eslint-plugin-react",
+        "eslint-plugin-react-hooks",
+        "tailwindcss"
       ]
     },
     "packages/scripts": {
-      "entry": [
-        "**/*.{ts,js}"
-      ],
-      "project": [
-        "**/*.{ts,js}"
-      ]
+      "entry": ["**/*.{ts,js}"],
+      "project": ["**/*.{ts,js}"]
+    },
+    "packages/invoice-sdk": {
+      "ignoreDependencies": ["@iln/sdk"]
+    },
+    "packages/eslint-config": {
+      "ignoreDependencies": []
     }
   },
   "ignoreExportsUsedInFile": true

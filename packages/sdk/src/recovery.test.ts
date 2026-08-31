@@ -1,9 +1,4 @@
-import {
-  isRetryableError,
-  withRetry,
-  CircuitBreaker,
-  CircuitOpenError,
-} from './recovery';
+import { isRetryableError, withRetry, CircuitBreaker, CircuitOpenError } from './recovery';
 import {
   ILNError,
   NetworkError,
@@ -150,9 +145,7 @@ describe('withRetry', () => {
   });
 
   it('retries on retryable error and succeeds', async () => {
-    const fn = jest.fn()
-      .mockRejectedValueOnce(new NetworkError())
-      .mockResolvedValue('ok');
+    const fn = jest.fn().mockRejectedValueOnce(new NetworkError()).mockResolvedValue('ok');
 
     const result = await withRetry(fn, {
       maxAttempts: 3,
@@ -168,7 +161,7 @@ describe('withRetry', () => {
     const fn = jest.fn().mockRejectedValue(new ValidationError('bad input'));
 
     await expect(
-      withRetry(fn, { maxAttempts: 3, initialDelayMs: 0, jitter: false }),
+      withRetry(fn, { maxAttempts: 3, initialDelayMs: 0, jitter: false })
     ).rejects.toBeInstanceOf(ValidationError);
     expect(fn).toHaveBeenCalledTimes(1);
   });
@@ -177,7 +170,7 @@ describe('withRetry', () => {
     const fn = jest.fn().mockRejectedValue(new NetworkError());
 
     await expect(
-      withRetry(fn, { maxAttempts: 3, initialDelayMs: 0, jitter: false }),
+      withRetry(fn, { maxAttempts: 3, initialDelayMs: 0, jitter: false })
     ).rejects.toBeInstanceOf(NetworkError);
     expect(fn).toHaveBeenCalledTimes(3);
   });
@@ -191,7 +184,7 @@ describe('withRetry', () => {
         initialDelayMs: 0,
         jitter: false,
         retryIf: () => true,
-      }),
+      })
     ).rejects.toBeInstanceOf(ValidationError);
     expect(fn).toHaveBeenCalledTimes(3);
   });
@@ -205,7 +198,7 @@ describe('withRetry', () => {
         initialDelayMs: 0,
         jitter: false,
         retryIf: () => false,
-      }),
+      })
     ).rejects.toBeInstanceOf(NetworkError);
     expect(fn).toHaveBeenCalledTimes(1);
   });

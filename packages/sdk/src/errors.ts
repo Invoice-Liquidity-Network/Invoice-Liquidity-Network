@@ -57,7 +57,7 @@ export class ILNError extends Error {
       context?: Record<string, unknown>;
       retryable?: boolean;
       cause?: unknown;
-    },
+    }
   ) {
     super(message);
     Object.setPrototypeOf(this, new.target.prototype);
@@ -87,7 +87,7 @@ export class InvoiceNotFoundError extends ILNError {
         docsUrl: withDocs('INVOICE_NOT_FOUND'),
         context: { invoiceId, ...context },
         retryable: false,
-      },
+      }
     );
     Object.setPrototypeOf(this, new.target.prototype);
   }
@@ -106,7 +106,7 @@ export class InvoiceAlreadyFundedError extends ILNError {
         docsUrl: withDocs('INVOICE_ALREADY_FUNDED'),
         context: { invoiceId, ...context },
         retryable: false,
-      },
+      }
     );
     Object.setPrototypeOf(this, new.target.prototype);
   }
@@ -125,7 +125,7 @@ export class InvoiceAlreadyPaidError extends ILNError {
         docsUrl: withDocs('INVOICE_ALREADY_PAID'),
         context: { invoiceId, ...context },
         retryable: false,
-      },
+      }
     );
     Object.setPrototypeOf(this, new.target.prototype);
   }
@@ -144,7 +144,7 @@ export class InvoiceNotFundedError extends ILNError {
         docsUrl: withDocs('INVOICE_NOT_FUNDED'),
         context: { invoiceId, ...context },
         retryable: false,
-      },
+      }
     );
     Object.setPrototypeOf(this, new.target.prototype);
   }
@@ -163,7 +163,7 @@ export class InvoiceDefaultedError extends ILNError {
         docsUrl: withDocs('INVOICE_DEFAULTED'),
         context: { invoiceId, ...context },
         retryable: false,
-      },
+      }
     );
     Object.setPrototypeOf(this, new.target.prototype);
   }
@@ -182,7 +182,7 @@ export class InvoiceExpiredError extends ILNError {
         docsUrl: withDocs('INVOICE_EXPIRED'),
         context: { invoiceId, ...context },
         retryable: false,
-      },
+      }
     );
     Object.setPrototypeOf(this, new.target.prototype);
   }
@@ -196,7 +196,7 @@ export class InvoiceExpiredError extends ILNError {
 export class FundingAmountExceededError extends ILNError {
   constructor(
     message = 'Funding amount exceeds the remaining balance.',
-    context?: Record<string, unknown>,
+    context?: Record<string, unknown>
   ) {
     super(
       message,
@@ -206,7 +206,7 @@ export class FundingAmountExceededError extends ILNError {
         docsUrl: withDocs('FUNDING_AMOUNT_EXCEEDED'),
         context,
         retryable: false,
-      },
+      }
     );
     Object.setPrototypeOf(this, new.target.prototype);
   }
@@ -219,7 +219,7 @@ export class InsufficientBalanceError extends ILNError {
   constructor(
     message = 'Insufficient balance to complete the transaction.',
     remediation = 'Ensure the account has enough funds (including transaction fees) before retrying. If on testnet, fund the account first.',
-    context?: Record<string, unknown>,
+    context?: Record<string, unknown>
   ) {
     super(message, 'INSUFFICIENT_BALANCE', remediation, {
       docsUrl: withDocs('INSUFFICIENT_BALANCE'),
@@ -239,7 +239,7 @@ export class NetworkError extends ILNError {
   constructor(
     message = 'Network request failed.',
     remediation = 'Failed to reach the Stellar RPC endpoint. Verify the rpcUrl, check connectivity, and ensure the RPC server is healthy.',
-    context?: Record<string, unknown>,
+    context?: Record<string, unknown>
   ) {
     super(message, 'NETWORK_ERROR', remediation, {
       docsUrl: withDocs('NETWORK_ERROR'),
@@ -257,7 +257,7 @@ export class TimeoutError extends ILNError {
   constructor(
     operation = 'unknown operation',
     timeoutMs?: number,
-    context?: Record<string, unknown>,
+    context?: Record<string, unknown>
   ) {
     super(
       `Operation "${operation}" timed out${timeoutMs ? ` after ${timeoutMs}ms` : ''}.`,
@@ -267,7 +267,7 @@ export class TimeoutError extends ILNError {
         docsUrl: withDocs('TIMEOUT'),
         context: { operation, timeoutMs, ...context },
         retryable: true,
-      },
+      }
     );
     Object.setPrototypeOf(this, new.target.prototype);
   }
@@ -279,21 +279,16 @@ export class TimeoutError extends ILNError {
  * Thrown when the user is unauthorized for the requested operation.
  */
 export class UnauthorizedError extends ILNError {
-  constructor(
-    operation?: string,
-    context?: Record<string, unknown>,
-  ) {
+  constructor(operation?: string, context?: Record<string, unknown>) {
     super(
-      operation
-        ? `Unauthorized for operation "${operation}".`
-        : 'Unauthorized for this operation.',
+      operation ? `Unauthorized for operation "${operation}".` : 'Unauthorized for this operation.',
       'UNAUTHORIZED',
       'You do not have permission to perform this action. Verify you are using the correct wallet/signer for this operation.',
       {
         docsUrl: withDocs('UNAUTHORIZED'),
         context: { operation, ...context },
         retryable: false,
-      },
+      }
     );
     Object.setPrototypeOf(this, new.target.prototype);
   }
@@ -303,10 +298,7 @@ export class UnauthorizedError extends ILNError {
  * Thrown when a wallet is required but not connected.
  */
 export class WalletNotConnectedError extends ILNError {
-  constructor(
-    message = 'Wallet is not connected.',
-    context?: Record<string, unknown>,
-  ) {
+  constructor(message = 'Wallet is not connected.', context?: Record<string, unknown>) {
     super(
       message,
       'WALLET_NOT_CONNECTED',
@@ -315,7 +307,7 @@ export class WalletNotConnectedError extends ILNError {
         docsUrl: withDocs('WALLET_NOT_CONNECTED'),
         context,
         retryable: false,
-      },
+      }
     );
     Object.setPrototypeOf(this, new.target.prototype);
   }
@@ -336,7 +328,7 @@ export class TokenMismatchError extends ILNError {
         docsUrl: withDocs('TOKEN_MISMATCH'),
         context,
         retryable: false,
-      },
+      }
     );
     Object.setPrototypeOf(this, new.target.prototype);
   }
@@ -357,7 +349,7 @@ export class InvalidDiscountRateError extends ILNError {
         docsUrl: withDocs('INVALID_DISCOUNT_RATE'),
         context,
         retryable: false,
-      },
+      }
     );
     Object.setPrototypeOf(this, new.target.prototype);
   }
@@ -376,7 +368,7 @@ export class PayerReputationTooLowError extends ILNError {
         docsUrl: withDocs('PAYER_REPUTATION_TOO_LOW'),
         context,
         retryable: false,
-      },
+      }
     );
     Object.setPrototypeOf(this, new.target.prototype);
   }
@@ -390,7 +382,7 @@ export class ContractCallError extends ILNError {
     message: string,
     public readonly contractId?: string,
     public readonly method?: string,
-    context?: Record<string, unknown>,
+    context?: Record<string, unknown>
   ) {
     super(
       message,
@@ -400,7 +392,7 @@ export class ContractCallError extends ILNError {
         docsUrl: withDocs('CONTRACT_ERROR'),
         context: { contractId, method, ...context },
         retryable: false,
-      },
+      }
     );
     Object.setPrototypeOf(this, new.target.prototype);
   }
@@ -419,7 +411,7 @@ export class GenericContractError extends ILNError {
         docsUrl: withDocs('CONTRACT_ERROR'),
         context: { rawError, ...(context ?? {}) },
         retryable: false,
-      },
+      }
     );
     Object.setPrototypeOf(this, new.target.prototype);
   }
@@ -433,7 +425,7 @@ export class GenericContractError extends ILNError {
 export class TransactionFailedError extends ILNError {
   constructor(
     message = 'Transaction execution failed on-chain.',
-    context?: Record<string, unknown>,
+    context?: Record<string, unknown>
   ) {
     super(
       message,
@@ -443,7 +435,7 @@ export class TransactionFailedError extends ILNError {
         docsUrl: withDocs('TRANSACTION_FAILED'),
         context,
         retryable: false,
-      },
+      }
     );
     Object.setPrototypeOf(this, new.target.prototype);
   }
@@ -453,10 +445,7 @@ export class TransactionFailedError extends ILNError {
  * Thrown when transaction simulation fails.
  */
 export class SimulationError extends ILNError {
-  constructor(
-    message = 'Transaction simulation failed.',
-    context?: Record<string, unknown>,
-  ) {
+  constructor(message = 'Transaction simulation failed.', context?: Record<string, unknown>) {
     super(
       message,
       'SIMULATION_FAILED',
@@ -465,7 +454,7 @@ export class SimulationError extends ILNError {
         docsUrl: withDocs('SIMULATION_FAILED'),
         context,
         retryable: true,
-      },
+      }
     );
     Object.setPrototypeOf(this, new.target.prototype);
   }
@@ -478,7 +467,7 @@ export class ValidationError extends ILNError {
   constructor(
     message = 'Validation failed.',
     remediation = 'Check provided input parameters. Use the Validators to validate fields and inspect which constraint failed.',
-    context?: Record<string, unknown>,
+    context?: Record<string, unknown>
   ) {
     super(message, 'VALIDATION_ERROR', remediation, {
       docsUrl: withDocs('VALIDATION_ERROR'),
@@ -493,10 +482,7 @@ export class ValidationError extends ILNError {
  * Thrown when XDR parsing or decoding fails.
  */
 export class XDRParseError extends ILNError {
-  constructor(
-    message = 'XDR parsing failed.',
-    context?: Record<string, unknown>,
-  ) {
+  constructor(message = 'XDR parsing failed.', context?: Record<string, unknown>) {
     super(
       message,
       'XDR_PARSE_ERROR',
@@ -505,7 +491,7 @@ export class XDRParseError extends ILNError {
         docsUrl: withDocs('XDR_PARSE_ERROR'),
         context,
         retryable: false,
-      },
+      }
     );
     Object.setPrototypeOf(this, new.target.prototype);
   }
@@ -518,7 +504,7 @@ export class InvalidAddressError extends ILNError {
   constructor(
     message = 'Invalid Stellar address.',
     public readonly address?: string,
-    context?: Record<string, unknown>,
+    context?: Record<string, unknown>
   ) {
     super(
       message,
@@ -528,7 +514,7 @@ export class InvalidAddressError extends ILNError {
         docsUrl: withDocs('INVALID_ADDRESS'),
         context: { address, ...context },
         retryable: false,
-      },
+      }
     );
     Object.setPrototypeOf(this, new.target.prototype);
   }
@@ -543,7 +529,7 @@ export class RateLimitError extends ILNError {
   constructor(
     message = 'Rate limit exceeded.',
     retryAfterMs?: number,
-    context?: Record<string, unknown>,
+    context?: Record<string, unknown>
   ) {
     super(
       message,
@@ -553,7 +539,7 @@ export class RateLimitError extends ILNError {
         docsUrl: withDocs('RATE_LIMITED'),
         context: { retryAfterMs, ...context },
         retryable: true,
-      },
+      }
     );
     Object.setPrototypeOf(this, new.target.prototype);
   }
@@ -616,7 +602,11 @@ export function parseContractError(xdrError: unknown, signature?: string): ILNEr
     const entry = CONTRACT_ERROR_MAP[code];
     if (entry) {
       if (entry.Ctor === InvoiceNotFoundError) {
-        return new InvoiceNotFoundError('unknown', { ...baseContext, matchedPattern: entry.name, errorCode: code });
+        return new InvoiceNotFoundError('unknown', {
+          ...baseContext,
+          matchedPattern: entry.name,
+          errorCode: code,
+        });
       }
       return new entry.Ctor({ ...baseContext, matchedPattern: entry.name, errorCode: code });
     }
@@ -628,37 +618,81 @@ export function parseContractError(xdrError: unknown, signature?: string): ILNEr
   for (const { pattern, Ctor } of CONTRACT_ERROR_PATTERNS) {
     if (errorStr.includes(pattern)) {
       if (Ctor === InvoiceNotFoundError) {
-        return new InvoiceNotFoundError('unknown', { ...baseContext, matchedPattern: pattern, rawErrorString: errorStr });
+        return new InvoiceNotFoundError('unknown', {
+          ...baseContext,
+          matchedPattern: pattern,
+          rawErrorString: errorStr,
+        });
       }
       if (Ctor === InvalidDiscountRateError) {
-        return new InvalidDiscountRateError({ ...baseContext, matchedPattern: pattern, rawErrorString: errorStr });
+        return new InvalidDiscountRateError({
+          ...baseContext,
+          matchedPattern: pattern,
+          rawErrorString: errorStr,
+        });
       }
       if (Ctor === TokenMismatchError) {
-        return new TokenMismatchError({ ...baseContext, matchedPattern: pattern, rawErrorString: errorStr });
+        return new TokenMismatchError({
+          ...baseContext,
+          matchedPattern: pattern,
+          rawErrorString: errorStr,
+        });
       }
       if (Ctor === PayerReputationTooLowError) {
-        return new PayerReputationTooLowError({ ...baseContext, matchedPattern: pattern, rawErrorString: errorStr });
+        return new PayerReputationTooLowError({
+          ...baseContext,
+          matchedPattern: pattern,
+          rawErrorString: errorStr,
+        });
       }
       if (Ctor === UnauthorizedError) {
-        return new UnauthorizedError(undefined, { ...baseContext, matchedPattern: pattern, rawErrorString: errorStr });
+        return new UnauthorizedError(undefined, {
+          ...baseContext,
+          matchedPattern: pattern,
+          rawErrorString: errorStr,
+        });
       }
       if (Ctor === InvoiceAlreadyFundedError) {
-        return new InvoiceAlreadyFundedError('unknown', { ...baseContext, matchedPattern: pattern, rawErrorString: errorStr });
+        return new InvoiceAlreadyFundedError('unknown', {
+          ...baseContext,
+          matchedPattern: pattern,
+          rawErrorString: errorStr,
+        });
       }
       if (Ctor === InvoiceAlreadyPaidError) {
-        return new InvoiceAlreadyPaidError('unknown', { ...baseContext, matchedPattern: pattern, rawErrorString: errorStr });
+        return new InvoiceAlreadyPaidError('unknown', {
+          ...baseContext,
+          matchedPattern: pattern,
+          rawErrorString: errorStr,
+        });
       }
       if (Ctor === InvoiceNotFundedError) {
-        return new InvoiceNotFundedError('unknown', { ...baseContext, matchedPattern: pattern, rawErrorString: errorStr });
+        return new InvoiceNotFundedError('unknown', {
+          ...baseContext,
+          matchedPattern: pattern,
+          rawErrorString: errorStr,
+        });
       }
       if (Ctor === InvoiceExpiredError) {
-        return new InvoiceExpiredError('unknown', { ...baseContext, matchedPattern: pattern, rawErrorString: errorStr });
+        return new InvoiceExpiredError('unknown', {
+          ...baseContext,
+          matchedPattern: pattern,
+          rawErrorString: errorStr,
+        });
       }
       if (Ctor === InvoiceDefaultedError) {
-        return new InvoiceDefaultedError('unknown', { ...baseContext, matchedPattern: pattern, rawErrorString: errorStr });
+        return new InvoiceDefaultedError('unknown', {
+          ...baseContext,
+          matchedPattern: pattern,
+          rawErrorString: errorStr,
+        });
       }
       if (Ctor === FundingAmountExceededError) {
-        return new FundingAmountExceededError(undefined, { ...baseContext, matchedPattern: pattern, rawErrorString: errorStr });
+        return new FundingAmountExceededError(undefined, {
+          ...baseContext,
+          matchedPattern: pattern,
+          rawErrorString: errorStr,
+        });
       }
     }
   }
@@ -681,7 +715,7 @@ export function parseContractError(xdrError: unknown, signature?: string): ILNEr
 export function normalizeError(
   err: unknown,
   fallbackCode = 'UNKNOWN_ERROR',
-  fallbackMessage = 'An unexpected error occurred.',
+  fallbackMessage = 'An unexpected error occurred.'
 ): ILNError {
   if (err instanceof ILNError) {
     return err;
@@ -697,7 +731,7 @@ export function normalizeError(
         context: { name: err.name, stack: err.stack },
         cause: err,
         retryable: false,
-      },
+      }
     );
   }
 
@@ -715,7 +749,7 @@ export function normalizeError(
       context: { raw: err, rawStr },
       cause: err,
       retryable: false,
-    },
+    }
   );
 }
 

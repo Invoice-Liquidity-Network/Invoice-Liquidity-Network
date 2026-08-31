@@ -4,11 +4,11 @@
  * Terminal dashboard UI for real-time invoice activity and metrics.
  */
 
-import pc from "picocolors";
-import { formatAmount } from "./amounts";
-import { formatTimestamp } from "./dates";
-import { ILNClient } from "./client";
-import type { Invoice, ListedInvoice, ProtocolConfig, ResolvedConfig } from "./types";
+import pc from 'picocolors';
+import { formatAmount } from './amounts';
+import { formatTimestamp } from './dates';
+import { ILNClient } from './client';
+import type { ListedInvoice, ResolvedConfig } from './types';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -19,7 +19,7 @@ export interface DashboardConfig {
   maxItems?: number;
 }
 
-export type DashboardView = "overview" | "invoices" | "stats" | "activity";
+export type DashboardView = 'overview' | 'invoices' | 'stats' | 'activity';
 
 interface DashboardState {
   currentView: DashboardView;
@@ -39,7 +39,7 @@ interface ProtocolStats {
 
 interface ActivityItem {
   timestamp: number;
-  type: "submit" | "fund" | "pay" | "default";
+  type: 'submit' | 'fund' | 'pay' | 'default';
   invoiceId: bigint;
   address: string;
   amount?: bigint;
@@ -56,11 +56,7 @@ export class Dashboard {
   private refreshTimer: ReturnType<typeof setInterval> | null = null;
   private configData: ResolvedConfig;
 
-  constructor(
-    client: ILNClient,
-    config: ResolvedConfig,
-    dashboardConfig: DashboardConfig = {}
-  ) {
+  constructor(client: ILNClient, config: ResolvedConfig, dashboardConfig: DashboardConfig = {}) {
     this.client = client;
     this.configData = config;
     this.config = {
@@ -69,7 +65,7 @@ export class Dashboard {
     };
 
     this.state = {
-      currentView: "overview",
+      currentView: 'overview',
       invoices: [],
       stats: null,
       activity: [],
@@ -115,90 +111,92 @@ export class Dashboard {
   }
 
   private clearScreen(): void {
-    process.stdout.write("\x1b[2J\x1b[H");
+    process.stdout.write('\x1b[2J\x1b[H');
   }
 
   private restoreTerminal(): void {
-    process.stdout.write("\x1b[?25h");
-    process.stdout.write("\x1b[0m");
+    process.stdout.write('\x1b[?25h');
+    process.stdout.write('\x1b[0m');
   }
 
   private renderHeader(): void {
     const width = process.stdout.columns || 80;
-    const title = "ILN Dashboard";
+    const title = 'ILN Dashboard';
     const network = this.configData.network;
     const timestamp = new Date().toLocaleTimeString();
 
-    console.log(pc.bold(pc.cyan("═".repeat(width))));
+    console.log(pc.bold(pc.cyan('═'.repeat(width))));
     console.log(pc.bold(pc.cyan(title.padStart((width + title.length) / 2))));
-    console.log(
-      pc.dim(`${network} | Last update: ${timestamp}`.padStart(width))
-    );
-    console.log(pc.bold(pc.cyan("═".repeat(width))));
+    console.log(pc.dim(`${network} | Last update: ${timestamp}`.padStart(width)));
+    console.log(pc.bold(pc.cyan('═'.repeat(width))));
     console.log();
   }
 
   private renderView(): void {
     switch (this.state.currentView) {
-      case "overview":
+      case 'overview':
         this.renderOverview();
         break;
-      case "invoices":
+      case 'invoices':
         this.renderInvoices();
         break;
-      case "stats":
+      case 'stats':
         this.renderStats();
         break;
-      case "activity":
+      case 'activity':
         this.renderActivity();
         break;
     }
   }
 
   private renderOverview(): void {
-    console.log(pc.bold(pc.yellow("📊 Overview")));
+    console.log(pc.bold(pc.yellow('📊 Overview')));
     console.log();
 
     if (this.state.stats) {
       const stats = this.state.stats;
-      this.renderRow("Total Invoices", stats.totalInvoices.toString());
-      this.renderRow("Total Volume", formatAmount(stats.totalVolume));
-      this.renderRow("Total Yield", formatAmount(stats.totalYield));
-      this.renderRow("Default Rate", `${(stats.defaultRate * 100).toFixed(2)}%`);
+      this.renderRow('Total Invoices', stats.totalInvoices.toString());
+      this.renderRow('Total Volume', formatAmount(stats.totalVolume));
+      this.renderRow('Total Yield', formatAmount(stats.totalYield));
+      this.renderRow('Default Rate', `${(stats.defaultRate * 100).toFixed(2)}%`);
     } else {
-      console.log(pc.dim("  Loading stats..."));
+      console.log(pc.dim('  Loading stats...'));
     }
 
     console.log();
-    console.log(pc.bold(pc.yellow("📋 Recent Invoices")));
+    console.log(pc.bold(pc.yellow('📋 Recent Invoices')));
     console.log();
 
     if (this.state.invoices.length === 0) {
-      console.log(pc.dim("  No invoices found"));
+      console.log(pc.dim('  No invoices found'));
     } else {
       const recent = this.state.invoices.slice(0, 5);
       for (const invoice of recent) {
         const status = this.getStatusColor(invoice.status);
         console.log(
-          `  ${pc.dim("#")}${invoice.id.toString().padEnd(8)} ${status(invoice.status.padEnd(10))} ${formatAmount(invoice.amount).padEnd(15)} ${pc.dim(formatTimestamp(invoice.dueDate).slice(0, 10))}`
+          `  ${pc.dim('#')}${invoice.id.toString().padEnd(8)} ${status(
+            invoice.status.padEnd(10)
+          )} ${formatAmount(invoice.amount).padEnd(15)} ${pc.dim(
+            formatTimestamp(invoice.dueDate).slice(0, 10)
+          )}`
         );
       }
     }
   }
 
   private renderInvoices(): void {
-    console.log(pc.bold(pc.yellow("📋 Invoices")));
+    console.log(pc.bold(pc.yellow('📋 Invoices')));
     console.log();
 
     if (this.state.invoices.length === 0) {
-      console.log(pc.dim("  No invoices found"));
+      console.log(pc.dim('  No invoices found'));
       return;
     }
 
     // Header
-    const headers = ["ID", "Status", "Amount", "Rate", "Due", "Freelancer"];
-    console.log(pc.bold(headers.map((h) => h.padEnd(15)).join("")));
-    console.log(pc.dim("─".repeat(90)));
+    const headers = ['ID', 'Status', 'Amount', 'Rate', 'Due', 'Freelancer'];
+    console.log(pc.bold(headers.map((h) => h.padEnd(15)).join('')));
+    console.log(pc.dim('─'.repeat(90)));
 
     // Rows
     for (const invoice of this.state.invoices) {
@@ -210,46 +208,48 @@ export class Dashboard {
           formatAmount(invoice.amount).padEnd(15),
           `${invoice.discountRate} bps`.padEnd(15),
           formatTimestamp(invoice.dueDate).slice(0, 10).padEnd(15),
-          invoice.freelancer.slice(0, 8) + "...",
-        ].join("")
+          invoice.freelancer.slice(0, 8) + '...',
+        ].join('')
       );
     }
   }
 
   private renderStats(): void {
-    console.log(pc.bold(pc.yellow("📈 Protocol Statistics")));
+    console.log(pc.bold(pc.yellow('📈 Protocol Statistics')));
     console.log();
 
     if (!this.state.stats) {
-      console.log(pc.dim("  Loading stats..."));
+      console.log(pc.dim('  Loading stats...'));
       return;
     }
 
     const stats = this.state.stats;
-    this.renderRow("Total Invoices", stats.totalInvoices.toString());
-    this.renderRow("Total Volume", formatAmount(stats.totalVolume));
-    this.renderRow("Total Yield", formatAmount(stats.totalYield));
-    this.renderRow("Default Rate", `${(stats.defaultRate * 100).toFixed(2)}%`);
-    this.renderRow("Avg Discount", this.calculateAvgDiscount());
-    this.renderRow("Active LPs", this.countActiveLPs().toString());
+    this.renderRow('Total Invoices', stats.totalInvoices.toString());
+    this.renderRow('Total Volume', formatAmount(stats.totalVolume));
+    this.renderRow('Total Yield', formatAmount(stats.totalYield));
+    this.renderRow('Default Rate', `${(stats.defaultRate * 100).toFixed(2)}%`);
+    this.renderRow('Avg Discount', this.calculateAvgDiscount());
+    this.renderRow('Active LPs', this.countActiveLPs().toString());
   }
 
   private renderActivity(): void {
-    console.log(pc.bold(pc.yellow("⚡ Recent Activity")));
+    console.log(pc.bold(pc.yellow('⚡ Recent Activity')));
     console.log();
 
     if (this.state.activity.length === 0) {
-      console.log(pc.dim("  No recent activity"));
+      console.log(pc.dim('  No recent activity'));
       return;
     }
 
     for (const item of this.state.activity.slice(0, this.config.maxItems)) {
       const time = new Date(item.timestamp).toLocaleTimeString();
       const type = this.getActivityColor(item.type);
-      const amount = item.amount ? ` ${formatAmount(item.amount)}` : "";
+      const amount = item.amount ? ` ${formatAmount(item.amount)}` : '';
 
       console.log(
-        `  ${pc.dim(time)} ${type(item.type.toUpperCase().padEnd(8))} #${item.invoiceId}${amount} ${pc.dim(item.address.slice(0, 8) + "...")}`
+        `  ${pc.dim(time)} ${type(item.type.toUpperCase().padEnd(8))} #${
+          item.invoiceId
+        }${amount} ${pc.dim(item.address.slice(0, 8) + '...')}`
       );
     }
   }
@@ -257,11 +257,11 @@ export class Dashboard {
   private renderFooter(): void {
     const width = process.stdout.columns || 80;
     console.log();
-    console.log(pc.bold(pc.cyan("─".repeat(width))));
+    console.log(pc.bold(pc.cyan('─'.repeat(width))));
     console.log(
-      pc.dim("Controls: [1] Overview  [2] Invoices  [3] Stats  [4] Activity  [R] Refresh  [Q] Quit")
+      pc.dim('Controls: [1] Overview  [2] Invoices  [3] Stats  [4] Activity  [R] Refresh  [Q] Quit')
     );
-    console.log(pc.bold(pc.cyan("─".repeat(width))));
+    console.log(pc.bold(pc.cyan('─'.repeat(width))));
   }
 
   private renderRow(label: string, value: string): void {
@@ -291,10 +291,7 @@ export class Dashboard {
       // For now, return mock data
       return {
         totalInvoices: this.state.invoices.length,
-        totalVolume: this.state.invoices.reduce(
-          (sum, inv) => sum + BigInt(inv.amount),
-          0n
-        ),
+        totalVolume: this.state.invoices.reduce((sum, inv) => sum + BigInt(inv.amount), 0n),
         totalYield: 0n,
         defaultRate: 0,
       };
@@ -316,44 +313,44 @@ export class Dashboard {
   // ── Keyboard Handling ─────────────────────────────────────────────────────
 
   private setupKeyboardHandlers(): void {
-    if (typeof process.stdin.setRawMode !== "function") {
+    if (typeof process.stdin.setRawMode !== 'function') {
       return;
     }
 
     process.stdin.setRawMode(true);
     process.stdin.resume();
-    process.stdin.setEncoding("utf-8");
+    process.stdin.setEncoding('utf-8');
 
-    process.stdin.on("data", (key: string) => {
+    process.stdin.on('data', (key: string) => {
       this.handleKeyPress(key);
     });
   }
 
   private handleKeyPress(key: string): void {
     switch (key) {
-      case "1":
-        this.state.currentView = "overview";
+      case '1':
+        this.state.currentView = 'overview';
         this.render();
         break;
-      case "2":
-        this.state.currentView = "invoices";
+      case '2':
+        this.state.currentView = 'invoices';
         this.render();
         break;
-      case "3":
-        this.state.currentView = "stats";
+      case '3':
+        this.state.currentView = 'stats';
         this.render();
         break;
-      case "4":
-        this.state.currentView = "activity";
+      case '4':
+        this.state.currentView = 'activity';
         this.render();
         break;
-      case "r":
-      case "R":
+      case 'r':
+      case 'R':
         this.refresh().then(() => this.render());
         break;
-      case "q":
-      case "Q":
-      case "\u0003": // Ctrl+C
+      case 'q':
+      case 'Q':
+      case '\u0003': // Ctrl+C
         this.stop();
         process.exit(0);
         break;
@@ -371,34 +368,30 @@ export class Dashboard {
 
   // ── Helpers ───────────────────────────────────────────────────────────────
 
-  private getStatusColor(
-    status: string
-  ): (text: string) => string {
+  private getStatusColor(status: string): (text: string) => string {
     switch (status) {
-      case "Pending":
+      case 'Pending':
         return pc.yellow;
-      case "Funded":
+      case 'Funded':
         return pc.blue;
-      case "Paid":
+      case 'Paid':
         return pc.green;
-      case "Defaulted":
+      case 'Defaulted':
         return pc.red;
       default:
         return pc.white;
     }
   }
 
-  private getActivityColor(
-    type: string
-  ): (text: string) => string {
+  private getActivityColor(type: string): (text: string) => string {
     switch (type) {
-      case "submit":
+      case 'submit':
         return pc.cyan;
-      case "fund":
+      case 'fund':
         return pc.blue;
-      case "pay":
+      case 'pay':
         return pc.green;
-      case "default":
+      case 'default':
         return pc.red;
       default:
         return pc.white;
@@ -406,19 +399,14 @@ export class Dashboard {
   }
 
   private calculateAvgDiscount(): string {
-    if (this.state.invoices.length === 0) return "0 bps";
-    const total = this.state.invoices.reduce(
-      (sum, inv) => sum + inv.discountRate,
-      0
-    );
+    if (this.state.invoices.length === 0) return '0 bps';
+    const total = this.state.invoices.reduce((sum, inv) => sum + inv.discountRate, 0);
     return `${Math.round(total / this.state.invoices.length)} bps`;
   }
 
   private countActiveLPs(): number {
     const funderSet = new Set(
-      this.state.invoices
-        .filter((inv) => inv.funder)
-        .map((inv) => inv.funder)
+      this.state.invoices.filter((inv) => inv.funder).map((inv) => inv.funder)
     );
     return funderSet.size;
   }

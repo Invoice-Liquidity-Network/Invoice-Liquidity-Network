@@ -31,9 +31,21 @@ describe('mainnet checklist parser', () => {
       closedIssues,
     });
 
-    assert.ok(updated.includes('| Unified security policy | Publish reporting policy | Security lead | Done | [#299](https://github.com/Invoice-Liquidity-Network/Invoice-Liquidity-Network/issues/299) |'));
-    assert.ok(updated.includes('| Local dev guide | Dev setup guide | Docs lead | In progress | [#300](https://github.com/Invoice-Liquidity-Network/Invoice-Liquidity-Network/issues/300) |'));
-    assert.ok(updated.includes('| Glossary | Define protocol terms | Docs lead | Done | [#301](https://github.com/Invoice-Liquidity-Network/Invoice-Liquidity-Network/issues/301) |'));
+    assert.ok(
+      updated.includes(
+        '| Unified security policy | Publish reporting policy | Security lead | Done | [#299](https://github.com/Invoice-Liquidity-Network/Invoice-Liquidity-Network/issues/299) |'
+      )
+    );
+    assert.ok(
+      updated.includes(
+        '| Local dev guide | Dev setup guide | Docs lead | In progress | [#300](https://github.com/Invoice-Liquidity-Network/Invoice-Liquidity-Network/issues/300) |'
+      )
+    );
+    assert.ok(
+      updated.includes(
+        '| Glossary | Define protocol terms | Docs lead | Done | [#301](https://github.com/Invoice-Liquidity-Network/Invoice-Liquidity-Network/issues/301) |'
+      )
+    );
   });
 
   test('preserves non-matching lines and non-table content unchanged', () => {
@@ -46,6 +58,10 @@ describe('mainnet checklist parser', () => {
 
     assert.ok(updated.includes('# Mainnet Launch Checklist'));
     assert.ok(updated.includes('| Item | Description | Owner | Status | Link |'));
-    assert.ok(updated.includes('| External security audit | Audit Soroban contracts | Security lead | Not started | [Audit link](https://example.com) |'));
+    assert.ok(
+      updated.includes(
+        '| External security audit | Audit Soroban contracts | Security lead | Not started | [Audit link](https://example.com) |'
+      )
+    );
   });
 });

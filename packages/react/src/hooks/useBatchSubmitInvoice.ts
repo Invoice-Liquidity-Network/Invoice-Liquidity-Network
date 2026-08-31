@@ -1,7 +1,7 @@
-import { useState, useCallback } from "react";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { useILNClient } from "../context";
-import type { BatchResult, BatchSubmitParams } from "@iln/sdk";
+import { useState, useCallback } from 'react';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { useILNClient } from '../context';
+import type { BatchResult, BatchSubmitParams } from '@iln/sdk';
 
 export interface BatchInvoiceInput {
   freelancer: string;
@@ -12,7 +12,7 @@ export interface BatchInvoiceInput {
   token?: string;
 }
 
-export type InvoiceStatus = "pending" | "submitting" | "success" | "failed";
+export type InvoiceStatus = 'pending' | 'submitting' | 'success' | 'failed';
 
 export interface InvoiceProgress {
   index: number;
@@ -54,7 +54,7 @@ function createInitialProgress(invoices: BatchInvoiceInput[]): BatchProgress {
       amount: inv.amount,
       discountRate: inv.discountRate,
       dueDate: inv.dueDate,
-      status: "pending" as InvoiceStatus,
+      status: 'pending' as InvoiceStatus,
     })),
     totalCount: invoices.length,
     completedCount: 0,
@@ -69,16 +69,14 @@ function createInitialProgress(invoices: BatchInvoiceInput[]): BatchProgress {
 function updateProgress(
   prev: BatchProgress,
   index: number,
-  update: Partial<InvoiceProgress>,
+  update: Partial<InvoiceProgress>
 ): BatchProgress {
-  const invoices = prev.invoices.map((inv, i) =>
-    i === index ? { ...inv, ...update } : inv,
-  );
+  const invoices = prev.invoices.map((inv, i) => (i === index ? { ...inv, ...update } : inv));
   const completedCount = invoices.filter(
-    (inv) => inv.status === "success" || inv.status === "failed",
+    (inv) => inv.status === 'success' || inv.status === 'failed'
   ).length;
-  const successCount = invoices.filter((inv) => inv.status === "success").length;
-  const failedCount = invoices.filter((inv) => inv.status === "failed").length;
+  const successCount = invoices.filter((inv) => inv.status === 'success').length;
+  const failedCount = invoices.filter((inv) => inv.status === 'failed').length;
   return {
     ...prev,
     invoices,
@@ -95,28 +93,35 @@ export function useBatchSubmitInvoice(): UseBatchSubmitInvoiceResult {
   const queryClient = useQueryClient();
   const [batchProgress, setBatchProgress] = useState<BatchProgress | null>(null);
 
-  const { mutateAsync, isPending, error, reset: resetMutation } = useMutation({
+  const {
+    mutateAsync,
+    isPending,
+    error,
+    reset: resetMutation,
+  } = useMutation({
     mutationFn: async (params: BatchSubmitParams) => {
-      return (client as unknown as { batchSubmitInvoices(p: BatchSubmitParams): Promise<BatchResult> }).batchSubmitInvoices(params);
+      return (
+        client as unknown as { batchSubmitInvoices(p: BatchSubmitParams): Promise<BatchResult> }
+      ).batchSubmitInvoices(params);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["invoices"] });
+      queryClient.invalidateQueries({ queryKey: ['invoices'] });
     },
   });
 
   const submitBatch = useCallback(
     async (invoices: BatchInvoiceInput[]): Promise<BatchResult> => {
       if (invoices.length === 0) {
-        throw new Error("No invoices to submit");
+        throw new Error('No invoices to submit');
       }
       if (invoices.length > 10) {
-        throw new Error("Maximum 10 invoices per batch");
+        throw new Error('Maximum 10 invoices per batch');
       }
 
       const progress = createInitialProgress(invoices);
       progress.invoices = progress.invoices.map((inv) => ({
         ...inv,
-        status: "submitting" as InvoiceStatus,
+        status: 'submitting' as InvoiceStatus,
       }));
       setBatchProgress(progress);
 
@@ -139,8 +144,8 @@ export function useBatchSubmitInvoice(): UseBatchSubmitInvoiceResult {
           let p = prev;
           for (let i = 0; i < invoices.length; i++) {
             p = updateProgress(p, i, {
-              status: "failed",
-              error: err instanceof Error ? err.message : "Submission failed",
+              status: 'failed',
+              error: err instanceof Error ? err.message : 'Submission failed',
             });
           }
           return p;
@@ -155,13 +160,13 @@ export function useBatchSubmitInvoice(): UseBatchSubmitInvoiceResult {
           const idx = result.index;
           if (result.success) {
             p = updateProgress(p, idx, {
-              status: "success",
+              status: 'success',
               invoiceId: result.invoiceId,
             });
           } else {
             p = updateProgress(p, idx, {
-              status: "failed",
-              error: result.error ?? "Unknown error",
+              status: 'failed',
+              error: result.error ?? 'Unknown error',
             });
           }
         }
@@ -170,18 +175,18 @@ export function useBatchSubmitInvoice(): UseBatchSubmitInvoiceResult {
 
       return batchResult;
     },
-    [mutateAsync],
+    [mutateAsync]
   );
 
   const retryFailed = useCallback(async (): Promise<void> => {
     setBatchProgress((prev) => {
       if (!prev) return prev;
-      const failed = prev.invoices.filter((inv) => inv.status === "failed");
+      const failed = prev.invoices.filter((inv) => inv.status === 'failed');
       if (failed.length === 0) return prev;
       let p = prev;
       for (const inv of failed) {
         p = updateProgress(p, inv.index, {
-          status: "submitting",
+          status: 'submitting',
           error: undefined,
         });
       }
@@ -191,10 +196,10 @@ export function useBatchSubmitInvoice(): UseBatchSubmitInvoiceResult {
     const currentProgress = batchProgress;
     if (!currentProgress) return;
 
-    const failed = currentProgress.invoices.filter((inv) => inv.status === "failed");
+    const failed = currentProgress.invoices.filter((inv) => inv.status === 'failed');
     if (failed.length === 0) return;
 
-    const freelancer = failed[0].payer.startsWith("G") ? failed[0].payer : "G";
+    const freelancer = failed[0].payer.startsWith('G') ? failed[0].payer : 'G';
 
     const failedInputs: BatchInvoiceInput[] = failed.map((inv) => ({
       freelancer,
@@ -213,7 +218,7 @@ export function useBatchSubmitInvoice(): UseBatchSubmitInvoiceResult {
           const originalIdx = failed[r.index]?.index;
           if (originalIdx !== undefined) {
             p = updateProgress(p, originalIdx, {
-              status: r.success ? "success" : "failed",
+              status: r.success ? 'success' : 'failed',
               error: r.error,
               invoiceId: r.invoiceId,
             });
@@ -233,9 +238,9 @@ export function useBatchSubmitInvoice(): UseBatchSubmitInvoiceResult {
 
   const failedInvoices: BatchInvoiceInput[] = batchProgress
     ? batchProgress.invoices
-        .filter((inv) => inv.status === "failed")
+        .filter((inv) => inv.status === 'failed')
         .map((inv) => ({
-          freelancer: inv.payer.startsWith("G") ? inv.payer : "G",
+          freelancer: inv.payer.startsWith('G') ? inv.payer : 'G',
           payer: inv.payer,
           amount: inv.amount,
           discountRate: inv.discountRate,

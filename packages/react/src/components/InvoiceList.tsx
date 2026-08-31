@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import type { Invoice } from '@invoice-liquidity/sdk';
+import type { Invoice } from '@iln/sdk';
 import { useInvoiceList } from '../hooks/useInvoiceList';
 
 export interface InvoiceListProps {
@@ -41,15 +41,15 @@ export const InvoiceList: React.FC<InvoiceListProps> = ({
   const [resolvedTheme, setResolvedTheme] = useState<'light' | 'dark'>('light');
 
   useEffect(() => {
-    if (theme === 'system') {
-      const mq = window.matchMedia('(prefers-color-scheme: dark)');
-      setResolvedTheme(mq.matches ? 'dark' : 'light');
-      const handler = (e: MediaQueryListEvent) => setResolvedTheme(e.matches ? 'dark' : 'light');
-      mq.addEventListener('change', handler);
-      return () => mq.removeEventListener('change', handler);
-    } else {
+    if (theme !== 'system') {
       setResolvedTheme(theme);
+      return;
     }
+    const mq = window.matchMedia('(prefers-color-scheme: dark)');
+    setResolvedTheme(mq.matches ? 'dark' : 'light');
+    const handler = (e: MediaQueryListEvent) => setResolvedTheme(e.matches ? 'dark' : 'light');
+    mq.addEventListener('change', handler);
+    return () => mq.removeEventListener('change', handler);
   }, [theme]);
 
   const isDark = resolvedTheme === 'dark';
@@ -66,17 +66,20 @@ export const InvoiceList: React.FC<InvoiceListProps> = ({
 
   // ── Data Fetching ────────────────────────────────────────────────────────
   const isAutoFetch = !staticInvoices && !!address && address.startsWith('G');
-  const { data: fetchedInvoices, isLoading: hookLoading, error } = useInvoiceList(
-    isAutoFetch ? address : '',
-    role
-  );
+  const {
+    data: fetchedInvoices,
+    isLoading: hookLoading,
+    error,
+  } = useInvoiceList(isAutoFetch ? address : '', role);
 
   const rawInvoices = staticInvoices ?? fetchedInvoices ?? [];
   const isLoading = staticLoading || (isAutoFetch && hookLoading);
 
   // ── Filters & Search States ──────────────────────────────────────────────
   const [searchTerm, setSearchTerm] = useState('');
-  const [statusFilter, setStatusFilter] = useState<'all' | 'pending' | 'funded' | 'paid' | 'defaulted'>('all');
+  const [statusFilter, setStatusFilter] = useState<
+    'all' | 'pending' | 'funded' | 'paid' | 'defaulted'
+  >('all');
   const [sortBy, setSortBy] = useState<'id' | 'amount' | 'dueDate'>('id');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
 
@@ -95,7 +98,7 @@ export const InvoiceList: React.FC<InvoiceListProps> = ({
       result = result.filter(
         (inv) =>
           String(inv.id).toLowerCase().includes(term) ||
-          inv.issuer.toLowerCase().includes(term) ||
+          inv.freelancer.toLowerCase().includes(term) ||
           inv.payer.toLowerCase().includes(term)
       );
     }
@@ -139,15 +142,30 @@ export const InvoiceList: React.FC<InvoiceListProps> = ({
     const s = status?.toLowerCase();
     switch (s) {
       case 'paid':
-        return { bg: isDark ? 'rgba(34, 197, 94, 0.15)' : 'rgba(34, 197, 94, 0.1)', color: '#22c55e' };
+        return {
+          bg: isDark ? 'rgba(34, 197, 94, 0.15)' : 'rgba(34, 197, 94, 0.1)',
+          color: '#22c55e',
+        };
       case 'funded':
-        return { bg: isDark ? 'rgba(59, 130, 246, 0.15)' : 'rgba(59, 130, 246, 0.1)', color: '#3b82f6' };
+        return {
+          bg: isDark ? 'rgba(59, 130, 246, 0.15)' : 'rgba(59, 130, 246, 0.1)',
+          color: '#3b82f6',
+        };
       case 'defaulted':
-        return { bg: isDark ? 'rgba(239, 68, 68, 0.15)' : 'rgba(239, 68, 68, 0.1)', color: '#ef4444' };
+        return {
+          bg: isDark ? 'rgba(239, 68, 68, 0.15)' : 'rgba(239, 68, 68, 0.1)',
+          color: '#ef4444',
+        };
       case 'disputed':
-        return { bg: isDark ? 'rgba(245, 158, 11, 0.15)' : 'rgba(245, 158, 11, 0.1)', color: '#f59e0b' };
+        return {
+          bg: isDark ? 'rgba(245, 158, 11, 0.15)' : 'rgba(245, 158, 11, 0.1)',
+          color: '#f59e0b',
+        };
       default:
-        return { bg: isDark ? 'rgba(148, 163, 184, 0.15)' : 'rgba(148, 163, 184, 0.1)', color: '#94a3b8' };
+        return {
+          bg: isDark ? 'rgba(148, 163, 184, 0.15)' : 'rgba(148, 163, 184, 0.1)',
+          color: '#94a3b8',
+        };
     }
   };
 
@@ -168,13 +186,17 @@ export const InvoiceList: React.FC<InvoiceListProps> = ({
 
   return (
     <>
-      <style dangerouslySetInnerHTML={{ __html: `
+      <style
+        dangerouslySetInnerHTML={{
+          __html: `
         @keyframes iln-shimmer {
           0% { background-position: -200% 0; }
           100% { background-position: 200% 0; }
         }
         .iln-skeleton-bar {
-          background: linear-gradient(90deg, ${skeletonBg} 25%, ${isDark ? '#475569' : '#f1f5f9'} 50%, ${skeletonBg} 75%);
+          background: linear-gradient(90deg, ${skeletonBg} 25%, ${
+            isDark ? '#475569' : '#f1f5f9'
+          } 50%, ${skeletonBg} 75%);
           background-size: 200% 100%;
           animation: iln-shimmer 1.5s infinite;
           border-radius: 4px;
@@ -183,7 +205,7 @@ export const InvoiceList: React.FC<InvoiceListProps> = ({
           transition: background-color 0.2s ease, transform 0.15s ease;
         }
         .iln-invoice-row:hover {
-          background-color: ${isDark ? '#334155' : '#f8fafc'} !important;
+          background-color: ${rowHoverBg} !important;
           cursor: pointer;
         }
         .iln-tab-btn {
@@ -206,7 +228,9 @@ export const InvoiceList: React.FC<InvoiceListProps> = ({
           .iln-mobile-cards { display: block !important; }
           .iln-desktop-table { display: none !important; }
         }
-      `}} />
+      `,
+        }}
+      />
       <div
         className={className}
         style={{
@@ -223,8 +247,18 @@ export const InvoiceList: React.FC<InvoiceListProps> = ({
       >
         {/* Controls Panel */}
         {showControls && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', marginBottom: '20px' }}>
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '12px', justifyContent: 'space-between', alignItems: 'center' }}>
+          <div
+            style={{ display: 'flex', flexDirection: 'column', gap: '16px', marginBottom: '20px' }}
+          >
+            <div
+              style={{
+                display: 'flex',
+                flexWrap: 'wrap',
+                gap: '12px',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+              }}
+            >
               {/* Search */}
               <div style={{ position: 'relative', flex: '1 1 240px', minWidth: '200px' }}>
                 <input
@@ -245,7 +279,13 @@ export const InvoiceList: React.FC<InvoiceListProps> = ({
                   }}
                 />
                 <svg
-                  style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: textMuted }}
+                  style={{
+                    position: 'absolute',
+                    left: '12px',
+                    top: '50%',
+                    transform: 'translateY(-50%)',
+                    color: textMuted,
+                  }}
                   width="16"
                   height="16"
                   viewBox="0 0 24 24"
@@ -297,7 +337,15 @@ export const InvoiceList: React.FC<InvoiceListProps> = ({
             </div>
 
             {/* Filter Tabs */}
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', borderBottom: `1px solid ${border}`, paddingBottom: '10px' }}>
+            <div
+              style={{
+                display: 'flex',
+                flexWrap: 'wrap',
+                gap: '6px',
+                borderBottom: `1px solid ${border}`,
+                paddingBottom: '10px',
+              }}
+            >
               {(['all', 'pending', 'funded', 'paid', 'defaulted'] as const).map((tab) => {
                 const isActive = statusFilter === tab;
                 return (
@@ -328,9 +376,20 @@ export const InvoiceList: React.FC<InvoiceListProps> = ({
         {isLoading && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
             {[1, 2, 3].map((n) => (
-              <div key={n} style={{ display: 'flex', gap: '16px', padding: '16px 8px', borderBottom: `1px solid ${border}` }}>
+              <div
+                key={n}
+                style={{
+                  display: 'flex',
+                  gap: '16px',
+                  padding: '16px 8px',
+                  borderBottom: `1px solid ${border}`,
+                }}
+              >
                 <div className="iln-skeleton-bar" style={{ width: '60px', height: '18px' }} />
-                <div className="iln-skeleton-bar" style={{ width: '80px', height: '18px', marginLeft: 'auto' }} />
+                <div
+                  className="iln-skeleton-bar"
+                  style={{ width: '80px', height: '18px', marginLeft: 'auto' }}
+                />
                 <div className="iln-skeleton-bar" style={{ width: '120px', height: '18px' }} />
                 <div className="iln-skeleton-bar" style={{ width: '70px', height: '18px' }} />
               </div>
@@ -341,7 +400,19 @@ export const InvoiceList: React.FC<InvoiceListProps> = ({
         {/* Error State */}
         {!isLoading && error && (
           <div style={{ textAlign: 'center', padding: '24px', color: '#ef4444' }}>
-            <svg style={{ marginBottom: '8px' }} width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
+            <svg
+              style={{ marginBottom: '8px' }}
+              width="24"
+              height="24"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+            >
+              <circle cx="12" cy="12" r="10"></circle>
+              <line x1="12" y1="8" x2="12" y2="12"></line>
+              <line x1="12" y1="16" x2="12.01" y2="16"></line>
+            </svg>
             <div style={{ fontWeight: 600 }}>Failed to load invoices</div>
             <div style={{ fontSize: '13px', opacity: 0.8, marginTop: '4px' }}>{error.message}</div>
           </div>
@@ -350,9 +421,26 @@ export const InvoiceList: React.FC<InvoiceListProps> = ({
         {/* Empty State */}
         {!isLoading && !error && processedInvoices.length === 0 && (
           <div style={{ textAlign: 'center', padding: '40px 20px', color: textMuted }}>
-            <svg style={{ opacity: 0.5, marginBottom: '12px' }} width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><rect x="3" y="4" width="18" height="16" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="4"></line><line x1="8" y1="2" x2="8" y2="4"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>
-            <div style={{ fontWeight: 600, fontSize: '16px', color: textPrimary }}>No invoices found</div>
-            <div style={{ fontSize: '13px', marginTop: '4px' }}>There are no invoices matching the current criteria.</div>
+            <svg
+              style={{ opacity: 0.5, marginBottom: '12px' }}
+              width="40"
+              height="40"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.5"
+            >
+              <rect x="3" y="4" width="18" height="16" rx="2" ry="2"></rect>
+              <line x1="16" y1="2" x2="16" y2="4"></line>
+              <line x1="8" y1="2" x2="8" y2="4"></line>
+              <line x1="3" y1="10" x2="21" y2="10"></line>
+            </svg>
+            <div style={{ fontWeight: 600, fontSize: '16px', color: textPrimary }}>
+              No invoices found
+            </div>
+            <div style={{ fontSize: '13px', marginTop: '4px' }}>
+              There are no invoices matching the current criteria.
+            </div>
           </div>
         )}
 
@@ -369,19 +457,38 @@ export const InvoiceList: React.FC<InvoiceListProps> = ({
             }}
           >
             <thead>
-              <tr style={{ borderBottom: `2px solid ${border}`, color: textMuted, background: tableHeaderBg }}>
-                <th style={{ padding: '12px 16px', fontWeight: 600, cursor: 'pointer' }} onClick={() => handleSort('id')}>
+              <tr
+                style={{
+                  borderBottom: `2px solid ${border}`,
+                  color: textMuted,
+                  background: tableHeaderBg,
+                }}
+              >
+                <th
+                  style={{ padding: '12px 16px', fontWeight: 600, cursor: 'pointer' }}
+                  onClick={() => handleSort('id')}
+                >
                   Invoice ID {renderSortIndicator('id')}
                 </th>
                 <th style={{ padding: '12px 16px', fontWeight: 600 }}>Status</th>
-                <th style={{ padding: '12px 16px', fontWeight: 600, cursor: 'pointer' }} onClick={() => handleSort('amount')}>
+                <th
+                  style={{ padding: '12px 16px', fontWeight: 600, cursor: 'pointer' }}
+                  onClick={() => handleSort('amount')}
+                >
                   Amount {renderSortIndicator('amount')}
                 </th>
                 <th style={{ padding: '12px 16px', fontWeight: 600 }}>Discount Rate</th>
-                <th style={{ padding: '12px 16px', fontWeight: 600, cursor: 'pointer' }} onClick={() => handleSort('dueDate')}>
+                <th
+                  style={{ padding: '12px 16px', fontWeight: 600, cursor: 'pointer' }}
+                  onClick={() => handleSort('dueDate')}
+                >
                   Due Date {renderSortIndicator('dueDate')}
                 </th>
-                {(onActionClick || onInvoiceClick) && <th style={{ padding: '12px 16px', fontWeight: 600, textAlign: 'right' }}>Actions</th>}
+                {(onActionClick || onInvoiceClick) && (
+                  <th style={{ padding: '12px 16px', fontWeight: 600, textAlign: 'right' }}>
+                    Actions
+                  </th>
+                )}
               </tr>
             </thead>
             <tbody>
@@ -396,24 +503,31 @@ export const InvoiceList: React.FC<InvoiceListProps> = ({
                   >
                     <td style={{ padding: '16px', fontWeight: 600 }}>#{String(inv.id)}</td>
                     <td style={{ padding: '16px' }}>
-                      <span style={{
-                        padding: '4px 10px',
-                        borderRadius: '9999px',
-                        fontSize: '12px',
-                        fontWeight: 600,
-                        backgroundColor: statusColor.bg,
-                        color: statusColor.color,
-                        textTransform: 'capitalize',
-                        display: 'inline-block',
-                      }}>
+                      <span
+                        style={{
+                          padding: '4px 10px',
+                          borderRadius: '9999px',
+                          fontSize: '12px',
+                          fontWeight: 600,
+                          backgroundColor: statusColor.bg,
+                          color: statusColor.color,
+                          textTransform: 'capitalize',
+                          display: 'inline-block',
+                        }}
+                      >
                         {inv.status}
                       </span>
                     </td>
-                    <td style={{ padding: '16px', fontWeight: 600 }}>{formatAmount(inv.amount)} USDC</td>
+                    <td style={{ padding: '16px', fontWeight: 600 }}>
+                      {formatAmount(inv.amount)} USDC
+                    </td>
                     <td style={{ padding: '16px' }}>{(inv.discountRate / 100).toFixed(2)}%</td>
                     <td style={{ padding: '16px', color: textMuted }}>{formatDate(inv.dueDate)}</td>
                     {(onActionClick || onInvoiceClick) && (
-                      <td style={{ padding: '16px', textAlign: 'right' }} onClick={(e) => e.stopPropagation()}>
+                      <td
+                        style={{ padding: '16px', textAlign: 'right' }}
+                        onClick={(e) => e.stopPropagation()}
+                      >
                         <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
                           {inv.status === 'Pending' && role === 'lp' && onActionClick && (
                             <button
@@ -499,40 +613,97 @@ export const InvoiceList: React.FC<InvoiceListProps> = ({
                 <div
                   key={String(inv.id)}
                   className="iln-mobile-card"
+                  role="button"
+                  tabIndex={0}
                   onClick={() => onInvoiceClick?.(inv)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault();
+                      onInvoiceClick?.(inv);
+                    }
+                  }}
                 >
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
-                    <span style={{ fontWeight: 700, fontSize: '15px' }}>Invoice #{String(inv.id)}</span>
-                    <span style={{
-                      padding: '2px 8px',
-                      borderRadius: '9999px',
-                      fontSize: '11px',
-                      fontWeight: 600,
-                      backgroundColor: statusColor.bg,
-                      color: statusColor.color,
-                      textTransform: 'capitalize',
-                    }}>
+                  <div
+                    style={{
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center',
+                      marginBottom: '12px',
+                    }}
+                  >
+                    <span style={{ fontWeight: 700, fontSize: '15px' }}>
+                      Invoice #{String(inv.id)}
+                    </span>
+                    <span
+                      style={{
+                        padding: '2px 8px',
+                        borderRadius: '9999px',
+                        fontSize: '11px',
+                        fontWeight: 600,
+                        backgroundColor: statusColor.bg,
+                        color: statusColor.color,
+                        textTransform: 'capitalize',
+                      }}
+                    >
                       {inv.status}
                     </span>
                   </div>
 
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px 16px', fontSize: '13px', marginBottom: '12px' }}>
+                  <div
+                    style={{
+                      display: 'grid',
+                      gridTemplateColumns: '1fr 1fr',
+                      gap: '8px 16px',
+                      fontSize: '13px',
+                      marginBottom: '12px',
+                    }}
+                  >
                     <div>
-                      <div style={{ color: textMuted, fontSize: '11px', textTransform: 'uppercase' }}>Amount</div>
-                      <div style={{ fontWeight: 600, marginTop: '2px' }}>{formatAmount(inv.amount)} USDC</div>
+                      <div
+                        style={{ color: textMuted, fontSize: '11px', textTransform: 'uppercase' }}
+                      >
+                        Amount
+                      </div>
+                      <div style={{ fontWeight: 600, marginTop: '2px' }}>
+                        {formatAmount(inv.amount)} USDC
+                      </div>
                     </div>
                     <div>
-                      <div style={{ color: textMuted, fontSize: '11px', textTransform: 'uppercase' }}>Discount</div>
-                      <div style={{ fontWeight: 600, marginTop: '2px' }}>{(inv.discountRate / 100).toFixed(2)}%</div>
+                      <div
+                        style={{ color: textMuted, fontSize: '11px', textTransform: 'uppercase' }}
+                      >
+                        Discount
+                      </div>
+                      <div style={{ fontWeight: 600, marginTop: '2px' }}>
+                        {(inv.discountRate / 100).toFixed(2)}%
+                      </div>
                     </div>
                     <div style={{ gridColumn: 'span 2' }}>
-                      <div style={{ color: textMuted, fontSize: '11px', textTransform: 'uppercase' }}>Due Date</div>
-                      <div style={{ fontWeight: 500, marginTop: '2px' }}>{formatDate(inv.dueDate)}</div>
+                      <div
+                        style={{ color: textMuted, fontSize: '11px', textTransform: 'uppercase' }}
+                      >
+                        Due Date
+                      </div>
+                      <div style={{ fontWeight: 500, marginTop: '2px' }}>
+                        {formatDate(inv.dueDate)}
+                      </div>
                     </div>
                   </div>
 
-                  {/* Actions */}
-                  <div style={{ display: 'flex', gap: '8px', marginTop: '12px', borderTop: `1px solid ${border}`, paddingTop: '12px' }} onClick={(e) => e.stopPropagation()}>
+                  {/* Actions — onClick here only stops propagation to the card's
+                      click handler above; the real interactive elements are the
+                      <button>s inside. */}
+                  {/* eslint-disable-next-line jsx-a11y/no-static-element-interactions, jsx-a11y/click-events-have-key-events */}
+                  <div
+                    style={{
+                      display: 'flex',
+                      gap: '8px',
+                      marginTop: '12px',
+                      borderTop: `1px solid ${border}`,
+                      paddingTop: '12px',
+                    }}
+                    onClick={(e) => e.stopPropagation()}
+                  >
                     {inv.status === 'Pending' && role === 'lp' && onActionClick && (
                       <button
                         onClick={() => onActionClick(inv, 'fund')}

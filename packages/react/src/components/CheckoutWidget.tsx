@@ -1,6 +1,6 @@
-import React, { useState } from "react";
-import { ILNSdk, createFreighterSigner, ILN_TESTNET } from "@iln/sdk";
-import type { ILNSdkConfig } from "@iln/sdk";
+import React, { useState } from 'react';
+import { ILNSdk, createFreighterSigner, ILN_TESTNET } from '@iln/sdk';
+import type { ILNSdkConfig } from '@iln/sdk';
 
 export interface CheckoutWidgetProps {
   /** The invoice ID to fund (the checkout order). */
@@ -17,7 +17,7 @@ export interface CheckoutWidgetProps {
   onError?: (error: Error) => void;
 }
 
-type Status = "idle" | "connecting" | "submitting" | "success" | "error";
+type Status = 'idle' | 'connecting' | 'submitting' | 'success' | 'error';
 
 export function CheckoutWidget({
   orderId,
@@ -28,17 +28,17 @@ export function CheckoutWidget({
   onSuccess,
   onError,
 }: CheckoutWidgetProps) {
-  const [status, setStatus] = useState<Status>("idle");
+  const [status, setStatus] = useState<Status>('idle');
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
   async function handlePay() {
-    setStatus("connecting");
+    setStatus('connecting');
     setErrorMsg(null);
     try {
       const signer = createFreighterSigner();
       const funder = await signer.getPublicKey();
 
-      setStatus("submitting");
+      setStatus('submitting');
 
       const sdk = new ILNSdk({
         ...ILN_TESTNET,
@@ -48,11 +48,11 @@ export function CheckoutWidget({
 
       await sdk.fundInvoice({ funder, invoiceId: orderId });
 
-      setStatus("success");
+      setStatus('success');
       onSuccess?.(orderId, funder);
     } catch (err) {
       const error = err instanceof Error ? err : new Error(String(err));
-      setStatus("error");
+      setStatus('error');
       setErrorMsg(error.message);
       onError?.(error);
     }
@@ -61,34 +61,42 @@ export function CheckoutWidget({
   return (
     <div style={styles.container} role="region" aria-label="Checkout">
       <p style={styles.summary}>
-        Pay{" "}
+        Pay{' '}
         <strong>
           {amount} {token}
-        </strong>{" "}
+        </strong>{' '}
         to <code style={styles.address}>{merchantAddress.slice(0, 8)}…</code>
       </p>
 
-      {status === "error" && (
+      {status === 'error' && (
         <p style={styles.error} role="alert">
           {errorMsg}
         </p>
       )}
 
-      {status === "success" ? (
-        <p style={styles.success} role="status">Payment submitted ✓</p>
+      {status === 'success' ? (
+        <p style={styles.success} role="status">
+          Payment submitted ✓
+        </p>
       ) : (
         <button
           style={styles.button}
           onClick={handlePay}
-          disabled={status === "connecting" || status === "submitting"}
-          aria-busy={status === "connecting" || status === "submitting"}
-          aria-label={status === "connecting" ? "Connecting wallet" : status === "submitting" ? "Submitting payment" : `Pay ${amount} ${token}`}
+          disabled={status === 'connecting' || status === 'submitting'}
+          aria-busy={status === 'connecting' || status === 'submitting'}
+          aria-label={
+            status === 'connecting'
+              ? 'Connecting wallet'
+              : status === 'submitting'
+              ? 'Submitting payment'
+              : `Pay ${amount} ${token}`
+          }
         >
-          {status === "connecting"
-            ? "Connecting wallet…"
-            : status === "submitting"
-              ? "Submitting…"
-              : `Pay ${amount} ${token}`}
+          {status === 'connecting'
+            ? 'Connecting wallet…'
+            : status === 'submitting'
+            ? 'Submitting…'
+            : `Pay ${amount} ${token}`}
         </button>
       )}
     </div>
@@ -97,25 +105,25 @@ export function CheckoutWidget({
 
 const styles: Record<string, React.CSSProperties> = {
   container: {
-    fontFamily: "sans-serif",
-    border: "1px solid #e2e8f0",
+    fontFamily: 'sans-serif',
+    border: '1px solid #e2e8f0',
     borderRadius: 8,
-    padding: "1.25rem 1.5rem",
+    padding: '1.25rem 1.5rem',
     maxWidth: 360,
-    boxSizing: "border-box",
+    boxSizing: 'border-box',
   },
-  summary: { margin: "0 0 1rem", fontSize: 15 },
-  address: { fontSize: 13, background: "#f1f5f9", padding: "1px 4px", borderRadius: 4 },
+  summary: { margin: '0 0 1rem', fontSize: 15 },
+  address: { fontSize: 13, background: '#f1f5f9', padding: '1px 4px', borderRadius: 4 },
   button: {
-    width: "100%",
-    padding: "0.625rem 1rem",
-    background: "#6366f1",
-    color: "#fff",
-    border: "none",
+    width: '100%',
+    padding: '0.625rem 1rem',
+    background: '#6366f1',
+    color: '#fff',
+    border: 'none',
     borderRadius: 6,
     fontSize: 15,
-    cursor: "pointer",
+    cursor: 'pointer',
   },
-  success: { margin: 0, color: "#16a34a", fontWeight: 600 },
-  error: { margin: "0 0 0.75rem", color: "#dc2626", fontSize: 13 },
+  success: { margin: 0, color: '#16a34a', fontWeight: 600 },
+  error: { margin: '0 0 0.75rem', color: '#dc2626', fontSize: 13 },
 };

@@ -12,10 +12,10 @@
  *   scheduler.stop();
  */
 
-import type { InvoiceEvent } from "./types";
-import type { NotificationFrequency } from "./preferences";
-import { renderDigestEmail, buildDigestSubject } from "./templates/digest.template";
-import type { DigestItem } from "./templates/digest.template";
+import type { InvoiceEvent } from './types';
+import type { NotificationFrequency } from './preferences';
+import { renderDigestEmail, buildDigestSubject } from './templates/digest.template';
+import type { DigestItem } from './templates/digest.template';
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -26,7 +26,7 @@ export interface DigestEmailSender {
 export interface DigestUserConfig {
   stellarAddress: string;
   email: string;
-  frequency: "daily" | "weekly";
+  frequency: 'daily' | 'weekly';
   /** Preferred UTC hour (0–23) to send the digest. Default 8 (08:00 UTC). */
   sendHour?: number;
   /** Preferred day of week for weekly digests: 0=Sun … 6=Sat. Default 1=Mon. */
@@ -60,8 +60,8 @@ function eventToDigestItem(event: InvoiceEvent): DigestItem {
   };
 }
 
-function periodLabel(frequency: "daily" | "weekly", now: Date): string {
-  if (frequency === "daily") {
+function periodLabel(frequency: 'daily' | 'weekly', now: Date): string {
+  if (frequency === 'daily') {
     return now.toUTCString().slice(0, 16);
   }
   const weekStart = new Date(now);
@@ -76,7 +76,7 @@ function isDueNow(buffer: DigestBuffer, nowMs: number): boolean {
   const now = new Date(nowMs);
   const sendHour = config.sendHour ?? 8;
 
-  if (config.frequency === "daily") {
+  if (config.frequency === 'daily') {
     const msSinceFlush = nowMs - lastFlushedAt;
     // At least 20 h since last flush and it is the configured send hour
     return msSinceFlush >= 20 * 3600_000 && now.getUTCHours() === sendHour;
@@ -101,10 +101,7 @@ export class DigestScheduler {
   /** How often to check whether any digest is due (default: every minute). */
   private readonly tickMs: number;
 
-  constructor(
-    private readonly emailSender: DigestEmailSender,
-    tickMs = 60_000,
-  ) {
+  constructor(private readonly emailSender: DigestEmailSender, tickMs = 60_000) {
     this.tickMs = tickMs;
   }
 
@@ -149,7 +146,7 @@ export class DigestScheduler {
     if (this.timer) return;
     this.timer = setInterval(() => {
       this.tick(Date.now()).catch((err) => {
-        console.error("[digest] Tick error:", err);
+        console.error('[digest] Tick error:', err);
       });
     }, this.tickMs);
   }
@@ -225,14 +222,16 @@ export class DigestScheduler {
    * Convenience: determine whether a given NotificationFrequency should use
    * the digest scheduler (true) or immediate delivery (false).
    */
-  static isDigestFrequency(frequency: NotificationFrequency): frequency is "daily" | "weekly" {
-    return frequency === "daily" || frequency === "weekly";
+  static isDigestFrequency(frequency: NotificationFrequency): frequency is 'daily' | 'weekly' {
+    return frequency === 'daily' || frequency === 'weekly';
   }
 }
 
 export const digestScheduler = new DigestScheduler({
   async send(to, subject, html) {
     // Replace with your real Resend/email sender in index.ts startup
-    console.warn(`[digest] No email sender configured — would send to ${to}: ${subject} (${html.length} chars)`);
+    console.warn(
+      `[digest] No email sender configured — would send to ${to}: ${subject} (${html.length} chars)`
+    );
   },
 });

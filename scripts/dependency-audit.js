@@ -20,7 +20,7 @@ function getNpmAuditRoots(root) {
     'notifications',
     'packages/indexer',
     'packages/mock-backend',
-    'packages/sdk'
+    'packages/sdk',
   ].filter((dir) => fs.existsSync(path.join(base, dir, 'package-lock.json')));
 }
 
@@ -42,7 +42,10 @@ Environment:
 }
 
 function toReportName(label) {
-  return label.replace(/[^a-z0-9]+/gi, '-').replace(/^-|-$/g, '').toLowerCase();
+  return label
+    .replace(/[^a-z0-9]+/gi, '-')
+    .replace(/^-|-$/g, '')
+    .toLowerCase();
 }
 
 function runCommand(command, args, options = {}) {
@@ -52,7 +55,7 @@ function runCommand(command, args, options = {}) {
   const result = spawn(command, args, {
     cwd,
     encoding: 'utf8',
-    shell: process.platform === 'win32'
+    shell: process.platform === 'win32',
   });
 
   let output = `${result.stdout || ''}${result.stderr || ''}`;
@@ -72,14 +75,14 @@ function runCommand(command, args, options = {}) {
     return {
       ok: false,
       status: 1,
-      output
+      output,
     };
   }
 
   return {
     ok: result.status === 0,
     status: result.status || 0,
-    output
+    output,
   };
 }
 
@@ -89,7 +92,8 @@ function ensureReportDir(dir) {
 
 function runNpmAudit({ fix = false, report = false, _deps = {} } = {}) {
   const severity = _deps.severity || getSeverity();
-  const roots = _deps.npmAuditRoots != null ? _deps.npmAuditRoots : getNpmAuditRoots(_deps.repoRoot);
+  const roots =
+    _deps.npmAuditRoots != null ? _deps.npmAuditRoots : getNpmAuditRoots(_deps.repoRoot);
   const run = _deps.runCommand || runCommand;
 
   if (roots.length === 0) {
@@ -113,16 +117,17 @@ function runNpmAudit({ fix = false, report = false, _deps = {} } = {}) {
 
     console.log(`\nRunning npm ${args.join(' ')} in ${label}`);
     const reportDirPath = _deps.reportDir || reportDir;
-    const reportPath = report && !fix
-      ? path.join(reportDirPath, `npm-audit-${toReportName(label)}.json`)
-      : undefined;
+    const reportPath =
+      report && !fix
+        ? path.join(reportDirPath, `npm-audit-${toReportName(label)}.json`)
+        : undefined;
     const result = run('npm', args, { cwd, reportPath, _spawnSync: _deps._spawnSync });
 
     summary.push({
       project: label,
       command: `npm ${args.join(' ')}`,
       status: result.status,
-      report: reportPath ? path.relative(_deps.repoRoot || repoRoot, reportPath) : undefined
+      report: reportPath ? path.relative(_deps.repoRoot || repoRoot, reportPath) : undefined,
     });
 
     if (!result.ok) {
@@ -161,7 +166,7 @@ function runPnpmAudit({ report = false, _deps = {} } = {}) {
   const reportDirPath = _deps.reportDir || reportDir;
   const result = run('pnpm', args, {
     reportPath: report ? path.join(reportDirPath, 'pnpm-audit-workspace.json') : undefined,
-    _spawnSync: _deps._spawnSync
+    _spawnSync: _deps._spawnSync,
   });
 
   if (!result.ok) {
@@ -184,7 +189,7 @@ function runSnyk({ report = false, _deps = {} } = {}) {
   const reportDirPath = _deps.reportDir || reportDir;
   const result = run('npx', args, {
     reportPath: report ? path.join(reportDirPath, 'snyk-report.json') : undefined,
-    _spawnSync: _deps._spawnSync
+    _spawnSync: _deps._spawnSync,
   });
 
   if (!result.ok) {
@@ -200,7 +205,7 @@ function runLicenses({ report = false, _deps = {} } = {}) {
   const reportDirPath = _deps.reportDir || reportDir;
   const result = run('node', ['scripts/check-licenses.js'], {
     reportPath: report ? path.join(reportDirPath, 'license-report.txt') : undefined,
-    _spawnSync: _deps._spawnSync
+    _spawnSync: _deps._spawnSync,
   });
 
   if (!result.ok) {
@@ -228,7 +233,13 @@ function main() {
   const [, , command, ...flags] = process.argv;
   const fix = flags.includes('--fix');
 
-  if (!command || command === '--help' || command === '-h' || flags.includes('--help') || flags.includes('-h')) {
+  if (
+    !command ||
+    command === '--help' ||
+    command === '-h' ||
+    flags.includes('--help') ||
+    flags.includes('-h')
+  ) {
     usage();
     process.exit(command ? 0 : 1);
   }
@@ -283,5 +294,5 @@ module.exports = {
   getSeverity,
   getNpmAuditRoots,
   repoRoot,
-  reportDir
+  reportDir,
 };

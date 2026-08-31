@@ -42,15 +42,15 @@ export const StatsCard: React.FC<StatsCardProps> = ({
   const [resolvedTheme, setResolvedTheme] = useState<'light' | 'dark'>('light');
 
   useEffect(() => {
-    if (theme === 'system') {
-      const mq = window.matchMedia('(prefers-color-scheme: dark)');
-      setResolvedTheme(mq.matches ? 'dark' : 'light');
-      const handler = (e: MediaQueryListEvent) => setResolvedTheme(e.matches ? 'dark' : 'light');
-      mq.addEventListener('change', handler);
-      return () => mq.removeEventListener('change', handler);
-    } else {
+    if (theme !== 'system') {
       setResolvedTheme(theme);
+      return;
     }
+    const mq = window.matchMedia('(prefers-color-scheme: dark)');
+    setResolvedTheme(mq.matches ? 'dark' : 'light');
+    const handler = (e: MediaQueryListEvent) => setResolvedTheme(e.matches ? 'dark' : 'light');
+    mq.addEventListener('change', handler);
+    return () => mq.removeEventListener('change', handler);
   }, [theme]);
 
   const isDark = resolvedTheme === 'dark';
@@ -66,7 +66,9 @@ export const StatsCard: React.FC<StatsCardProps> = ({
 
   return (
     <>
-      <style dangerouslySetInnerHTML={{ __html: `
+      <style
+        dangerouslySetInnerHTML={{
+          __html: `
         @keyframes iln-pulse {
           0%, 100% { opacity: 1; }
           50% { opacity: .5; }
@@ -79,7 +81,9 @@ export const StatsCard: React.FC<StatsCardProps> = ({
           box-shadow: 0 10px 20px -5px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
           border-color: ${accentColor} !important;
         }
-      `}} />
+      `,
+        }}
+      />
       <div
         className={`iln-stats-card-hover ${className}`}
         style={{
@@ -98,57 +102,148 @@ export const StatsCard: React.FC<StatsCardProps> = ({
         }}
       >
         {/* Accent bar */}
-        <div style={{
-          position: 'absolute',
-          top: 0,
-          left: 0,
-          right: 0,
-          height: '3px',
-          background: accentColor,
-          borderTopLeftRadius: '12px',
-          borderTopRightRadius: '12px',
-        }} />
+        <div
+          style={{
+            position: 'absolute',
+            top: 0,
+            left: 0,
+            right: 0,
+            height: '3px',
+            background: accentColor,
+            borderTopLeftRadius: '12px',
+            borderTopRightRadius: '12px',
+          }}
+        />
 
         {loading ? (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', width: '100%' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <div style={{ width: '40%', height: '14px', background: skeletonBg, borderRadius: '4px', animation: 'iln-pulse 1.5s infinite' }} />
-              <div style={{ width: '20px', height: '20px', background: skeletonBg, borderRadius: '50%', animation: 'iln-pulse 1.5s infinite' }} />
+              <div
+                style={{
+                  width: '40%',
+                  height: '14px',
+                  background: skeletonBg,
+                  borderRadius: '4px',
+                  animation: 'iln-pulse 1.5s infinite',
+                }}
+              />
+              <div
+                style={{
+                  width: '20px',
+                  height: '20px',
+                  background: skeletonBg,
+                  borderRadius: '50%',
+                  animation: 'iln-pulse 1.5s infinite',
+                }}
+              />
             </div>
-            <div style={{ width: '70%', height: '28px', background: skeletonBg, borderRadius: '6px', animation: 'iln-pulse 1.5s infinite' }} />
-            <div style={{ width: '50%', height: '12px', background: skeletonBg, borderRadius: '4px', animation: 'iln-pulse 1.5s infinite' }} />
+            <div
+              style={{
+                width: '70%',
+                height: '28px',
+                background: skeletonBg,
+                borderRadius: '6px',
+                animation: 'iln-pulse 1.5s infinite',
+              }}
+            />
+            <div
+              style={{
+                width: '50%',
+                height: '12px',
+                background: skeletonBg,
+                borderRadius: '4px',
+                animation: 'iln-pulse 1.5s infinite',
+              }}
+            />
           </div>
         ) : (
           <>
             <div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '8px' }}>
-                <span style={{ fontSize: '13px', fontWeight: 500, color: textMuted, letterSpacing: '0.01em' }}>
+              <div
+                style={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'flex-start',
+                  marginBottom: '8px',
+                }}
+              >
+                <span
+                  style={{
+                    fontSize: '13px',
+                    fontWeight: 500,
+                    color: textMuted,
+                    letterSpacing: '0.01em',
+                  }}
+                >
                   {title}
                 </span>
                 {icon && <span style={{ color: textMuted, display: 'inline-flex' }}>{icon}</span>}
               </div>
-              <div style={{ fontSize: '28px', fontWeight: 700, color: textPrimary, letterSpacing: '-0.02em', margin: '4px 0' }}>
+              <div
+                style={{
+                  fontSize: '28px',
+                  fontWeight: 700,
+                  color: textPrimary,
+                  letterSpacing: '-0.02em',
+                  margin: '4px 0',
+                }}
+              >
                 {value}
               </div>
             </div>
 
             {(trend || description) && (
-              <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '8px', marginTop: '12px', fontSize: '12px' }}>
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  flexWrap: 'wrap',
+                  gap: '8px',
+                  marginTop: '12px',
+                  fontSize: '12px',
+                }}
+              >
                 {trend && (
-                  <span style={{
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    gap: '4px',
-                    padding: '2px 8px',
-                    borderRadius: '9999px',
-                    fontWeight: 600,
-                    color: trend.isPositive ? '#22c55e' : '#ef4444',
-                    background: trend.isPositive ? trendUpBg : trendDownBg,
-                  }}>
+                  <span
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '4px',
+                      padding: '2px 8px',
+                      borderRadius: '9999px',
+                      fontWeight: 600,
+                      color: trend.isPositive ? '#22c55e' : '#ef4444',
+                      background: trend.isPositive ? trendUpBg : trendDownBg,
+                    }}
+                  >
                     {trend.isPositive ? (
-                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"></polyline><polyline points="17 6 23 6 23 12"></polyline></svg>
+                      <svg
+                        width="12"
+                        height="12"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="3"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      >
+                        <polyline points="23 6 13.5 15.5 8.5 10.5 1 18"></polyline>
+                        <polyline points="17 6 23 6 23 12"></polyline>
+                      </svg>
                     ) : (
-                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="23 18 13.5 8.5 8.5 13.5 1 6"></polyline><polyline points="17 18 23 18 23 12"></polyline></svg>
+                      <svg
+                        width="12"
+                        height="12"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="3"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      >
+                        <polyline points="23 18 13.5 8.5 8.5 13.5 1 6"></polyline>
+                        <polyline points="17 18 23 18 23 12"></polyline>
+                      </svg>
                     )}
                     {trend.value}%
                   </span>

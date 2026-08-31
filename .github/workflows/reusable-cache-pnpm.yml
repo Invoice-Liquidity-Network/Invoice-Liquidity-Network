@@ -9,12 +9,12 @@ on:
         description: Node.js version for setup-node
         required: false
         type: string
-        default: "20"
+        default: '20'
       pnpm-version:
         description: pnpm version for pnpm/action-setup
         required: false
         type: string
-        default: "9.0.0"
+        default: '9.0.0'
       lockfile-path:
         description: Path to pnpm-lock.yaml (relative to repository root)
         required: false
@@ -47,7 +47,7 @@ permissions:
 jobs:
   cache:
     name: pnpm store cache
-    runs-on: namespace-profile-nursca
+    runs-on: ubuntu-latest
     outputs:
       cache-hit: ${{ steps.setup-pnpm.outputs.cache-hit }}
     steps:
@@ -63,4 +63,3 @@ jobs:
           lockfile-path: ${{ inputs.lockfile-path }}
           cache-key-prefix: ${{ inputs.cache-key-prefix }}
           install-args: ${{ inputs.install-dependencies == true && inputs.install-args || '' }}
-

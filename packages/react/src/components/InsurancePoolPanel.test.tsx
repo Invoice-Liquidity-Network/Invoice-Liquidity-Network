@@ -10,14 +10,23 @@ const LP_ADDRESS = 'GLPADDR00000000000000000000000000000000000000000000000';
 async function renderPanel(overrides: Record<string, unknown> = {}) {
   const mockClient = createMockILNClient({
     getLPCoverage: vi.fn().mockResolvedValue(mockLPCoverage),
-    getPoolBalance: vi.fn().mockResolvedValue({ totalPremiums: 10_000_000_000n, totalPayouts: 3_000_000_000n, reserveBalance: 7_000_000_000n, enrolledLps: 5, activeClaims: 3, pendingClaims: 2, approvedClaims: 1, rejectedClaims: 0 }),
+    getPoolBalance: vi.fn().mockResolvedValue({
+      totalPremiums: 10_000_000_000n,
+      totalPayouts: 3_000_000_000n,
+      reserveBalance: 7_000_000_000n,
+      enrolledLps: 5,
+      activeClaims: 3,
+      pendingClaims: 2,
+      approvedClaims: 1,
+      rejectedClaims: 0,
+    }),
     getInvoicesByStatus: vi.fn().mockResolvedValue([]),
     ...overrides,
   });
   return render(
     <TestWrapper client={mockClient}>
       <InsurancePoolPanel address={LP_ADDRESS} />
-    </TestWrapper>,
+    </TestWrapper>
   );
 }
 
@@ -51,7 +60,7 @@ describe('InsurancePoolPanel', () => {
     render(
       <TestWrapper client={mockClient}>
         <InsurancePoolPanel address={LP_ADDRESS} />
-      </TestWrapper>,
+      </TestWrapper>
     );
     await vi.waitFor(() => {
       expect(screen.getByText('Enroll Now')).toBeTruthy();

@@ -47,7 +47,7 @@ class InMemoryOracleCache implements OracleCacheReaderWriter {
   async set(
     key: string,
     response: OracleVerificationResponse,
-    ttlSeconds: number = DEFAULT_TTL_SECONDS,
+    ttlSeconds: number = DEFAULT_TTL_SECONDS
   ): Promise<void> {
     const generatedAtMs = Date.parse(response.generatedAt) || Date.now();
     this.entries.set(key, {
@@ -79,7 +79,7 @@ class RedisOracleCache implements OracleCacheReaderWriter {
   async set(
     key: string,
     response: OracleVerificationResponse,
-    ttlSeconds: number = DEFAULT_TTL_SECONDS,
+    ttlSeconds: number = DEFAULT_TTL_SECONDS
   ): Promise<void> {
     const payload: OracleCacheEntry = {
       key,
@@ -105,7 +105,7 @@ export interface ResolvedOracleCache {
 }
 
 export async function createOracleCache(
-  options: CreateOracleCacheOptions = {},
+  options: CreateOracleCacheOptions = {}
 ): Promise<ResolvedOracleCache> {
   if (!options.redisUrl) {
     return {

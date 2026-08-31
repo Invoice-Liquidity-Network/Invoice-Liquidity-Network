@@ -4,16 +4,16 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: "Release version (e.g., v1.2.0)"
+        description: 'Release version (e.g., v1.2.0)'
         required: true
         type: string
       dry_run:
-        description: "Dry run mode (skip actual tagging)"
+        description: 'Dry run mode (skip actual tagging)'
         required: false
         type: boolean
         default: false
       discord_webhook:
-        description: "Discord webhook URL for notification (leave empty to skip)"
+        description: 'Discord webhook URL for notification (leave empty to skip)'
         required: false
         type: string
 
@@ -24,7 +24,7 @@ permissions:
 
 jobs:
   coordinate-release:
-    runs-on: namespace-profile-nursca
+    runs-on: ubuntu-latest
     env:
       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       DRY_RUN: ${{ inputs.dry_run }}

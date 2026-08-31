@@ -28,7 +28,7 @@ export const NotificationCenter: React.FC = () => {
   useEffect(() => {
     // Connect to real-time notification service
     const eventSource = new EventSource('/api/notifications/stream');
-    
+
     eventSource.onmessage = (event) => {
       const newNotification = JSON.parse(event.data);
       setNotifications((prev) => [newNotification, ...prev]);
@@ -42,9 +42,7 @@ export const NotificationCenter: React.FC = () => {
   const markAsRead = async (id: string) => {
     try {
       await fetch(`/api/notifications/${id}/read`, { method: 'POST' });
-      setNotifications((prev) =>
-        prev.map((n) => (n.id === id ? { ...n, read: true } : n))
-      );
+      setNotifications((prev) => prev.map((n) => (n.id === id ? { ...n, read: true } : n)));
     } catch (error) {
       console.error('Failed to mark notification as read:', error);
     }
@@ -76,7 +74,12 @@ export const NotificationCenter: React.FC = () => {
       </button>
 
       {isOpen && (
-        <div className="notification-panel" id="notification-panel" role="region" aria-label="Notifications">
+        <div
+          className="notification-panel"
+          id="notification-panel"
+          role="region"
+          aria-label="Notifications"
+        >
           <div className="preferences" role="group" aria-label="Notification preferences">
             <h4 id="pref-heading">Preferences</h4>
             <label>
@@ -107,7 +110,12 @@ export const NotificationCenter: React.FC = () => {
 
           <div className="notifications-list" role="list" aria-label="Notification list">
             {Object.keys(groupedNotifications).map((category) => (
-              <div key={category} className="notification-group" role="group" aria-label={`${category} notifications`}>
+              <div
+                key={category}
+                className="notification-group"
+                role="group"
+                aria-label={`${category} notifications`}
+              >
                 <h4>{category}</h4>
                 {groupedNotifications[category]
                   .filter((n) => preferences[n.type as keyof NotificationPreferences] ?? true)

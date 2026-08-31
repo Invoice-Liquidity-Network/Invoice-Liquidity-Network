@@ -26,15 +26,15 @@
  * Non-terminal: Pending, PartiallyFunded, Funded, Appealed, Disputed.
  */
 export type InvoiceStatus =
-  | "Pending"         // Submitted, awaiting LP funding
-  | "PartiallyFunded" // One or more LPs contributed; not yet fully funded
-  | "Funded"          // Fully funded; awaiting payer settlement
-  | "Paid"            // Payer settled — TERMINAL
-  | "Defaulted"       // Due date passed, payer did not settle — TERMINAL
-  | "Appealed"        // Payer appealed a default; admin review pending
-  | "Disputed"        // Payer disputed before settlement; admin review pending
-  | "Expired"         // Never funded and due date passed — TERMINAL
-  | "Cancelled";      // Submitter cancelled a Pending invoice — TERMINAL
+  | 'Pending' // Submitted, awaiting LP funding
+  | 'PartiallyFunded' // One or more LPs contributed; not yet fully funded
+  | 'Funded' // Fully funded; awaiting payer settlement
+  | 'Paid' // Payer settled — TERMINAL
+  | 'Defaulted' // Due date passed, payer did not settle — TERMINAL
+  | 'Appealed' // Payer appealed a default; admin review pending
+  | 'Disputed' // Payer disputed before settlement; admin review pending
+  | 'Expired' // Never funded and due date passed — TERMINAL
+  | 'Cancelled'; // Submitter cancelled a Pending invoice — TERMINAL
 
 /**
  * @deprecated Use InvoiceStatus instead.
@@ -124,11 +124,11 @@ export interface ReputationScore {
 // =============================================================================
 
 export type ProposalStatus =
-  | "Active"    // Voting period ongoing
-  | "Passed"    // Voting complete, quorum and majority met; awaiting timelock
-  | "Rejected"  // Quorum not met or minority vote — TERMINAL
-  | "Executed"  // Successfully executed after timelock — TERMINAL
-  | "Vetoed";   // Blocked by admin veto — TERMINAL
+  | 'Active' // Voting period ongoing
+  | 'Passed' // Voting complete, quorum and majority met; awaiting timelock
+  | 'Rejected' // Quorum not met or minority vote — TERMINAL
+  | 'Executed' // Successfully executed after timelock — TERMINAL
+  | 'Vetoed'; // Blocked by admin veto — TERMINAL
 
 // =============================================================================
 // Governance — ProposalAction
@@ -137,10 +137,10 @@ export type ProposalStatus =
 
 /** Discriminated union of the four on-chain governance action variants. */
 export type ProposalAction =
-  | { type: "UpdateFeeRate";         value: number }  // u32 bps
-  | { type: "AddToken";              value: string }  // Address
-  | { type: "RemoveToken";           value: string }  // Address
-  | { type: "UpdateMaxDiscountRate"; value: number }; // u32 bps
+  | { type: 'UpdateFeeRate'; value: number } // u32 bps
+  | { type: 'AddToken'; value: string } // Address
+  | { type: 'RemoveToken'; value: string } // Address
+  | { type: 'UpdateMaxDiscountRate'; value: number }; // u32 bps
 
 // =============================================================================
 // Governance — GovernanceProposal
@@ -258,7 +258,7 @@ interface ContractEventBase {
 
 /** contract event: InvoiceSubmitted */
 export interface InvoiceSubmittedEvent extends ContractEventBase {
-  type: "InvoiceSubmitted";
+  type: 'InvoiceSubmitted';
   invoice: Invoice;
 }
 
@@ -267,13 +267,13 @@ export interface InvoiceSubmittedEvent extends ContractEventBase {
  * The contract emits "InvoiceSubmitted", not "InvoiceCreated".
  * This alias is kept for consumers that adopted the old name.
  */
-export type InvoiceCreatedEvent = Omit<InvoiceSubmittedEvent, "type"> & {
-  type: "InvoiceCreated";
+export type InvoiceCreatedEvent = Omit<InvoiceSubmittedEvent, 'type'> & {
+  type: 'InvoiceCreated';
 };
 
 /** contract event: InvoiceFunded (invoice-contract.md#event-schema) */
 export interface InvoiceFundedEvent extends ContractEventBase {
-  type: "InvoiceFunded";
+  type: 'InvoiceFunded';
   invoiceId: bigint;
   /** LP that contributed capital */
   funder: string;
@@ -288,7 +288,7 @@ export interface InvoiceFundedEvent extends ContractEventBase {
 
 /** contract event: InvoicePaid (invoice-contract.md#event-schema) */
 export interface InvoicePaidEvent extends ContractEventBase {
-  type: "InvoicePaid";
+  type: 'InvoicePaid';
   invoiceId: bigint;
   payer: string;
   /** Total amount paid by payer */
@@ -303,13 +303,13 @@ export interface InvoicePaidEvent extends ContractEventBase {
  * @deprecated Use InvoicePaidEvent.
  * The contract emits "InvoicePaid", not "InvoiceRepaid".
  */
-export type InvoiceRepaidEvent = Omit<InvoicePaidEvent, "type"> & {
-  type: "InvoiceRepaid";
+export type InvoiceRepaidEvent = Omit<InvoicePaidEvent, 'type'> & {
+  type: 'InvoiceRepaid';
 };
 
 /** contract event: InvoiceDefaulted (invoice-contract.md#event-schema) */
 export interface InvoiceDefaultedEvent extends ContractEventBase {
-  type: "InvoiceDefaulted";
+  type: 'InvoiceDefaulted';
   invoiceId: bigint;
   funder: string | null;
   amountRecovered: bigint;
@@ -317,13 +317,13 @@ export interface InvoiceDefaultedEvent extends ContractEventBase {
 
 /** contract event: ProposalCreated (governance-contract.md#event-schema) */
 export interface GovernanceProposalCreatedEvent extends ContractEventBase {
-  type: "ProposalCreated";
+  type: 'ProposalCreated';
   proposal: GovernanceProposal;
 }
 
 /** contract event: VoteCast (governance-contract.md#cast_vote) */
 export interface VoteCastEvent extends ContractEventBase {
-  type: "VoteCast";
+  type: 'VoteCast';
   proposalId: bigint;
   voter: string;
   /** true = vote for, false = vote against */
@@ -336,26 +336,26 @@ export interface VoteCastEvent extends ContractEventBase {
  * @deprecated Use VoteCastEvent.
  * The contract emits "VoteCast", not "ProposalVoted".
  */
-export type GovernanceProposalVotedEvent = Omit<VoteCastEvent, "type"> & {
-  type: "ProposalVoted";
+export type GovernanceProposalVotedEvent = Omit<VoteCastEvent, 'type'> & {
+  type: 'ProposalVoted';
 };
 
 /** contract event: ProposalExecuted (governance-contract.md#execute_proposal) */
 export interface GovernanceProposalExecutedEvent extends ContractEventBase {
-  type: "ProposalExecuted";
+  type: 'ProposalExecuted';
   proposalId: bigint;
   executor: string;
 }
 
 /** contract event: TokenAdded (invoice-contract.md#add_token) */
 export interface TokenAddedEvent extends ContractEventBase {
-  type: "TokenAdded";
+  type: 'TokenAdded';
   token: Token;
 }
 
 /** contract event: TokenRemoved (invoice-contract.md#remove_token) */
 export interface TokenRemovedEvent extends ContractEventBase {
-  type: "TokenRemoved";
+  type: 'TokenRemoved';
   token: Token;
 }
 
@@ -363,21 +363,21 @@ export interface TokenRemovedEvent extends ContractEventBase {
  * @deprecated Use TokenAddedEvent.
  * The contract emits "TokenAdded", not "TokenListed".
  */
-export type TokenListedEvent = Omit<TokenAddedEvent, "type"> & {
-  type: "TokenListed";
+export type TokenListedEvent = Omit<TokenAddedEvent, 'type'> & {
+  type: 'TokenListed';
 };
 
 /**
  * @deprecated Use TokenRemovedEvent.
  * The contract emits "TokenRemoved", not "TokenDelisted".
  */
-export type TokenDelistedEvent = Omit<TokenRemovedEvent, "type"> & {
-  type: "TokenDelisted";
+export type TokenDelistedEvent = Omit<TokenRemovedEvent, 'type'> & {
+  type: 'TokenDelisted';
 };
 
 /** contract event: ReputationUpdated (reputation-contract.md) */
 export interface ReputationUpdatedEvent extends ContractEventBase {
-  type: "ReputationUpdated";
+  type: 'ReputationUpdated';
   reputation: ReputationScore;
 }
 
@@ -386,7 +386,7 @@ export interface ReputationUpdatedEvent extends ContractEventBase {
  * for consumers that synthesise stats update notifications locally.
  */
 export interface ContractStatsUpdatedEvent extends ContractEventBase {
-  type: "ContractStatsUpdated";
+  type: 'ContractStatsUpdated';
   stats: ContractStats;
 }
 
@@ -395,7 +395,7 @@ export interface ContractStatsUpdatedEvent extends ContractEventBase {
  * for consumers that synthesise LP stats update notifications locally.
  */
 export interface LPStatsUpdatedEvent extends ContractEventBase {
-  type: "LPStatsUpdated";
+  type: 'LPStatsUpdated';
   address: string;
   stats: LPStats;
 }

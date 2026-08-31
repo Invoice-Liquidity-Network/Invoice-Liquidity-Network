@@ -50,7 +50,9 @@ export function useILN(): UseILNResult {
     setError(null);
 
     try {
-      const walletAddress = await (client as unknown as { connectWallet(): Promise<string> }).connectWallet();
+      const walletAddress = await (
+        client as unknown as { connectWallet(): Promise<string> }
+      ).connectWallet();
       setAddress(walletAddress);
       setIsConnected(true);
     } catch (err) {

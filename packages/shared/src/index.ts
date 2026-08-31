@@ -1,7 +1,7 @@
 export type {
   // Enums
   InvoiceStatus,
-  InvoiceState,         // @deprecated — alias for InvoiceStatus
+  InvoiceState, // @deprecated — alias for InvoiceStatus
   ProposalStatus,
   ProposalAction,
 
@@ -34,4 +34,4 @@ export type {
   GovernanceProposalVotedEvent,
   TokenListedEvent,
   TokenDelistedEvent,
-} from "./types";
+} from './types';

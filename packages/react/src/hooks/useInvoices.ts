@@ -11,7 +11,7 @@ export interface UseInvoicesOptions {
 }
 
 export interface UseInvoicesResult {
-  data: import('@invoice-liquidity/sdk').Invoice[] | undefined;
+  data: import('@iln/sdk').Invoice[] | undefined;
   totalCount: number;
   page: number;
   pageSize: number;
@@ -23,8 +23,7 @@ export interface UseInvoicesResult {
 
 const invoicesKeys = {
   all: ['invoices', 'paginated'] as const,
-  list: (address: string, role: InvoiceRole) =>
-    [...invoicesKeys.all, address, role] as const,
+  list: (address: string, role: InvoiceRole) => [...invoicesKeys.all, address, role] as const,
 };
 
 /**
@@ -58,16 +57,20 @@ export function useInvoices(address: string, options: UseInvoicesOptions = {}): 
   const { role = 'issuer', page = 1, pageSize = 10 } = options;
   const client = useILNClient();
 
-  const { data: allData, isLoading, error } = useQuery({
+  const {
+    data: allData,
+    isLoading,
+    error,
+  } = useQuery({
     queryKey: invoicesKeys.list(address, role),
     queryFn: async () => {
       switch (role) {
         case 'issuer':
           return client.getInvoicesByIssuer(address);
         case 'lp':
-          return client.getInvoicesByStatus(1);
+          return client.getInvoicesByStatus('Funded');
         case 'payer': {
-          const all = await client.getInvoicesByStatus(0);
+          const all = await client.getInvoicesByStatus('Pending');
           return all.filter((inv) => inv.payer === address);
         }
         default:
