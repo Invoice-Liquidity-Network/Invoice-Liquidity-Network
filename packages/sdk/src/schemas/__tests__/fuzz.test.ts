@@ -14,9 +14,7 @@ import { validateEvent, EventValidationError } from '../validateEvent';
 // ─── Generators ─────────────────────────────────────────────────────────────
 
 /** Generate a valid Stellar address string. */
-const addressArb = fc
-  .hexaString({ minLength: 56, maxLength: 56 })
-  .map((h) => 'G' + h);
+const addressArb = fc.hexaString({ minLength: 56, maxLength: 56 }).map((h) => 'G' + h);
 
 /** Generate a valid hex string for BytesN<32>. */
 const bytesN32HexArb = fc.hexaString({ minLength: 64, maxLength: 64 });
@@ -301,32 +299,26 @@ describe('Fuzz: malformed data is gracefully rejected', () => {
 
   it('rejects objects with missing type field', () => {
     fc.assert(
-      fc.property(
-        fc.dictionary(fc.string(), fc.anything()),
-        (data) => {
-          const result = validateEvent(data);
-          expect(result).toBeDefined();
-          expect(typeof result.ok).toBe('boolean');
-        }
-      ),
+      fc.property(fc.dictionary(fc.string(), fc.anything()), (data) => {
+        const result = validateEvent(data);
+        expect(result).toBeDefined();
+        expect(typeof result.ok).toBe('boolean');
+      }),
       { numRuns: 100 }
     );
   });
 
   it('rejects objects with unknown event type', () => {
     fc.assert(
-      fc.property(
-        fc.hexaString({ minLength: 5, maxLength: 20 }),
-        (typeName) => {
-          const event = { type: typeName, data: 'test' };
-          const result = validateEvent(event);
-          expect(result).toBeDefined();
-          expect(typeof result.ok).toBe('boolean');
-          if (!result.ok) {
-            expect(result.error.eventType).toBe(typeName);
-          }
+      fc.property(fc.hexaString({ minLength: 5, maxLength: 20 }), (typeName) => {
+        const event = { type: typeName, data: 'test' };
+        const result = validateEvent(event);
+        expect(result).toBeDefined();
+        expect(typeof result.ok).toBe('boolean');
+        if (!result.ok) {
+          expect(result.error.eventType).toBe(typeName);
         }
-      ),
+      }),
       { numRuns: 100 }
     );
   });

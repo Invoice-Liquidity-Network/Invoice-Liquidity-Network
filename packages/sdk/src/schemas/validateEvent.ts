@@ -7,7 +7,12 @@
 
 import { type ZodSchema, type ZodIssue } from 'zod';
 import { ILNError } from '../errors';
-import { EVENT_SCHEMAS, SCHEMA_VERSION, type EventTypeName, type ValidatedContractEvent } from './events';
+import {
+  EVENT_SCHEMAS,
+  SCHEMA_VERSION,
+  type EventTypeName,
+  type ValidatedContractEvent,
+} from './events';
 
 // ─── Error class ────────────────────────────────────────────────────────────
 
@@ -32,25 +37,33 @@ export class EventValidationError extends ILNError {
     message: string,
     options: {
       eventType?: string;
-      issues: ZodIssue[] | Array<{
-        path: (string | number)[];
-        message: string;
-        code: string;
-      }>;
+      issues:
+        | ZodIssue[]
+        | Array<{
+            path: (string | number)[];
+            message: string;
+            code: string;
+          }>;
       cause?: unknown;
       context?: Record<string, unknown>;
     }
   ) {
-    super(message, 'EVENT_VALIDATION_ERROR', 'The event data does not match the expected schema. Check the event payload structure and types.', {
-      docsUrl: 'https://github.com/Invoice-Liquidity-Network/Invoice-Liquidity-Network/blob/main/docs/errors.md#event_validation_error',
-      context: {
-        eventType: options.eventType,
-        issueCount: options.issues.length,
-        ...options.context,
-      },
-      retryable: false,
-      cause: options.cause,
-    });
+    super(
+      message,
+      'EVENT_VALIDATION_ERROR',
+      'The event data does not match the expected schema. Check the event payload structure and types.',
+      {
+        docsUrl:
+          'https://github.com/Invoice-Liquidity-Network/Invoice-Liquidity-Network/blob/main/docs/errors.md#event_validation_error',
+        context: {
+          eventType: options.eventType,
+          issueCount: options.issues.length,
+          ...options.context,
+        },
+        retryable: false,
+        cause: options.cause,
+      }
+    );
     Object.setPrototypeOf(this, new.target.prototype);
     this.eventType = options.eventType;
     this.issues = options.issues.map((issue) => ({
@@ -147,7 +160,8 @@ export function validateEvent(
         issues: [
           {
             path: [],
-            message: 'Expected a non-null object, received ' + (data === null ? 'null' : typeof data),
+            message:
+              'Expected a non-null object, received ' + (data === null ? 'null' : typeof data),
             code: 'invalid_type',
           },
         ],

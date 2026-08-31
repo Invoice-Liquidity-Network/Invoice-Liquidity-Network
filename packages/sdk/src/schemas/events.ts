@@ -51,9 +51,7 @@ const U32Schema = z.number().int().nonnegative();
 const BytesN32Schema = z
   .union([
     z.instanceof(Uint8Array),
-    z
-      .string()
-      .regex(/^[0-9a-fA-F]{64}$/, 'Must be a 64-character hex string'),
+    z.string().regex(/^[0-9a-fA-F]{64}$/, 'Must be a 64-character hex string'),
   ])
   .transform((val) => {
     if (val instanceof Uint8Array) return val;

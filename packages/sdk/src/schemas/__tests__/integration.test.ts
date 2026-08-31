@@ -368,9 +368,7 @@ describe('Integration: validation catches type errors', () => {
     expect(result.ok).toBe(false);
     if (!result.ok) {
       expect(result.error.issues.length).toBeGreaterThan(0);
-      const invoiceIdIssue = result.error.issues.find((i) =>
-        i.path.includes('invoiceId')
-      );
+      const invoiceIdIssue = result.error.issues.find((i) => i.path.includes('invoiceId'));
       expect(invoiceIdIssue).toBeDefined();
     }
   });
@@ -404,9 +402,7 @@ describe('Integration: validation catches type errors', () => {
 
     expect(result.ok).toBe(false);
     if (!result.ok) {
-      const statusIssue = result.error.issues.find((i) =>
-        i.path.includes('status')
-      );
+      const statusIssue = result.error.issues.find((i) => i.path.includes('status'));
       expect(statusIssue).toBeDefined();
     }
   });

@@ -551,17 +551,18 @@ export class RateLimitError extends ILNError {
  * Contract error code to error class mapping, derived from errors.rs patterns.
  * Maps numeric Soroban error codes to their string names and ILNError classes.
  */
-const CONTRACT_ERROR_MAP: Record<number, { name: string; Ctor: new (...args: any[]) => ILNError }> = {
-  1: { name: 'InvoiceNotFound', Ctor: InvoiceNotFoundError },
-  2: { name: 'InvoiceAlreadyFunded', Ctor: InvoiceAlreadyFundedError },
-  3: { name: 'InvoiceAlreadyPaid', Ctor: InvoiceAlreadyPaidError },
-  4: { name: 'InvoiceNotFunded', Ctor: InvoiceNotFundedError },
-  5: { name: 'Unauthorized', Ctor: UnauthorizedError },
-  7: { name: 'InvalidDiscountRate', Ctor: InvalidDiscountRateError },
-  8: { name: 'InvoiceExpired', Ctor: InvoiceExpiredError },
-  9: { name: 'InvoiceDefaulted', Ctor: InvoiceDefaultedError },
-  12: { name: 'FundingAmountExceeded', Ctor: FundingAmountExceededError },
-};
+const CONTRACT_ERROR_MAP: Record<number, { name: string; Ctor: new (...args: any[]) => ILNError }> =
+  {
+    1: { name: 'InvoiceNotFound', Ctor: InvoiceNotFoundError },
+    2: { name: 'InvoiceAlreadyFunded', Ctor: InvoiceAlreadyFundedError },
+    3: { name: 'InvoiceAlreadyPaid', Ctor: InvoiceAlreadyPaidError },
+    4: { name: 'InvoiceNotFunded', Ctor: InvoiceNotFundedError },
+    5: { name: 'Unauthorized', Ctor: UnauthorizedError },
+    7: { name: 'InvalidDiscountRate', Ctor: InvalidDiscountRateError },
+    8: { name: 'InvoiceExpired', Ctor: InvoiceExpiredError },
+    9: { name: 'InvoiceDefaulted', Ctor: InvoiceDefaultedError },
+    12: { name: 'FundingAmountExceeded', Ctor: FundingAmountExceededError },
+  };
 
 const CONTRACT_ERROR_PATTERNS: Array<{
   pattern: string;

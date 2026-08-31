@@ -175,6 +175,9 @@ export function createValidatedHandler(
     }
 
     // Dispatch to handler
-    await handlers[eventType]!(result.event as ContractEvent, result as ValidatedEvent & { ok: true });
+    await handlers[eventType]!(
+      result.event as ContractEvent,
+      result as ValidatedEvent & { ok: true }
+    );
   };
 }
