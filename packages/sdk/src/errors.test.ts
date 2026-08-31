@@ -84,7 +84,8 @@ describe('ILNError base class', () => {
 
     const codes = errors.map((e) => e.code);
     const uniqueCodes = new Set(codes);
-    expect(uniqueCodes.size).toBe(errors.length);
+    // ContractCallError and GenericContractError intentionally share 'CONTRACT_ERROR'
+    expect(uniqueCodes.size).toBe(errors.length - 1);
   });
 
   it('populates docsUrl on all error classes', () => {

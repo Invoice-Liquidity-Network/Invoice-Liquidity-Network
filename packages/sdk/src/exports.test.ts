@@ -11,10 +11,10 @@ describe('package.json exports', () => {
 
   it('has all required subpath exports', () => {
     const subpaths = Object.keys(pkg.exports).sort();
-    expect(subpaths).toEqual(['.', './errors', './events', './tokens', './xdr']);
+    expect(subpaths).toEqual(['.', './errors', './events', './schemas', './tokens', './xdr']);
   });
 
-  it.each(['.', './errors', './events', './tokens', './xdr'])(
+  it.each(['.', './errors', './events', './schemas', './tokens', './xdr'])(
     'subpath %s has import, require, and types conditions',
     (subpath) => {
       const entry = pkg.exports[subpath];
@@ -25,6 +25,10 @@ describe('package.json exports', () => {
         expect(entry.require).toBe('./dist/index.cjs');
         expect(entry.types).toBe('./dist/index.d.ts');
         expect(entry.browser).toBe('./dist/browser/index.js');
+      } else if (subpath === './schemas') {
+        expect(entry.import).toBe('./dist/schemas/index.js');
+        expect(entry.require).toBe('./dist/schemas/index.cjs');
+        expect(entry.types).toBe('./dist/schemas/index.d.ts');
       } else {
         const name = subpath.replace('./', '');
         expect(entry.import).toBe(`./dist/${name}.js`);
@@ -43,6 +47,12 @@ describe('package.json exports', () => {
     }
   );
 
+  it('subpath ./schemas maps to an existing source directory', () => {
+    const schemasDir = path.resolve(__dirname, 'schemas');
+    expect(fs.existsSync(schemasDir)).toBe(true);
+    expect(fs.existsSync(path.join(schemasDir, 'index.ts'))).toBe(true);
+  });
+
   it('has a build script that includes all entry points', () => {
     const buildScript = pkg.scripts.build;
     expect(buildScript).toContain('src/index.ts');
@@ -50,6 +60,7 @@ describe('package.json exports', () => {
     expect(buildScript).toContain('src/events.ts');
     expect(buildScript).toContain('src/errors.ts');
     expect(buildScript).toContain('src/xdr.ts');
+    expect(buildScript).toContain('src/schemas/index.ts');
   });
 });
 
