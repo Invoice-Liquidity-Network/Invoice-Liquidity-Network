@@ -113,6 +113,40 @@ export const mockPoolBalance = {
   rejectedClaims: 0,
 } as unknown as import('@iln/sdk').PoolBalance;
 
+export const mockDisputeRecord = {
+  invoiceId: 101n,
+  disputer: 'GPAYER123',
+  reasonCategory: 'quality',
+  reasonDescription: 'Work deliverable does not match specifications.',
+  evidenceCid: 'ipfs://bafybeigdyrzt5sfp7udm7hu76uh7y26nf3efuylqabf3oclgtqy55fbzdi',
+  evidence: [
+    {
+      id: 'ev-1',
+      submitter: 'GPAYER123',
+      role: 'payer',
+      evidenceCid: 'ipfs://bafybeigdyrzt5sfp7udm7hu76uh7y26nf3efuylqabf3oclgtqy55fbzdi',
+      description: 'Initial claim with specs sheet.',
+      submittedAt: 1735776000,
+    },
+  ],
+  filedAt: 1735776000,
+  evidenceDeadline: 1736380800,
+  autoResolveAt: 1736380800,
+  status: 'Pending',
+  resolvedAt: null,
+  resolvedBy: null,
+  resolutionDecision: null,
+  resolutionNotes: null,
+};
+
+export const mockDisputeAnalytics = {
+  totalDisputes: 4,
+  disputeRateByPayer: { GPAYER123: 0.2 },
+  averageResolutionTimeSeconds: 86400,
+  winRateByParty: { payer: 0.5, freelancer: 0.5 },
+  commonDisputeReasons: { quality: 2, timing: 1, amount: 1, other: 0 },
+};
+
 export function createMockILNClient(overrides: Partial<Record<string, unknown>> = {}): ILNClient {
   return {
     getInvoice: vi.fn().mockResolvedValue(mockInvoice),
@@ -140,6 +174,13 @@ export function createMockILNClient(overrides: Partial<Record<string, unknown>> 
     depositPremium: vi.fn().mockResolvedValue(undefined),
     submitClaim: vi.fn().mockResolvedValue(2n),
     reviewClaim: vi.fn().mockResolvedValue(undefined),
+    getDispute: vi.fn().mockResolvedValue(mockDisputeRecord),
+    listDisputes: vi.fn().mockResolvedValue([mockDisputeRecord]),
+    disputeInvoice: vi.fn().mockResolvedValue({ txHash: 'tx-hash-dispute' }),
+    submitDisputeEvidence: vi.fn().mockResolvedValue({ txHash: 'tx-hash-evidence' }),
+    resolveDispute: vi.fn().mockResolvedValue({ txHash: 'tx-hash-resolve' }),
+    autoResolveDispute: vi.fn().mockResolvedValue({ txHash: 'tx-hash-auto' }),
+    getDisputeAnalytics: vi.fn().mockResolvedValue(mockDisputeAnalytics),
     ...overrides,
   } as unknown as ILNClient;
 }
