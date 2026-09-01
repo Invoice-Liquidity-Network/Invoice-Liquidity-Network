@@ -3,6 +3,7 @@ import { Resend } from 'resend';
 import Twilio from 'twilio';
 import { CONFIG } from './config';
 import { createWebhookDeliveryLog, updateWebhookDeliveryLog } from './db';
+import { SSRFError, assertWebhookTargetPublic } from './ssrf';
 import type { NotificationPayload, Subscription, NotificationTrigger, Invoice } from './types';
 
 const resend = new Resend(CONFIG.resendApiKey);
@@ -19,6 +20,80 @@ function getTwilioClient() {
 function delay(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
+
+// ── Circuit Breaker ──────────────────────────────────────────────────────────
+
+type CircuitState = 'closed' | 'open' | 'half-open';
+
+interface CircuitBreakerEntry {
+  failures: number;
+  state: CircuitState;
+  lastFailureAt: number;
+  /** Timestamp (ms) when the circuit transitions from open to half-open. */
+  nextProbeAt: number;
+}
+
+const circuitBreakers = new Map<string, CircuitBreakerEntry>();
+
+const CIRCUIT_BREAKER_FAILURE_THRESHOLD = 5;
+const CIRCUIT_BREAKER_RESET_TIMEOUT_MS = 60_000;
+
+export function getCircuitBreakerState(destination: string): CircuitState {
+  const entry = circuitBreakers.get(destination);
+  if (!entry) return 'closed';
+  return entry.state;
+}
+
+export function resetCircuitBreakers(): void {
+  circuitBreakers.clear();
+}
+
+function recordCircuitSuccess(destination: string): void {
+  circuitBreakers.delete(destination);
+}
+
+function recordCircuitFailure(destination: string): CircuitState {
+  const now = Date.now();
+  const existing = circuitBreakers.get(destination);
+
+  if (!existing) {
+    circuitBreakers.set(destination, {
+      failures: 1,
+      state: 'closed',
+      lastFailureAt: now,
+      nextProbeAt: 0,
+    });
+    return 'closed';
+  }
+
+  existing.failures++;
+  existing.lastFailureAt = now;
+
+  if (existing.failures >= CIRCUIT_BREAKER_FAILURE_THRESHOLD) {
+    existing.state = 'open';
+    existing.nextProbeAt = now + CIRCUIT_BREAKER_RESET_TIMEOUT_MS;
+  }
+
+  return existing.state;
+}
+
+function shouldAllowRequest(destination: string): boolean {
+  const entry = circuitBreakers.get(destination);
+  if (!entry) return true;
+
+  if (entry.state === 'closed') return true;
+
+  if (entry.state === 'open' && Date.now() >= entry.nextProbeAt) {
+    entry.state = 'half-open';
+    return true;
+  }
+
+  if (entry.state === 'half-open') return true;
+
+  return false;
+}
+
+// ── Dead Letter Queue ────────────────────────────────────────────────────────
 
 export interface DeadLetterEntry {
   channel: 'email' | 'sms' | 'webhook';
@@ -99,36 +174,48 @@ export async function sendEmail(
   subscription: Subscription,
   payload: NotificationPayload
 ): Promise<void> {
-  await retryWithBackoff(
-    async () => {
-      await resend.emails.send({
-        from: CONFIG.resendFromEmail,
-        to: subscription.destination,
-        subject: payload.subject,
-        html: `<p>${payload.message}</p>
+  const destination = subscription.destination;
+  if (!shouldAllowRequest(destination)) {
+    console.warn(`[delivery] Circuit open for ${destination} — skipping email`);
+    return;
+  }
+
+  try {
+    await retryWithBackoff(
+      async () => {
+        await resend.emails.send({
+          from: CONFIG.resendFromEmail,
+          to: subscription.destination,
+          subject: payload.subject,
+          html: `<p>${payload.message}</p>
       <p><strong>Invoice #${payload.invoice.id}</strong></p>
       <p>Status: ${payload.invoice.status}</p>
       <p>Due date: ${new Date(payload.invoice.due_date * 1000).toISOString()}</p>`,
-      });
-    },
-    {
-      label: `email to ${subscription.destination}`,
-      onDeadLetter: (lastError) => {
-        deadLetterQueue.push({
-          channel: 'email',
-          destination: subscription.destination,
-          subscriptionId: subscription.id,
-          trigger: payload.trigger,
-          invoice: payload.invoice,
-          subject: payload.subject,
-          message: payload.message,
-          lastError,
-          attempts: CONFIG.maxWebhookRetry,
-          timestamp: Date.now(),
         });
       },
-    }
-  );
+      {
+        label: `email to ${subscription.destination}`,
+        onDeadLetter: (lastError) => {
+          deadLetterQueue.push({
+            channel: 'email',
+            destination: subscription.destination,
+            subscriptionId: subscription.id,
+            trigger: payload.trigger,
+            invoice: payload.invoice,
+            subject: payload.subject,
+            message: payload.message,
+            lastError,
+            attempts: CONFIG.maxWebhookRetry,
+            timestamp: Date.now(),
+          });
+        },
+      }
+    );
+    recordCircuitSuccess(destination);
+  } catch {
+    recordCircuitFailure(destination);
+    throw new Error(`Circuit breaker: email delivery to ${destination} failed`);
+  }
 }
 
 function getWebhookSignature(secret: string, body: string): string {
@@ -141,6 +228,24 @@ export async function sendWebhook(
   attempt = 1,
   logId?: number
 ): Promise<void> {
+  const destination = subscription.destination;
+  if (!shouldAllowRequest(destination)) {
+    console.warn(`[delivery] Circuit open for ${destination} — skipping webhook`);
+    deadLetterQueue.push({
+      channel: 'webhook',
+      destination,
+      subscriptionId: subscription.id,
+      trigger: payload.trigger,
+      invoice: payload.invoice,
+      subject: payload.subject,
+      message: payload.message,
+      lastError: 'Circuit breaker open',
+      attempts: attempt,
+      timestamp: Date.now(),
+    });
+    return;
+  }
+
   const body = JSON.stringify({
     trigger: payload.trigger,
     actor: payload.actor,
@@ -167,6 +272,28 @@ export async function sendWebhook(
 
   let response;
   let errorMessage: string | null = null;
+
+  try {
+    await assertWebhookTargetPublic(subscription.destination);
+  } catch (error: unknown) {
+    const reason =
+      error instanceof SSRFError ? error.message : 'Destination URL rejected as unsafe';
+    console.error(`[delivery] Refusing unsafe webhook target for ${subscription.id}: ${reason}`);
+    await updateWebhookDeliveryLog(id, { status: 'failed', attempts: attempt, error: reason });
+    deadLetterQueue.push({
+      channel: 'webhook',
+      destination: subscription.destination,
+      subscriptionId: subscription.id,
+      trigger: payload.trigger,
+      invoice: payload.invoice,
+      subject: payload.subject,
+      message: payload.message,
+      lastError: reason,
+      attempts: attempt,
+      timestamp: Date.now(),
+    });
+    return;
+  }
 
   try {
     const headers: Record<string, string> = {
@@ -201,6 +328,7 @@ export async function sendWebhook(
       await updateWebhookDeliveryLog(id, {
         status: 'success',
       });
+      recordCircuitSuccess(destination);
       return;
     }
 
@@ -228,6 +356,7 @@ export async function sendWebhook(
       attempts: attempt,
       timestamp: Date.now(),
     });
+    recordCircuitFailure(destination);
     return;
   }
 
@@ -254,6 +383,12 @@ export async function sendSms(
     throw new Error('Twilio credentials not configured');
   }
 
+  const destination = subscription.destination;
+  if (!shouldAllowRequest(destination)) {
+    console.warn(`[delivery] Circuit open for ${destination} — skipping SMS`);
+    return;
+  }
+
   const message = [
     payload.subject,
     '',
@@ -262,32 +397,38 @@ export async function sendSms(
     `Due date: ${new Date(payload.invoice.due_date * 1000).toISOString()}`,
   ].join('\n');
 
-  await retryWithBackoff(
-    async () => {
-      await client.messages.create({
-        to: subscription.destination,
-        from: CONFIG.twilioFromNumber,
-        body: message,
-      });
-    },
-    {
-      label: `sms to ${subscription.destination}`,
-      onDeadLetter: (lastError) => {
-        deadLetterQueue.push({
-          channel: 'sms',
-          destination: subscription.destination,
-          subscriptionId: subscription.id,
-          trigger: payload.trigger,
-          invoice: payload.invoice,
-          subject: payload.subject,
-          message: payload.message,
-          lastError,
-          attempts: CONFIG.maxWebhookRetry,
-          timestamp: Date.now(),
+  try {
+    await retryWithBackoff(
+      async () => {
+        await client.messages.create({
+          to: subscription.destination,
+          from: CONFIG.twilioFromNumber,
+          body: message,
         });
       },
-    }
-  );
+      {
+        label: `sms to ${subscription.destination}`,
+        onDeadLetter: (lastError) => {
+          deadLetterQueue.push({
+            channel: 'sms',
+            destination: subscription.destination,
+            subscriptionId: subscription.id,
+            trigger: payload.trigger,
+            invoice: payload.invoice,
+            subject: payload.subject,
+            message: payload.message,
+            lastError,
+            attempts: CONFIG.maxWebhookRetry,
+            timestamp: Date.now(),
+          });
+        },
+      }
+    );
+    recordCircuitSuccess(destination);
+  } catch {
+    recordCircuitFailure(destination);
+    throw new Error(`Circuit breaker: SMS delivery to ${destination} failed`);
+  }
 }
 
 export async function deliverNotification(

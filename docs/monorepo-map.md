@@ -38,7 +38,7 @@ Every workspace in the ILN monorepo, its purpose, status, and key dependencies.
 | `packages/mock-backend/` | `@iln/mock-backend` | Next | In-memory mock backend for frontend development without a live Stellar node. | `@iln/shared` |
 | `packages/react/` | `@iln/react` | Next | React hooks for ILN contract data fetching. Consumed by dashboard and examples. | `@iln/shared` |
 | `packages/opentelemetry/` | `@iln/opentelemetry` | Experimental | OpenTelemetry instrumentation for the ILN SDK. | `@iln/sdk` |
-| `packages/upgrade-tests/` | `@iln/upgrade-tests` | Experimental | Upgrade compatibility tests for Soroban contract migrations. | — |
+| `packages/upgrade-tests/` | `@iln/upgrade-tests` | Stable | Upgrade compatibility tests for Soroban contract migrations. | `@iln/shared`, `@iln/sdk` |
 | `packages/scripts/` | `@iln/scripts` | — | Internal dev/CI scripts. Not published. | — |
 
 ---
@@ -68,6 +68,7 @@ sdk/                      # Foundation: types, contract clients, helpers
 ├── packages/react/       # React hooks → consumed by dashboard/examples
 ├── packages/mock-backend/# Standalone mock → consumed by frontend dev
 ├── packages/opentelemetry/# Optional instrumentation wrapper
+├── packages/upgrade-tests/# Upgrade compatibility test harness & test suites
 ├── cli/                  # The canonical CLI → uses @iln/sdk
 ├── indexer/              # Production indexer service → uses @iln/sdk, @iln/indexer
 └── notifications/        # Notification service → uses @iln/sdk
@@ -87,6 +88,7 @@ for full detail.
 | 2026-08-25 | `packages/cli` vs `cli/` | **Resolved: consolidated into `cli/`.** `packages/cli`'s five unique commands (`watch`, `export`, `stats`, `reputation get`, `network switch`) were ported into `cli/` with parity tests; `packages/cli` was then removed. See [cli-vs-cli-next.md](cli-vs-cli-next.md). |
 | 2026-08-25 | `packages/sdk` (`@iln/sdk-next`) vs `sdk/` | **Plan: becomes `@iln/sdk` v2.** `packages/sdk` stays on its own package name and release cadence while it stabilizes; once its API surface is considered final it ships as a major version bump to `@iln/sdk` itself (not a permanent second package), with `docs/sdk-next-migration.md` promoted to the release's migration guide. No fixed date is set for that cutover yet — it is gated on `packages/sdk` reaching feature parity with `sdk/`'s contract surface, not a calendar date. In the meantime `docs/sdk-next-migration.md` is kept accurate against `packages/sdk`'s actual exports (see that file's changelog note). |
 | 2026-08-25 | `docs/` vs `packages/docs/` | **Reversed a premature "Deprecated" label.** `packages/docs/content/` currently covers 16 of `docs/`'s 54 `.md` files (see [DOCS_SETUP.md](DOCS_SETUP.md)'s migration checklist). `docs/` remains the content source of record and is not deprecated until that migration is complete; `packages/docs/` remains canonical only for *where the site is deployed from* and *for the content it already has*. |
+| 2026-08-31 | `packages/upgrade-tests` | **Completed and promoted to Stable.** Implemented full contract in-place upgrade simulation harness, storage layout integrity and bulk migration tests, SDK forward/backward compatibility checks, authorization enforcement, and emergency circuit breaker preservation test suites (#930). |
 
 ---
 

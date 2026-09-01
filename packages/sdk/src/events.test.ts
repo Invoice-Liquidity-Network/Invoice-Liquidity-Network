@@ -8,6 +8,9 @@ import {
   parseInvoiceCancelledEvent,
   parseInvoiceExpiredEvent,
   parseInvoiceDisputedEvent,
+  parseDisputeEvidenceSubmittedEvent,
+  parseDisputeResolvedEvent,
+  parseDisputeAutoResolvedEvent,
   parseReputationUpdatedEvent,
   parseContractPausedEvent,
   parseTokenAddedEvent,
@@ -182,6 +185,58 @@ describe('parseInvoiceDisputedEvent', () => {
     expect(event!.type).toBe('InvoiceDisputed');
     expect(event!.invoiceId).toBe(INVOICE_ID);
     expect(event!.disputer).toBe(TEST_DISPUTER);
+    expect(event!.timestamp).toBe(TIMESTAMP);
+  });
+});
+
+describe('parseDisputeEvidenceSubmittedEvent', () => {
+  it('parses a valid DisputeEvidenceSubmitted event', () => {
+    const evidenceCid = 'ipfs://bafybeigdyrzt5sfp7udm7hu76uh7y26nf3efuylqabf3oclgtqy55fbzdi';
+    const raw = makeRawEvent(
+      [sym('dispute_evidence_submitted'), u64(INVOICE_ID), addressScVal(TEST_DISPUTER)],
+      valueWith({ evidence_cid: nativeToScVal(evidenceCid, { type: 'string' }) })
+    );
+
+    const event = parseDisputeEvidenceSubmittedEvent(raw);
+    expect(event).not.toBeNull();
+    expect(event!.type).toBe('DisputeEvidenceSubmitted');
+    expect(event!.invoiceId).toBe(INVOICE_ID);
+    expect(event!.submitter).toBe(TEST_DISPUTER);
+    expect(event!.evidenceCid).toBe(evidenceCid);
+    expect(event!.timestamp).toBe(TIMESTAMP);
+  });
+});
+
+describe('parseDisputeResolvedEvent', () => {
+  it('parses a valid DisputeResolved event', () => {
+    const raw = makeRawEvent(
+      [sym('dispute_resolved'), u64(INVOICE_ID), addressScVal(TEST_PUBLIC_KEY)],
+      valueWith({
+        decision: nativeToScVal('favor_freelancer', { type: 'string' }),
+        notes: nativeToScVal('Arbitration completed', { type: 'string' }),
+      })
+    );
+
+    const event = parseDisputeResolvedEvent(raw);
+    expect(event).not.toBeNull();
+    expect(event!.type).toBe('DisputeResolved');
+    expect(event!.invoiceId).toBe(INVOICE_ID);
+    expect(event!.resolver).toBe(TEST_PUBLIC_KEY);
+    expect(event!.decision).toBe('favor_freelancer');
+    expect(event!.notes).toBe('Arbitration completed');
+    expect(event!.timestamp).toBe(TIMESTAMP);
+  });
+});
+
+describe('parseDisputeAutoResolvedEvent', () => {
+  it('parses a valid DisputeAutoResolved event', () => {
+    const raw = makeRawEvent([sym('dispute_auto_resolved'), u64(INVOICE_ID)], valueWith({}));
+
+    const event = parseDisputeAutoResolvedEvent(raw);
+    expect(event).not.toBeNull();
+    expect(event!.type).toBe('DisputeAutoResolved');
+    expect(event!.invoiceId).toBe(INVOICE_ID);
+    expect(event!.decision).toBe('favor_freelancer');
     expect(event!.timestamp).toBe(TIMESTAMP);
   });
 });
@@ -368,15 +423,18 @@ describe('parseContractEvent', () => {
 });
 
 describe('supportedEventTypes', () => {
-  it('returns all 10 event type names', () => {
+  it('returns all 13 event type names', () => {
     const types = supportedEventTypes();
-    expect(types).toHaveLength(10);
+    expect(types).toHaveLength(13);
     expect(types).toContain('InvoiceSubmitted');
     expect(types).toContain('InvoiceFunded');
     expect(types).toContain('InvoicePaid');
     expect(types).toContain('InvoiceCancelled');
     expect(types).toContain('InvoiceExpired');
     expect(types).toContain('InvoiceDisputed');
+    expect(types).toContain('DisputeEvidenceSubmitted');
+    expect(types).toContain('DisputeResolved');
+    expect(types).toContain('DisputeAutoResolved');
     expect(types).toContain('ReputationUpdated');
     expect(types).toContain('ContractPaused');
     expect(types).toContain('TokenAdded');

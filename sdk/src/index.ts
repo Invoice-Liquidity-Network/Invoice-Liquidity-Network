@@ -11,6 +11,7 @@ export * from './invoice-status';
 export * from './signers';
 export * from './types';
 export * from './timeouts';
+export * from './backoff';
 export { ContractError } from './generated/types';
 export * from './notifications';
 export * from './analytics';

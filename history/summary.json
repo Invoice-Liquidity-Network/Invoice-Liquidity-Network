@@ -54,6 +54,70 @@
     "dailyMinutesDown": {}
   },
   {
+    "name": "ILN Indexer Service",
+    "url": "https://indexer.iln.finance/health",
+    "icon": "https://icons.duckduckgo.com/ip3/indexer.iln.finance.ico",
+    "slug": "iln-indexer-service",
+    "status": "down",
+    "uptime": "99.31%",
+    "uptimeDay": "99.31%",
+    "uptimeWeek": "99.31%",
+    "uptimeMonth": "99.31%",
+    "uptimeYear": "99.31%",
+    "time": 0,
+    "timeDay": 0,
+    "timeWeek": 0,
+    "timeMonth": 0,
+    "timeYear": 0,
+    "dailyMinutesDown": {
+      "2026-08-30": 2
+    }
+  },
+  {
+    "name": "ILN Notifications Service",
+    "url": "https://notifications.iln.finance/health",
+    "icon": "https://icons.duckduckgo.com/ip3/notifications.iln.finance.ico",
+    "slug": "iln-notifications-service",
+    "status": "down",
+    "uptime": "99.46%",
+    "uptimeDay": "99.46%",
+    "uptimeWeek": "99.46%",
+    "uptimeMonth": "99.46%",
+    "uptimeYear": "99.46%",
+    "time": 0,
+    "timeDay": 0,
+    "timeWeek": 0,
+    "timeMonth": 0,
+    "timeYear": 0,
+    "dailyMinutesDown": {
+      "2026-08-30": 2
+    }
+  },
+  {
+    "name": "ILN Oracle Service",
+    "url": "https://oracle.iln.finance/v1/health",
+    "icon": "https://icons.duckduckgo.com/ip3/oracle.iln.finance.ico",
+    "slug": "iln-oracle-service",
+    "status": "down",
+    "uptime": "0.00%",
+    "uptimeDay": "0.00%",
+    "uptimeWeek": "0.00%",
+    "uptimeMonth": "0.00%",
+    "uptimeYear": "0.00%",
+    "time": 0,
+    "timeDay": 0,
+    "timeWeek": 0,
+    "timeMonth": 0,
+    "timeYear": 0,
+    "dailyMinutesDown": {
+      "2026-08-30": 1427,
+      "2026-08-29": 1440,
+      "2026-08-28": 1440,
+      "2026-08-27": 1440,
+      "2026-08-26": 468
+    }
+  },
+  {
     "name": "ILN Frontend",
     "url": "https://iln.finance",
     "icon": "https://icons.duckduckgo.com/ip3/iln.finance.ico",
@@ -95,18 +159,22 @@
     "icon": "https://icons.duckduckgo.com/ip3/oracle.iln.finance.ico",
     "slug": "iln-oracle-service",
     "status": "down",
-    "uptime": "74.78%",
-    "uptimeDay": "74.78%",
-    "uptimeWeek": "74.78%",
-    "uptimeMonth": "74.78%",
-    "uptimeYear": "74.78%",
+    "uptime": "0.00%",
+    "uptimeDay": "0.00%",
+    "uptimeWeek": "0.00%",
+    "uptimeMonth": "0.00%",
+    "uptimeYear": "0.00%",
     "time": 0,
     "timeDay": 0,
     "timeWeek": 0,
     "timeMonth": 0,
     "timeYear": 0,
     "dailyMinutesDown": {
-      "2026-08-26": 0
+      "2026-08-30": 1427,
+      "2026-08-29": 1440,
+      "2026-08-28": 1440,
+      "2026-08-27": 1440,
+      "2026-08-26": 468
     }
   }
 ]

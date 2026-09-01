@@ -21,12 +21,25 @@ SDK (builds XDR, validates address format, enforces signer identity match)
   ▼
 Soroban RPC Node (simulates, prepares, and forwards the transaction)
   │
+  ├───────────────▶ Oracle Service (only on the fund_invoice() path when
+  │                 require_oracle_verification: true — off-chain payer
+  │                 verification; gates whether funding proceeds)
+  │
   ▼
 Stellar Network / Soroban Contract (cryptographically verifies signature, enforces rules)
   │  emits contract events
   ▼
 Indexer (read-only event mirror, eventually consistent)
+  │  read by dashboards, oracle-service history lookups, and…
+  ▼
+Notifications (read-only event consumer — email / webhook / SMS / WebSocket)
 ```
+
+The oracle-service hop is conditional: it only enters the trust chain for
+`fund_invoice()` calls made with `require_oracle_verification: true`. For every
+other flow (`submit_invoice`, `mark_paid`, `claim_default`, all reads) the chain
+is exactly the one documented above. Notifications is never on a write path — it
+observes the same contract events the indexer does and cannot influence them.
 
 **What breaks at each hop if that hop is compromised:**
 
@@ -35,8 +48,10 @@ Indexer (read-only event mirror, eventually consistent)
 | User's key (stolen or phished) | Attacker can submit, fund, pay, or claim default on behalf of the user |
 | SDK configuration (`rpcUrl`, `contractId`, `networkPassphrase`) | SDK may target a malicious contract or a different network |
 | Soroban RPC node | Simulation results can be forged; prepared XDR may differ from simulated XDR |
+| Oracle service (`oracle-service/`, `fund_invoice()` with `require_oracle_verification: true` only) | A compromised oracle can **falsely verify a fraudulent payer** — letting an LP fund an invoice the fraud heuristics should have blocked — or **falsely block a legitimate payer**, denying funding. It cannot move funds itself, forge a signature, or alter contract state; its only power is the pass/fail verdict the caller uses as a funding gate. A stale or offline oracle fails safe toward rejection (see [oracle-service.md](./oracle-service.md) §"Cache staleness" and the `unknown` vs `unverified` distinction). |
 | Network / contract | Protocol-level invariants are violated; out of scope for the SDK |
 | Indexer | Dashboards show stale or incorrect state; canonical state on-chain is unaffected |
+| Notifications (`notifications/`) | A compromised notification service can **send misleading, missing, or spoofed notifications** (e.g. a fake "invoice paid" email, or suppression of a real default alert). It **cannot move funds, change invoice state, or influence the contract, RPC node, or oracle** — this is the key distinction from the RPC and contract hops, which sit on the write path. Its blast radius is limited to what a recipient believes has happened; canonical state remains on-chain and independently verifiable via the SDK's read methods or a second indexer. Webhook payloads are HMAC-SHA256 signed with a per-subscription secret so a downstream receiver can still detect tampering — see [notifications.md](./notifications.md). |
 
 ---
 
@@ -83,6 +98,7 @@ The SDK provides its stated security properties only when all of the following a
   - Any off-chain evidence, price feeds, or external validation required by business logic is outside the SDK.
   - The SDK only packages the transaction and relies on the contract, off-chain oracle service (`oracle-service/`), and network to evaluate observable state.
   - For detailed trust boundaries and honest scoping regarding what the oracle verifies (on-chain payment behavior, default frequency, rapid succession fraud signals) versus what it does not verify (real-world corporate entity existence, legal KYB), refer to [docs/oracle-service.md](./oracle-service.md).
+  - The oracle-service hardening work — asymmetric cache TTL, explicit cache invalidation on new indexed activity, `unknown` vs `unverified` handling so a provider outage cannot silently degrade verdicts, rate limiting, and the Prometheus alert set (`OracleFraudFlagRateHigh`, `OracleAllVerificationsRejected`, `OracleNoVerifications`, …) — is documented in [docs/oracle-service.md](./oracle-service.md). Integrators relying on `require_oracle_verification: true` should read its "Cache staleness" and "Monitoring" sections, because the oracle's failure modes become part of your funding path's trust surface.
 
 - **Contract policy rules and token allowlists**
   - The SDK does not independently maintain the contract token allowlist or business rule enforcement.
@@ -224,6 +240,68 @@ If your custom signer returns a public key from one keypair but signs with anoth
 
 ---
 
+## Verifying SDK Provenance
+
+Supply chain attacks targeting npm account takeovers or compromised credentials pose a major threat to DeFi integrators. Even if a publisher account is compromised on npm, cryptographic build provenance guarantees that the package was generated directly from this repository's audited source code via GitHub Actions OIDC and Sigstore, rather than uploaded from an unauthorized developer machine.
+
+Follow these verification steps when installing or upgrading `@iln/sdk` (or `@iln/sdk-next`).
+
+### 1. Verify npm Registry Attestation
+
+Inspect the provenance attestation recorded on the npm registry:
+
+```bash
+# Inspect the provenance metadata for the target release:
+npm view @iln/sdk@<version> --json | jq '.provenance'
+
+# Or query the npm attestations endpoint directly:
+curl -s https://registry.npmjs.org/-/npm/v1/attestations/@iln/sdk@<version> | jq
+```
+
+Verify that the output contains the following fields:
+- **Repository:** `Invoice-Liquidity-Network/Invoice-Liquidity-Network` (or `https://github.com/Invoice-Liquidity-Network/Invoice-Liquidity-Network`)
+- **Workflow:** `.github/workflows/sdk-release.yml` or `.github/workflows/release.yml`
+- **Commit SHA:** Matches the official release tag on GitHub.
+
+### 2. Cryptographic Attestation Verification via GitHub CLI
+
+Use GitHub CLI's `gh attestation verify` to cryptographically validate the Sigstore bundle and SLSA Level 3 build provenance:
+
+```bash
+gh attestation verify \
+  "$(npm pack @iln/sdk@<version> --silent)" \
+  --repo Invoice-Liquidity-Network/Invoice-Liquidity-Network
+```
+
+**Expected verification output:**
+- Signer: `https://token.actions.githubusercontent.com`
+- Source repository: `Invoice-Liquidity-Network/Invoice-Liquidity-Network`
+- Status: `Loaded digest ... from ... Verified against expected repository`
+
+If verification fails or the repository does not match, **do not install or execute the package**, and immediately notify the security team at `security@iln.finance`.
+
+### 3. Verify Tarball Checksum Against GitHub Releases
+
+Every official release publishes a canonical `checksums.txt` file on GitHub Releases. Compare your locally downloaded archive hash against the published digest:
+
+```bash
+# Generate the SHA-256 hash of the packed npm archive:
+npm pack @iln/sdk@<version> --silent | xargs sha256sum
+
+# Compare the hash against the checksums on:
+# https://github.com/Invoice-Liquidity-Network/Invoice-Liquidity-Network/releases/tag/v<version>
+```
+
+### 4. Continuous Verification in CI Pipelines
+
+Integrators should automate provenance and signature verification in their CI/CD deployment pipelines:
+
+- **Enforce Immutable Lockfiles:** Always use `pnpm install --frozen-lockfile` or `npm ci` in production builds.
+- **Audit Registry Signatures:** Run `npm audit signatures` as part of your CI dependency check stage.
+- **Dependency Review Action:** In GitHub Actions, add the `actions/dependency-review-action` to flag unverified package additions in pull requests.
+
+---
+
 ## SDK-Specific Threat Model
 
 The following threats are specific to SDK integration. For the full protocol threat model — including frontend, API, indexer, and governance surface — see [threat-model.md](./threat-model.md).
@@ -235,8 +313,8 @@ The following threats are specific to SDK integration. For the full protocol thr
 **SDK mitigation:** The SDK uses typed helpers, validates payload shapes before SCVal encoding, and keeps the transaction construction surface small and explicit.
 
 **Integrator action:**
-- Verify the SDK's package attestation on every install: `npm audit signatures @invoice-liquidity/sdk`. See [security.md](./security.md) for SLSA Level 3 verification details.
-- Pin `@invoice-liquidity/sdk` to an exact version in your `package-lock.json` or `yarn.lock`.
+- Verify the SDK's package attestation on every install using the steps in [Verifying SDK Provenance](#verifying-sdk-provenance).
+- Pin `@iln/sdk` to an exact version in your `package-lock.json` or `yarn.lock`.
 - Review transitive dependency updates before merging automated dependency PRs.
 
 ### XDR interception and replay
@@ -348,4 +426,5 @@ The SDK's security posture is only as strong as the key management, RPC node, an
 - [threat-model.md](./threat-model.md) — Protocol-wide attack surface (frontend, API, indexer, governance)
 - [contracts/invoice-contract.md](./contracts/invoice-contract.md) — On-chain authorization and state machine
 - [security.md](./security.md) — Package provenance and SLSA Level 3 verification
+- [oracle-service.md](./oracle-service.md) — Oracle hop trust boundaries, cache-staleness hardening, and fraud-signal monitoring for the `require_oracle_verification` path
 - [notifications.md](./notifications.md) — Webhook HMAC signing and WebSocket subscription security

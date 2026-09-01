@@ -1,5 +1,27 @@
 # Reusable workflow: restore/save the pnpm store with lockfile-scoped cache keys.
 # Run as an early job; caller jobs should use ./.github/actions/setup-pnpm with the same inputs.
+#
+# Contract
+# ─────────────────────────────────────────────────────────────────────────────
+# Inputs (all optional — safe defaults for this repo):
+#   node-version       string   Node.js version               (default: 20)
+#   pnpm-version       string   pnpm version                  (default: 9.0.0)
+#   lockfile-path      string   pnpm-lock.yaml path           (default: pnpm-lock.yaml)
+#   cache-key-prefix   string   Prefix for actions/cache keys  (default: iln)
+#   install-dependencies  bool  Run pnpm install after cache? (default: false)
+#   install-args       string   Args for pnpm install          (default: --frozen-lockfile)
+#
+# Outputs:
+#   cache-hit  string  "true" when a full cache key matched, "false" otherwise
+#
+# Side effects:
+#   - Populates the GitHub Actions cache with the pnpm virtual store
+#   - Optionally runs pnpm install (when install-dependencies = true)
+#
+# Consumers: ci.yml, cli-docs.yml, coverage.yml, deploy.yml,
+#            indexer-migrations.yml, knip.yml, sdk-api-docs.yml,
+#            sdk-bundle-size.yml, sdk-e2e-local-node.yml
+# ─────────────────────────────────────────────────────────────────────────────
 name: Reusable pnpm cache
 
 on:
