@@ -27,6 +27,7 @@ jobs:
       sdk: ${{ steps.filter.outputs.sdk }}
       cli: ${{ steps.filter.outputs.cli }}
       indexer: ${{ steps.filter.outputs.indexer }}
+      oracle: ${{ steps.filter.outputs.oracle }}
       packages: ${{ steps.filter.outputs.packages }}
     steps:
       - uses: actions/checkout@v4
@@ -56,6 +57,8 @@ jobs:
             indexer:
               - 'indexer/**'
               - 'packages/indexer/**'
+            oracle:
+              - 'oracle-service/**'
             packages:
               - 'packages/**'
 
@@ -366,6 +369,7 @@ jobs:
 
   gitleaks:
     name: Secret scanning
+    needs: pnpm-cache
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
