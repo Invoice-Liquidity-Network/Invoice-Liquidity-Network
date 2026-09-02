@@ -338,7 +338,7 @@ A: 10 hops (`MAX_DELEGATION_DEPTH`). Chains longer than 10 are rejected with `De
 **Q: Can the admin veto any proposal?**  
 A: Yes, while veto power is enabled. The admin can block proposals in `Active` or `Passed` state (error `NotVetoable` for other states). Veto power can be permanently disabled by calling `disable_veto_power` through the ILN contract after a governance vote, after which no single party can block proposals.
 
-**Q: Can veto power be re-enabled after being disabled?**  
+**Q: Can veto power be re-enabled after being disabled?**
 A: No. `disable_veto_power` is a one-way switch — once disabled, veto power cannot be re-enabled. This is by design to allow governance to fully control the protocol.
 
 **Q: Is testnet governance the same as mainnet?**  
@@ -350,13 +350,13 @@ A: Only a SHA-256 hash (`description_hash`) is stored on-chain. The full descrip
 **Q: What happens if quorum is not met?**  
 A: The proposal moves to `Rejected` status after the voting period ends. A new proposal with the same parameters can be submitted.
 
-**Q: What is the vote receipt TTL?**  
+**Q: What is the vote receipt TTL?**
 A: Vote receipts are stored in temporary storage with a TTL threshold of 50,000 ledgers and an explicit TTL of 69,120 ledgers (~4 days at 5s/ledger) for audit trail purposes.
 
-**Q: What error do I get if I try to vote after the voting deadline?**  
+**Q: What error do I get if I try to vote after the voting deadline?**
 A: `VotingEnded` (error code 3). The voting period is exactly 3 days (259,200 seconds) from proposal creation.
 
-**Q: What happens if I try to delegate to myself?**  
+**Q: What happens if I try to delegate to myself?**
 A: `CannotDelegateToSelf` (error code 11). The contract prevents self-delegation.
 
 ---
