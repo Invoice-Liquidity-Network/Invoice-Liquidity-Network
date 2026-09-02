@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import * as StellarSdk from '@stellar/stellar-sdk';
-import { ILNSdk } from '@invoice-liquidity/sdk';
+import { ILNSdk } from '@iln/sdk';
 
 const RPC_URL = 'http://localhost:8000/soroban/rpc';
 const FRIENDBOT_URL = 'http://localhost:8000/friendbot';

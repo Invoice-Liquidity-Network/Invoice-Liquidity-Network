@@ -20,6 +20,9 @@ importers:
       '@commitlint/config-conventional':
         specifier: ^17.6.0
         version: 17.8.1
+      '@iln/sdk':
+        specifier: workspace:*
+        version: link:sdk
       '@stellar/stellar-sdk':
         specifier: ^15.0.1
         version: 15.1.0
