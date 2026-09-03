@@ -207,6 +207,12 @@ export interface ILNSdkConfig {
    * defaults to 3 retries with exponential backoff and jitter.
    */
   backoff?: BackoffOptions | false;
+  /**
+   * Cache configuration for read operations.
+   * Set to `{ enabled: false }` to disable caching.
+   * Defaults to `{ ttl: 60000, storage: 'memory', enabled: true }`.
+   */
+  cache?: CacheConfig;
 }
 
 /**
