@@ -43,7 +43,7 @@ These records exist for delivery-state correctness (de-duplication and transient
 - **Subscriptions**: Deleted immediately on `DELETE /unsubscribe` or `POST /unsubscribe`.
 - **Delivery logs (`sent_notifications`)**: Retained for 30 days from `sent_at`, then purged.
 - **Webhook delivery logs**: Retained for 90 days.
-- See the [Frontend Delivery History Retention Policy](https://github.com/Invoice-Liquidity-Network/frontend/blob/main/docs/delivery-history-retention-policy.md) for details on client-side notification history.
+- Client-side notification history follows the frontend application's data retention practices.
 
 ---
 
