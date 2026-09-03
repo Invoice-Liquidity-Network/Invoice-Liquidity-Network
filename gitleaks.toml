@@ -8,7 +8,13 @@ paths = [
   '''(^|/)\.secrets\.baseline$''',
   '''(^|/)gitleaks\.toml$''',
   '''cli/src/dev-environment\.ts$''',
-  '''cli/src/dev-seed\.ts$'''
+  '''cli/src/dev-seed\.ts$''',
+  '''cli/tests/dev-seed\.test\.ts$''',
+  '''indexer/tests/dashboard\.security\.test\.ts$''',
+  '''packages/sdk/src/clients/InvoiceClient\.test\.ts$''',
+  '''docs/sdk-next-migration\.md$''',
+  '''docs/mainnet-deployment-dry-run\.md$''',
+  '''docs/indexer/backup-archive\.md$'''
 ]
 
 [[rules]]

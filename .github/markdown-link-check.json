@@ -27,6 +27,10 @@
     {
       "comment": "docs.iln.finance is an internal staging domain not reachable from CI; ignore link check",
       "pattern": "^https://docs\\.iln\\.finance"
+    },
+    {
+      "comment": "Nextra-internal routes (absolute paths like /protocol-overview) are page paths resolved by the Next.js build, not static files or URLs; the docs site build validates them",
+      "pattern": "^/"
     }
   ],
   "aliveStatusCodes": [200, 206, 301, 302, 429],
