@@ -1,8 +1,8 @@
 # Invoice Liquidity Network
 
-[![CI](https://github.com/barry01-hash/Invoice-Liquidity-Network/actions/workflows/ci.yml/badge.svg)](https://github.com/barry01-hash/Invoice-Liquidity-Network/actions/workflows/ci.yml)
+[![CI](https://github.com/Invoice-Liquidity-Network/Invoice-Liquidity-Network/actions/workflows/ci.yml/badge.svg)](https://github.com/Invoice-Liquidity-Network/Invoice-Liquidity-Network/actions/workflows/ci.yml)
 [![Coverage](https://codecov.io/gh/Nursca/Invoice-Liquidity-Network/branch/main/graph/badge.svg?token=CODECOV_TOKEN)](https://codecov.io/gh/Nursca/Invoice-Liquidity-Network)
-[![CodeQL](https://github.com/barry01-hash/Invoice-Liquidity-Network/actions/workflows/codeql.yml/badge.svg)](https://github.com/barry01-hash/Invoice-Liquidity-Network/actions/workflows/codeql.yml)
+[![CodeQL](https://github.com/Invoice-Liquidity-Network/Invoice-Liquidity-Network/actions/workflows/codeql.yml/badge.svg)](https://github.com/Invoice-Liquidity-Network/Invoice-Liquidity-Network/actions/workflows/codeql.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](./LICENSE)
 
 **Turn unpaid invoices into instant liquidity on-chain, on Stellar.**
@@ -245,7 +245,7 @@ The table below lists every workspace package, its directory, npm package name, 
 
 - [Node.js](https://nodejs.org/) 18+
 - [Rust](https://rustup.rs/) 1.74+
-- [Stellar CLI](https://developers.stellar.org/docs/tools/developer-tools/stellar-cli)
+- [Stellar CLI](https://developers.stellar.org/docs/tools/cli/stellar-cli)
 - [Docker](https://docs.docker.com/get-docker/) (for E2E tests)
 
 ### Clone with Submodules
