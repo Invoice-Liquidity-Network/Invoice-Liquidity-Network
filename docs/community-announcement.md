@@ -28,7 +28,7 @@ As an early-stage DeFi protocol, safety and stability are our top priorities:
 - Users are encouraged to start with small invoice volumes while liquidity pools bootstrap.
 
 #### Getting Started
-- **Web App**: [https://iln.finance](https://iln.finance)
+- **Web App**: _Coming at mainnet launch — will be published at https://iln.finance_
 - **Documentation**: [https://docs.iln.finance](https://docs.iln.finance)
 - **Source Code**: [https://github.com/Invoice-Liquidity-Network](https://github.com/Invoice-Liquidity-Network)
 
@@ -55,7 +55,7 @@ For security vulnerabilities and emergency operational issues, follow the dedica
 - **Safe Harbour**: Good-faith research is explicitly protected under our [Safe Harbour Policy](../SECURITY.md#safe-harbour).
 
 ### Operational Incidents & Outages
-- **Live Status Page**: [https://status.iln.finance](https://status.iln.finance)
+- **Live Status Page**: _Coming at mainnet launch — will be published at https://status.iln.finance_
 - **Emergency War Room**: Discord `#incident-response` (restricted to core on-call maintainers)
 
 ---

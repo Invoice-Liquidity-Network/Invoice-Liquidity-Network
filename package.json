@@ -53,6 +53,7 @@
     "@commitlint/config-conventional": "^17.6.0",
     "@stellar/stellar-sdk": "^15.0.1",
     "@vitest/coverage-v8": "^4.1.5",
+    "gitleaks": "^1.0.0",
     "husky": "^8.0.0",
     "jsdom": "^29.1.1",
     "knip": "^6.15.0",

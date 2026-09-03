@@ -12,11 +12,11 @@ Incidents in the main repository frequently intersect with contract execution an
 
 | Incident Type | Primary Escalation Owner | Impacted Downstream Repos | Immediate Containment Action | Cross-Repo Link |
 | --- | --- | --- | --- | --- |
-| **SDK Compromise** (malicious npm package, XDR mutation) | SDK Lead / Security Team | `frontend`, third-party integrators | Deprecate npm version, publish security advisory, enforce SLSA attestation verification | [Frontend Runbook](../frontend/docs/incident-response.md#step-2-emergency-vercel-rollback-sev-1-mitigation) |
-| **Indexer Data Loss / Corruption** | Infrastructure Lead | `frontend`, analytics dashboards | Switch frontend to direct Soroban RPC read mode, restore SQLite WAL backup | [Frontend Runbook](../frontend/docs/incident-response.md#step-1-execute-feature-flag-kill-switches) |
-| **Oracle-Service Compromise** | Security Lead & Governance Lead | `backend`, `frontend` | Disable oracle feature flag in frontend (`NEXT_PUBLIC_ORACLE_ENABLED=false`), trigger contract fallback mode | [Contract Policy](../backend/docs/security.md#oracle-integration--manipulation) |
+| **SDK Compromise** (malicious npm package, XDR mutation) | SDK Lead / Security Team | `frontend`, third-party integrators | Deprecate npm version, publish security advisory, enforce SLSA attestation verification | [Frontend Runbook](https://github.com/Invoice-Liquidity-Network/ILN-Frontend/blob/main/docs/incident-response.md#step-2-emergency-vercel-rollback-sev-1-mitigation) |
+| **Indexer Data Loss / Corruption** | Infrastructure Lead | `frontend`, analytics dashboards | Switch frontend to direct Soroban RPC read mode, restore SQLite WAL backup | [Frontend Runbook](https://github.com/Invoice-Liquidity-Network/ILN-Frontend/blob/main/docs/incident-response.md#step-1-execute-feature-flag-kill-switches) |
+| **Oracle-Service Compromise** | Security Lead & Governance Lead | `backend`, `frontend` | Disable oracle feature flag in frontend (`NEXT_PUBLIC_ORACLE_ENABLED=false`), trigger contract fallback mode | [Contract Policy](https://github.com/Invoice-Liquidity-Network/ILN-Smart-Contract/blob/main/docs/security.md#oracle-integration--manipulation) |
 | **Notifications Abuse** (SSRF, Webhook flood) | Backend Services Lead | Integrator webhooks, user channels | Rotate HMAC signing keys, enforce IP blocklist, trip service circuit breaker | [Security Policy](../SECURITY.md#severity-classification) |
-| **Contract-Level Emergency** (drained escrow, reentrancy) | Smart Contract Lead | `backend`, `frontend` | Trigger contract pause via admin multisig | [Contract Reentrancy Matrix](../backend/docs/security.md#reentrancy-analysis-issue-535) |
+| **Contract-Level Emergency** (drained escrow, reentrancy) | Smart Contract Lead | `backend`, `frontend` | Trigger contract pause via admin multisig | [Contract Reentrancy Matrix](https://github.com/Invoice-Liquidity-Network/ILN-Smart-Contract/blob/main/docs/security.md#reentrancy-analysis-issue-535) |
 
 ### Emergency Notification Channels
 - **Security Lead / Incident Commander**: `@sec-commander` / `security@invoiceliquidity.network`
@@ -58,7 +58,7 @@ A compromised SDK package (e.g. via stolen npm credentials or malicious transiti
    gh attestation verify sdk-package.tgz --repo Invoice-Liquidity-Network/Invoice-Liquidity-Network
    ```
 3. **Notify Downstream Consumers & Frontend Team**:
-   - Instruct the **Frontend Team** to execute an emergency deployment pinning a verified safe SDK version ([Frontend Runbook Procedures](../frontend/docs/incident-response.md#step-2-emergency-vercel-rollback-sev-1-mitigation)).
+   - Instruct the **Frontend Team** to execute an emergency deployment pinning a verified safe SDK version ([Frontend Runbook Procedures](https://github.com/Invoice-Liquidity-Network/ILN-Frontend/blob/main/docs/incident-response.md#step-2-emergency-vercel-rollback-sev-1-mitigation)).
    - Issue an advisory instructing third-party integrators to verify lockfile integrity (`pnpm-lock.yaml`) and check package signatures via `npm audit signatures @invoice-liquidity/sdk`.
 4. **Publish Clean Patch Release**:
    Publish a patched version built exclusively via automated CI (`.github/workflows/sdk-release.yml`) with updated SLSA attestations.
@@ -117,7 +117,7 @@ The `oracle-service` assesses payer addresses and returns credit scores and veri
    vercel env add NEXT_PUBLIC_ORACLE_ENABLED production false
    vercel --prod
    ```
-   *(See [Frontend Incident Response Runbook](../frontend/docs/incident-response.md#step-1-execute-feature-flag-kill-switches)).*
+   *(See [Frontend Incident Response Runbook](https://github.com/Invoice-Liquidity-Network/ILN-Frontend/blob/main/docs/incident-response.md#step-1-execute-feature-flag-kill-switches)).*
 2. **Purge Poisoned Oracle Cache**:
    If the oracle service cache contains manipulated payer reputation records, purge the internal cache:
    ```bash
@@ -126,11 +126,11 @@ The `oracle-service` assesses payer addresses and returns credit scores and veri
      -H "Authorization: Bearer ${ORACLE_ADMIN_SECRET}"
    ```
 3. **Audit Smart Contract Fallback Mode**:
-   Confirm that the Soroban contract's static bounds fallback is active. Per [backend/docs/security.md#oracle-integration--manipulation](../backend/docs/security.md#oracle-integration--manipulation), smart contracts do not depend solely on off-chain oracle prices for accounting and enforce safety limits natively.
+   Confirm that the Soroban contract's static bounds fallback is active. Per [backend/docs/security.md#oracle-integration--manipulation](https://github.com/Invoice-Liquidity-Network/ILN-Smart-Contract/blob/main/docs/security.md#oracle-integration--manipulation), smart contracts do not depend solely on off-chain oracle prices for accounting and enforce safety limits natively.
 4. **Rotate Oracle Signing Keys & Update On-Chain Registry**:
    If oracle private key compromise is suspected:
    - Rotate oracle keypair in secret manager.
-   - Submit a governance proposal or admin multisig transaction to update the oracle registry on-chain ([ADR-010 Oracle Registry](../backend/docs/adr/ADR-010-oracle-registry.md)).
+   - Submit a governance proposal or admin multisig transaction to update the oracle registry on-chain ([ADR-010 Oracle Registry](https://github.com/Invoice-Liquidity-Network/ILN-Smart-Contract/blob/main/docs/adr/ADR-010-oracle-registry.md)).
 
 ---
 
@@ -178,8 +178,8 @@ Following containment of any SEV-1 or SEV-2 incident:
 
 ## 5. Related Incident Response Runbooks
 
-- **Smart Contract Security & Reentrancy Policy**: [`backend/docs/security.md`](../backend/docs/security.md)
-- **Frontend Incident Response Runbook**: [`frontend/docs/incident-response.md`](../frontend/docs/incident-response.md)
+- **Smart Contract Security & Reentrancy Policy**: [`backend/docs/security.md`](https://github.com/Invoice-Liquidity-Network/ILN-Smart-Contract/blob/main/docs/security.md)
+- **Frontend Incident Response Runbook**: [`frontend/docs/incident-response.md`](https://github.com/Invoice-Liquidity-Network/ILN-Frontend/blob/main/docs/incident-response.md)
 - **Repository Security Policy**: [`SECURITY.md`](../SECURITY.md)
 - **Protocol Threat Model**: [`docs/threat-model.md`](./threat-model.md)
 - **Security Guide**: [`docs/security-guide.md`](./security-guide.md)
