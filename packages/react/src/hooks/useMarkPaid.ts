@@ -42,14 +42,9 @@ export function useMarkPaid(): UseMarkPaidResult {
   const client = useILNClient();
   const queryClient = useQueryClient();
 
-  const { mutateAsync, isPending, error, reset } = useMutation<
-    void,
-    Error,
-    MarkPaidParams
-  >({
+  const { mutateAsync, isPending, error, reset } = useMutation<void, Error, MarkPaidParams>({
     mutationFn: (params: MarkPaidParams): Promise<void> =>
-      (client as unknown as { markPaid(p: MarkPaidParams): Promise<void> })
-        .markPaid(params),
+      (client as unknown as { markPaid(p: MarkPaidParams): Promise<void> }).markPaid(params),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['invoices'] }),
   });
 

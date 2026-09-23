@@ -10,16 +10,16 @@
  * `readline` to avoid adding heavy dependencies.
  */
 
-import { createInterface } from "node:readline";
-import pc from "picocolors";
+import { createInterface } from 'node:readline';
+import pc from 'picocolors';
 
-import { parseDisplayAmount } from "./amounts";
-import { parseDueDate } from "./dates";
-import { formatInvoiceDetails, formatInvoiceList } from "./format";
-import { createSpinner } from "./progress";
-import type { ILNClient } from "./client";
-import type { Ui } from "./format";
-import type { ResolvedConfig } from "./types";
+import { parseDisplayAmount } from './amounts';
+import { parseDueDate } from './dates';
+import { formatInvoiceDetails, formatInvoiceList } from './format';
+import { createSpinner } from './progress';
+import type { ILNClient } from './client';
+import type { Ui } from './format';
+import type { ResolvedConfig } from './types';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -33,13 +33,7 @@ export interface InteractiveDependencies {
   output?: NodeJS.WritableStream;
 }
 
-type MenuChoice =
-  | "submit"
-  | "fund"
-  | "pay"
-  | "status"
-  | "list"
-  | "exit";
+type MenuChoice = 'submit' | 'fund' | 'pay' | 'status' | 'list' | 'exit';
 
 // ─── Main entry ───────────────────────────────────────────────────────────────
 
@@ -56,56 +50,56 @@ export async function runInteractive(deps: InteractiveDependencies): Promise<voi
 
   const ask = makeAsker(rl);
 
-  ui.info(pc.bold("\n  Invoice Liquidity Network — Interactive Mode"));
+  ui.info(pc.bold('\n  Invoice Liquidity Network — Interactive Mode'));
   ui.info(`  Network : ${pc.cyan(config.network)}`);
   ui.info(`  Contract: ${pc.cyan(config.contractId)}\n`);
 
   try {
+    // eslint-disable-next-line no-constant-condition -- loop exits via internal break
     while (true) {
       const choice = await promptMenu(ask, ui);
-      if (choice === "exit") break;
+      if (choice === 'exit') break;
 
       try {
         await dispatchAction(choice, { ask, client, config, ui, output: deps.output });
       } catch (err) {
         ui.error(err instanceof Error ? err.message : String(err));
-        const retry = await ask(
-          pc.yellow("An error occurred. Continue? [Y/n] "),
-        );
-        if (retry.trim().toLowerCase() === "n") break;
+        const retry = await ask(pc.yellow('An error occurred. Continue? [Y/n] '));
+        if (retry.trim().toLowerCase() === 'n') break;
       }
 
-      ui.info(""); // blank line between operations
+      ui.info(''); // blank line between operations
     }
   } finally {
     rl.close();
   }
 
-  ui.info(pc.bold("Goodbye.\n"));
+  ui.info(pc.bold('Goodbye.\n'));
 }
 
 // ─── Menu ─────────────────────────────────────────────────────────────────────
 
 async function promptMenu(ask: Asker, ui: Ui): Promise<MenuChoice> {
-  ui.info(pc.bold("What would you like to do?"));
-  ui.info(`  ${pc.cyan("1")} Submit invoice`);
-  ui.info(`  ${pc.cyan("2")} Fund invoice`);
-  ui.info(`  ${pc.cyan("3")} Mark invoice as paid`);
-  ui.info(`  ${pc.cyan("4")} Check invoice status`);
-  ui.info(`  ${pc.cyan("5")} List invoices for an address`);
-  ui.info(`  ${pc.cyan("0")} Exit`);
+  ui.info(pc.bold('What would you like to do?'));
+  ui.info(`  ${pc.cyan('1')} Submit invoice`);
+  ui.info(`  ${pc.cyan('2')} Fund invoice`);
+  ui.info(`  ${pc.cyan('3')} Mark invoice as paid`);
+  ui.info(`  ${pc.cyan('4')} Check invoice status`);
+  ui.info(`  ${pc.cyan('5')} List invoices for an address`);
+  ui.info(`  ${pc.cyan('0')} Exit`);
 
   const map: Record<string, MenuChoice> = {
-    "1": "submit",
-    "2": "fund",
-    "3": "pay",
-    "4": "status",
-    "5": "list",
-    "0": "exit",
+    '1': 'submit',
+    '2': 'fund',
+    '3': 'pay',
+    '4': 'status',
+    '5': 'list',
+    '0': 'exit',
   };
 
+  // eslint-disable-next-line no-constant-condition -- loop exits via internal break
   while (true) {
-    const input = (await ask(pc.bold("\nChoose [0-5]: "))).trim();
+    const input = (await ask(pc.bold('\nChoose [0-5]: '))).trim();
     if (map[input]) return map[input];
     ui.warn(`Invalid choice "${input}". Please enter a number between 0 and 5.`);
   }
@@ -127,11 +121,16 @@ function spinnerOptions(deps: ActionDeps) {
 
 async function dispatchAction(choice: MenuChoice, deps: ActionDeps): Promise<void> {
   switch (choice) {
-    case "submit": return submitInvoice(deps);
-    case "fund":   return fundInvoice(deps);
-    case "pay":    return markPaid(deps);
-    case "status": return checkStatus(deps);
-    case "list":   return listInvoices(deps);
+    case 'submit':
+      return submitInvoice(deps);
+    case 'fund':
+      return fundInvoice(deps);
+    case 'pay':
+      return markPaid(deps);
+    case 'status':
+      return checkStatus(deps);
+    case 'list':
+      return listInvoices(deps);
   }
 }
 
@@ -139,33 +138,48 @@ async function dispatchAction(choice: MenuChoice, deps: ActionDeps): Promise<voi
 
 async function submitInvoice(deps: ActionDeps): Promise<void> {
   const { ask, client, config, ui } = deps;
-  ui.info(pc.bold("\n── Submit Invoice ──"));
+  ui.info(pc.bold('\n── Submit Invoice ──'));
 
-  const payer = await askValidated(ask, ui, "Payer Stellar address: ", validateStellarAddress);
-  const amount = await askValidated(ask, ui, "Invoice amount (e.g. 100 or 12.50): ", validateAmount);
-  const due = await askValidated(ask, ui, "Due date (YYYY-MM-DD or Unix timestamp): ", validateDueDate);
-  const rate = await askValidated(ask, ui, "Discount rate in basis points (e.g. 300): ", validateBasisPoints);
+  const payer = await askValidated(ask, ui, 'Payer Stellar address: ', validateStellarAddress);
+  const amount = await askValidated(
+    ask,
+    ui,
+    'Invoice amount (e.g. 100 or 12.50): ',
+    validateAmount
+  );
+  const due = await askValidated(
+    ask,
+    ui,
+    'Due date (YYYY-MM-DD or Unix timestamp): ',
+    validateDueDate
+  );
+  const rate = await askValidated(
+    ask,
+    ui,
+    'Discount rate in basis points (e.g. 300): ',
+    validateBasisPoints
+  );
 
   const tokenId = config.tokenId;
   if (!tokenId) {
     throw new Error(
-      "Token ID is not configured. Set `contractIds.token` in your config file or `ILN_TOKEN_ID`.",
+      'Token ID is not configured. Set `contractIds.token` in your config file or `ILN_TOKEN_ID`.'
     );
   }
 
   const confirmed = await confirmAction(ask, ui, [
-    ["Payer", payer],
-    ["Amount", amount],
-    ["Due", due],
-    ["Rate", `${rate} bps`],
-    ["Token", tokenId],
+    ['Payer', payer],
+    ['Amount', amount],
+    ['Due', due],
+    ['Rate', `${rate} bps`],
+    ['Token', tokenId],
   ]);
   if (!confirmed) {
-    ui.warn("Cancelled.");
+    ui.warn('Cancelled.');
     return;
   }
 
-  const spinner = createSpinner("Submitting transaction…", spinnerOptions(deps));
+  const spinner = createSpinner('Submitting transaction…', spinnerOptions(deps));
   try {
     const { invoiceId, txHash } = await client.submitInvoice({
       amount: parseDisplayAmount(amount),
@@ -174,11 +188,9 @@ async function submitInvoice(deps: ActionDeps): Promise<void> {
       payer,
       tokenId,
     });
-    spinner.succeed(
-      `Invoice ${pc.bold(invoiceId.toString())} submitted in tx ${pc.cyan(txHash)}`,
-    );
+    spinner.succeed(`Invoice ${pc.bold(invoiceId.toString())} submitted in tx ${pc.cyan(txHash)}`);
   } catch (err) {
-    spinner.fail("Transaction submission failed");
+    spinner.fail('Transaction submission failed');
     throw err;
   }
 }
@@ -187,27 +199,27 @@ async function submitInvoice(deps: ActionDeps): Promise<void> {
 
 async function fundInvoice(deps: ActionDeps): Promise<void> {
   const { ask, client, ui } = deps;
-  ui.info(pc.bold("\n── Fund Invoice ──"));
+  ui.info(pc.bold('\n── Fund Invoice ──'));
 
-  const id = await askValidated(ask, ui, "Invoice ID: ", validateInvoiceId);
-  const amountInput = (await ask("Amount to fund (leave blank to fund full balance): ")).trim();
+  const id = await askValidated(ask, ui, 'Invoice ID: ', validateInvoiceId);
+  const amountInput = (await ask('Amount to fund (leave blank to fund full balance): ')).trim();
 
   const confirmed = await confirmAction(ask, ui, [
-    ["Invoice ID", id],
-    ["Amount", amountInput || "(full balance)"],
+    ['Invoice ID', id],
+    ['Amount', amountInput || '(full balance)'],
   ]);
   if (!confirmed) {
-    ui.warn("Cancelled.");
+    ui.warn('Cancelled.');
     return;
   }
 
-  const spinner = createSpinner("Submitting transaction…", spinnerOptions(deps));
+  const spinner = createSpinner('Submitting transaction…', spinnerOptions(deps));
   try {
     const amount = amountInput ? parseDisplayAmount(amountInput) : undefined;
     const result = await client.fundInvoice(BigInt(id), amount);
     spinner.succeed(`Invoice ${pc.bold(id)} funded in tx ${pc.cyan(result.hash)}`);
   } catch (err) {
-    spinner.fail("Transaction submission failed");
+    spinner.fail('Transaction submission failed');
     throw err;
   }
 }
@@ -216,22 +228,22 @@ async function fundInvoice(deps: ActionDeps): Promise<void> {
 
 async function markPaid(deps: ActionDeps): Promise<void> {
   const { ask, client, ui } = deps;
-  ui.info(pc.bold("\n── Mark Invoice as Paid ──"));
+  ui.info(pc.bold('\n── Mark Invoice as Paid ──'));
 
-  const id = await askValidated(ask, ui, "Invoice ID: ", validateInvoiceId);
+  const id = await askValidated(ask, ui, 'Invoice ID: ', validateInvoiceId);
 
-  const confirmed = await confirmAction(ask, ui, [["Invoice ID", id]]);
+  const confirmed = await confirmAction(ask, ui, [['Invoice ID', id]]);
   if (!confirmed) {
-    ui.warn("Cancelled.");
+    ui.warn('Cancelled.');
     return;
   }
 
-  const spinner = createSpinner("Submitting transaction…", spinnerOptions(deps));
+  const spinner = createSpinner('Submitting transaction…', spinnerOptions(deps));
   try {
     const result = await client.markPaid(BigInt(id));
     spinner.succeed(`Invoice ${pc.bold(id)} marked as paid in tx ${pc.cyan(result.hash)}`);
   } catch (err) {
-    spinner.fail("Transaction submission failed");
+    spinner.fail('Transaction submission failed');
     throw err;
   }
 }
@@ -240,17 +252,17 @@ async function markPaid(deps: ActionDeps): Promise<void> {
 
 async function checkStatus(deps: ActionDeps): Promise<void> {
   const { ask, client, ui } = deps;
-  ui.info(pc.bold("\n── Invoice Status ──"));
+  ui.info(pc.bold('\n── Invoice Status ──'));
 
-  const id = await askValidated(ask, ui, "Invoice ID: ", validateInvoiceId);
+  const id = await askValidated(ask, ui, 'Invoice ID: ', validateInvoiceId);
 
-  const spinner = createSpinner("Fetching invoice…", spinnerOptions(deps));
+  const spinner = createSpinner('Fetching invoice…', spinnerOptions(deps));
   try {
     const invoice = await client.getInvoice(BigInt(id));
     spinner.stop();
     ui.info(formatInvoiceDetails(invoice));
   } catch (err) {
-    spinner.fail("Failed to fetch invoice");
+    spinner.fail('Failed to fetch invoice');
     throw err;
   }
 }
@@ -259,22 +271,22 @@ async function checkStatus(deps: ActionDeps): Promise<void> {
 
 async function listInvoices(deps: ActionDeps): Promise<void> {
   const { ask, client, ui } = deps;
-  ui.info(pc.bold("\n── List Invoices ──"));
+  ui.info(pc.bold('\n── List Invoices ──'));
 
   const address = await askValidated(
     ask,
     ui,
-    "Stellar address (freelancer, payer, or funder): ",
-    validateStellarAddress,
+    'Stellar address (freelancer, payer, or funder): ',
+    validateStellarAddress
   );
 
-  const spinner = createSpinner("Fetching invoices…", spinnerOptions(deps));
+  const spinner = createSpinner('Fetching invoices…', spinnerOptions(deps));
   try {
     const invoices = await client.listInvoicesByAddress(address);
     spinner.stop();
     ui.info(formatInvoiceList(invoices));
   } catch (err) {
-    spinner.fail("Failed to fetch invoices");
+    spinner.fail('Failed to fetch invoices');
     throw err;
   }
 }
@@ -286,12 +298,12 @@ type Validator = (value: string) => string | null; // returns error message or n
 function validateStellarAddress(value: string): string | null {
   // Stellar G-addresses are 56 characters, starting with G
   if (/^G[A-Z2-7]{55}$/.test(value.trim())) return null;
-  return "Invalid Stellar address. It must be a 56-character Ed25519 public key starting with G.";
+  return 'Invalid Stellar address. It must be a 56-character Ed25519 public key starting with G.';
 }
 
 function validateAmount(value: string): string | null {
   if (/^\d+(\.\d{1,7})?$/.test(value.trim()) && Number(value) > 0) return null;
-  return "Invalid amount. Use a positive decimal value with up to 7 fractional digits (e.g. 100 or 12.5).";
+  return 'Invalid amount. Use a positive decimal value with up to 7 fractional digits (e.g. 100 or 12.5).';
 }
 
 function validateDueDate(value: string): string | null {
@@ -299,18 +311,18 @@ function validateDueDate(value: string): string | null {
     parseDueDate(value);
     return null;
   } catch {
-    return "Invalid date. Use YYYY-MM-DD or a Unix timestamp.";
+    return 'Invalid date. Use YYYY-MM-DD or a Unix timestamp.';
   }
 }
 
 function validateBasisPoints(value: string): string | null {
   if (/^\d+$/.test(value.trim()) && Number(value) >= 0) return null;
-  return "Invalid rate. Use a non-negative integer (e.g. 300 for 3%).";
+  return 'Invalid rate. Use a non-negative integer (e.g. 300 for 3%).';
 }
 
 function validateInvoiceId(value: string): string | null {
   if (/^\d+$/.test(value.trim()) && Number(value) > 0) return null;
-  return "Invalid invoice ID. Use a positive integer.";
+  return 'Invalid invoice ID. Use a positive integer.';
 }
 
 // ─── UI helpers ───────────────────────────────────────────────────────────────
@@ -328,8 +340,9 @@ async function askValidated(
   ask: Asker,
   ui: Ui,
   prompt: string,
-  validate: Validator,
+  validate: Validator
 ): Promise<string> {
+  // eslint-disable-next-line no-constant-condition -- loop exits via internal break
   while (true) {
     const value = (await ask(pc.bold(prompt))).trim();
     const error = validate(value);
@@ -341,12 +354,12 @@ async function askValidated(
 async function confirmAction(
   ask: Asker,
   ui: Ui,
-  fields: Array<[label: string, value: string]>,
+  fields: Array<[label: string, value: string]>
 ): Promise<boolean> {
-  ui.info(pc.bold("\nPlease confirm:"));
+  ui.info(pc.bold('\nPlease confirm:'));
   for (const [label, value] of fields) {
     ui.info(`  ${pc.cyan(label.padEnd(12))} ${value}`);
   }
-  const answer = (await ask(pc.bold("\nProceed? [Y/n] "))).trim().toLowerCase();
-  return answer !== "n";
+  const answer = (await ask(pc.bold('\nProceed? [Y/n] '))).trim().toLowerCase();
+  return answer !== 'n';
 }

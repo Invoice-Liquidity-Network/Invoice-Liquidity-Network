@@ -305,7 +305,7 @@ const subscription = client.on('InvoicePaid', (event) => {
 });
 ```
 
-See: [Event Documentation](../event-schema.md)
+See: [Event Documentation](#event-schema)
 
 ### Governance Workflow
 
@@ -393,12 +393,12 @@ See: [Governance Contract - Workflow Example](./governance-contract.md#workflow-
    - [Integration & SDK Usage](../integration-guide.md)
 
 3. **Monitor events** for real-time updates:
-   - [Event Schema Documentation](../event-schema.md)
+   - [Event Schema Documentation](#event-schema)
 
 4. **Review examples** in the repository:
-   - TypeScript SDK: [`sdk/src/`](../../../sdk/src/)
-   - CLI: [`cli/src/`](../../../cli/src/)
-   - Integration tests: [`tests/`](../../../tests/)
+   - TypeScript SDK: [`sdk/src/`](../../sdk/src/)
+   - CLI: [`cli/src/`](../../cli/src/)
+   - Integration tests: [`tests/`](../../tests/)
 
 ---
 
@@ -407,7 +407,7 @@ See: [Governance Contract - Workflow Example](./governance-contract.md#workflow-
 - **GitHub Repository**: [ILN Smart Contract](https://github.com/Invoice-Liquidity-Network/ILN-Smart-Contract)
 - **Documentation**: This docs site
 - **Integration Guide**: [How to integrate](../integration-guide.md)
-- **Event Reference**: [Event schema](../event-schema.md)
+- **Event Reference**: [Event schema](#event-schema)
 - **Local Development**: [Local setup](../local-development.md)
 
 ---
@@ -429,6 +429,196 @@ See: [Governance Contract - Workflow Example](./governance-contract.md#workflow-
 
 ---
 
-**Last Updated**: 2 June 2026
+## TypeScript Type Alignment (`packages/shared`)
+
+### The drift problem
+
+`packages/shared/src/types.ts` is the foundation every TypeScript consumer
+builds on. Before the audit in July 2026, the hand-maintained types had
+drifted significantly from the deployed contract. The table below records
+every finding so future auditors can verify the fix and catch new drift early.
+
+### Drift found and fixed (July 2026 audit)
+
+#### `InvoiceStatus` (was `InvoiceState`)
+
+| Value | Was present | Notes |
+|---|---|---|
+| `Pending` | ✅ | |
+| `PartiallyFunded` | ❌ missing | Added |
+| `Funded` | ✅ | |
+| `Paid` | ✅ | |
+| `Defaulted` | ✅ | |
+| `Appealed` | ❌ missing | Added |
+| `Disputed` | ❌ missing | Added |
+| `Expired` | ❌ missing | Added |
+| `Cancelled` | ❌ missing | Added |
+
+`InvoiceState` kept as a deprecated alias for backward compatibility.
+
+#### `Invoice` struct
+
+| Field | Was present | Fix |
+|---|---|---|
+| `id`, `freelancer`, `payer`, `amount`, `dueDate`, `discountRate`, `status`, `funder`, `fundedAt` | ✅ | — |
+| `token` | ❌ missing | Added — payment token address (USDC/XLM/EURC) |
+| `amountFunded` | ❌ missing | Added — cumulative LP capital deployed |
+| `amountPaid` | ❌ missing | Added — cumulative payer payments |
+| `submitterReputation` | ❌ missing | Added — freelancer score snapshot at submission |
+| `referralCode` | ❌ missing | Added — `Uint8Array \| null` (BytesN<32>) |
+| `allowedLps` | ❌ missing | Added — LP whitelist (`string[] \| null`) |
+| `isAuction` | ❌ missing | Added |
+| `auctionStartRate` | ❌ missing | Added |
+| `auctionMinRate` | ❌ missing | Added |
+| `auctionRateDecayPerHour` | ❌ missing | Added |
+| `auctionStartedAt` | ❌ missing | Added |
+
+#### `ReputationScore`
+
+| Field | Was present | Fix |
+|---|---|---|
+| `address`, `score` | ✅ | — |
+| `updatedAt` | ❌ wrong name | Renamed to `lastActivityLedger` (maps to `last_activity_ledger u64`) |
+| `invoicesSubmitted` | ❌ missing | Added (`invoices_submitted u64`) |
+| `invoicesPaid` | ❌ missing | Added (`invoices_paid u64`) |
+| `invoicesDefaulted` | ❌ missing | Added (`invoices_defaulted u64`) |
+
+#### `ProposalStatus`
+
+| Value | Was present | Fix |
+|---|---|---|
+| `Active` | ✅ | — |
+| `Draft` | ❌ phantom | Removed — proposals go straight to `Active` |
+| `Succeeded` | ❌ wrong name | Renamed to `Passed` |
+| `Defeated` | ❌ wrong name | Renamed to `Rejected` |
+| `Executed` | ✅ | — |
+| `Cancelled` | ❌ phantom | Removed — only invoice statuses include `Cancelled` |
+| `Vetoed` | ❌ missing | Added |
+
+#### `GovernanceProposal`
+
+| Field | Was present | Fix |
+|---|---|---|
+| `id`, `proposer`, `status`, `createdAt`, `votingEndsAt` | ✅ | — |
+| `title` | ❌ phantom | Removed — not on-chain; proposals use `description_hash` |
+| `description` | ❌ phantom | Removed — same reason |
+| `abstainVotes` | ❌ phantom | Removed — contract only has `votes_for` / `votes_against` |
+| `executedAt` | ❌ wrong semantics | Replaced with `etaLedger` (`eta_ledger u32` — timelock ledger, not timestamp) |
+| `forVotes` / `againstVotes` | ✅ | Renamed to `votesFor` / `votesAgainst` to match camelCase convention |
+| `descriptionHash` | ❌ missing | Added (`description_hash BytesN<32>`) |
+| `actionType` | ❌ missing | Added (`action_type ProposalAction`) |
+| `proposedValue` | ❌ missing | Added (`proposed_value i128`) |
+
+#### `ContractStats`
+
+| Field | Was present | Fix |
+|---|---|---|
+| `totalInvoices`, `totalVolume` | ✅ | |
+| `totalYield` | ❌ phantom | Removed — not in `get_contract_stats()` return value |
+| `defaultRate` | ❌ phantom | Removed — not in `get_contract_stats()` return value |
+| `totalFunded` | ❌ missing | Added (`total_funded u64`) |
+| `totalPaid` | ❌ missing | Added (`total_paid u64`) |
+
+#### `LPStats`
+
+| Field | Was present | Fix |
+|---|---|---|
+| `deployed` | ❌ wrong name | Renamed to `totalFunded` (`total_funded i128`) |
+| `yield` | ❌ wrong name + reserved keyword | Renamed to `totalEarned` (`total_earned i128`) |
+| `invoiceCount` | ❌ ambiguous | Replaced by explicit `activePositions` + `totalPositions` |
+| `defaultRate` | ❌ phantom | Removed — not in `LPStats` struct |
+| `activePositions` | ❌ missing | Added (`active_positions u64`) |
+| `totalPositions` | ❌ missing | Added (`total_positions u64`) |
+| `avgYieldBps` | ❌ missing | Added (`avg_yield_bps u32`) |
+
+#### Events
+
+| Old type name | Issue | Fix |
+|---|---|---|
+| `InvoiceCreatedEvent` (`"InvoiceCreated"`) | Contract emits `"InvoiceSubmitted"` | New canonical `InvoiceSubmittedEvent`; old name kept as deprecated alias |
+| `InvoiceRepaidEvent` (`"InvoiceRepaid"`) | Contract emits `"InvoicePaid"` | New canonical `InvoicePaidEvent`; old name kept as deprecated alias |
+| `GovernanceProposalVotedEvent` (`"ProposalVoted"`) | Contract emits `"VoteCast"` | New canonical `VoteCastEvent`; old name kept; `weight: bigint` field added |
+| `TokenListedEvent` / `TokenDelistedEvent` | Contract emits `"TokenAdded"` / `"TokenRemoved"` | New canonical events; old names kept as deprecated aliases |
+| `InvoiceFundedEvent` | Missing `amountFunded`, `effectiveYieldBps`, `status` | Fields added |
+| `ContractStatsUpdatedEvent` / `LPStatsUpdatedEvent` | Not emitted by contract | Retained but documented as client-side synthetic events |
+
+---
+
+## Automated type generation
+
+Manually maintaining `packages/shared/src/types.ts` is the root cause of
+every drift finding above. The correct long-term fix is to derive types
+directly from the contract's machine-readable Soroban spec.
+
+### How it works
+
+```
+stellar contract build         # compiles Rust → WASM
+    ↓
+stellar contract info          # extracts XDR spec → spec.json
+    ↓
+scripts/generate-shared-types.mts   # spec.json → types.ts
+    ↓
+packages/shared/src/types.ts   # committed, never hand-edited
+```
+
+### Generating the spec
+
+```bash
+# From repo root (requires Stellar CLI and initialized contract submodule)
+cd backend
+stellar contract build
+stellar contract info \
+  --wasm target/wasm32v1-none/release/*.wasm \
+  --output-format json > target/spec.json
+cd ..
+```
+
+### Running the generator
+
+```bash
+# Generate types.ts from an existing spec.json
+pnpm generate:shared-types
+
+# Dry-run — print to stdout without writing
+node --import tsx/esm scripts/generate-shared-types.mts \
+  --spec backend/target/spec.json \
+  --dry-run
+```
+
+The generator is scaffolded at `scripts/generate-shared-types.mts`. It reads
+the `UdtStructV0`, `UdtEnumV0`, and `UdtUnionV0` entries from `spec.json` and
+emits camelCase TypeScript interfaces and union types with inline comments
+pointing back to the contract field names and types.
+
+### CI enforcement
+
+Once `backend/target/spec.json` is committed (or generated as a CI artifact),
+add this step to `ci.yml` alongside the existing `sdk-types-sync` job:
+
+```yaml
+- name: Regenerate shared types
+  run: pnpm generate:shared-types
+
+- name: Check if shared types drifted
+  run: |
+    if ! git diff --exit-code packages/shared/src/types.ts; then
+      echo "❌ Shared types are out of sync with the contract spec."
+      echo "Run: pnpm generate:shared-types"
+      exit 1
+    fi
+```
+
+### Current status
+
+The generator is scaffolded and the `pnpm generate:shared-types` script is
+wired in `package.json`. It cannot run automatically in CI yet because
+`backend/target/spec.json` is not committed — the contract submodule must be
+initialized and built first. Until then, types.ts is manually maintained and
+must be audited against `docs/contracts/` on every contract change.
+
+---
+
+**Last Updated**: July 2026
 **Contract Version**: v1.0
 **Documentation Version**: 1.0

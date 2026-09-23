@@ -1,6 +1,6 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
-import type { ILNClient } from '@invoice-liquidity/sdk';
+import type { ILNClient } from '@iln/sdk';
 import { ILNContext } from './ILNContext';
 
 export interface ILNProviderProps {
@@ -18,12 +18,14 @@ const defaultQueryClient = new QueryClient({
   },
 });
 
-export function ILNProvider({ client, children, queryClient = defaultQueryClient }: ILNProviderProps): JSX.Element {
+export function ILNProvider({
+  client,
+  children,
+  queryClient = defaultQueryClient,
+}: ILNProviderProps) {
   return (
     <QueryClientProvider client={queryClient}>
-      <ILNContext.Provider value={client}>
-        {children}
-      </ILNContext.Provider>
+      <ILNContext.Provider value={client}>{children}</ILNContext.Provider>
     </QueryClientProvider>
   );
 }

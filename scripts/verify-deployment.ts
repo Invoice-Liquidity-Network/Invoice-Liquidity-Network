@@ -6,13 +6,13 @@
  * database connectivity tests, and generates a full verification report.
  */
 
-import fs from "fs";
-import path from "path";
-import { runCapture, hashFile, getWasmFile, log } from "./deploy";
+import fs from 'fs';
+import path from 'path';
+import { runCapture, hashFile, getWasmFile, log } from './deploy';
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
-export type CheckStatus = "pass" | "fail" | "skip";
+export type CheckStatus = 'pass' | 'fail' | 'skip';
 
 export interface CheckResult {
   name: string;
@@ -26,7 +26,7 @@ export interface VerificationReport {
   contractId: string;
   network: string;
   runAt: string;
-  overallStatus: "pass" | "fail";
+  overallStatus: 'pass' | 'fail';
   durationMs: number;
   checks: CheckResult[];
   summary: {
@@ -73,28 +73,25 @@ async function timedAsync<T>(fn: () => Promise<T>): Promise<{ result: T; duratio
 export async function checkBytecodeMatch(
   contractId: string,
   network: string,
-  wasmDir: string,
+  wasmDir: string
 ): Promise<CheckResult> {
-  const name = "Bytecode Match";
+  const name = 'Bytecode Match';
   const start = Date.now();
 
   try {
     const wasmPath = getWasmFile(wasmDir);
     const localHash = hashFile(wasmPath);
 
-    const tmpPath = path.join(
-      process.env["TMPDIR"] ?? "/tmp",
-      `iln-verify-${contractId}.wasm`,
-    );
+    const tmpPath = path.join(process.env['TMPDIR'] ?? '/tmp', `iln-verify-${contractId}.wasm`);
 
     const fetchResult = runCapture(
-      `stellar contract fetch --id ${contractId} --network ${network} --out-file ${tmpPath}`,
+      `stellar contract fetch --id ${contractId} --network ${network} --out-file ${tmpPath}`
     );
 
     if (fetchResult.code !== 0) {
       return {
         name,
-        status: "fail",
+        status: 'fail',
         message: `Failed to fetch on-chain bytecode: ${fetchResult.stderr || fetchResult.stdout}`,
         durationMs: Date.now() - start,
       };
@@ -103,8 +100,8 @@ export async function checkBytecodeMatch(
     if (!fs.existsSync(tmpPath)) {
       return {
         name,
-        status: "fail",
-        message: "contract fetch completed but produced no output file",
+        status: 'fail',
+        message: 'contract fetch completed but produced no output file',
         durationMs: Date.now() - start,
       };
     }
@@ -115,9 +112,9 @@ export async function checkBytecodeMatch(
     const match = localHash === remoteHash;
     return {
       name,
-      status: match ? "pass" : "fail",
+      status: match ? 'pass' : 'fail',
       message: match
-        ? "On-chain bytecode matches local build artifact"
+        ? 'On-chain bytecode matches local build artifact'
         : `Hash mismatch — local: ${localHash}, remote: ${remoteHash}`,
       durationMs: Date.now() - start,
       details: { localHash, remoteHash },
@@ -125,7 +122,7 @@ export async function checkBytecodeMatch(
   } catch (err) {
     return {
       name,
-      status: "fail",
+      status: 'fail',
       message: `Bytecode check threw: ${err instanceof Error ? err.message : String(err)}`,
       durationMs: Date.now() - start,
     };
@@ -138,36 +135,39 @@ export async function checkBytecodeMatch(
  */
 export async function checkContractLiveness(
   contractId: string,
-  network: string,
+  network: string
 ): Promise<CheckResult> {
-  const name = "Contract Liveness";
+  const name = 'Contract Liveness';
   const start = Date.now();
 
   const result = runCapture(
-    `stellar contract invoke --id ${contractId} --network ${network} -- get_invoice --invoice_id 1`,
+    `stellar contract invoke --id ${contractId} --network ${network} -- get_invoice --invoice_id 1`
   );
 
   const output = `${result.stdout}\n${result.stderr}`;
 
   // A contract-level error means the contract is alive and enforcing its own logic.
-  const contractLevelError =
-    /Error\(Contract,\s*#?\d+\)|InvoiceNotFound|HostError.*Contract/i.test(output);
+  const contractLevelError = /Error\(Contract,\s*#?\d+\)|InvoiceNotFound|HostError.*Contract/i.test(
+    output
+  );
 
   if (result.code === 0 || contractLevelError) {
     return {
       name,
-      status: "pass",
+      status: 'pass',
       message: contractLevelError
-        ? "Contract responded with a defined contract-level error (expected for a fresh deploy)"
-        : "Contract returned successfully",
+        ? 'Contract responded with a defined contract-level error (expected for a fresh deploy)'
+        : 'Contract returned successfully',
       durationMs: Date.now() - start,
     };
   }
 
   return {
     name,
-    status: "fail",
-    message: `Contract did not respond as expected: ${result.stderr || result.stdout || "no output"}`,
+    status: 'fail',
+    message: `Contract did not respond as expected: ${
+      result.stderr || result.stdout || 'no output'
+    }`,
     durationMs: Date.now() - start,
   };
 }
@@ -175,20 +175,18 @@ export async function checkContractLiveness(
 /**
  * Verifies the Stellar RPC API endpoint is reachable and responding.
  */
-export async function checkApiEndpoint(
-  rpcUrl: string,
-): Promise<CheckResult> {
-  const name = "API Endpoint";
+export async function checkApiEndpoint(rpcUrl: string): Promise<CheckResult> {
+  const name = 'API Endpoint';
   const start = Date.now();
 
   const result = runCapture(`curl -sf --max-time 10 "${rpcUrl}" -o /dev/null -w "%{http_code}"`);
 
   if (result.code === 0) {
     const code = result.stdout.trim();
-    const ok = ["200", "400", "401", "405"].includes(code);
+    const ok = ['200', '400', '401', '405'].includes(code);
     return {
       name,
-      status: ok ? "pass" : "fail",
+      status: ok ? 'pass' : 'fail',
       message: ok
         ? `RPC endpoint reachable (HTTP ${code})`
         : `RPC endpoint returned unexpected status: HTTP ${code}`,
@@ -199,8 +197,8 @@ export async function checkApiEndpoint(
 
   return {
     name,
-    status: "fail",
-    message: `RPC endpoint unreachable: ${result.stderr || "curl failed"}`,
+    status: 'fail',
+    message: `RPC endpoint unreachable: ${result.stderr || 'curl failed'}`,
     durationMs: Date.now() - start,
     details: { url: rpcUrl },
   };
@@ -210,14 +208,12 @@ export async function checkApiEndpoint(
  * Verifies that the Stellar Horizon API (or a generic database/backend endpoint)
  * is reachable and responding correctly.
  */
-export async function checkDatabaseConnectivity(
-  databaseUrl: string,
-): Promise<CheckResult> {
-  const name = "Database Connectivity";
+export async function checkDatabaseConnectivity(databaseUrl: string): Promise<CheckResult> {
+  const name = 'Database Connectivity';
   const start = Date.now();
 
   const result = runCapture(
-    `curl -sf --max-time 10 "${databaseUrl}" -o /dev/null -w "%{http_code}"`,
+    `curl -sf --max-time 10 "${databaseUrl}" -o /dev/null -w "%{http_code}"`
   );
 
   if (result.code === 0) {
@@ -225,7 +221,7 @@ export async function checkDatabaseConnectivity(
     const ok = parseInt(code, 10) < 500;
     return {
       name,
-      status: ok ? "pass" : "fail",
+      status: ok ? 'pass' : 'fail',
       message: ok
         ? `Database/backend endpoint reachable (HTTP ${code})`
         : `Database/backend endpoint returned server error: HTTP ${code}`,
@@ -236,8 +232,8 @@ export async function checkDatabaseConnectivity(
 
   return {
     name,
-    status: "fail",
-    message: `Database/backend endpoint unreachable: ${result.stderr || "curl failed"}`,
+    status: 'fail',
+    message: `Database/backend endpoint unreachable: ${result.stderr || 'curl failed'}`,
     durationMs: Date.now() - start,
     details: { url: databaseUrl },
   };
@@ -247,17 +243,15 @@ export async function checkDatabaseConnectivity(
  * Checks that the Stellar CLI toolchain is available and reports its version.
  */
 export function checkToolchain(): CheckResult {
-  const name = "Toolchain";
+  const name = 'Toolchain';
   const start = Date.now();
 
-  const { result, durationMs } = timed(() =>
-    runCapture("stellar --version"),
-  );
+  const { result, durationMs } = timed(() => runCapture('stellar --version'));
 
   if (result.code === 0) {
     return {
       name,
-      status: "pass",
+      status: 'pass',
       message: `stellar CLI found: ${result.stdout.trim()}`,
       durationMs,
     };
@@ -265,8 +259,8 @@ export function checkToolchain(): CheckResult {
 
   return {
     name,
-    status: "fail",
-    message: "stellar CLI not found or not working",
+    status: 'fail',
+    message: 'stellar CLI not found or not working',
     durationMs,
   };
 }
@@ -274,19 +268,19 @@ export function checkToolchain(): CheckResult {
 // ── Report ─────────────────────────────────────────────────────────────────
 
 export function buildReport(
-  opts: Pick<VerificationOptions, "contractId" | "network" | "reportDir" | "reportFile">,
+  opts: Pick<VerificationOptions, 'contractId' | 'network' | 'reportDir' | 'reportFile'>,
   checks: CheckResult[],
-  durationMs: number,
+  durationMs: number
 ): VerificationReport {
-  const passed = checks.filter((c) => c.status === "pass").length;
-  const failed = checks.filter((c) => c.status === "fail").length;
-  const skipped = checks.filter((c) => c.status === "skip").length;
+  const passed = checks.filter((c) => c.status === 'pass').length;
+  const failed = checks.filter((c) => c.status === 'fail').length;
+  const skipped = checks.filter((c) => c.status === 'skip').length;
 
   const report: VerificationReport = {
     contractId: opts.contractId,
     network: opts.network,
     runAt: new Date().toISOString(),
-    overallStatus: failed > 0 ? "fail" : "pass",
+    overallStatus: failed > 0 ? 'fail' : 'pass',
     durationMs,
     checks,
     summary: {
@@ -297,11 +291,10 @@ export function buildReport(
     },
   };
 
-  const reportDir = opts.reportDir ?? "deploy-logs";
-  const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
+  const reportDir = opts.reportDir ?? 'deploy-logs';
+  const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
   const reportFile =
-    opts.reportFile ??
-    path.join(reportDir, `verification-${opts.network}-${timestamp}.json`);
+    opts.reportFile ?? path.join(reportDir, `verification-${opts.network}-${timestamp}.json`);
 
   fs.mkdirSync(path.dirname(reportFile), { recursive: true });
   fs.writeFileSync(reportFile, JSON.stringify(report, null, 2));
@@ -311,8 +304,7 @@ export function buildReport(
 }
 
 export function printReport(report: VerificationReport): void {
-  const statusIcon = (s: CheckStatus) =>
-    s === "pass" ? "✓" : s === "fail" ? "✗" : "—";
+  const statusIcon = (s: CheckStatus) => (s === 'pass' ? '✓' : s === 'fail' ? '✗' : '—');
 
   log(`\n=== Deployment Verification Report ===`);
   log(`Contract : ${report.contractId}`);
@@ -328,7 +320,7 @@ export function printReport(report: VerificationReport): void {
 
   log(
     `\nSummary: ${report.summary.passed} passed, ${report.summary.failed} failed, ` +
-      `${report.summary.skipped} skipped (${report.summary.total} total)`,
+      `${report.summary.skipped} skipped (${report.summary.total} total)`
   );
 
   if (report.reportFile) {
@@ -338,16 +330,14 @@ export function printReport(report: VerificationReport): void {
 
 // ── Orchestrator ───────────────────────────────────────────────────────────
 
-export async function runVerification(
-  options: VerificationOptions,
-): Promise<VerificationReport> {
+export async function runVerification(options: VerificationOptions): Promise<VerificationReport> {
   const {
     contractId,
     network,
     rpcUrl,
     apiBaseUrl,
     databaseUrl,
-    wasmDir = "target/wasm32v1-none/release",
+    wasmDir = 'target/wasm32v1-none/release',
     skipApi = false,
     skipDatabase = false,
   } = options;
@@ -369,9 +359,9 @@ export async function runVerification(
   // 4. API endpoint
   if (skipApi || !rpcUrl) {
     checks.push({
-      name: "API Endpoint",
-      status: "skip",
-      message: skipApi ? "Skipped via --skip-api flag" : "No --rpc-url provided",
+      name: 'API Endpoint',
+      status: 'skip',
+      message: skipApi ? 'Skipped via --skip-api flag' : 'No --rpc-url provided',
       durationMs: 0,
     });
   } else {
@@ -381,9 +371,9 @@ export async function runVerification(
   // 5. Database connectivity
   if (skipDatabase || !databaseUrl) {
     checks.push({
-      name: "Database Connectivity",
-      status: "skip",
-      message: skipDatabase ? "Skipped via --skip-database flag" : "No --database-url provided",
+      name: 'Database Connectivity',
+      status: 'skip',
+      message: skipDatabase ? 'Skipped via --skip-database flag' : 'No --database-url provided',
       durationMs: 0,
     });
   } else {
@@ -401,28 +391,28 @@ export async function runVerification(
 // ── Recovery hints ─────────────────────────────────────────────────────────
 
 export function printRecoveryHints(report: VerificationReport): void {
-  const failed = report.checks.filter((c) => c.status === "fail");
+  const failed = report.checks.filter((c) => c.status === 'fail');
   if (failed.length === 0) return;
 
-  log("\nRecovery options:");
+  log('\nRecovery options:');
   for (const check of failed) {
     switch (check.name) {
-      case "Bytecode Match":
-        log("  • Bytecode mismatch: redeploy with `pnpm ts-node scripts/deploy.ts`");
+      case 'Bytecode Match':
+        log('  • Bytecode mismatch: redeploy with `pnpm ts-node scripts/deploy.ts`');
         break;
-      case "Contract Liveness":
-        log("  • Contract not responding: verify the contract ID and network are correct");
-        log("    Run: stellar contract invoke --id <id> --network <net> -- get_version");
+      case 'Contract Liveness':
+        log('  • Contract not responding: verify the contract ID and network are correct');
+        log('    Run: stellar contract invoke --id <id> --network <net> -- get_version');
         break;
-      case "API Endpoint":
-        log("  • API unreachable: check the RPC URL and network connectivity");
-        log("    Testnet RPC: https://soroban-testnet.stellar.org");
+      case 'API Endpoint':
+        log('  • API unreachable: check the RPC URL and network connectivity');
+        log('    Testnet RPC: https://soroban-testnet.stellar.org');
         break;
-      case "Database Connectivity":
-        log("  • Backend unreachable: check the database URL and service health");
+      case 'Database Connectivity':
+        log('  • Backend unreachable: check the database URL and service health');
         break;
-      case "Toolchain":
-        log("  • stellar CLI missing: install via `cargo install stellar-cli`");
+      case 'Toolchain':
+        log('  • stellar CLI missing: install via `cargo install stellar-cli`');
         break;
     }
   }
@@ -434,26 +424,26 @@ function parseVerifyArgs(argv: string[]): VerificationOptions {
   const get = (flag: string) => {
     const idx = argv.findIndex((a) => a.startsWith(`${flag}=`) || a === flag);
     if (idx === -1) return undefined;
-    if (argv[idx]?.includes("=")) return argv[idx]?.split("=")[1];
+    if (argv[idx]?.includes('=')) return argv[idx]?.split('=')[1];
     return argv[idx + 1];
   };
 
-  const contractId = get("--contract-id") ?? get("--id");
+  const contractId = get('--contract-id') ?? get('--id');
   if (!contractId) {
-    throw new Error("Missing required flag: --contract-id <id>");
+    throw new Error('Missing required flag: --contract-id <id>');
   }
 
   return {
     contractId,
-    network: get("--network") ?? "testnet",
-    rpcUrl: get("--rpc-url"),
-    apiBaseUrl: get("--api-url"),
-    databaseUrl: get("--database-url"),
-    wasmDir: get("--wasm-dir"),
-    reportDir: get("--report-dir"),
-    reportFile: get("--report-file"),
-    skipApi: argv.includes("--skip-api"),
-    skipDatabase: argv.includes("--skip-database"),
+    network: get('--network') ?? 'testnet',
+    rpcUrl: get('--rpc-url'),
+    apiBaseUrl: get('--api-url'),
+    databaseUrl: get('--database-url'),
+    wasmDir: get('--wasm-dir'),
+    reportDir: get('--report-dir'),
+    reportFile: get('--report-file'),
+    skipApi: argv.includes('--skip-api'),
+    skipDatabase: argv.includes('--skip-database'),
   };
 }
 
@@ -464,7 +454,7 @@ if (isMainModule) {
       const options = parseVerifyArgs(process.argv.slice(2));
       const report = await runVerification(options);
       printRecoveryHints(report);
-      process.exitCode = report.overallStatus === "pass" ? 0 : 1;
+      process.exitCode = report.overallStatus === 'pass' ? 0 : 1;
     } catch (err) {
       console.error(err instanceof Error ? err.message : String(err));
       process.exitCode = 1;

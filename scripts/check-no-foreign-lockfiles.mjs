@@ -17,14 +17,7 @@ const __dirname = dirname(__filename);
 const rootDir = resolve(__dirname, '..');
 
 const FORBIDDEN_NAMES = new Set(['package-lock.json', 'yarn.lock']);
-const IGNORED_DIR_NAMES = new Set([
-  'node_modules',
-  '.git',
-  'target',
-  'dist',
-  'build',
-  '.next',
-]);
+const IGNORED_DIR_NAMES = new Set(['node_modules', '.git', 'target', 'dist', 'build', '.next']);
 
 function walk(dir, found) {
   for (const entry of readdirSync(dir)) {

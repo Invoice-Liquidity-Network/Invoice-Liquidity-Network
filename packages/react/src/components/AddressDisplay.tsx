@@ -36,7 +36,13 @@ export const AddressDisplay: React.FC<AddressDisplayProps> = ({
     <span
       className={className}
       title={address}
-      style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontFamily: 'monospace', fontSize: 13 }}
+      style={{
+        display: 'inline-flex',
+        alignItems: 'center',
+        gap: 6,
+        fontFamily: 'monospace',
+        fontSize: 13,
+      }}
     >
       {truncate(address, truncateChars)}
       {copyable && (
@@ -44,7 +50,14 @@ export const AddressDisplay: React.FC<AddressDisplayProps> = ({
           type="button"
           onClick={handleCopy}
           aria-label={copied ? 'Copied' : 'Copy address'}
-          style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, fontSize: 12, color: '#6B7280' }}
+          style={{
+            background: 'none',
+            border: 'none',
+            cursor: 'pointer',
+            padding: 0,
+            fontSize: 12,
+            color: '#6B7280',
+          }}
         >
           {copied ? '✓' : '⎘'}
         </button>

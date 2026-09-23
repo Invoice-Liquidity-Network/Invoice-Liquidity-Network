@@ -1,5 +1,5 @@
-import { getDb, type InvoiceFilter } from "./db";
-import type { Invoice, ILNEvent } from "./types";
+import { getDb, type InvoiceFilter } from './db';
+import type { Invoice, ILNEvent } from './types';
 
 let archiveAttached = false;
 
@@ -10,11 +10,11 @@ let archiveAttached = false;
 export function getArchiveDbConnection() {
   const db = getDb();
   if (!archiveAttached) {
-    const archivePath = process.env.ARCHIVE_DB_PATH || "archive.db";
-    
+    const archivePath = process.env.ARCHIVE_DB_PATH || 'archive.db';
+
     // Attach the archive database file
     db.prepare(`ATTACH DATABASE ? AS archive`).run(archivePath);
-    
+
     // Initialize the archive tables if they don't already exist
     db.exec(`
       CREATE TABLE IF NOT EXISTS archive.invoices (
@@ -52,7 +52,7 @@ export function getArchiveDbConnection() {
         events_moved   INTEGER NOT NULL
       );
     `);
-    
+
     archiveAttached = true;
   }
   return db;
@@ -63,39 +63,52 @@ export function getArchiveDbConnection() {
  * Moves eligible rows to the attached archive database and deletes them from the main database
  * within a single atomic transaction.
  */
-export function archiveOldData(olderThanDays: number = 90): { invoicesMoved: number; eventsMoved: number } {
+export function archiveOldData(olderThanDays: number = 90): {
+  invoicesMoved: number;
+  eventsMoved: number;
+} {
   const db = getArchiveDbConnection();
   const thresholdMs = Date.now() - olderThanDays * 24 * 60 * 60 * 1000;
 
   const txn = db.transaction(() => {
     // 1. Calculate how many records will be moved
-    const invoicesToMove = db.prepare("SELECT COUNT(*) as count FROM main.invoices WHERE created_at < ?").get(thresholdMs) as { count: number };
-    const eventsToMove = db.prepare("SELECT COUNT(*) as count FROM main.events WHERE created_at < ?").get(thresholdMs) as { count: number };
+    const invoicesToMove = db
+      .prepare('SELECT COUNT(*) as count FROM main.invoices WHERE created_at < ?')
+      .get(thresholdMs) as { count: number };
+    const eventsToMove = db
+      .prepare('SELECT COUNT(*) as count FROM main.events WHERE created_at < ?')
+      .get(thresholdMs) as { count: number };
 
     if (invoicesToMove.count === 0 && eventsToMove.count === 0) {
       return { invoicesMoved: 0, eventsMoved: 0 };
     }
 
     // 2. Insert records into the archive database
-    db.prepare(`
+    db.prepare(
+      `
       INSERT OR REPLACE INTO archive.invoices
       SELECT * FROM main.invoices WHERE created_at < ?
-    `).run(thresholdMs);
+    `
+    ).run(thresholdMs);
 
-    db.prepare(`
+    db.prepare(
+      `
       INSERT OR REPLACE INTO archive.events
       SELECT * FROM main.events WHERE created_at < ?
-    `).run(thresholdMs);
+    `
+    ).run(thresholdMs);
 
     // 3. Delete records from the main database
-    db.prepare("DELETE FROM main.invoices WHERE created_at < ?").run(thresholdMs);
-    db.prepare("DELETE FROM main.events WHERE created_at < ?").run(thresholdMs);
+    db.prepare('DELETE FROM main.invoices WHERE created_at < ?').run(thresholdMs);
+    db.prepare('DELETE FROM main.events WHERE created_at < ?').run(thresholdMs);
 
     // 4. Log the archival run
-    db.prepare(`
+    db.prepare(
+      `
       INSERT INTO archive.archive_runs (run_time, invoices_moved, events_moved)
       VALUES (?, ?, ?)
-    `).run(Date.now(), invoicesToMove.count, eventsToMove.count);
+    `
+    ).run(Date.now(), invoicesToMove.count, eventsToMove.count);
 
     return {
       invoicesMoved: invoicesToMove.count,
@@ -115,23 +128,23 @@ export function queryArchiveInvoices(filter: InvoiceFilter): Invoice[] {
   const params: (string | number)[] = [];
 
   if (filter.status) {
-    clauses.push("status = ?");
+    clauses.push('status = ?');
     params.push(filter.status);
   }
   if (filter.freelancer) {
-    clauses.push("freelancer = ?");
+    clauses.push('freelancer = ?');
     params.push(filter.freelancer);
   }
   if (filter.payer) {
-    clauses.push("payer = ?");
+    clauses.push('payer = ?');
     params.push(filter.payer);
   }
   if (filter.funder) {
-    clauses.push("funder = ?");
+    clauses.push('funder = ?');
     params.push(filter.funder);
   }
 
-  const where = clauses.length > 0 ? `WHERE ${clauses.join(" AND ")}` : "";
+  const where = clauses.length > 0 ? `WHERE ${clauses.join(' AND ')}` : '';
   return db
     .prepare(`SELECT * FROM archive.invoices ${where} ORDER BY id ASC`)
     .all(...params) as Invoice[];
@@ -144,11 +157,11 @@ export function queryArchiveEvents(invoiceId?: number): ILNEvent[] {
   const db = getArchiveDbConnection();
   if (invoiceId !== undefined) {
     return db
-      .prepare("SELECT * FROM archive.events WHERE invoice_id = ? ORDER BY ledger ASC")
+      .prepare('SELECT * FROM archive.events WHERE invoice_id = ? ORDER BY ledger ASC')
       .all(invoiceId) as ILNEvent[];
   }
   return db
-    .prepare("SELECT * FROM archive.events ORDER BY ledger ASC LIMIT 1000")
+    .prepare('SELECT * FROM archive.events ORDER BY ledger ASC LIMIT 1000')
     .all() as ILNEvent[];
 }
 
@@ -160,26 +173,32 @@ export function restoreInvoice(id: number): boolean {
 
   const txn = db.transaction(() => {
     // Check if the invoice exists in the archive database
-    const invoice = db.prepare("SELECT * FROM archive.invoices WHERE id = ?").get(id) as Invoice | undefined;
+    const invoice = db.prepare('SELECT * FROM archive.invoices WHERE id = ?').get(id) as
+      | Invoice
+      | undefined;
     if (!invoice) {
       return false;
     }
 
     // 1. Insert invoice back into main database
-    db.prepare(`
+    db.prepare(
+      `
       INSERT OR REPLACE INTO main.invoices
       SELECT * FROM archive.invoices WHERE id = ?
-    `).run(id);
+    `
+    ).run(id);
 
     // 2. Insert associated events back into main database
-    db.prepare(`
+    db.prepare(
+      `
       INSERT OR REPLACE INTO main.events
       SELECT * FROM archive.events WHERE invoice_id = ?
-    `).run(id);
+    `
+    ).run(id);
 
     // 3. Delete from archive database
-    db.prepare("DELETE FROM archive.invoices WHERE id = ?").run(id);
-    db.prepare("DELETE FROM archive.events WHERE invoice_id = ?").run(id);
+    db.prepare('DELETE FROM archive.invoices WHERE id = ?').run(id);
+    db.prepare('DELETE FROM archive.events WHERE invoice_id = ?').run(id);
 
     return true;
   });
@@ -200,12 +219,20 @@ export interface ArchiveStats {
 export function getArchiveStats(): ArchiveStats {
   const db = getArchiveDbConnection();
 
-  const invoicesCount = db.prepare("SELECT COUNT(*) as count FROM archive.invoices").get() as { count: number };
-  const eventsCount = db.prepare("SELECT COUNT(*) as count FROM archive.events").get() as { count: number };
-  
-  const lastRun = db.prepare("SELECT run_time FROM archive.archive_runs ORDER BY id DESC LIMIT 1").get() as { run_time: number } | undefined;
-  
-  const volumeRow = db.prepare("SELECT COALESCE(SUM(CAST(amount AS INTEGER)), 0) as total FROM archive.invoices").get() as { total: number };
+  const invoicesCount = db.prepare('SELECT COUNT(*) as count FROM archive.invoices').get() as {
+    count: number;
+  };
+  const eventsCount = db.prepare('SELECT COUNT(*) as count FROM archive.events').get() as {
+    count: number;
+  };
+
+  const lastRun = db
+    .prepare('SELECT run_time FROM archive.archive_runs ORDER BY id DESC LIMIT 1')
+    .get() as { run_time: number } | undefined;
+
+  const volumeRow = db
+    .prepare('SELECT COALESCE(SUM(CAST(amount AS INTEGER)), 0) as total FROM archive.invoices')
+    .get() as { total: number };
 
   return {
     totalArchivedInvoices: invoicesCount.count,
@@ -229,7 +256,9 @@ export function startArchivalScheduler(intervalMs = 86400000, olderThanDays = 90
   try {
     const res = archiveOldData(olderThanDays);
     if (res.invoicesMoved > 0 || res.eventsMoved > 0) {
-      console.log(`[archive] Automatic archive run completed. Archived ${res.invoicesMoved} invoices and ${res.eventsMoved} events.`);
+      console.log(
+        `[archive] Automatic archive run completed. Archived ${res.invoicesMoved} invoices and ${res.eventsMoved} events.`
+      );
     }
   } catch (err: any) {
     console.error(`[archive] Automatic archive run failed: ${err.message}`);
@@ -240,7 +269,9 @@ export function startArchivalScheduler(intervalMs = 86400000, olderThanDays = 90
     try {
       const res = archiveOldData(olderThanDays);
       if (res.invoicesMoved > 0 || res.eventsMoved > 0) {
-        console.log(`[archive] Automatic archive run completed. Archived ${res.invoicesMoved} invoices and ${res.eventsMoved} events.`);
+        console.log(
+          `[archive] Automatic archive run completed. Archived ${res.invoicesMoved} invoices and ${res.eventsMoved} events.`
+        );
       }
     } catch (err: any) {
       console.error(`[archive] Automatic archive run failed: ${err.message}`);

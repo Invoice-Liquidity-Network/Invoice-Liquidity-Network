@@ -1,13 +1,7 @@
-import { WebSocketServer, WebSocket } from "ws";
-import { IncomingMessage } from "http";
-import { Server } from "http";
-import { v4 as uuidv4 } from "crypto";
-import type {
-  WebSocketClient,
-  WebSocketMessage,
-  InvoiceEvent,
-  NotificationTrigger,
-} from "./types";
+import { WebSocketServer, WebSocket } from 'ws';
+import { IncomingMessage } from 'http';
+import { Server } from 'http';
+import type { WebSocketClient, WebSocketMessage, InvoiceEvent } from './types';
 
 const HEARTBEAT_INTERVAL = 30000;
 const CLIENT_TIMEOUT = 60000;
@@ -20,9 +14,9 @@ export class NotificationWebSocketServer {
   constructor(private readonly port: number = 4002) {}
 
   start(server: Server): void {
-    this.wss = new WebSocketServer({ server, path: "/ws" });
+    this.wss = new WebSocketServer({ server, path: '/ws' });
 
-    this.wss.on("connection", (socket: WebSocket, req: IncomingMessage) => {
+    this.wss.on('connection', (socket: WebSocket, req: IncomingMessage) => {
       this.handleConnection(socket, req);
     });
 
@@ -40,7 +34,7 @@ export class NotificationWebSocketServer {
     }
 
     this.clients.forEach((client) => {
-      client.socket.close(1000, "Server shutting down");
+      client.socket.close(1000, 'Server shutting down');
     });
 
     this.clients.clear();
@@ -53,7 +47,7 @@ export class NotificationWebSocketServer {
 
   broadcastEvent(event: InvoiceEvent): void {
     const message: WebSocketMessage = {
-      type: "event",
+      type: 'event',
       payload: event,
       timestamp: Date.now(),
     };
@@ -84,11 +78,11 @@ export class NotificationWebSocketServer {
     return Array.from(addresses);
   }
 
-  private handleConnection(socket: WebSocket, req: IncomingMessage): void {
+  private handleConnection(socket: WebSocket, _req: IncomingMessage): void {
     const clientId = this.generateClientId();
     const client: WebSocketClient = {
       id: clientId,
-      address: "",
+      address: '',
       socket,
       subscribedAddresses: new Set(),
       lastHeartbeat: Date.now(),
@@ -97,27 +91,27 @@ export class NotificationWebSocketServer {
 
     this.clients.set(clientId, client);
 
-    socket.on("message", (data: Buffer) => {
+    socket.on('message', (data: Buffer) => {
       this.handleMessage(client, data.toString());
     });
 
-    socket.on("close", () => {
+    socket.on('close', () => {
       this.clients.delete(clientId);
       console.log(`[websocket] Client ${clientId} disconnected`);
     });
 
-    socket.on("error", (error: Error) => {
+    socket.on('error', (error: Error) => {
       console.error(`[websocket] Client ${clientId} error:`, error.message);
       this.clients.delete(clientId);
     });
 
-    socket.on("pong", () => {
+    socket.on('pong', () => {
       client.isAlive = true;
       client.lastHeartbeat = Date.now();
     });
 
     this.sendToClient(client, {
-      type: "heartbeat",
+      type: 'heartbeat',
       payload: { clientId },
       timestamp: Date.now(),
     });
@@ -130,26 +124,26 @@ export class NotificationWebSocketServer {
       const message: WebSocketMessage = JSON.parse(data);
 
       switch (message.type) {
-        case "subscribe":
+        case 'subscribe':
           this.handleSubscribe(client, message);
           break;
-        case "unsubscribe":
+        case 'unsubscribe':
           this.handleUnsubscribe(client, message);
           break;
-        case "heartbeat":
+        case 'heartbeat':
           client.isAlive = true;
           client.lastHeartbeat = Date.now();
           break;
         default:
           this.sendToClient(client, {
-            type: "error",
+            type: 'error',
             payload: { message: `Unknown message type: ${message.type}` },
           });
       }
     } catch (error) {
       this.sendToClient(client, {
-        type: "error",
-        payload: { message: "Invalid message format" },
+        type: 'error',
+        payload: { message: 'Invalid message format' },
       });
     }
   }

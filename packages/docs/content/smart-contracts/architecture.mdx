@@ -9,11 +9,11 @@ ILN consists of three core Soroban smart contracts deployed on Stellar. Each con
 
 ## Contract Overview
 
-| Contract | Purpose | Language |
-|----------|---------|----------|
-| `InvoiceLiquidity` | Core invoice lifecycle | Rust |
-| `ILNDistribution` | Yield distribution & fee management | Rust |
-| `ILNGovernance` | Protocol parameter governance | Rust |
+| Contract           | Purpose                             | Language |
+| ------------------ | ----------------------------------- | -------- |
+| `InvoiceLiquidity` | Core invoice lifecycle              | Rust     |
+| `ILNDistribution`  | Yield distribution & fee management | Rust     |
+| `ILNGovernance`    | Protocol parameter governance       | Rust     |
 
 ## InvoiceLiquidity Contract
 
@@ -39,10 +39,13 @@ pub enum InvoiceStatus {
     Defaulted,
     Liquidated,
 }
+```
 
+### Key Functions
 
-Key Functions
-submit_invoice
+#### `submit_invoice`
+
+```rust
 pub fn submit_invoice(
     env: Env,
     issuer: Address,
@@ -52,36 +55,51 @@ pub fn submit_invoice(
     due_date: u64,
     token: Address,
 ) -> Result<u64, Error>;
+```
+
 Creates a new invoice and returns its ID.
 
-fund_invoice
+#### `fund_invoice`
+
+```rust
 pub fn fund_invoice(
     env: Env,
     lp: Address,
     invoice_id: u64,
 ) -> Result<(), Error>;
+```
+
 Funds a pending invoice. Transfers amount - discount to the issuer immediately.
 
-mark_paid
+#### `mark_paid`
+
+```rust
 pub fn mark_paid(
     env: Env,
     payer: Address,
     invoice_id: u64,
 ) -> Result<(), Error>;
+```
+
 Called by the payer (or oracle) to mark an invoice as paid. Releases full amount to LP.
 
+## ILNDistribution Contract
 
-ILNDistribution Contract
 Handles fee collection and yield distribution.
-Fee Structure| Fee Type     | Rate     | Recipient               |
+
+### Fee Structure
+
+| Fee Type     | Rate     | Recipient               |
 | ------------ | -------- | ----------------------- |
 | Protocol fee | 0.5%     | Treasury                |
 | LP yield     | Variable | Liquidity Provider      |
 | Late fee     | 1% / day | LP (after grace period) |
 
+## ILNGovernance Contract
 
-ILNGovernance Contract
 Manages protocol parameters through on-chain governance.
+
+```rust
 pub struct Proposal {
     pub id: u64,
     pub proposer: Address,
@@ -100,39 +118,42 @@ pub enum Parameter {
     LiquidationThreshold,
     ProtocolFeeRate,
 }
+```
 
+## Contract Interaction Flow
 
-Contract Interaction Flow
+```mermaid
 sequenceDiagram
     participant U as User
     participant IC as InvoiceLiquidity
     participant DC as ILNDistribution
     participant GC as ILNGovernance
-    
+
     U->>IC: submit_invoice()
     IC->>DC: record_invoice_fees()
     DC-->>IC: ok
-    
+
     U->>IC: fund_invoice()
     IC->>DC: calculate_yield()
     DC-->>IC: yield_amount
     IC->>U: transfer_funds()
-    
+
     U->>GC: propose_parameter_change()
     GC->>GC: start_voting_period()
     U->>GC: vote()
     GC->>GC: execute_if_passed()
+```
 
-    Deployment Addresses
-    Testnet
+## Deployment Addresses
+
+### Testnet
+
 | Contract          | Contract ID                                                |
 | ----------------- | ---------------------------------------------------------- |
 | Invoice-Liquidity | `CCPASLHKRFBMVV5PZG3LKDGKFEDXZMB5U7DK42CVLUVWCMUCSRPVBIMO` |
 | ILN-Distribution  | `CAQGPMT3EQK4AABMIR66JJXEOCNCLPTDNXMS5OHZXH4LI24UYAF25V5B` |
 | ILN-Governance    | `CD7GOIU3GNK7EZHG7XWBC7VI4NRVGMRCU7X2FOCAPQN6EGTSW46BY4EB` |
 
+### Mainnet
 
-
-
-Mainnet
 Coming after audit. Do not use testnet contracts with real funds.

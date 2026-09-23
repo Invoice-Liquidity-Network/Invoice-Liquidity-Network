@@ -1,61 +1,158 @@
-# `@iln/sdk` vs `@iln/sdk-next`
+# Step-by-Step Migration Guide: `@iln/sdk` to `@iln/sdk-next`
 
-The repo currently ships two parallel TypeScript SDK packages:
+This document details the step-by-step migration path from the legacy SDK (`@iln/sdk` located in `sdk/`) to the modular, browser-first SDK rewrite (`@iln/sdk-next` located in `packages/sdk/`).
 
-| | `sdk/` (`@iln/sdk`) | `packages/sdk` (`@iln/sdk-next`) |
-|---|---|---|
-| Status | **Stable — recommended for all integrators** | Experimental — modular/browser-first rewrite, not yet feature-complete |
-| `@stellar/stellar-sdk` | `^15.0.1` | `^12.0.0` |
-| Module format | ESM + CJS, single entry point | ESM + CJS + dedicated `browser` build, submodule exports (`./tokens`, `./events`, `./errors`, `./xdr`) |
-| Browser support | Freighter signing via peer deps | Dedicated `vite.browser.config.ts` build and Playwright browser test suite (`tests/browser/`) — `sdk/` has neither |
-| React / React Native | `CheckoutWidget.tsx`, `InvoiceDashboard.tsx`, `react-native/` entry point | None yet |
-| Governance | `governance.ts`, `governance-parser.ts`, `governance-utils.ts`, `governance-types.ts` | None yet |
-| Analytics / offline / plugins | `analytics.ts`, `offline.ts`, `plugins.ts`, `recovery.ts`, `federation.ts` | None yet |
-| Test runner | Vitest | Jest (unit) + Playwright (browser) |
+> [!NOTE]
+> `@iln/sdk-next` is the experimental, modular/browser-first rewrite focused on bundle footprint reduction, native Web Crypto API support, and zero Node.js polyfills for modern browser environments.
 
-## Decision: `@iln/sdk` is the stable package today
+---
 
-`sdk/` (`@iln/sdk`) is what `docs/sdk-quickstart.md` installs and what
-integrators should build against right now. It has the full feature set —
-governance, analytics, offline support, plugins, React and React Native
-bindings — none of which exist yet in `packages/sdk`.
+## Architectural & API Differences
 
-`packages/sdk` (`@iln/sdk-next`) is where the SDK is being rebuilt with a
-leaner, more modular API surface (per-feature submodule exports) and a
-first-class browser build/test pipeline. It is not a drop-in replacement:
-it is missing governance, analytics, offline, plugins, and React support
-present in `@iln/sdk`.
+| Category | `@iln/sdk` (`sdk/`) | `@iln/sdk-next` (`packages/sdk/`) |
+| :--- | :--- | :--- |
+| **Main Class** | `ILNSdk` | `InvoiceClient` |
+| **Target Runtime** | Node.js + Browser polyfills | Browser-first (Web Crypto) + Node.js ES Modules |
+| **Browser Bundle** | Transpiled CJS/ESM | Dedicated `dist/browser/index.js` via Vite |
+| **Cryptography** | Node.js `crypto` | Web Crypto API (`crypto.subtle`, `crypto.getRandomValues`) |
+| **Method Signature Style** | Options object (`{ freelancer, payer, ... }`) | Structured positional & typed parameter objects |
+| **Error Handling** | Class-based `ILNError` hierarchy | Normalized `ILNError` with error codes |
 
-## What's new in `-next`
+---
 
-- **Modular exports** — `@iln/sdk-next/tokens`, `/events`, `/errors`, `/xdr`
-  can be imported independently instead of pulling in the full SDK.
-- **First-class browser build** — a dedicated `browser` export condition
-  (`dist/browser/index.js`) built with Vite, plus a Playwright suite that
-  runs the SDK in a real browser instead of relying on peer-dependency
-  shims.
-- **`crypto-browser.ts`** — uses the Web Crypto API instead of Node's
-  `crypto` module for browser environments.
+## Find-and-Replace / Codemod Quick Reference
 
-## What's deprecated in `@iln/sdk`
+| Legacy `@iln/sdk` Pattern | New `@iln/sdk-next` Pattern | Notes |
+| :--- | :--- | :--- |
+| `import { ILNSdk } from '@iln/sdk'` | `import { InvoiceClient } from '@iln/sdk-next'` | Renamed client export |
+| `new ILNSdk({ ...ILN_TESTNET })` | `new InvoiceClient(horizonUrl, contractId)` | Constructor accepts positional config |
+| `sdk.submitInvoice({ freelancer, ... })` | `client.submitInvoice({ freelancer, ... })` | Updated method call |
+| `sdk.fundInvoice({ funder, invoiceId })` | `client.fundInvoice(invoiceId, funder)` | Positional arguments |
+| `sdk.getInvoice(invoiceId)` | `client.getInvoice(invoiceId)` | Returns typed `Invoice` |
 
-Nothing in `@iln/sdk` is deprecated yet. `@iln/sdk-next` has not reached
-feature parity, so no migration should happen until it does.
+---
 
-## Target timeline
+## Runnable Before & After Examples
 
-No firm deprecation date is set. `@iln/sdk-next` needs governance,
-analytics, offline, plugins, and React/React Native support before it can
-be considered a replacement candidate. Once parity is reached, this doc
-will be updated with a deprecation timeline for `@iln/sdk` and a step-by-step
-migration guide (in the style of `docs/sdk-migration-guide.md`).
+### 1. Submit Invoice
 
-## For contributors
+**Before (`@iln/sdk`):**
+```typescript
+import { ILNSdk, ILN_TESTNET, createFreighterSigner } from '@iln/sdk';
 
-- Building an integration today → install `@iln/sdk`, follow
-  `docs/sdk-quickstart.md`.
-- Working on the next-generation modular/browser SDK → `packages/sdk`
-  (`@iln/sdk-next`).
-- New feature work should land in `@iln/sdk` until `@iln/sdk-next` reaches
-  parity; browser-specific or modular-export work belongs in
-  `@iln/sdk-next`.
+const sdk = new ILNSdk({
+  ...ILN_TESTNET,
+  signer: createFreighterSigner(),
+});
+
+const invoiceId = await sdk.submitInvoice({
+  freelancer: 'GBRPYHIL2CI3FNQ4BXLFMNDLFIMTXHRGY2TEWLYYACGNDWDRV4TVTBU5',
+  payer: 'GA2C5RFPE6GCKMY3US5PAB4BO4FRGSRTCMGV35EOWFCG3LXDTR27TMZG',
+  amount: 25_000_000n,
+  dueDate: Math.floor(Date.now() / 1000) + 604800,
+  discountRate: 300,
+});
+console.log('Submitted invoice ID:', invoiceId);
+```
+
+**After (`@iln/sdk-next`):**
+```typescript
+import { InvoiceClient } from '@iln/sdk-next';
+
+const client = new InvoiceClient(
+  'https://horizon-testnet.stellar.org',
+  'CA3D26RZE4CJGDWIDVRWS5PGAEV7R3Y5QG5W2VDJ3CQ626FJG5423F7E'
+);
+
+const invoiceId = await client.submitInvoice({
+  freelancer: 'GBRPYHIL2CI3FNQ4BXLFMNDLFIMTXHRGY2TEWLYYACGNDWDRV4TVTBU5',
+  payer: 'GA2C5RFPE6GCKMY3US5PAB4BO4FRGSRTCMGV35EOWFCG3LXDTR27TMZG',
+  amount: 25_000_000n,
+  dueDate: Math.floor(Date.now() / 1000) + 604800,
+  discountRate: 300,
+});
+console.log('Submitted invoice ID:', invoiceId);
+```
+
+---
+
+### 2. Fund Invoice
+
+**Before (`@iln/sdk`):**
+```typescript
+import { ILNSdk, ILN_TESTNET } from '@iln/sdk';
+
+const sdk = new ILNSdk({ ...ILN_TESTNET });
+
+await sdk.fundInvoice({
+  funder: 'GC3KW5E4ZJ4Z627FJG5423F7ECA3D26RZE4CJGDWIDVRWS5PGAEV7R3Y',
+  invoiceId: 1n,
+});
+```
+
+**After (`@iln/sdk-next`):**
+```typescript
+import { InvoiceClient } from '@iln/sdk-next';
+
+const client = new InvoiceClient(
+  'https://horizon-testnet.stellar.org',
+  'CA3D26RZE4CJGDWIDVRWS5PGAEV7R3Y5QG5W2VDJ3CQ626FJG5423F7E'
+);
+
+await client.fundInvoice(
+  1n,
+  'GC3KW5E4ZJ4Z627FJG5423F7ECA3D26RZE4CJGDWIDVRWS5PGAEV7R3Y'
+);
+```
+
+---
+
+### 3. Get Invoice
+
+**Before (`@iln/sdk`):**
+```typescript
+import { ILNSdk, ILN_TESTNET } from '@iln/sdk';
+
+const sdk = new ILNSdk({ ...ILN_TESTNET });
+const invoice = await sdk.getInvoice(1n);
+
+console.log('Status:', invoice.status);
+```
+
+**After (`@iln/sdk-next`):**
+```typescript
+import { InvoiceClient } from '@iln/sdk-next';
+
+const client = new InvoiceClient(
+  'https://horizon-testnet.stellar.org',
+  'CA3D26RZE4CJGDWIDVRWS5PGAEV7R3Y5QG5W2VDJ3CQ626FJG5423F7E'
+);
+
+const invoice = await client.getInvoice(1n);
+console.log('Status:', invoice.status);
+```
+
+---
+
+## Browser Support & Vite Configuration
+
+`@iln/sdk-next` provides browser bundles with zero Node.js runtime dependencies:
+
+```typescript
+// vite.browser.config.ts
+import { defineConfig } from 'vite';
+
+export default defineConfig({
+  build: {
+    lib: {
+      entry: 'src/index.ts',
+      name: 'ILNSdkNext',
+      fileName: (format) => `browser/index.${format}.js`,
+      formats: ['es'],
+    },
+    target: 'es2022',
+  },
+});
+```
+
+To cross-link or view legacy migration steps, see [`docs/sdk-migration-guide.md`](sdk-migration-guide.md).

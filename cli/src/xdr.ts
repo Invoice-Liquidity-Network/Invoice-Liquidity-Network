@@ -1,13 +1,13 @@
-import { scValToNative, xdr as stellarXdr } from "@stellar/stellar-sdk";
+import { scValToNative, xdr as stellarXdr } from '@stellar/stellar-sdk';
 
 export function decodeScValXdr(base64: string): unknown {
   const trimmed = base64.trim();
   if (!trimmed) {
-    throw new Error("XDR value must be a non-empty base64 string.");
+    throw new Error('XDR value must be a non-empty base64 string.');
   }
 
   try {
-    return toReadableValue(scValToNative(stellarXdr.ScVal.fromXDR(trimmed, "base64")));
+    return toReadableValue(scValToNative(stellarXdr.ScVal.fromXDR(trimmed, 'base64')));
   } catch (error) {
     throw new Error(`Invalid ScVal XDR: ${error instanceof Error ? error.message : String(error)}`);
   }
@@ -18,14 +18,14 @@ export function formatDecodedScVal(value: unknown): string {
 }
 
 function toReadableValue(value: unknown): unknown {
-  if (typeof value === "bigint") {
+  if (typeof value === 'bigint') {
     return value.toString();
   }
 
   if (value instanceof Uint8Array) {
     return {
       bytes: Array.from(value),
-      hex: Array.from(value, (byte) => byte.toString(16).padStart(2, "0")).join(""),
+      hex: Array.from(value, (byte) => byte.toString(16).padStart(2, '0')).join(''),
     };
   }
 
@@ -35,16 +35,16 @@ function toReadableValue(value: unknown): unknown {
 
   if (value instanceof Map) {
     return Object.fromEntries(
-      Array.from(value.entries(), ([key, mapValue]) => [formatKey(key), toReadableValue(mapValue)]),
+      Array.from(value.entries(), ([key, mapValue]) => [formatKey(key), toReadableValue(mapValue)])
     );
   }
 
-  if (value && typeof value === "object") {
+  if (value && typeof value === 'object') {
     return Object.fromEntries(
       Object.entries(value as Record<string, unknown>).map(([key, objectValue]) => [
         key,
         toReadableValue(objectValue),
-      ]),
+      ])
     );
   }
 
@@ -52,11 +52,11 @@ function toReadableValue(value: unknown): unknown {
 }
 
 function formatKey(key: unknown): string {
-  if (typeof key === "string") {
+  if (typeof key === 'string') {
     return key;
   }
 
-  if (typeof key === "bigint") {
+  if (typeof key === 'bigint') {
     return key.toString();
   }
 

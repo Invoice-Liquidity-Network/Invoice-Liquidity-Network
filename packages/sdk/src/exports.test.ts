@@ -31,19 +31,17 @@ describe('package.json exports', () => {
         expect(entry.require).toBe(`./dist/${name}.cjs`);
         expect(entry.types).toBe(`./dist/${name}.d.ts`);
       }
-    },
+    }
   );
 
-  it.each([
-    './errors',
-    './events',
-    './tokens',
-    './xdr',
-  ])('subpath %s maps to an existing source file', (subpath) => {
-    const name = subpath.replace('./', '');
-    const srcFile = path.resolve(__dirname, `${name}.ts`);
-    expect(fs.existsSync(srcFile)).toBe(true);
-  });
+  it.each(['./errors', './events', './tokens', './xdr'])(
+    'subpath %s maps to an existing source file',
+    (subpath) => {
+      const name = subpath.replace('./', '');
+      const srcFile = path.resolve(__dirname, `${name}.ts`);
+      expect(fs.existsSync(srcFile)).toBe(true);
+    }
+  );
 
   it('has a build script that includes all entry points', () => {
     const buildScript = pkg.scripts.build;

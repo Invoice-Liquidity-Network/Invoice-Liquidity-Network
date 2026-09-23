@@ -11,7 +11,15 @@
  * never hard-code a scale factor.
  */
 
-/** A canonical, fully-described token recognised by the protocol. */
+/**
+ * A canonical, fully-described token recognised by the protocol.
+ *
+ * Intentionally differs from @iln/shared's Token: this SDK version is a
+ * UI/display-oriented representation with `logo` (asset path), literal union
+ * `symbol` (`'USDC' | 'EURC' | 'XLM'`), and constrained `decimals` (`6 | 7`).
+ * The shared version is a contract-level type with `name`, `issuer`, `listed`,
+ * and unconstrained `symbol`/`decimals` fields.
+ */
 export interface Token {
   /** Stellar Asset Contract (SAC) address, `C...` for issued assets. */
   address: string;
@@ -77,10 +85,7 @@ export const SUPPORTED_TOKENS: Record<Network, readonly Token[]> = {
 } as const;
 
 /** Flat list of every supported token across all networks. */
-const ALL_TOKENS: readonly Token[] = [
-  ...SUPPORTED_TOKENS.testnet,
-  ...SUPPORTED_TOKENS.mainnet,
-];
+const ALL_TOKENS: readonly Token[] = [...SUPPORTED_TOKENS.testnet, ...SUPPORTED_TOKENS.mainnet];
 
 /**
  * Format an on-chain integer `amount` (base units) as a human-readable decimal
@@ -105,10 +110,7 @@ export function formatAmount(amount: bigint, token: Token): string {
   if (fraction === 0n) {
     result = whole.toString();
   } else {
-    const fractionStr = fraction
-      .toString()
-      .padStart(token.decimals, '0')
-      .replace(/0+$/, '');
+    const fractionStr = fraction.toString().padStart(token.decimals, '0').replace(/0+$/, '');
     result = `${whole.toString()}.${fractionStr}`;
   }
 
@@ -138,7 +140,7 @@ export function parseAmount(display: string, token: Token): bigint {
   const [, sign, wholePart, fractionPart = ''] = match;
   if (fractionPart.length > token.decimals) {
     throw new RangeError(
-      `Amount "${display}" has more than ${token.decimals} decimal places for ${token.symbol}`,
+      `Amount "${display}" has more than ${token.decimals} decimal places for ${token.symbol}`
     );
   }
 

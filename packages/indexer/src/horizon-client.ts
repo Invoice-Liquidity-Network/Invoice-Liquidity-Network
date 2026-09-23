@@ -1,5 +1,5 @@
-import { RawHorizonEvent } from "./parse";
-import { TimeoutError } from "./errors";
+import { RawHorizonEvent } from './parse';
+import { TimeoutError } from './errors';
 
 export interface HorizonPage {
   _embedded: {
@@ -25,13 +25,8 @@ export class HorizonClient {
   private timeoutMs: number;
   private fetchFn: FetchFn;
 
-  constructor(
-    baseUrl: string,
-    pageSize: number,
-    timeoutMs: number,
-    fetchFn?: FetchFn
-  ) {
-    this.baseUrl = baseUrl.replace(/\/$/, "");
+  constructor(baseUrl: string, pageSize: number, timeoutMs: number, fetchFn?: FetchFn) {
+    this.baseUrl = baseUrl.replace(/\/$/, '');
     this.pageSize = pageSize;
     this.timeoutMs = timeoutMs;
     this.fetchFn = fetchFn ?? globalThis.fetch.bind(globalThis);
@@ -41,9 +36,9 @@ export class HorizonClient {
   contractEventsUrl(contractId: string, cursor?: string): string {
     const params = new URLSearchParams({
       limit: String(this.pageSize),
-      order: "asc",
+      order: 'asc',
     });
-    if (cursor) params.set("cursor", cursor);
+    if (cursor) params.set('cursor', cursor);
     return `${this.baseUrl}/contracts/${contractId}/events?${params}`;
   }
 
@@ -51,9 +46,9 @@ export class HorizonClient {
   accountTransactionsUrl(address: string, cursor?: string): string {
     const params = new URLSearchParams({
       limit: String(this.pageSize),
-      order: "asc",
+      order: 'asc',
     });
-    if (cursor) params.set("cursor", cursor);
+    if (cursor) params.set('cursor', cursor);
     return `${this.baseUrl}/accounts/${address}/transactions?${params}`;
   }
 
@@ -69,13 +64,8 @@ export class HorizonClient {
       }
       return (await res.json()) as HorizonPage;
     } catch (error) {
-      if (
-        error &&
-        typeof error === "object" &&
-        "name" in error &&
-        error.name === "AbortError"
-      ) {
-        throw new TimeoutError("Horizon fetchPage", this.timeoutMs);
+      if (error && typeof error === 'object' && 'name' in error && error.name === 'AbortError') {
+        throw new TimeoutError('Horizon fetchPage', this.timeoutMs);
       }
       throw error;
     } finally {
@@ -113,13 +103,13 @@ export class HorizonClient {
     onError?: (err: Error) => void
   ): AbortController {
     const controller = new AbortController();
-    const sseUrl = url.includes("?")
+    const sseUrl = url.includes('?')
       ? `${url}&accept=text/event-stream`
       : `${url}?accept=text/event-stream`;
 
     this.fetchFn(sseUrl, {
       signal: controller.signal,
-      headers: { Accept: "text/event-stream" },
+      headers: { Accept: 'text/event-stream' },
     })
       .then(async (res) => {
         if (!res.ok || !res.body) {
@@ -128,20 +118,21 @@ export class HorizonClient {
 
         const reader = res.body.getReader();
         const decoder = new TextDecoder();
-        let buffer = "";
+        let buffer = '';
 
+        // eslint-disable-next-line no-constant-condition -- reads until the stream signals done
         while (true) {
           const { done, value } = await reader.read();
           if (done) break;
 
           buffer += decoder.decode(value, { stream: true });
-          const lines = buffer.split("\n");
-          buffer = lines.pop() ?? "";
+          const lines = buffer.split('\n');
+          buffer = lines.pop() ?? '';
 
           for (const line of lines) {
-            if (line.startsWith("data:")) {
+            if (line.startsWith('data:')) {
               const data = line.slice(5).trim();
-              if (data === "" || data === "\"hello\"") continue;
+              if (data === '' || data === '"hello"') continue;
               try {
                 const event = JSON.parse(data) as RawHorizonEvent;
                 onEvent(event);
@@ -153,7 +144,7 @@ export class HorizonClient {
         }
       })
       .catch((err: Error) => {
-        if (err.name !== "AbortError") {
+        if (err.name !== 'AbortError') {
           onError?.(err);
         }
       });
