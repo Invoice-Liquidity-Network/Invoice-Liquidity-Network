@@ -18,6 +18,8 @@ Security fixes are provided for the latest major version of each maintained ILN 
 
 Please report suspected vulnerabilities privately. Do not open a public issue, discussion, or pull request with exploit details before the maintainers have investigated and shipped any necessary fix.
 
+For the SDK's security assumptions, trust boundaries, and key management guidelines, see the [SDK Trust Model](docs/sdk-trust-model.md). This document is the authoritative reference for understanding what the SDK validates, what it delegates, and what must be protected outside the SDK — including browser signing via Freighter and backend keypair signing.
+
 Use either reporting channel:
 
 - Email: `security@invoiceliquidity.network`

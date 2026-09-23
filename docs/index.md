@@ -19,8 +19,9 @@
 - [CI/CD](ci-cd.md)
 - [PR Submission Form](pr-16-submission-form.md)
 - [Release Process](release-process.md)
- - [Reputation](reputation/overview.md)
+  - [Reputation](reputation/overview.md)
 - [Security](security.md)
+- [SDK Trust Model](sdk-trust-model.md) — trust assumptions, key management, and threat model for the SDK
 - [Glossary](glossary.md)
 
 ## Support

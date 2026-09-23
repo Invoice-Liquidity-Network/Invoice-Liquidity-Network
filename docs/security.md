@@ -82,6 +82,12 @@ gh attestation verify iln-sdk-*.tgz \
 
 A successful verification prints the workflow run, commit SHA, and attestation metadata for the tarball.
 
+## SDK Trust Model
+
+The [SDK Trust Model](sdk-trust-model.md) documents the trust assumptions, key management guidelines, security assumptions, threat model, and best practices for `@invoice-liquidity/sdk`. It is the authoritative reference for understanding what the SDK validates, what it delegates, and what must be protected outside the SDK — including browser signing via Freighter and backend keypair signing.
+
+This document is cross-linked from the SDK's browser test suite, which validates genuine wallet-extension interaction patterns. Any SDK-level signing bug that could affect frontend wallet security should be caught by the SDK test suite before reaching the frontend.
+
 ## Recognition
 
 Researchers who want public credit may be listed in [`HALL_OF_FAME.md`](../HALL_OF_FAME.md) after the issue is fixed and disclosure is approved. ILN does not guarantee bounty payment unless a separate bounty program says otherwise.
