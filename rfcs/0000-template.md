@@ -4,6 +4,7 @@
 - **Author(s):** [GitHub handles]
 - **Created:** [YYYY-MM-DD]
 - **PR:** [link once submitted]
+- **Tracking issues:** —
 
 ---
 
@@ -48,3 +49,13 @@ What other designs were considered? Why was this one chosen over them?
 ## Unresolved Questions
 
 List anything that must be resolved before this RFC can be accepted. Remove items as they are settled during the comment period.
+
+---
+
+## Implementation notes
+
+*(Fill in during or after implementation)*
+
+- Tracking issue(s): —
+- Implementation PR(s): —
+- Merged: —

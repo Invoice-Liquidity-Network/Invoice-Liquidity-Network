@@ -4,7 +4,9 @@ try {
   require('ts-node/register/transpile-only');
 } catch (e) {
   // If ts-node isn't available, print a helpful message
-  console.error('ts-node is required to run the ILN CLI. Install dependencies with `pnpm install`.');
+  console.error(
+    'ts-node is required to run the ILN CLI. Install dependencies with `pnpm install`.'
+  );
   process.exit(1);
 }
 

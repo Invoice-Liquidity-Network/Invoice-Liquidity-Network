@@ -10,19 +10,65 @@
 *                           @Invoice-Liquidity-Network/maintainers
 
 # SDK
-sdk/                        @Invoice-Liquidity-Network/sdk-team
+sdk/                         @Invoice-Liquidity-Network/sdk-team
+packages/sdk/                @Invoice-Liquidity-Network/sdk-team
+packages/invoice-sdk/        @Invoice-Liquidity-Network/sdk-team
+
+# Shared libraries
+packages/shared/             @Invoice-Liquidity-Network/sdk-team
+packages/test-utils/         @Invoice-Liquidity-Network/sdk-team
+packages/upgrade-tests/      @Invoice-Liquidity-Network/sdk-team
+
+# CLI
+cli/                         @Invoice-Liquidity-Network/cli-team
+packages/cli/                @Invoice-Liquidity-Network/cli-team
+packages/scripts/            @Invoice-Liquidity-Network/cli-team
+
+# Indexer
+indexer/                     @Invoice-Liquidity-Network/indexer-team
+packages/indexer/            @Invoice-Liquidity-Network/indexer-team
+
+# Notifications
+notifications/               @Invoice-Liquidity-Network/notifications-team
+packages/react/              @Invoice-Liquidity-Network/frontend-team
+packages/opentelemetry/      @Invoice-Liquidity-Network/infra-team
+packages/opentelemetry/      @Invoice-Liquidity-Network/observability-team
+packages/mock-backend/       @Invoice-Liquidity-Network/sdk-team
 
 # Documentation
-docs/                       @Invoice-Liquidity-Network/docs-lead
+docs/                        @Invoice-Liquidity-Network/docs-lead
+packages/docs/               @Invoice-Liquidity-Network/docs-lead
 
 # Scripts and deployment tooling
-scripts/                    @Invoice-Liquidity-Network/devops
+scripts/                     @Invoice-Liquidity-Network/devops
+account-seeder/              @Invoice-Liquidity-Network/devops
+contract-deployer/           @Invoice-Liquidity-Network/devops
 
 # CI/CD workflows
-.github/workflows/          @Invoice-Liquidity-Network/devops
+.github/                     @Invoice-Liquidity-Network/devops
+.github/workflows/           @Invoice-Liquidity-Network/devops
 
 # RFCs (if added in future)
-rfcs/                       @Invoice-Liquidity-Network/maintainers
+rfcs/                        @Invoice-Liquidity-Network/maintainers
 
 # Security policy — security lead must review any changes
-SECURITY.md                 @Invoice-Liquidity-Network/security-lead
+SECURITY.md                  @Invoice-Liquidity-Network/security-lead
+gitleaks.toml                @Invoice-Liquidity-Network/security-lead
+.secrets.baseline            @Invoice-Liquidity-Network/security-lead
+
+# Frontend submodule — frontend team owns; note current submodule is empty/uninitialized
+frontend/                    @Invoice-Liquidity-Network/frontend-team
+
+# Backend smart-contract submodule — protocol team owns; note current submodule is empty/uninitialized
+backend/                     @Invoice-Liquidity-Network/protocol-team
+
+# Examples and integration test fixtures (owned by SDK/CLI teams respectively)
+examples/                    @Invoice-Liquidity-Network/sdk-team
+tests/sdk-integration/        @Invoice-Liquidity-Network/sdk-team
+tests/e2e/                   @Invoice-Liquidity-Network/sdk-team
+
+# Worker scaffolding (purpose pending clarification per issue tracking)
+workers/                     @Invoice-Liquidity-Network/maintainers
+
+# History snapshots / status JSON — infrastructure/maintainers
+history/                     @Invoice-Liquidity-Network/infra-team

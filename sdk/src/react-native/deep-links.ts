@@ -1,9 +1,9 @@
-import { getPlatformAdapter, type PlatformAdapter } from "./platform";
+import { getPlatformAdapter, type PlatformAdapter } from './platform';
 
-export const STELLAR_URI_SCHEME = "web+stellar:";
+export const STELLAR_URI_SCHEME = 'web+stellar:';
 
 export interface StellarURIParams {
-  operation: "pay" | "tx" | "sign";
+  operation: 'pay' | 'tx' | 'sign';
   destination?: string;
   amount?: string;
   assetCode?: string;
@@ -28,7 +28,7 @@ export function buildStellarURI(params: StellarURIParams): string {
   const base = `${STELLAR_URI_SCHEME}${params.operation}`;
   const queryParams: string[] = [];
 
-  const skipKeys = new Set(["operation"]);
+  const skipKeys = new Set(['operation']);
 
   for (const [key, value] of Object.entries(params)) {
     if (skipKeys.has(key) || value === undefined) continue;
@@ -36,31 +36,31 @@ export function buildStellarURI(params: StellarURIParams): string {
   }
 
   if (queryParams.length === 0) return base;
-  return `${base}?${queryParams.join("&")}`;
+  return `${base}?${queryParams.join('&')}`;
 }
 
 export function parseStellarURI(uri: string): DeepLinkResult | null {
   if (!uri.startsWith(STELLAR_URI_SCHEME)) return null;
 
   const withoutScheme = uri.slice(STELLAR_URI_SCHEME.length);
-  const qIndex = withoutScheme.indexOf("?");
+  const qIndex = withoutScheme.indexOf('?');
 
   let operation: string;
   let queryString: string;
 
   if (qIndex === -1) {
     operation = withoutScheme;
-    queryString = "";
+    queryString = '';
   } else {
     operation = withoutScheme.slice(0, qIndex);
     queryString = withoutScheme.slice(qIndex + 1);
   }
 
-  const params: StellarURIParams = { operation: operation as StellarURIParams["operation"] };
+  const params: StellarURIParams = { operation: operation as StellarURIParams['operation'] };
 
   if (queryString) {
-    for (const part of queryString.split("&")) {
-      const eqIndex = part.indexOf("=");
+    for (const part of queryString.split('&')) {
+      const eqIndex = part.indexOf('=');
       if (eqIndex === -1) continue;
       const key = decodeURIComponent(part.slice(0, eqIndex));
       const value = decodeURIComponent(part.slice(eqIndex + 1));
@@ -74,10 +74,10 @@ export function parseStellarURI(uri: string): DeepLinkResult | null {
 export function buildSigningDeepLink(
   transactionXdr: string,
   networkPassphrase: string,
-  callbackUrl?: string,
+  callbackUrl?: string
 ): string {
   const params: StellarURIParams = {
-    operation: "sign",
+    operation: 'sign',
     xdr: transactionXdr,
     networkPassphrase,
   };
@@ -100,10 +100,10 @@ export function buildPayDeepLink(
     callback?: string;
     msg?: string;
     networkPassphrase?: string;
-  },
+  }
 ): string {
   const params: StellarURIParams = {
-    operation: "pay",
+    operation: 'pay',
     destination,
     amount,
     ...options,
@@ -118,9 +118,10 @@ export function extractSignedXDRFromCallback(url: string): string | null {
 
   try {
     const urlObj = new URL(url);
-    const xdr = urlObj.searchParams.get("xdr");
+    const xdr = urlObj.searchParams.get('xdr');
     if (xdr) return xdr;
   } catch {
+    // malformed URL — fall through to null
   }
 
   return null;
@@ -129,21 +130,19 @@ export function extractSignedXDRFromCallback(url: string): string | null {
 export function extractTransactionHashFromCallback(url: string): string | null {
   try {
     const urlObj = new URL(url);
-    return urlObj.searchParams.get("tx") ?? null;
+    return urlObj.searchParams.get('tx') ?? null;
   } catch {
     return null;
   }
 }
 
-export function waitForDeepLinkCallback(
-  timeoutMs: number = 120_000,
-): Promise<string> {
+export function waitForDeepLinkCallback(timeoutMs: number = 120_000): Promise<string> {
   const adapter: PlatformAdapter = getPlatformAdapter();
 
   return new Promise<string>((resolve, reject) => {
     const timeout = setTimeout(() => {
       cleanup();
-      reject(new Error("Deep link callback timed out"));
+      reject(new Error('Deep link callback timed out'));
     }, timeoutMs);
 
     const cleanup = adapter.addURLListener((url: string) => {
@@ -168,6 +167,6 @@ export function waitForDeepLinkCallback(
   });
 }
 
-export function buildCallbackUrl(scheme: string = "ilnsdk"): string {
+export function buildCallbackUrl(scheme: string = 'ilnsdk'): string {
   return `${scheme}://wallet/callback`;
 }

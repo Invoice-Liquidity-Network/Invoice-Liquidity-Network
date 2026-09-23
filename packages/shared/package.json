@@ -18,8 +18,23 @@
   },
   "scripts": {
     "build": "tsc -p tsconfig.json",
-    "check": "tsc -p tsconfig.json --noEmit",
+    "type-check": "tsc -p tsconfig.json --noEmit",
     "test": "tsc -p tsconfig.json && tsd"
+  },
+  "tsd": {
+    "directory": "test-d",
+    "compilerOptions": {
+      "target": "ES2020",
+      "module": "ESNext",
+      "moduleResolution": "bundler",
+      "strict": true,
+      "baseUrl": ".",
+      "paths": {
+        "@iln/shared": [
+          "./dist/index.d.ts"
+        ]
+      }
+    }
   },
   "engines": {
     "node": ">=20"

@@ -80,3 +80,21 @@ npm test
 npx playwright install
 npm run test:browser
 ```
+
+## Testing the packed npm output locally
+
+To try the package as it will actually be published (rather than via a workspace
+symlink), pack it and install the tarball into a scratch project instead of
+committing a `.tgz` to the repo:
+
+```bash
+# From packages/sdk
+npm run build
+npm pack --pack-destination /tmp
+
+# In a separate scratch project
+npm install /tmp/iln-sdk-<version>.tgz
+```
+
+Packed tarballs are build output — delete them after use and don't commit them;
+`*.tgz` is gitignored for this reason.

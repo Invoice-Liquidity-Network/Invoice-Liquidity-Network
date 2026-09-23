@@ -49,16 +49,16 @@ export function parseAmount(input: string, token: AmountToken): bigint {
   const match = trimmed.match(/^(\d+)(?:\.(\d+))?$/);
 
   if (!match) {
-    throw new Error("Invalid amount. Use a non-negative decimal value.");
+    throw new Error('Invalid amount. Use a non-negative decimal value.');
   }
 
-  const fraction = match[2] ?? "";
+  const fraction = match[2] ?? '';
   if (fraction.length > decimals) {
     throw new Error(`Invalid amount. Token supports at most ${decimals} decimal places.`);
   }
 
   const whole = BigInt(match[1]);
-  const fractional = BigInt(fraction.padEnd(decimals, "0") || "0");
+  const fractional = BigInt(fraction.padEnd(decimals, '0') || '0');
   return whole * 10n ** BigInt(decimals) + fractional;
 }
 
@@ -79,7 +79,7 @@ export function parseAmount(input: string, token: AmountToken): bigint {
  */
 export function formatAmount(amount: bigint, token: AmountToken): string {
   if (amount < 0n) {
-    throw new Error("Cannot format a negative amount.");
+    throw new Error('Cannot format a negative amount.');
   }
 
   const decimals = normalizeDecimals(token);
@@ -90,7 +90,7 @@ export function formatAmount(amount: bigint, token: AmountToken): string {
     return whole.toString();
   }
 
-  const fraction = (amount % scale).toString().padStart(decimals, "0");
+  const fraction = (amount % scale).toString().padStart(decimals, '0');
   return `${whole.toString()}.${fraction}`;
 }
 
@@ -103,10 +103,10 @@ export function formatAmount(amount: bigint, token: AmountToken): string {
 export function formatAmountOptions(
   amount: bigint,
   token: AmountToken,
-  opts: FormatOptions,
+  opts: FormatOptions
 ): string {
   if (amount < 0n) {
-    throw new Error("Cannot format a negative amount.");
+    throw new Error('Cannot format a negative amount.');
   }
 
   const decimals = normalizeDecimals(token);
@@ -121,9 +121,9 @@ export function formatAmountOptions(
     if (decimals === 0) {
       result = whole.toString();
     } else {
-      let fraction = (amount % scale).toString().padStart(decimals, "0");
+      let fraction = (amount % scale).toString().padStart(decimals, '0');
       if (opts.trimZeros) {
-        fraction = fraction.replace(/0+$/, "");
+        fraction = fraction.replace(/0+$/, '');
       }
       result = fraction.length > 0 ? `${whole.toString()}.${fraction}` : whole.toString();
     }
@@ -146,7 +146,7 @@ export function formatAmountTrimmed(amount: bigint, token: AmountToken): string 
  */
 export function formatAmountWithSymbol(
   amount: bigint,
-  token: AmountToken & { symbol: string },
+  token: AmountToken & { symbol: string }
 ): string {
   return formatAmountOptions(amount, token, { symbol: token.symbol });
 }
@@ -161,16 +161,16 @@ export function validateAmount(input: string, token: AmountToken): ValidationRes
   try {
     normalizeDecimals(token);
   } catch (e) {
-    return { valid: false, error: e instanceof Error ? e.message : "Invalid token." };
+    return { valid: false, error: e instanceof Error ? e.message : 'Invalid token.' };
   }
 
   const trimmed = input.trim();
   const match = trimmed.match(/^(\d+)(?:\.(\d+))?$/);
   if (!match) {
-    return { valid: false, error: "Invalid amount. Use a non-negative decimal value." };
+    return { valid: false, error: 'Invalid amount. Use a non-negative decimal value.' };
   }
 
-  const fraction = match[2] ?? "";
+  const fraction = match[2] ?? '';
   if (fraction.length > token.decimals) {
     return {
       valid: false,
@@ -189,7 +189,7 @@ export function hasExcessPrecision(display: string, token: AmountToken): boolean
   const trimmed = display.trim();
   const match = trimmed.match(/^-?(\d+)(?:\.(\d+))?$/);
   if (!match) return false;
-  const fraction = match[2] ?? "";
+  const fraction = match[2] ?? '';
   return fraction.length > token.decimals;
 }
 
@@ -200,11 +200,11 @@ export function hasExcessPrecision(display: string, token: AmountToken): boolean
  */
 export function clampToTokenDecimals(display: string, token: AmountToken): string {
   // Normalize a trailing decimal point ("0." → "0") before matching.
-  const trimmed = display.trim().replace(/\.$/, "");
+  const trimmed = display.trim().replace(/\.$/, '');
   const match = trimmed.match(/^(-?)(\d+)(?:\.(\d+))?$/);
   if (!match) return trimmed;
 
-  const [, sign, whole, fraction = ""] = match;
+  const [, sign, whole, fraction = ''] = match;
   if (fraction.length <= token.decimals) return trimmed;
 
   const clamped = fraction.slice(0, token.decimals);
@@ -221,7 +221,7 @@ export function clampToTokenDecimals(display: string, token: AmountToken): strin
 export function applyBasisPoints(amount: bigint, bps: number, token: AmountToken): bigint {
   normalizeDecimals(token);
   if (!Number.isInteger(bps) || bps < 0 || bps > 10_000) {
-    throw new Error("Basis points must be an integer between 0 and 10,000.");
+    throw new Error('Basis points must be an integer between 0 and 10,000.');
   }
   return (amount * BigInt(bps)) / BASIS_POINTS_SCALE;
 }
@@ -256,11 +256,11 @@ export function scaledMultiply(
   amount: bigint,
   numerator: bigint,
   denominator: bigint,
-  token: AmountToken,
+  token: AmountToken
 ): bigint {
   normalizeDecimals(token);
   if (denominator === 0n) {
-    throw new Error("scaledMultiply: denominator must not be zero.");
+    throw new Error('scaledMultiply: denominator must not be zero.');
   }
   return (amount * numerator) / denominator;
 }
@@ -279,10 +279,7 @@ export function scaledMultiply(
  * a.applyBasisPoints(300).toRaw()                 // 30_000n (3%)
  */
 export class BigAmount {
-  private constructor(
-    private readonly _raw: bigint,
-    readonly token: AmountToken,
-  ) {
+  private constructor(private readonly _raw: bigint, readonly token: AmountToken) {
     normalizeDecimals(token);
   }
 
@@ -297,12 +294,12 @@ export class BigAmount {
   // ── Arithmetic ──────────────────────────────────────────────────────────────
 
   add(other: BigAmount): BigAmount {
-    assertSameDecimals(this.token, other.token, "add");
+    assertSameDecimals(this.token, other.token, 'add');
     return new BigAmount(this._raw + other._raw, this.token);
   }
 
   subtract(other: BigAmount): BigAmount {
-    assertSameDecimals(this.token, other.token, "subtract");
+    assertSameDecimals(this.token, other.token, 'subtract');
     return new BigAmount(this._raw - other._raw, this.token);
   }
 
@@ -322,7 +319,7 @@ export class BigAmount {
   // ── Comparison ──────────────────────────────────────────────────────────────
 
   compare(other: BigAmount): -1 | 0 | 1 {
-    assertSameDecimals(this.token, other.token, "compare");
+    assertSameDecimals(this.token, other.token, 'compare');
     if (this._raw < other._raw) return -1;
     if (this._raw > other._raw) return 1;
     return 0;
@@ -345,7 +342,7 @@ export class BigAmount {
   /** Format using `formatAmount` by default; accepts `FormatOptions` for richer output. */
   format(opts?: FormatOptions): string {
     if (this._raw < 0n) {
-      throw new Error("Cannot format a negative BigAmount.");
+      throw new Error('Cannot format a negative BigAmount.');
     }
     if (!opts || Object.keys(opts).length === 0) {
       return formatAmount(this._raw, this.token);
@@ -370,7 +367,7 @@ function normalizeDecimals(token: AmountToken): number {
 function assertSameDecimals(a: AmountToken, b: AmountToken, op: string): void {
   if (a.decimals !== b.decimals) {
     throw new Error(
-      `Cannot ${op} amounts with different token decimals (${a.decimals} vs ${b.decimals}).`,
+      `Cannot ${op} amounts with different token decimals (${a.decimals} vs ${b.decimals}).`
     );
   }
 }
@@ -395,6 +392,6 @@ function formatCompact(amount: bigint, decimals: number, scale: bigint): string 
   }
 
   // Below 1K: show whole units with trimmed fraction
-  const fraction = (amount % displayScale).toString().padStart(decimals, "0").replace(/0+$/, "");
+  const fraction = (amount % displayScale).toString().padStart(decimals, '0').replace(/0+$/, '');
   return fraction.length > 0 ? `${whole}.${fraction}` : whole.toString();
 }

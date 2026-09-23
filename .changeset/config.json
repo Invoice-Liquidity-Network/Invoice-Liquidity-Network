@@ -7,9 +7,6 @@
   "access": "public",
   "baseBranch": "main",
   "updateInternalDependencies": "patch",
-  "packages": [
-    "packages/sdk",
-    "sdk"
-  ],
+  "packages": ["packages/sdk", "sdk"],
   "ignore": []
 }

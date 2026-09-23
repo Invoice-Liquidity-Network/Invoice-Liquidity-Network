@@ -12,7 +12,7 @@
     "resolveJsonModule": true,
     "isolatedModules": true,
     "lib": ["ES2020", "DOM"],
-    "types": ["node"],
+    "types": ["node", "vitest/globals"],
     "baseUrl": ".",
     "paths": {
       "@iln/sdk": ["../../sdk/src/index.ts"]

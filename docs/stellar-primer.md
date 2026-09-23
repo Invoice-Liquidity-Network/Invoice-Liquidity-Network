@@ -80,7 +80,7 @@ If a user's account has no USDC trustline, sending them USDC will fail. The ILN 
 
 Soroban smart contracts use the **SEP-41 token interface** — the Stellar equivalent of ERC-20. Classic assets (USDC, EURC, XLM) are wrapped behind a **Stellar Asset Contract (SAC)** that exposes the SEP-41 interface to Soroban contracts.
 
-**ILN context:** The `Invoice-Liquidity` contract holds USDC as a SAC. When a LP calls `fund_invoice()`, it transfers USDC from the LP's account to the contract via the SAC's `transfer` method. The contract IDs for the SACs on testnet are configured in [`sdk/src/config.ts`](../sdk/src/config.ts).
+**ILN context:** The `Invoice-Liquidity` contract holds USDC as a SAC. When a LP calls `fund_invoice()`, it transfers USDC from the LP's account to the contract via the SAC's `transfer` method. The contract IDs for the SACs on testnet are configured in [`sdk/src/signers.ts`](../sdk/src/signers.ts) (see the `ILN_TESTNET` network config).
 
 **Further reading:**
 - [Assets](https://developers.stellar.org/docs/learn/fundamentals/stellar-data-structures/assets)
@@ -107,8 +107,8 @@ Stellar exposes two distinct APIs. Knowing which to use for a given task saves a
 You won't often call these APIs directly — the SDK and `@stellar/stellar-sdk` abstract them — but you need to know which one to point at when debugging.
 
 **Further reading:**
-- [Horizon API Reference](https://developers.stellar.org/docs/data/horizon)
-- [Soroban RPC](https://developers.stellar.org/docs/data/rpc)
+- [Horizon API Reference](https://developers.stellar.org/docs/data/apis/horizon)
+- [Soroban RPC](https://developers.stellar.org/docs/data/apis/rpc)
 
 ---
 
@@ -136,7 +136,7 @@ await rpc.sendTransaction(signed);
 
 To read state without submitting a transaction, use `simulateTransaction` with a read-only invocation, or call the contract's view functions. There is no `eth_call` equivalent — simulation is the mechanism.
 
-**Further reading:** [Soroban Transactions](https://developers.stellar.org/docs/learn/encyclopedia/contract-development/contract-interactions/transaction-simulation)
+**Further reading:** [Soroban Transactions](https://developers.stellar.org/docs/learn/fundamentals/contract-development/contract-interactions/transaction-simulation)
 
 ---
 

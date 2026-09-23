@@ -1,17 +1,17 @@
-import http from "http";
-import { createApp } from "./api";
-import { CONFIG } from "./config";
-import { startPolling } from "./poller";
-import { createGraphQLServer } from "./graphql/server";
-import { startArchivalScheduler } from "./archive";
-import { BackupManager } from "./backup";
+import http from 'http';
+import { createApp } from './api';
+import { CONFIG } from './config';
+import { startPolling } from './poller';
+import { createGraphQLServer } from './graphql/server';
+import { startArchivalScheduler } from './archive';
+import { BackupManager } from './backup';
 
 async function main() {
   const app = createApp();
   const httpServer = http.createServer(app);
 
   const graphqlMiddleware = await createGraphQLServer(httpServer);
-  app.use("/graphql", graphqlMiddleware);
+  app.use('/graphql', graphqlMiddleware);
 
   httpServer.listen(CONFIG.apiPort, () => {
     console.log(`[api] Listening on http://0.0.0.0:${CONFIG.apiPort}`);
@@ -34,14 +34,14 @@ async function main() {
       cloud: CONFIG.backupCloudProvider
         ? {
             provider: CONFIG.backupCloudProvider,
-            bucket: CONFIG.backupCloudBucket ?? "",
+            bucket: CONFIG.backupCloudBucket ?? '',
             prefix: CONFIG.backupCloudPrefix,
             region: CONFIG.backupCloudRegion,
           }
         : undefined,
     });
     backupManager.start();
-    console.log("[backup] Automated backups enabled");
+    console.log('[backup] Automated backups enabled');
   }
 }
 

@@ -16,11 +16,11 @@ export const TOKEN_DECIMALS: Record<string, number> = {
 };
 
 export const TOKEN_SYMBOLS: Record<string, string> = {
-  USDC: "$",
-  XLM: "XLM",
-  ILN: "ILN",
-  BTC: "₿",
-  ETH: "Ξ",
+  USDC: '$',
+  XLM: 'XLM',
+  ILN: 'ILN',
+  BTC: '₿',
+  ETH: 'Ξ',
 };
 
 /**
@@ -51,18 +51,18 @@ export function formatTokenAmount(
   };
 
   if (options?.compact) {
-    formatOptions.notation = "compact";
-    formatOptions.compactDisplay = "short";
+    formatOptions.notation = 'compact';
+    formatOptions.compactDisplay = 'short';
   }
 
   if (options?.currency) {
-    formatOptions.style = "currency";
+    formatOptions.style = 'currency';
     formatOptions.currency = options.currency;
   }
 
-  const locale = options?.locale ?? "en-US";
+  const locale = options?.locale ?? 'en-US';
   const formatter = new Intl.NumberFormat(locale, formatOptions);
-  
+
   let formatted = formatter.format(numericAmount);
 
   // If no native currency symbol was requested via Intl, prepend/append manually based on known tokens

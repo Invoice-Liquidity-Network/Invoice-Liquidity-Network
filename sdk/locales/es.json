@@ -1,8 +1,0 @@
-{
-  "InvalidAmount": "Importe no válido",
-  "AlreadyFunded": "Ya financiado",
-  "NotFunded": "No financiado",
-  "InvoiceNotFound": "Factura no encontrada",
-  "NotYetDefaulted": "Aún no declarado en mora",
-  "Unknown": "Error desconocido"
-}

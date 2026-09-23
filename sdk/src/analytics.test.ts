@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, type Mocked } from 'vitest';
 import axios from 'axios';
-import { AnalyticsSDK } from '../src/analytics';
+import { AnalyticsSDK } from './analytics';
 
 vi.mock('axios');
 const mockedAxios = axios as Mocked<typeof axios>;
@@ -34,7 +34,7 @@ describe('AnalyticsSDK', () => {
     expect(mockedAxios.get).toHaveBeenCalledTimes(1);
 
     // Wait for TTL (1s)
-    await new Promise(resolve => setTimeout(resolve, 1100));
+    await new Promise((resolve) => setTimeout(resolve, 1100));
 
     await sdk.getProtocolStats();
     expect(mockedAxios.get).toHaveBeenCalledTimes(2);
@@ -52,9 +52,9 @@ describe('AnalyticsSDK', () => {
   });
 
   it('should fetch LP stats', async () => {
-    mockedAxios.get.mockResolvedValueOnce({ data: { invoiceCount: 5 } });
+    mockedAxios.get.mockResolvedValueOnce({ data: { totalPositions: 5 } });
     const data = await sdk.getLPStats('G123');
-    expect(data.invoiceCount).toBe(5);
+    expect(data.totalPositions).toBe(5);
     expect(mockedAxios.get).toHaveBeenCalledWith('https://api.test/lps/G123/stats');
   });
 

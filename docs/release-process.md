@@ -12,6 +12,96 @@ ILN releases require coordinating changes across three repositories:
 
 The correct release order is critical: smart contract deployment must complete before SDK updates, and SDK updates must complete before frontend deployment.
 
+## Workflow Relationships
+
+This repository contains four release-related workflows. The following diagram shows what triggers each, what they publish, and how they relate:
+
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│                        Release Workflows                                │
+├──────────────────────┬──────────────────────────────────────────────────┤
+│ Workflow             │ Trigger / Relationship                           │
+├──────────────────────┼──────────────────────────────────────────────────┤
+│ coordinate-release   │ workflow_dispatch (manual)                       │
+│                      │ Orchestrator — does NOT call the other three     │
+│                      │ via workflow_call. Tags repos, polls CI,         │
+│                      │ and sends Discord notifications.                 │
+├──────────────────────┼──────────────────────────────────────────────────┤
+│ release.yml          │ push to main (changesets)                        │
+│                      │ Opens "Version Packages" PR; merging it          │
+│                      │ publishes ALL packages via changeset publish.    │
+│                      │ Independent of coordinate-release.yml.           │
+├──────────────────────┼──────────────────────────────────────────────────┤
+│ sdk-release.yml      │ push of v* tags OR PR touching packages/sdk/     │
+│                      │ Publishes @iln/sdk to npm with provenance;       │
+│                      │ creates GitHub Release. Dry-run on PRs.          │
+│                      │ Independent of the other three workflows.        │
+├──────────────────────┼──────────────────────────────────────────────────┤
+│ scripts-release.yml  │ push of @iln/scripts@* tags OR PR touching       │
+│                      │ packages/scripts/                                 │
+│                      │ Publishes @iln/scripts to npm with provenance;   │
+│                      │ creates GitHub Release. Dry-run on PRs.          │
+│                      │ Independent of the other three workflows.        │
+└──────────────────────┴──────────────────────────────────────────────────┘
+```
+
+### Sequence Diagram — Automated Release (changesets path)
+
+```
+Developer          main branch          release.yml            npm
+  │                    │                     │                   │
+  │── merge PR ───────>│                     │                   │
+  │                    │── push trigger ────>│                   │
+  │                    │                     │── detect changesets
+  │                    │                     │── open "Version    │
+  │                    │                     │   Packages" PR     │
+  │                    │<─────────────────── │                   │
+  │                    │                     │                   │
+  │── merge version PR>│                     │                   │
+  │                    │── push trigger ────>│                   │
+  │                    │                     │── changeset publish
+  │                    │                     │── npm publish ────>│
+  │                    │                     │── attest provenance│
+```
+
+### Sequence Diagram — Tag-based Release (sdk / scripts)
+
+```
+Developer          v* tag              sdk-release.yml         npm
+  │                    │                     │                   │
+  │── git push tag ───>│                     │                   │
+  │                    │── push trigger ────>│                   │
+  │                    │                     │── install + build  │
+  │                    │                     │── test             │
+  │                    │                     │── npm publish ────>│
+  │                    │                     │── GitHub Release   │
+```
+
+### Sequence Diagram — Cross-Repo Coordinated Release
+
+```
+Maintainer       coordinate-release.yml     Smart Contract Repo    SDK Repo       Frontend Repo
+  │                      │                         │                 │                │
+  │── dispatch(v1.2.0)──>│                         │                 │                │
+  │                      │── validate version       │                 │                │
+  │                      │── tag v1.2.0 ───────────>│                 │                │
+  │                      │── poll CI (≤10 min) ─────│                 │                │
+  │                      │── update contract IDs ──────────────────> │                │
+  │                      │── run SDK tests ─────────────────────────>│                │
+  │                      │── tag sdk-v1.2.0 ────────────────────────>│                │
+  │                      │── trigger frontend update ───────────────────────────────> │
+  │                      │── poll frontend CI ───────────────────────────────────────│
+  │                      │── tag frontend-v1.2.0 ───────────────────────────────────>│
+  │                      │── Discord notification                    │                │
+```
+
+### Key Observations
+
+- **No `workflow_call` dependencies exist** between the four workflows. Each is independently triggered.
+- `coordinate-release.yml` is a **manual orchestrator** — it uses `gh api` and `gh workflow run` to tag repos and trigger CI, but does not invoke `release.yml`, `sdk-release.yml`, or `scripts-release.yml` as callable workflows.
+- `release.yml` (changesets) and `sdk-release.yml` (tag-based) can **both publish `@iln/sdk`** depending on the release path chosen. This is not a bug — they serve different release strategies (changesets workflow vs. manual tag push). However, teams should pick one strategy to avoid duplicate publishes.
+- `scripts-release.yml` exclusively publishes `@iln/scripts` and has no overlap with the other workflows.
+
 ## Release Order
 
 ### Phase 1: Smart Contract (ILN-Smart-Contract)
@@ -213,6 +303,25 @@ git push origin main
 - Check Discord channel permissions for the webhook
 - If webhook is invalid, the workflow will continue but log a warning
 
+## Manual Triggers (`workflow_dispatch`)
+
+All deploy and release workflows support manual triggering from the GitHub UI:
+
+| Workflow | Has `workflow_dispatch` | Inputs |
+| -------- | ---------------------- | ------ |
+| `deploy.yml` | Yes | `network` (testnet/mainnet), `dry_run` |
+| `docs-deploy.yml` | Yes | None |
+| `coordinate-release.yml` | Yes | `version`, `dry_run`, `discord_webhook` |
+| `release.yml` | Yes | None (triggers changeset flow) |
+| `sdk-release.yml` | Yes | None (requires `v*` tag ref) |
+| `scripts-release.yml` | Yes | None (requires `@iln/scripts@*` tag ref) |
+
+### When to use manual triggers
+
+- **Re-deploy docs** after a failed automatic deployment: run `docs-deploy.yml` → "Run workflow".
+- **Re-cut a release** after a failed publish: run `release.yml` → "Run workflow" on `main`, or push a new tag for `sdk-release.yml` / `scripts-release.yml`.
+- **Dry-run a cross-repo release**: run `coordinate-release.yml` with `dry_run: true`.
+
 ## Future Improvements
 
 Potential enhancements to the release process:
@@ -223,3 +332,56 @@ Potential enhancements to the release process:
 - [ ] Release notes template population
 - [ ] Mainnet vs testnet release coordination
 - [ ] Automated frontend deploy to staging/production
+
+## NPM Scope Ownership and Publishing Policy
+
+### Registered Scopes
+
+The project publishes npm packages under two scopes:
+
+| Scope | Owner | 2FA Required |
+|---|---|---|
+| `@iln` | Invoice Liquidity Network maintainers | Yes |
+| `@invoice-liquidity` | Invoice Liquidity Network maintainers | Yes |
+
+Both scopes must be registered under the project's control. **Maintainers must
+verify scope ownership and 2FA on the publishing account before any publish
+workflow runs.** Unclaimed or poorly-controlled scopes create a
+dependency-confusion/typosquatting risk.
+
+### Unpublished-but-referenced Packages
+
+The following internal packages are referenced in the monorepo but are not yet
+published to npm. They MUST NOT be installed from npm by external consumers;
+they resolve from the workspace instead.
+
+| Local Name | Published Name | Status |
+|---|---|---|
+| `packages/cli` | `@iln/cli` | Unpublished |
+| `packages/test-utils` | `@iln/test-utils` | Unpublished |
+| `packages/scripts` | `@iln/scripts` | Unpublished |
+| `packages/sdk` | `@iln/sdk-next` | Unpublished |
+| `packages/mock-backend` | `@iln/mock-backend` | Unpublished |
+| `packages/indexer` | `@iln/indexer` | Unpublished |
+| `packages/invoice-sdk` | `@iln/invoice-sdk` | Unpublished |
+| `packages/eslint-config` | `@iln/eslint-config` | Unpublished |
+| `packages/upgrade-tests` | `@iln/upgrade-tests` | Unpublished |
+| `packages/shared` | `@iln/shared` | Unpublished |
+| `packages/react` | `@iln/react` | Unpublished |
+| `packages/opentelemetry` | `@iln/opentelemetry` | Unpublished |
+| `sdk/` | `@iln/sdk` | Published via `sdk-release.yml` |
+| `cli/` | `@invoice-liquidity/cli` | Unpublished |
+| `docs/` | `@invoice-liquidity/docs` | Unpublished |
+| `indexer/` | `iln-indexer` | Unpublished |
+| `notifications/` | `iln-notifications` | Unpublished |
+
+> **Action required:** Add a placeholders publish task to reserve these names
+> if the project's standard practice is to prevent squatting. Coordinate with a
+> maintainer who has npm registry access.
+
+### Verification Checklist (per release)
+
+1. Confirm `@iln` and `@invoice-liquidity` scopes are owned by the project org.
+2. Confirm the npm automation token used in CI has `2FA-required` publish access.
+3. Review the unpublished-but-referenced table above and reserve any new names
+   before they appear in a public release.

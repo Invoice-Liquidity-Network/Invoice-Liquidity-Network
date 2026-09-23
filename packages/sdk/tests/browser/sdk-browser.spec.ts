@@ -3,7 +3,10 @@ import { test, expect } from '@playwright/test';
 test.describe('ILN SDK browser bundle', () => {
   test.beforeEach(async ({ page }) => {
     await page.goto('/tests/browser/index.html');
-    await page.waitForFunction(() => (window as any).__ilnReady !== undefined || (window as any).__ilnError !== null);
+    // Wait until the module script has run
+    await page.waitForFunction(
+      () => (window as any).__ilnReady !== undefined || (window as any).__ilnError !== null
+    );
   });
 
   test('loads without errors', async ({ page }) => {
@@ -24,7 +27,9 @@ test.describe('ILN SDK browser bundle', () => {
   });
 
   test('Web Crypto API is available', async ({ page }) => {
-    const available = await page.evaluate(() => typeof crypto !== 'undefined' && typeof crypto.subtle !== 'undefined');
+    const available = await page.evaluate(
+      () => typeof crypto !== 'undefined' && typeof crypto.subtle !== 'undefined'
+    );
     expect(available).toBe(true);
   });
 
@@ -36,9 +41,10 @@ test.describe('ILN SDK browser bundle', () => {
       ></iframe>
     `);
     const msg = await page.evaluate(
-      () => new Promise<string>((resolve) => {
-        window.addEventListener('message', (e) => resolve(e.data), { once: true });
-      }),
+      () =>
+        new Promise<string>((resolve) => {
+          window.addEventListener('message', (e) => resolve(e.data), { once: true });
+        })
     );
     expect(msg).toBe('ok');
   });

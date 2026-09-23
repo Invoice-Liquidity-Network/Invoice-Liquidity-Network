@@ -1,5 +1,5 @@
-import Redis from "ioredis";
-import { CONFIG } from "./config";
+import Redis from 'ioredis';
+import { CONFIG } from './config';
 
 const INVOICE_TTL_SECONDS = 30;
 
@@ -9,8 +9,8 @@ function getClient(): Redis | null {
   if (!CONFIG.redisUrl) return null;
   if (!_client) {
     _client = new Redis(CONFIG.redisUrl);
-    _client.on("error", (err: Error) => {
-      console.error("[cache] Redis error:", err.message);
+    _client.on('error', (err: Error) => {
+      console.error('[cache] Redis error:', err.message);
     });
   }
   return _client;
@@ -27,10 +27,10 @@ export async function cacheGet(key: string): Promise<string | null> {
 export async function cacheSet(
   key: string,
   value: string,
-  ttlSeconds = INVOICE_TTL_SECONDS,
+  ttlSeconds = INVOICE_TTL_SECONDS
 ): Promise<void> {
   try {
-    await getClient()?.set(key, value, "EX", ttlSeconds);
+    await getClient()?.set(key, value, 'EX', ttlSeconds);
   } catch {
     // Non-fatal: the next request will simply miss the cache.
   }
@@ -59,15 +59,5 @@ export async function cacheDeletePattern(pattern: string): Promise<void> {
 
 /** Invalidate all cache entries for a given invoice and every invoice list. */
 export async function invalidateInvoiceCache(id: number): Promise<void> {
-  await Promise.all([
-    cacheDelete(`invoice:${id}`),
-    cacheDeletePattern("invoices:*"),
-  ]);
-}
-
-export async function disconnectCache(): Promise<void> {
-  if (_client) {
-    await _client.quit();
-    _client = null;
-  }
+  await Promise.all([cacheDelete(`invoice:${id}`), cacheDeletePattern('invoices:*')]);
 }

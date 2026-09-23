@@ -4,6 +4,20 @@ Command-line interface for common Invoice Liquidity Network contract operations 
 
 By participating in this project, you agree to abide by our [Code of Conduct](../CODE_OF_CONDUCT.md).
 
+## Table of Contents
+
+- [Install](#install)
+- [Configuration](#configuration)
+- [Commands](#commands)
+  - [Local Development Environment](#local-development-environment)
+  - [Submit](#submit)
+  - [Fund](#fund)
+  - [Pay](#pay)
+  - [Status](#status)
+  - [List](#list)
+- [Testnet Account Seeding](#testnet-account-seeding) — See [SEEDER.md](./SEEDER.md) for detailed setup instructions
+- [Local Integration Testing](#local-integration-testing)
+
 ## Install
 
 ```bash

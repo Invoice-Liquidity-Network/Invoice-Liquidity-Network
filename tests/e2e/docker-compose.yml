@@ -4,11 +4,11 @@ services:
     image: stellar/quickstart:latest
     restart: unless-stopped
     ports:
-      - "8000:8000"
+      - '8000:8000'
     environment:
-      - "QUICKSTART_HTTP_PORT=8000"
+      - 'QUICKSTART_HTTP_PORT=8000'
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/" ]
+      test: ['CMD', 'curl', '-f', 'http://localhost:8000/']
       interval: 5s
       timeout: 2s
       retries: 12

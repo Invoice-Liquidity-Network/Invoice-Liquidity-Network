@@ -60,9 +60,7 @@ export default function AlgoliaSearch() {
         <span style={{ display: 'inline-block', minWidth: '80px', textAlign: 'left' }}>
           Search...
         </span>
-        <span style={{ marginLeft: 'auto', fontSize: '12px', opacity: 0.6 }}>
-          ⌘K
-        </span>
+        <span style={{ marginLeft: 'auto', fontSize: '12px', opacity: 0.6 }}>⌘K</span>
       </button>
 
       {isOpen && (

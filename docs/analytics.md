@@ -16,7 +16,7 @@ Analytics are derived from on-chain invoice data only:
 
 All monetary values are in token base units. For USDC-like assets this repo treats `10_000_000` units as `1 USDC`.
 
-Contract formulas verified against [invoice_liquidity/src/lib.rs](../invoice-liquidity-network/contracts/invoice_liquidity/src/lib.rs) and arithmetic tests in [tests_arithmetic.rs](../invoice-liquidity-network/contracts/invoice_liquidity/src/tests_arithmetic.rs):
+Contract formulas verified against `backend/contracts/invoice_liquidity/src/lib.rs` and arithmetic tests in `backend/contracts/invoice_liquidity/src/tests_arithmetic.rs` in the [ILN-Smart-Contract](https://github.com/Invoice-Liquidity-Network/ILN-Smart-Contract) submodule ([cross-repo dependencies](./cross-repo-dependencies.md)):
 
 | Metric | Formula | Notes |
 | --- | --- | --- |

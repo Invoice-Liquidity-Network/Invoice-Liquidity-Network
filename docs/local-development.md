@@ -288,3 +288,22 @@ Use this checklist before marking local setup docs as verified on a new OS image
 | Run SDK, CLI, indexer, and notifications tests | Pending | Pending | Pending |
 | Start indexer and notifications individually | Pending | Pending | Pending |
 | Record OS-specific troubleshooting notes | Pending | Pending | Pending |
+
+---
+
+## Scripts Reference
+
+The `scripts/` directory contains helper scripts invoked directly by `make` targets or CI. They are **not** containerised — `docker-compose.yml` provides only the Stellar node, contract deployer, and account seeder as Docker services. The scripts run on the host.
+
+| Script | Invoked by | Target network | Purpose |
+|--------|-----------|----------------|---------|
+| `scripts/dev-setup.sh` | `make setup` | local | Installs Rust, `wasm32-unknown-unknown` target, and Stellar CLI |
+| `scripts/deploy.ts` | Manual / CI | testnet / mainnet | Deploys the Soroban contract and updates `.env` and `README.md` with the new Contract ID. Supports `--network=mainnet` and `--dry-run` flags. |
+| `scripts/seed.sh` | `make seed` | local | Seeds the local node with test identities (`freelancer`, `payer`, `funder`), mock USDC, and sample invoices. Requires `.local-contract-id` to exist. |
+| `scripts/fund-wallets.sh` | Manual | testnet | Funds wallet addresses via Friendbot and mints mock USDC. Designed for testnet only — not the local node. |
+
+### Relationship between Docker services and Make targets
+
+`docker compose up --build` (used by CI and `npm run test:e2e`) starts all three services — `stellar-node`, `contract-deployer`, and `account-seeder` — through Docker.
+
+`make deploy-local` and `make seed` perform the equivalent steps directly on the host using the `scripts/` scripts. Use the Make targets for day-to-day local development; use Docker Compose for CI and full-stack E2E runs.

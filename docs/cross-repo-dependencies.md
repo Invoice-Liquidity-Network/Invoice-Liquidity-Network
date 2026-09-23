@@ -26,6 +26,12 @@ Each row represents a tested, compatible combination of component versions. **Th
 
 > **Important**: The markers `<!-- COMPATIBILITY_MATRIX_START -->` and `<!-- COMPATIBILITY_MATRIX_END -->` are parsed by the CI compatibility check script. Do not remove or rename them.
 
+### Relationship to the docs site version banner
+
+The documentation site is single-track: it always describes the latest build deployed to Stellar testnet, and states which contract and SDK release that is in a banner on every page. See [Documentation Versioning](versioning.md) for the policy and for the declared values.
+
+The banner reads from [`docs/version-manifest.json`](version-manifest.json), and `scripts/check-compatibility.ts` asserts that the manifest's `(contract, sdk)` pair appears in the matrix above. A banner can therefore never advertise a combination this table does not list — if you add a row here for a new release, bump the manifest in the same PR, and vice versa.
+
 ---
 
 ## Dependency Graph
@@ -81,6 +87,11 @@ Open `docs/cross-repo-dependencies.md` and add a new row between the `COMPATIBIL
 | `0.2.0` | `0.2.0` | `0.1.0` | Contract + SDK bump; frontend unchanged |
 ```
 
+If the newly deployed contract or SDK is what the docs now describe, update
+[`docs/version-manifest.json`](version-manifest.json) in the same PR and mirror the change into
+`packages/docs/lib/docs-version.ts` and `docs/theme.config.jsx`. The compatibility check fails
+otherwise. See [Documentation Versioning](versioning.md).
+
 ### 3. Regenerate SDK types (if contract changed)
 
 ```bash
@@ -106,9 +117,13 @@ A dedicated CI job (`check-compatibility`) runs on every push and pull request. 
 1. Reads the current `version` from each of the three source files
 2. Parses the compatibility matrix table in this document
 3. Asserts that the current `(contract, sdk, frontend)` tuple appears in at least one row
-4. Fails with a clear error message if no matching row is found
+4. Validates the docs site version declaration:
+   - `packages/docs/lib/docs-version.ts` and `docs/theme.config.jsx` match [`docs/version-manifest.json`](version-manifest.json)
+   - both versioning pages (`docs/versioning.md`, `packages/docs/content/versioning.mdx`) quote the manifest's contract version and contract ID
+   - the manifest's `(contract, sdk)` pair appears in the matrix above
+5. Fails with a clear error message if any of the above does not hold
 
-The check script lives at [`scripts/check-compatibility.ts`](../scripts/check-compatibility.ts).
+The check script lives at [`scripts/check-compatibility.ts`](../scripts/check-compatibility.ts) and is also runnable locally via `pnpm check-compatibility`.
 
 ---
 

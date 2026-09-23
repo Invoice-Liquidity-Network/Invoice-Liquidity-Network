@@ -56,8 +56,9 @@ export function useSubmitInvoice(): UseSubmitInvoiceResult {
 
   const { mutateAsync, isPending, error, reset } = useMutation({
     mutationFn: (params: SubmitInvoiceParams): Promise<unknown> =>
-      (client as unknown as { submitInvoice(p: SubmitInvoiceParams): Promise<unknown> })
-        .submitInvoice(params),
+      (
+        client as unknown as { submitInvoice(p: SubmitInvoiceParams): Promise<unknown> }
+      ).submitInvoice(params),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['invoices'] }),
   });
 

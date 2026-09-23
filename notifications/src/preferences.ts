@@ -8,11 +8,11 @@
  *   - Per-trigger overrides (enable/disable individual event types)
  */
 
-import type { NotificationTrigger, SubscriptionChannel } from "./types";
+import type { NotificationTrigger, SubscriptionChannel } from './types';
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
-export type NotificationFrequency = "realtime" | "daily" | "weekly";
+export type NotificationFrequency = 'realtime' | 'daily' | 'weekly';
 
 export interface QuietHours {
   /** 0–23 — inclusive start of the quiet window */
@@ -51,8 +51,8 @@ const store = new Map<string, UserPreferences>();
 function defaultPreferences(stellarAddress: string): UserPreferences {
   return {
     stellarAddress,
-    enabledChannels: ["email", "webhook"],
-    frequency: "realtime",
+    enabledChannels: ['email', 'webhook'],
+    frequency: 'realtime',
     quietHours: null,
     triggerPreferences: [],
     updatedAt: new Date().toISOString(),
@@ -70,7 +70,7 @@ export class PreferencesService {
   /** Create or update preferences for an address. */
   upsert(
     stellarAddress: string,
-    patch: Partial<Omit<UserPreferences, "stellarAddress" | "updatedAt">>
+    patch: Partial<Omit<UserPreferences, 'stellarAddress' | 'updatedAt'>>
   ): UserPreferences {
     const current = this.get(stellarAddress);
     const updated: UserPreferences = {
@@ -95,8 +95,8 @@ export class PreferencesService {
   isQuietHour(prefs: UserPreferences, nowMs = Date.now()): boolean {
     if (!prefs.quietHours) return false;
     const { startHour, endHour, timezone } = prefs.quietHours;
-    const hourStr = new Date(nowMs).toLocaleString("en-US", {
-      hour: "numeric",
+    const hourStr = new Date(nowMs).toLocaleString('en-US', {
+      hour: 'numeric',
       hour12: false,
       timeZone: timezone,
     });
@@ -110,10 +110,7 @@ export class PreferencesService {
    * Returns the effective delivery channels for a given trigger,
    * respecting any per-trigger override for the user.
    */
-  channelsForTrigger(
-    prefs: UserPreferences,
-    trigger: NotificationTrigger
-  ): SubscriptionChannel[] {
+  channelsForTrigger(prefs: UserPreferences, trigger: NotificationTrigger): SubscriptionChannel[] {
     const override = prefs.triggerPreferences.find((p) => p.trigger === trigger);
     if (override) return override.enabled ? override.channels : [];
     return prefs.enabledChannels;
