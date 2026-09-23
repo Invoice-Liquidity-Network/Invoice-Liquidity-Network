@@ -32,8 +32,8 @@ jobs:
     steps:
       - name: Validate version format
         run: |
-          if [[ ! "${{ inputs.version }}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-            echo "❌ Invalid version format. Use semantic versioning (e.g., v1.2.0)"
+          if [[ ! "${{ inputs.version }}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[a-zA-Z0-9.]+)?$ ]]; then
+            echo "❌ Invalid version format. Use semantic versioning (e.g., v1.2.0 or v1.2.0-canary.1)"
             exit 1
           fi
           echo "✅ Version format valid: ${{ inputs.version }}"
@@ -49,9 +49,9 @@ jobs:
           echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
           echo "1️⃣  Tag ILN-Smart-Contract repo"
           echo "2️⃣  Wait for smart contract deployment CI"
-          echo "3️⃣  Update contract IDs in SDK"
-          echo "4️⃣  Run SDK tests"
-          echo "5️⃣  Tag SDK release"
+          echo "3️⃣  Update contract IDs in SDK, CLI, indexer, notifications"
+          echo "4️⃣  Run SDK, CLI, indexer, notifications tests"
+          echo "5️⃣  Tag package releases"
           echo "6️⃣  Update SDK version in frontend"
           echo "7️⃣  Run frontend CI"
           echo "8️⃣  Tag frontend release"
@@ -104,21 +104,21 @@ jobs:
 
       - name: Step 3 & 4 - Update SDK contract IDs and test
         run: |
-          echo "📦 Updating SDK with new contract IDs..."
+          echo "📦 Updating SDK, CLI, indexer, and notifications with new contract IDs..."
           if [[ "$DRY_RUN" != "true" ]]; then
             # Fetch new contract IDs from smart contract repo
             CONTRACT_IDS=$(gh api repos/Songu3020/ILN-Smart-Contract/contents/contract-ids.json \
               --jq '.content | @base64d' 2>/dev/null || echo "{}")
             
             # Update SDK contract IDs (implementation depends on SDK structure)
-            echo "Contract IDs fetched, would update SDK files"
+            echo "Contract IDs fetched, would update SDK, CLI, indexer, and notifications files"
             
-            # Run SDK tests
+            # Run tests
             echo "🧪 Running SDK tests..."
             npm ci
             npm run test || echo "⚠️  Tests may have issues"
           else
-            echo "🔄 [DRY RUN] Would update SDK contract IDs and run tests"
+            echo "🔄 [DRY RUN] Would update SDK, CLI, indexer, and notifications contract IDs and run tests"
           fi
 
       - name: Step 5 - Tag SDK release

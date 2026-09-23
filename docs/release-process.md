@@ -1,16 +1,19 @@
 # ILN Release Process
 
-This document describes the process for releasing new versions of the Invoice Liquidity Network protocol across three coordinated repositories.
+This document describes the process for releasing new versions of the Invoice Liquidity Network protocol across coordinated repositories.
 
 ## Overview
 
-ILN releases require coordinating changes across three repositories:
+ILN releases require coordinating changes across the following repositories and packages:
 
 1. **ILN-Smart-Contract** — Rust/Soroban contracts (deployed to Stellar)
-2. **Invoice-Liquidity-Network** — SDK, CLI, indexer, notifications (this repo)
-3. **ILN-Frontend** — Next.js dApp
+2. **Invoice-Liquidity-Network (SDK)** — `@invoice-liquidity/sdk` (`sdk/`) and `@iln/sdk-next` (`packages/sdk/`)
+3. **Invoice-Liquidity-Network (CLI)** — `@invoice-liquidity/cli` (`cli/`)
+4. **Invoice-Liquidity-Network (Indexer)** — `@iln/indexer` (`packages/indexer/`)
+5. **Invoice-Liquidity-Network (Notifications)** — `@iln/notifications` (`notifications/`)
+6. **ILN-Frontend** — Next.js dApp (`ILN-Frontend`)
 
-The correct release order is critical: smart contract deployment must complete before SDK updates, and SDK updates must complete before frontend deployment.
+The correct release order is critical: smart contract deployment must complete before SDK updates, and SDK updates must complete before frontend and dependent service deployments.
 
 ## Release Order
 
@@ -20,18 +23,21 @@ The correct release order is critical: smart contract deployment must complete b
 2. Tag the contract repository with the version (e.g., `v1.2.0`)
 3. CI verifies deployment and generates new contract IDs
 
-### Phase 2: SDK (Invoice-Liquidity-Network)
+### Phase 2: Shared Packages (Invoice-Liquidity-Network repo)
 
 1. Update contract IDs in SDK based on new deployment
-2. Run full SDK test suite
-3. Tag SDK release with `sdk-v1.2.0`
-4. Publish SDK to npm if applicable
+2. Update SDK version if needed
+3. Run full SDK test suite (`pnpm test` from package directory)
+4. Run CLI tests (`pnpm test` from `cli/` directory)
+5. Run indexer tests (`pnpm test` from `packages/indexer/` directory)
+6. Run notifications tests (`pnpm test` from `notifications/` directory)
+7. Tag releases for each published package
 
 ### Phase 3: Frontend (ILN-Frontend)
 
 1. Update SDK dependency in frontend package.json
 2. Run frontend CI (build, linting, tests)
-3. Tag frontend release with `frontend-v1.2.0`
+3. Tag frontend release
 
 ## Automated Release Workflow
 
@@ -39,7 +45,7 @@ The `.github/workflows/coordinate-release.yml` workflow automates this process.
 
 ### Triggering a Release
 
-1. Go to the main repository: [Invoice-Liquidity-Network](https://github.com/Songu3020/Invoice-Liquidity-Network)
+1. Go to the main repository: [Invoice-Liquidity-Network](https://github.com/Invoice-Liquidity-Network/Invoice-Liquidity-Network)
 2. Navigate to **Actions** → **Coordinate Cross-Repo Release**
 3. Click **Run workflow**
 4. Fill in the required inputs:
@@ -99,32 +105,83 @@ git push origin v1.2.0
 ### 2. SDK Release
 
 ```bash
-# In Invoice-Liquidity-Network repo
+# In Invoice-Liquidity-Network repo, sdk/ directory
 # Update contract IDs in sdk/src/config.ts or similar
 # Update SDK version in sdk/package.json
 
-npm ci
-npm run test
-npm run build
+pnpm install
+pnpm test
+pnpm build
 
 git add .
 git commit -m "chore(sdk): update contract IDs for v1.2.0"
-git tag sdk-v1.2.0
-git push origin main sdk-v1.2.0
+git tag v1.2.0
+git push origin main v1.2.0
 
 # Optionally publish to npm
-npm publish --workspace=sdk
+pnpm publish --provenance --access public
 ```
 
-### 3. Frontend Release
+### 3. CLI Release
+
+```bash
+# In Invoice-Liquidity-Network repo, cli/ directory
+pnpm install
+pnpm test
+pnpm build
+
+git add .
+git commit -m "chore(cli): update contract IDs for v1.2.0"
+git tag v1.2.0
+git push origin main v1.2.0
+
+# Optionally publish to npm
+pnpm publish --provenance --access public
+```
+
+### 4. Indexer Release
+
+```bash
+# In Invoice-Liquidity-Network repo, packages/indexer/ directory
+pnpm install
+pnpm test
+pnpm build
+
+git add .
+git commit -m "chore(indexer): update contract IDs for v1.2.0"
+git tag v1.2.0
+git push origin main v1.2.0
+
+# Optionally publish to npm
+pnpm publish --provenance --access public
+```
+
+### 5. Notifications Release
+
+```bash
+# In Invoice-Liquidity-Network repo, notifications/ directory
+pnpm install
+pnpm test
+pnpm build
+
+git add .
+git commit -m "chore(notifications): update contract IDs for v1.2.0"
+git tag v1.2.0
+git push origin main v1.2.0
+
+# Optionally publish to npm
+pnpm publish --provenance --access public
+```
+
+### 6. Frontend Release
 
 ```bash
 # In ILN-Frontend repo
 # Update SDK dependency
-npm install @invoice-liquidity/sdk@latest
+pnpm install @invoice-liquidity/sdk@latest
 
-npm run test
-npm run build
+pnpm test
+pnpm build
 
 git add .
 git commit -m "chore(frontend): update SDK to v1.2.0"
@@ -151,6 +208,7 @@ To enable the automated workflow, ensure:
 Set these secrets in the main repository settings:
 
 - `GITHUB_TOKEN` — Already available via `secrets.GITHUB_TOKEN`
+- `NPM_TOKEN` — npm automation token with publish rights (for npm publish steps)
 - No additional secrets required for basic functionality
 
 ### Discord Webhook (Optional)
@@ -184,7 +242,7 @@ git push origin --delete v1.2.0
 
 ```bash
 # If you need to revert to previous SDK version in frontend
-npm install @invoice-liquidity/sdk@<previous-version>
+pnpm install @invoice-liquidity/sdk@<previous-version>
 git add package.json package-lock.json
 git commit -m "chore: revert SDK to previous version"
 git push origin main
@@ -205,7 +263,7 @@ git push origin main
 ### Frontend dependency resolution fails
 
 - Check that SDK package.json version is published to npm before frontend tries to install
-- Manually run `npm install` in frontend after SDK release tag is created
+- Manually run `pnpm install` in frontend after SDK release tag is created
 
 ### Discord notification fails
 
@@ -223,3 +281,5 @@ Potential enhancements to the release process:
 - [ ] Release notes template population
 - [ ] Mainnet vs testnet release coordination
 - [ ] Automated frontend deploy to staging/production
+- [ ] Per-package release tags for CLI, indexer, and notifications
+- [ ] Coordination with ILN-Frontend for all shared package updates
