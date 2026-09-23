@@ -206,7 +206,7 @@ to the `@iln` scope. Provenance additionally relies on the workflow's
 1. Fork the repository.
 2. Create a branch named for the scope of the work:
    - `fix/...`, `feat/...`, `docs/...`, `chore/...`
-3. Make focused changes with clear commit messages.
+3. Make focused changes with clear commit messages following [Conventional Commits](https://www.conventionalcommits.org/) format.
 4. Run the relevant tests and verify the change locally.
 5. Open a PR against `main`.
 6. In the PR description, include:
@@ -214,6 +214,14 @@ to the `@iln` scope. Provenance additionally relies on the workflow's
    - why it changed
    - how to test it
    - related issue reference (`Closes #...`)
+
+PR titles are validated against the same Conventional Commits rules enforced by commitlint (`commitlint.config.js`). Valid types: `feat`, `fix`, `docs`, `chore`, `test`, `refactor`, `perf`, `ci`, `design`, `build`.
+
+Example PR titles:
+- `feat: add freelancer invoice submission form`
+- `fix: correct XDR encoding for batch operations`
+- `docs: update SDK browser test coverage`
+- `ci: reconcile PR title lint and commitlint rules`
 
 ### PR checklist
 
