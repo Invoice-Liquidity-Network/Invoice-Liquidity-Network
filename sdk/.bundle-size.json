@@ -1,7 +1,12 @@
 {
   "budgets": [
     { "path": "dist/index.mjs", "limit": "110 KB" },
-    { "path": "dist/index.cjs", "limit": "120 KB" }
+    { "path": "dist/index.cjs", "limit": "120 KB" },
+    {
+      "path": "dist/react-native/index.js",
+      "limit": "70 KB",
+      "notes": "React Native entry (ESM, browser platform). @stellar/stellar-sdk and React are external, so this bundle is small; the limit guards against accidental dependency bloat."
+    }
   ],
   "notes": "Budgets measure minified runtime bundles. Type declarations are excluded because they do not affect runtime bundle size."
 }

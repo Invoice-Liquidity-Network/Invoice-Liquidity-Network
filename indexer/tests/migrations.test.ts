@@ -15,8 +15,18 @@ const EXPECTED_COLUMNS = {
     'created_at',
     'updated_at',
   ],
-  events: ['event_id', 'event_type', 'invoice_id', 'ledger', 'ledger_closed_at', 'created_at'],
+  events: [
+    'event_id',
+    'event_type',
+    'invoice_id',
+    'ledger',
+    'ledger_closed_at',
+    'created_at',
+    'confirmed',
+  ],
   cursor: ['id', 'last_ledger', 'updated_at'],
+  ledger_hashes: ['ledger', 'hash', 'confirmed', 'created_at'],
+  checkpoint: ['id', 'ledger', 'block_hash', 'event_count', 'updated_at'],
 };
 
 describe('indexer database migrations', () => {

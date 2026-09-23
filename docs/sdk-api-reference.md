@@ -550,12 +550,90 @@ const sdk = new ILNSdk({
 await sdk.submitInvoice(params); // queues if offline, submits when reconnected
 sdk.setOnline(false);            // force-enqueue (e.g. in tests)
 await sdk.flushOfflineQueue();   // manually drain
-const state = sdk.getOfflineState(); // { isOnline, queueSize, pendingCount, failedCount }
+const state = sdk.getOfflineState(); // { isOnline, queueSize, pendingCount, failedCount, oldestPendingAgeMs }
 ```
 
 You can also construct the manager directly with `new OfflineManager(config?)`
 and wire its `onSubmit` / `onStateChange` callbacks yourself. There is no
 `createOfflineManager` factory export.
+
+#### Idempotency guarantees for replayed writes
+
+Every queued item carries a `dedupKey` derived from `(operation, params)`
+(canonicalised so key order does not matter) — or from an explicit
+`idempotencyKey` you pass to `enqueue`:
+
+```typescript
+const manager = new OfflineManager(config);
+manager.enqueue('submitInvoice', params); // dedupKey = "submitInvoice:{...canonical...}"
+manager.enqueue('submitInvoice', params); // SAME item returned — no duplicate
+manager.enqueue(
+  'fundInvoice',
+  params,
+  { idempotencyKey: 'my-write-key' } // caller-controlled dedup
+);
+```
+
+What this guarantees on a flaky connection:
+
+- Re-enqueuing the same logical write while a copy is still `pending` or
+  `submitting` returns the existing item — it never creates a second queue
+  entry, so a reconnect can never issue two concurrent submissions.
+- Each item also gets a monotonic `sequence` number (persisted), so replay
+  order is deterministic and callers can enforce exactly-once ordering.
+- Submissions that fail mid-flight are retried per `maxRetries` and, after the
+  final retry, left in `failed` state (recover via `retryItem`) rather than
+  silently dropped.
+
+Queued writes are covered by chaos tests that kill RPC connectivity mid-queue
+and assert no duplicate submissions occur.
+
+#### Queue state and health
+
+`getOfflineState()` now also exposes `oldestPendingAgeMs` — the time the oldest
+pending/submitting item has been waiting. Poll it to surface a "queued writes
+are aging" signal to users:
+
+```typescript
+setInterval(() => {
+  const s = sdk.getOfflineState();
+  if (s && s.pendingCount > 0 && s.oldestPendingAgeMs > 60_000) {
+    // warn the user that offline writes have not been delivered yet
+  }
+}, 30_000);
+```
+
+### Bundle Size & Tree-Shaking
+
+Published minified sizes are enforced in CI by
+[`scripts/check-bundle-size.js`](../scripts/check-bundle-size.js) against the
+budgets in [`sdk/.bundle-size.json`](../sdk/.bundle-size.json) (run
+`pnpm bundle-size:check` after `pnpm build`). Numerical **fs.stat** bytes can
+vary per build; budgets are set with headroom so legitimate changes do not
+thrash.
+
+| Entry (`sdk/dist/`) | Budget | Measured | Notes |
+| --- | --- | --- | --- |
+| `index.mjs` (ESM) | 110 KB | 108.18 KB | main browser/library entry |
+| `index.cjs` (CJS) | 120 KB | 115.93 KB | Node/require entry |
+| `react-native/index.js` | 70 KB | 2.09 KB | thin mobile wrapper (deep links / mobile signers) |
+
+Budgets measure **minified runtime** bundles; `.d.ts` declarations are excluded
+because they do not affect runtime size.
+
+Tree-shaking audit (run against the built ESM bundle with bundled/minified
+esbuild probes):
+
+- The package declares `"sideEffects": false`, so bundlers may drop unused
+  exports. Importing only `ILNSdk` from `index.mjs` yields a ~61 KB bundle
+  (≈43 % smaller than the full 108 KB entry), confirming the SDK tree-shakes
+  cleanly.
+- The React Native entry is a ~2 KB thin wrapper with no meaningful dead code;
+  importing any single export from it produces essentially the same footprint.
+
+To re-run the audit locally: `pnpm --filter @iln/sdk build`, then bundle a file
+containing only `import { ILNSdk } from "@iln/sdk";` with
+`esbuild --bundle --minify` and compare the output size to `dist/index.mjs`.
 
 ---
 

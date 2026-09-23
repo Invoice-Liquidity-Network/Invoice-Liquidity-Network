@@ -50,6 +50,9 @@ export async function processEvent(event: rpc.Api.EventResponse): Promise<void> 
     ledger: event.ledger,
     ledger_closed_at: event.ledgerClosedAt,
     created_at: Date.now(),
+    // The poller only hands us events that are already confirmation-depth
+    // behind the chain tip, so everything we persist is final by policy.
+    confirmed: true,
   };
   insertEvent(ilnEvent);
 

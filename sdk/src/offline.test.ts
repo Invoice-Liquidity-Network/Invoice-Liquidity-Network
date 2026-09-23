@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { OfflineManager } from './offline';
+import { OfflineManager, canonicalStringify, deriveDedupKey } from './offline';
 
 describe('OfflineManager', () => {
   let manager: OfflineManager;
@@ -219,6 +219,149 @@ describe('OfflineManager', () => {
       expect(data).toBeDefined();
       expect(data.queue).toHaveLength(1);
       expect(data.queue[0].operation).toBe('op1');
+    });
+  });
+
+  describe('idempotency / dedup keys', () => {
+    it('dedupes enqueues of the same operation + params', () => {
+      const a = manager.enqueue('submitInvoice', { invoiceId: 42, amount: 100 });
+      const b = manager.enqueue('submitInvoice', { invoiceId: 42, amount: 100 });
+
+      expect(b.id).toBe(a.id);
+      expect(manager.getState().queueSize).toBe(1);
+    });
+
+    it('does not dedupe when params differ', () => {
+      const a = manager.enqueue('submitInvoice', { invoiceId: 42 });
+      const b = manager.enqueue('submitInvoice', { invoiceId: 43 });
+
+      expect(b.id).not.toBe(a.id);
+      expect(manager.getState().queueSize).toBe(2);
+      expect(a.sequence).toBeLessThan(b.sequence);
+    });
+
+    it('honours an explicit idempotencyKey over params', () => {
+      const a = manager.enqueue(
+        'fundInvoice',
+        { invoiceId: 9, amount: 1 },
+        { idempotencyKey: 'w-1' }
+      );
+      const b = manager.enqueue(
+        'fundInvoice',
+        { invoiceId: 9, amount: 2 },
+        { idempotencyKey: 'w-1' }
+      );
+
+      expect(b.id).toBe(a.id);
+      expect(manager.getState().queueSize).toBe(1);
+    });
+
+    it('derives the same key regardless of object key ordering', () => {
+      expect(canonicalStringify({ a: 1, b: { c: 2 } })).toBe(
+        canonicalStringify({ b: { c: 2 }, a: 1 })
+      );
+      expect(deriveDedupKey('op', { payer: 'G1', amount: 5 })).toBe(
+        deriveDedupKey('op', { amount: 5, payer: 'G1' })
+      );
+      expect(deriveDedupKey('op', { amount: 5, payer: 'G1' })).not.toBe(
+        deriveDedupKey('op', { amount: 6, payer: 'G1' })
+      );
+    });
+
+    it('raises the oldestPendingAgeMs as queued writes age', () => {
+      vi.useFakeTimers();
+      const m = new OfflineManager();
+      m.setOnline(false);
+      m.enqueue('op1', {});
+      expect(m.getState().oldestPendingAgeMs).toBe(0);
+
+      vi.advanceTimersByTime(60000);
+      expect(m.getOldestPendingAgeMs()).toBe(60000);
+      m.destroy();
+      vi.useRealTimers();
+    });
+
+    it('assigns monotonic sequence numbers', () => {
+      const a = manager.enqueue('op1', {});
+      const b = manager.enqueue('op2', {});
+      const c = manager.enqueue('op3', {});
+
+      expect(a.sequence).toBe(1);
+      expect(b.sequence).toBe(2);
+      expect(c.sequence).toBe(3);
+    });
+  });
+
+  describe('chaos: connectivity loss must not double-submit', () => {
+    it('does not duplicate an in-flight submission when the same write is enqueued again', async () => {
+      const m = new OfflineManager({ maxRetries: 1, retryDelayMs: 1000, maxQueueSize: 10 });
+      let resolveSubmit!: (ok: boolean) => void;
+      const submitFn = vi.fn(
+        () =>
+          new Promise<boolean>((resolve) => {
+            resolveSubmit = resolve;
+          })
+      );
+      m.onSubmit(submitFn);
+
+      m.setOnline(false);
+      const original = m.enqueue('submitInvoice', { invoiceId: 42 });
+
+      // Connectivity returns; the submission is now in-flight at the RPC.
+      m.setOnline(true);
+      await Promise.resolve();
+
+      // The user retries the same logical write while the first attempt is
+      // still in flight — this must NOT create a second queue entry.
+      const retried = m.enqueue('submitInvoice', { invoiceId: 42 });
+      expect(retried.id).toBe(original.id);
+      expect(m.getState().queueSize).toBe(1);
+
+      resolveSubmit(true);
+      await new Promise((r) => setTimeout(r, 0));
+
+      expect(submitFn).toHaveBeenCalledTimes(1);
+      expect(m.getState().queueSize).toBe(0);
+      m.destroy();
+    });
+
+    it('recovers a dropped mid-queue RPC without duplicate logical submissions', async () => {
+      const m = new OfflineManager({ maxRetries: 3, retryDelayMs: 15, maxQueueSize: 20 });
+      const calls: string[] = [];
+      const submitFn = vi.fn(async (item: { id: string }) => {
+        calls.push(item.id);
+        // Simulate the RPC connection being killed on the first attempt.
+        if (calls.filter((id) => id === item.id).length === 1) {
+          throw new Error('NetworkError: fetch failed');
+        }
+        return true;
+      });
+      m.onSubmit(submitFn);
+
+      m.setOnline(false);
+      m.enqueue('submitInvoice', { invoiceId: 1 });
+      m.enqueue('fundInvoice', { invoiceId: 1, amount: 10 });
+
+      // Connectivity kill mid-queue: the first attempt throws, connectivity
+      // drops again before the retry timer fires, then returns.
+      m.setOnline(true);
+      await new Promise((r) => setTimeout(r, 0));
+      m.setOnline(false);
+      await new Promise((r) => setTimeout(r, 40));
+      m.setOnline(true);
+      await new Promise((r) => setTimeout(r, 60));
+
+      // Both writes completed. Each logical write was attempted exactly twice:
+      // one failed attempt + one successful retry — never a duplicated entry,
+      // and never two concurrent submissions of the same write.
+      const perItem = new Map<string, number>();
+      for (const id of calls) perItem.set(id, (perItem.get(id) ?? 0) + 1);
+      expect(perItem.size).toBe(2);
+      for (const count of perItem.values()) {
+        expect(count).toBe(2);
+      }
+      expect(m.getState().queueSize).toBe(0);
+      m.destroy();
     });
   });
 });

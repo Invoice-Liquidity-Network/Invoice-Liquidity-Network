@@ -74,7 +74,8 @@ function runMigrations(db: Database.Database): void {
       invoice_id       INTEGER NOT NULL,
       ledger           INTEGER NOT NULL,
       ledger_closed_at TEXT    NOT NULL,
-      created_at       INTEGER NOT NULL
+      created_at       INTEGER NOT NULL,
+      confirmed        INTEGER NOT NULL DEFAULT 1
     );
 
     CREATE TABLE IF NOT EXISTS cursor (
@@ -83,6 +84,22 @@ function runMigrations(db: Database.Database): void {
       updated_at   INTEGER NOT NULL
     );
 
+    CREATE TABLE IF NOT EXISTS ledger_hashes (
+      ledger     INTEGER PRIMARY KEY,
+      hash       TEXT    NOT NULL,
+      confirmed  INTEGER NOT NULL DEFAULT 0,
+      created_at INTEGER NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS checkpoint (
+      id          INTEGER PRIMARY KEY CHECK (id = 1),
+      ledger      INTEGER NOT NULL DEFAULT 0,
+      block_hash  TEXT    NOT NULL DEFAULT '',
+      event_count INTEGER NOT NULL DEFAULT 0,
+      updated_at  INTEGER NOT NULL
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_ledger_hashes_confirmed ON ledger_hashes(confirmed);
     CREATE INDEX IF NOT EXISTS idx_invoices_status     ON invoices(status);
     CREATE INDEX IF NOT EXISTS idx_invoices_freelancer ON invoices(freelancer);
     CREATE INDEX IF NOT EXISTS idx_invoices_payer      ON invoices(payer);
@@ -94,6 +111,14 @@ function runMigrations(db: Database.Database): void {
     CREATE INDEX IF NOT EXISTS idx_events_ledger       ON events(ledger);
     CREATE INDEX IF NOT EXISTS idx_events_created_at   ON events(created_at);
   `);
+
+  // Backfill the `confirmed` column for databases created before the column existed.
+  const eventsColumns = db
+    .prepare(`SELECT COUNT(*) AS c FROM pragma_table_info('events') WHERE name = 'confirmed'`)
+    .get() as { c: number };
+  if (eventsColumns.c === 0) {
+    db.exec(`ALTER TABLE events ADD COLUMN confirmed INTEGER NOT NULL DEFAULT 1`);
+  }
 }
 
 // ─── Invoice CRUD ─────────────────────────────────────────────────────────────
@@ -426,14 +451,32 @@ export function getTopLPs(limit: number, period: string): LPStat[] {
 // ─── Event queries ────────────────────────────────────────────────────────────
 
 /** Return events, optionally filtered by invoice_id. */
+function rowToEvent(row: Record<string, unknown>): ILNEvent {
+  const confirmed = row.confirmed === true || row.confirmed === 1 || row.confirmed === '1';
+  return {
+    event_id: String(row.event_id),
+    event_type: row.event_type as ILNEvent['event_type'],
+    invoice_id: Number(row.invoice_id),
+    ledger: Number(row.ledger),
+    ledger_closed_at: String(row.ledger_closed_at),
+    created_at: Number(row.created_at),
+    confirmed,
+  };
+}
+
 export function getEvents(invoiceId?: number): ILNEvent[] {
   const db = getDb();
   if (invoiceId !== undefined) {
-    return db
+    const rows = db
       .prepare('SELECT * FROM events WHERE invoice_id = ? ORDER BY ledger ASC')
-      .all(invoiceId) as ILNEvent[];
+      .all(invoiceId) as Record<string, unknown>[];
+    return rows.map(rowToEvent);
   }
-  return db.prepare('SELECT * FROM events ORDER BY ledger ASC LIMIT 1000').all() as ILNEvent[];
+  const rows = db.prepare('SELECT * FROM events ORDER BY ledger ASC LIMIT 1000').all() as Record<
+    string,
+    unknown
+  >[];
+  return rows.map(rowToEvent);
 }
 
 // ─── Event deduplication ──────────────────────────────────────────────────────
@@ -441,6 +484,12 @@ export function getEvents(invoiceId?: number): ILNEvent[] {
 /** Return true if this event has already been processed. */
 export function hasEvent(eventId: string): boolean {
   return getDb().prepare('SELECT 1 FROM events WHERE event_id = ?').get(eventId) !== undefined;
+}
+
+/** Total number of persisted event rows. */
+export function countEvents(): number {
+  const row = getDb().prepare('SELECT COUNT(*) AS c FROM events').get() as { c: number };
+  return row.c;
 }
 
 /**
@@ -451,11 +500,11 @@ export function insertEvent(event: ILNEvent): void {
   getDb()
     .prepare(
       `INSERT OR IGNORE INTO events
-         (event_id, event_type, invoice_id, ledger, ledger_closed_at, created_at)
+         (event_id, event_type, invoice_id, ledger, ledger_closed_at, created_at, confirmed)
        VALUES
-         (@event_id, @event_type, @invoice_id, @ledger, @ledger_closed_at, @created_at)`
+         (@event_id, @event_type, @invoice_id, @ledger, @ledger_closed_at, @created_at, @confirmed)`
     )
-    .run(event);
+    .run({ ...event, confirmed: event.confirmed ? 1 : 0 });
 }
 
 // ─── Cursor management ────────────────────────────────────────────────────────
@@ -495,4 +544,136 @@ export function setCursorLedger(ledger: number): void {
   } catch {
     /* metrics failure is non-fatal */
   }
+}
+
+// ─── Ledger hashes / reorg detection ─────────────────────────────────────────
+
+export interface RecordedLedgerHash {
+  ledger: number;
+  hash: string;
+  created_at: number;
+}
+
+/** Record the canonical hash of a ledger we have observed. */
+export function recordLedgerHash(ledger: number, hash: string): void {
+  getDb()
+    .prepare(
+      `INSERT INTO ledger_hashes (ledger, hash, created_at)
+       VALUES (?, ?, ?)
+       ON CONFLICT(ledger) DO UPDATE SET hash = excluded.hash`
+    )
+    .run(ledger, hash, Date.now());
+}
+
+/** Return the recorded hash for a ledger, or null if we never recorded it. */
+export function getRecordedHash(ledger: number): string | null {
+  const row = getDb().prepare('SELECT hash FROM ledger_hashes WHERE ledger = ?').get(ledger) as
+    | { hash: string }
+    | undefined;
+  return row?.hash ?? null;
+}
+
+/** All recorded hashes, oldest first. */
+export function getRecordedHashes(): RecordedLedgerHash[] {
+  return getDb()
+    .prepare('SELECT ledger, hash, created_at FROM ledger_hashes ORDER BY ledger ASC')
+    .all() as RecordedLedgerHash[];
+}
+
+/** Highest ledger we have observed (from hashes, events, or cursor). */
+export function latestKnownLedger(): number {
+  const maxHash = getDb().prepare('SELECT MAX(ledger) AS m FROM ledger_hashes').get() as {
+    m: number | null;
+  };
+  const maxEvent = getDb().prepare('SELECT MAX(ledger) AS m FROM events').get() as {
+    m: number | null;
+  };
+  return Math.max(maxHash.m ?? 0, maxEvent.m ?? 0, getCursorLedger());
+}
+
+/**
+ * Ledger boundary below which state is considered final:
+ * `latestKnownLedger - confirmationDepth`. Anything at or below this
+ * boundary is confirmed; anything above it is provisional.
+ */
+export function latestConfirmedLedger(confirmationDepth: number): number {
+  return Math.max(0, latestKnownLedger() - confirmationDepth);
+}
+
+/**
+ * True if an invoice is referenced by any event that is still inside the
+ * confirmation window (i.e. its state may yet change due to a reorg).
+ */
+export function invoiceIsProvisional(invoiceId: number, confirmationDepth: number): boolean {
+  const boundary = latestConfirmedLedger(confirmationDepth);
+  const row = getDb()
+    .prepare('SELECT 1 FROM events WHERE invoice_id = ? AND ledger > ? LIMIT 1')
+    .get(invoiceId, boundary) as { 1: number } | undefined;
+  return row !== undefined;
+}
+
+/**
+ * Roll the indexer back to `ledger`, removing any event/invoice/ledger-hash
+ * state derived from ledgers above it. The caller must replay from the rollback
+ * point to re-derive state from the canonical chain.
+ *
+ * @returns the number of invoice rows removed.
+ */
+export function rollbackToLedger(ledger: number): number {
+  const affected = getDb()
+    .prepare('SELECT DISTINCT invoice_id FROM events WHERE ledger > ?')
+    .all(ledger) as { invoice_id: number }[];
+
+  const run = getDb().transaction(() => {
+    getDb().prepare('DELETE FROM events WHERE ledger > ?').run(ledger);
+    getDb().prepare('DELETE FROM ledger_hashes WHERE ledger > ?').run(ledger);
+    for (const { invoice_id } of affected) {
+      getDb().prepare('DELETE FROM invoices WHERE id = ?').run(invoice_id);
+    }
+    setCursorLedger(ledger);
+  });
+  run();
+
+  return affected.length;
+}
+
+// ─── Backfill checkpoints ────────────────────────────────────────────────────
+
+export interface BackfillCheckpointRecord {
+  ledger: number;
+  block_hash: string;
+  event_count: number;
+  updated_at: number;
+}
+
+/** Persist a checkpoint so a crashed backfill can resume from `ledger`. */
+export function saveBackfillCheckpoint(
+  ledger: number,
+  blockHash: string,
+  eventCount: number
+): void {
+  getDb()
+    .prepare(
+      `INSERT INTO checkpoint (id, ledger, block_hash, event_count, updated_at)
+       VALUES (1, ?, ?, ?, ?)
+       ON CONFLICT(id) DO UPDATE SET
+         ledger      = excluded.ledger,
+         block_hash  = excluded.block_hash,
+         event_count = excluded.event_count,
+         updated_at  = excluded.updated_at`
+    )
+    .run(ledger, blockHash, eventCount, Date.now());
+}
+
+/** Return the last persisted backfill checkpoint, or null. */
+export function getBackfillCheckpoint(): BackfillCheckpointRecord | null {
+  const row = getDb()
+    .prepare('SELECT ledger, block_hash, event_count, updated_at FROM checkpoint WHERE id = 1')
+    .get() as BackfillCheckpointRecord | undefined;
+  return row ?? null;
+}
+
+/** Clear the persisted checkpoint (e.g. after a verified resume). */
+export function clearBackfillCheckpoint(): void {
+  getDb().prepare('DELETE FROM checkpoint WHERE id = 1').run();
 }

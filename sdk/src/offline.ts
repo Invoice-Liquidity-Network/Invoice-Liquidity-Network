@@ -21,6 +21,18 @@ export interface OfflineQueueItem {
   maxRetries: number;
   status: 'pending' | 'submitting' | 'failed' | 'completed';
   error?: string;
+  /**
+   * Deterministic key derived from `(operation, params)` (or passed explicitly
+   * by the caller). Re-enqueuing an operation with the same key while a copy is
+   * still pending or submitting is a no-op — this is the idempotency guarantee
+   * that prevents a flaky reconnect from double-submitting a write.
+   */
+  dedupKey?: string;
+  /**
+   * Monotonic sequence number assigned at enqueue time. Persisted replay order;
+   * consumers can use it to guarantee writes execute exactly-once in order.
+   */
+  sequence: number;
 }
 
 export interface OfflineConfig {
@@ -47,6 +59,8 @@ export interface OfflineState {
   queueSize: number;
   pendingCount: number;
   failedCount: number;
+  /** Milliseconds since the oldest pending/submitting item was enqueued (0 when idle). */
+  oldestPendingAgeMs: number;
 }
 
 export type StateChangeCallback = (state: OfflineState) => void;
@@ -86,6 +100,29 @@ function createMemoryStorage(): OfflineStorage {
     setItem: (key, value) => store.set(key, value),
     removeItem: (key) => store.delete(key),
   };
+}
+
+/**
+ * Canonical JSON stringify: object keys are sorted recursively so two
+ * semantically-identical param objects produce the same stability key even when
+ * their key insertion orders differ.
+ */
+export function canonicalStringify(value: unknown): string {
+  if (Array.isArray(value)) {
+    return `[${value.map(canonicalStringify).join(',')}]`;
+  }
+  if (value !== null && typeof value === 'object') {
+    const entries = Object.entries(value as Record<string, unknown>)
+      .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
+      .map(([k, v]) => `${JSON.stringify(k)}:${canonicalStringify(v)}`);
+    return `{${entries.join(',')}}`;
+  }
+  return JSON.stringify(value);
+}
+
+/** Default dedup key derivation from an operation name and its params. */
+export function deriveDedupKey(operation: string, params: unknown): string {
+  return `${operation}:${canonicalStringify(params)}`;
 }
 
 // ---------------------------------------------------------------------------
@@ -130,23 +167,61 @@ export class OfflineManager {
   }
 
   /**
-   * Get current offline state.
+   * Get the current offline state, including the age of the oldest queued item.
    */
   getState(): OfflineState {
+    const pending = this.queue.filter((i) => i.status === 'pending' || i.status === 'submitting');
+    const oldestTimestamp = pending.reduce(
+      (oldest, i) => (i.timestamp < oldest ? i.timestamp : oldest),
+      Number.POSITIVE_INFINITY
+    );
     return {
       isOnline: this.isOnline,
       queueSize: this.queue.length,
-      pendingCount: this.queue.filter((i) => i.status === 'pending').length,
+      pendingCount: pending.length,
       failedCount: this.queue.filter((i) => i.status === 'failed').length,
+      oldestPendingAgeMs: pending.length === 0 ? 0 : Math.max(0, Date.now() - oldestTimestamp),
     };
   }
 
   /**
-   * Enqueue an operation for later submission.
+   * Milliseconds since the oldest pending/submitting item was enqueued.
+   * Consumers can use this to surface a "queued writes are aging" signal and,
+   * for example, warn a user that offline writes have not been delivered.
    */
-  enqueue(operation: string, params: unknown): OfflineQueueItem {
+  getOldestPendingAgeMs(): number {
+    return this.getState().oldestPendingAgeMs;
+  }
+
+  /**
+   * Enqueue an operation for later submission.
+   *
+   * @param operation - Name of the operation (e.g. "submit_invoice").
+   * @param params - Parameters that will be replayed after reconnect.
+   * @param opts - Optional idempotency control.
+   *
+   * Idempotency: when `opts.idempotencyKey` is given, or derivable from
+   * `(operation, params)`, enqueueing a duplicate while an equivalent item is
+   * already pending or submitting returns the existing item instead of adding a
+   * new one. This guarantees a flaky reconnect can never double-submit a write.
+   */
+  enqueue(
+    operation: string,
+    params: unknown,
+    opts: { idempotencyKey?: string } = {}
+  ): OfflineQueueItem {
     if (this.queue.length >= this.config.maxQueueSize) {
       throw new Error(`Queue is full (max ${this.config.maxQueueSize} items)`);
+    }
+
+    const dedupKey = opts.idempotencyKey ?? deriveDedupKey(operation, params);
+
+    const existing = this.queue.find(
+      (i) => i.dedupKey === dedupKey && (i.status === 'pending' || i.status === 'submitting')
+    );
+    if (existing) {
+      logger.debug(`Deduped enqueue of ${operation} — reusing item ${existing.id}`);
+      return existing;
     }
 
     const item: OfflineQueueItem = {
@@ -157,13 +232,15 @@ export class OfflineManager {
       retries: 0,
       maxRetries: this.config.maxRetries,
       status: 'pending',
+      dedupKey,
+      sequence: this.nextSequence(),
     };
 
     this.queue.push(item);
     this.saveQueue();
     this.notifyListeners();
 
-    logger.debug(`Enqueued operation: ${operation} (id: ${item.id})`);
+    logger.debug(`Enqueued operation: ${operation} (id: ${item.id}, seq: ${item.sequence})`);
     return item;
   }
 
@@ -340,11 +417,20 @@ export class OfflineManager {
     return `offline_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
   }
 
+  private nextSequence(): number {
+    return this.queue.reduce((max, i) => Math.max(max, i.sequence ?? 0), 0) + 1;
+  }
+
   private loadQueue(): void {
     try {
       const stored = this.config.storage.getItem(this.config.storageKey);
       if (stored) {
-        this.queue = JSON.parse(stored);
+        const parsed = JSON.parse(stored) as OfflineQueueItem[];
+        this.queue = parsed.map((i) => ({
+          ...i,
+          sequence: typeof i.sequence === 'number' ? i.sequence : 0,
+          dedupKey: typeof i.dedupKey === 'string' ? i.dedupKey : undefined,
+        }));
         logger.debug(`Loaded ${this.queue.length} items from storage`);
       }
     } catch (error) {

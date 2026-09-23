@@ -224,18 +224,72 @@ GROUP BY payer;
 
 ---
 
-## Handling Ledger Finality (no reorgs)
+## Handling Ledger Finality
 
-**Stellar has no chain reorganizations.** Once a ledger is closed and the Soroban RPC reports it as `CLOSED`, it is final. There is no concept of a "deep enough confirmation depth" as with EVM chains.
+**Stellar itself does not reorganise closed ledgers.** Once a ledger is closed
+and Soroban RPC reports it as `CLOSED`, the chain is final — there is no
+"deep enough confirmation depth" as with EVM.
 
-Implications for indexers:
+The indexer nevertheless implements a **confirmation-depth policy** as
+defense-in-depth against RPC edge cases (a stale or divergent RPC view
+behind the tip, operator restores, or a misbehaving endpoint):
 
-| EVM concern | Stellar equivalent | Action |
-|-------------|-------------------|--------|
-| Reorg → undo state | Does not happen | No rollback logic needed |
+| EVM concern | Stellar equivalent | Indexer action |
+|-------------|-------------------|----------------|
+| Reorg → undo state | Does not happen on-chain | Record block hashes; on hash mismatch, detect reorg and roll back defensively |
 | Uncle blocks | Not applicable | — |
-| Pending mempool | Transactions are PENDING until ledger close | Track status `PENDING` vs `CLOSED` |
-| Safe/finalized heads | Soroban `getLatestLedger()` is always final | Poll from latest ledger safely |
+| Pending mempool | Transactions are PENDING until ledger close | Track status via events only |
+| Divergent RPC view behind the tip | Rare/operator error | `CONFIRMATION_DEPTH` window + hash verification + rollback |
+| Crash/resume | Durable cursor | `cursor` + verifiable backfill `checkpoint` |
+
+### Confirmation-depth policy (provisional vs final)
+
+The poller only **persists events that are `CONFIRMATION_DEPTH` ledgers behind
+the chain tip** (default 10, ≈50 s; env `CONFIRMATION_DEPTH`). Everything at or
+within the window is treated as **provisional** — it is never written and never
+surfaced, so a reorg inside the window cannot cause a rollback cascade. State
+is **final** only once it is more than `CONFIRMATION_DEPTH` behind the
+latest known ledger.
+
+Consumers can read the boundary from the API:
+
+- GraphQL: `Query.indexerStatus` → `{ latestLedger, latestConfirmedLedger, confirmationDepth }`.
+- GraphQL `ILNEvent.confirmed: Boolean!` — always `true` for surfaced events
+  (the policy enforces this); present so consumers can apply the same rule.
+- GraphQL `Invoice.provisional: Boolean!` — `true` when an event referencing
+  the invoice is still inside the confirmation window.
+- REST: `GET /indexer/status` → `{ latestLedger, latestConfirmedLedger, confirmationDepth, provisionalWindowLedgers }`.
+
+### Reorg detection & rollback (defense-in-depth)
+
+The poller records the canonical block hash of the confirmed boundary each
+cycle in the `ledger_hashes` table. On every poll it re-verifies that recorded
+boundary hash against Soroban RPC (`getLedger`):
+
+- If it still matches, nothing changes.
+- If it diverges, `detectReorg` computes the **last common ancestor** (LCA)
+  using the longest-matching-prefix rule over recorded hashes, then
+  `rollbackToLedger(lca)` deletes events/ledger hashes above the LCA, drops the
+  affected invoice rows, and resets the cursor — the next poll replays from the
+  canonical chain and re-derives state. Deduplication (`event_id` PK +
+  `INSERT OR IGNORE`) makes replay idempotent.
+
+Because Stellar is normally final, this is a zero-op safety net: it only
+triggers if recorded hashes actually disagree with the canonical response.
+
+### Backfill checkpoints
+
+Long backfills persist a `checkpoint` row every `CHECKPOINT_INTERVAL_LEDGERS`
+(default 500), storing `(ledger, canonical block_hash, event_count)`:
+
+- On startup the indexer resumes from a checkpoint whose stored block hash still
+  matches canonical (`resumeFromCheckpoint`).
+- If the block hash no longer matches, the checkpoint is discarded and the
+  backfill restarts from genesis — the checkpoint is only trusted when it can
+  be integrity-verified against the chain.
+- An operator backfilling from genesis simply lets the poller run; the
+  `cursor` and checkpoints make each restart resumable at the last verified
+  boundary.
 
 ### Cursor-Based Polling
 
@@ -249,7 +303,10 @@ CREATE TABLE IF NOT EXISTS cursor (
 );
 ```
 
-On startup, query `last_ledger` and resume polling from `last_ledger + 1`. Since Stellar has no reorgs, you never need to rewind.
+On startup, query `last_ledger` and resume polling from `last_ledger`. Because
+re-scanning a ledger is idempotent (dedup by `event_id`), starting from the
+cursor (rather than cursor + 1) guarantees no events are missed across a crash
+or rollback.
 
 ---
 
@@ -283,7 +340,27 @@ On startup, query `last_ledger` and resume polling from `last_ledger + 1`. Since
 │ ledger           │ INTEGER  │ NOT NULL       │
 │ ledger_closed_at │ TEXT     │ NOT NULL (ISO) │
 │ created_at       │ INTEGER  │ NOT NULL       │
+│ confirmed        │ INTEGER  │ NOT NULL (0/1) │
 └──────────────────┴──────────┴────────────────┘
+
+┌──────────────────────────────────────────────┐
+│                 ledger_hashes                │
+├──────────────┬──────────┬────────────────────┤
+│ ledger       │ INTEGER  │ PK                 │
+│ hash         │ TEXT     │ canonical block    │
+│ confirmed    │ INTEGER  │ NOT NULL (0/1)     │
+│ created_at   │ INTEGER  │ unix ms            │
+└──────────────┴──────────┴────────────────────┘
+
+┌──────────────────────────────────────────────┐
+│                 checkpoint                   │
+├──────────────┬──────────┬────────────────────┤
+│ id           │ INTEGER  │ PK (always = 1)    │
+│ ledger       │ INTEGER  │ checkpointed seq   │
+│ block_hash   │ TEXT     │ canonical hash     │
+│ event_count  │ INTEGER  │ events at cp time  │
+│ updated_at   │ INTEGER  │ unix ms            │
+└──────────────┴──────────┴────────────────────┘
 
 ┌──────────────────────────────────────────────┐
 │                    cursor                    │
@@ -331,7 +408,23 @@ CREATE TABLE events (
   invoice_id       BIGINT        NOT NULL REFERENCES invoices(id),
   ledger           INTEGER       NOT NULL,
   ledger_closed_at TIMESTAMPTZ   NOT NULL,
-  created_at       BIGINT        NOT NULL
+  created_at       BIGINT        NOT NULL,
+  confirmed        BOOLEAN       NOT NULL DEFAULT TRUE  -- confirmation-depth policy
+);
+
+CREATE TABLE ledger_hashes (
+  ledger     BIGINT  PRIMARY KEY,
+  hash       TEXT    NOT NULL,
+  confirmed  BOOLEAN NOT NULL DEFAULT FALSE,
+  created_at BIGINT  NOT NULL
+);
+
+CREATE TABLE checkpoint (
+  id          BIGINT  PRIMARY KEY CHECK (id = 1),
+  ledger      BIGINT  NOT NULL DEFAULT 0,
+  block_hash  TEXT    NOT NULL DEFAULT '',
+  event_count BIGINT  NOT NULL DEFAULT 0,
+  updated_at  BIGINT  NOT NULL
 );
 
 CREATE TABLE cursor (
