@@ -19,7 +19,7 @@ function measure<T>(label: string, fn: () => T): T {
     _queryCount++;
     _totalQueryTime += elapsed;
     if (elapsed > SLOW_QUERY_THRESHOLD_MS) {
-      console.warn(`[DB] Slow query (${elapsed}ms): ${label}`);
+      throw new Error(`[DB] Query exceeded performance budget (${elapsed}ms): ${label}`);
     }
   }
 }

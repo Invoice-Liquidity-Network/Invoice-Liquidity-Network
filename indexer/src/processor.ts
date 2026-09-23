@@ -1,5 +1,5 @@
 import { type rpc, scValToNative } from '@stellar/stellar-sdk';
-import { hasEvent, insertEvent, upsertInvoice } from './db';
+import { hasEvent, insertEvent, upsertInvoice, getInvoiceById } from './db';
 import { eventsProcessedTotal, invoicesUpsertedTotal } from './metrics';
 import { invalidateInvoiceCache } from './cache';
 import { fetchInvoice } from './rpc';
@@ -64,19 +64,29 @@ export async function processEvent(event: rpc.Api.EventResponse): Promise<void> 
   //   • `defaulted`  → updates status=Defaulted
   const invoice = await fetchInvoice(invoiceId);
   if (invoice) {
-    upsertInvoice(invoice);
-    await invalidateInvoiceCache(invoiceId);
-    try {
-      invoicesUpsertedTotal.inc();
-    } catch {
-      /* metrics failure is non-fatal */
+    const existing = getInvoiceById(invoiceId);
+    const isChanged = !existing || existing.status !== invoice.status || existing.funder !== (invoice.funder ?? null);
+
+    if (isChanged) {
+      upsertInvoice(invoice);
+      await invalidateInvoiceCache(invoiceId);
+      try {
+        invoicesUpsertedTotal.inc();
+      } catch {
+        /* metrics failure is non-fatal */
+      }
     }
-    pubsub.publish(INVOICE_UPDATED, { invoiceUpdated: invoice, triggeringEvent: ilnEvent });
+
+    // Always emit the event stream since we got a new event
     pubsub.publish(EVENT_STREAM, { eventStream: ilnEvent });
-    if (eventType === 'submitted') {
-      pubSub.publish('INVOICE_CREATED', invoice);
-    } else {
-      pubSub.publish('INVOICE_UPDATED', invoice);
+
+    if (isChanged) {
+      pubsub.publish(INVOICE_UPDATED, { invoiceUpdated: invoice, triggeringEvent: ilnEvent });
+      if (!existing) {
+        pubSub.publish('INVOICE_CREATED', invoice);
+      } else {
+        pubSub.publish('INVOICE_UPDATED', invoice);
+      }
     }
   }
 }
