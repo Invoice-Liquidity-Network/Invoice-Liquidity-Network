@@ -10,10 +10,12 @@ restartPolicyType = "on_failure"
 restartPolicyMaxRetries = 5
 restartPolicyMaxDelay = 60
 # Single-instance only — SQLite single-writer constraint prevents horizontal scaling.
+# This is a critical production hardening step to prevent data corruption with SQLite.
 numReplicas = 1
 
 [variables]
 NODE_ENV = "production"
 PORT = "3001"
 # SQLite WAL mode improves concurrent read performance under the single-writer model.
+# This is important for production performance and stability.
 SQLITE_WAL_MODE = "true"

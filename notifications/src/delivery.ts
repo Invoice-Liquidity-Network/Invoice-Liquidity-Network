@@ -225,8 +225,6 @@ function getWebhookSignature(secret: string, body: string): string {
 export async function sendWebhook(
   subscription: Subscription,
   payload: NotificationPayload,
-  attempt = 1,
-  logId?: number
 ): Promise<void> {
   const destination = subscription.destination;
   if (!shouldAllowRequest(destination)) {
@@ -256,19 +254,17 @@ export async function sendWebhook(
     eventType: payload.eventType ?? null,
   });
 
-  const id =
-    logId ??
-    createWebhookDeliveryLog({
-      subscription_id: subscription.id,
-      event_id: payload.eventId ?? null,
-      trigger: payload.trigger,
-      invoice_id: payload.invoice.id,
-      recipient_address: payload.recipientAddress,
-      status: 'pending',
-      attempts: 0,
-      response_status: null,
-      error: null,
-    }).id;
+  const deliveryLogId = createWebhookDeliveryLog({
+    subscription_id: subscription.id,
+    event_id: payload.eventId ?? null,
+    trigger: payload.trigger,
+    invoice_id: payload.invoice.id,
+    recipient_address: payload.recipientAddress,
+    status: 'pending',
+    attempts: 0,
+    response_status: null,
+    error: null,
+  }).id;
 
   let response;
   let errorMessage: string | null = null;

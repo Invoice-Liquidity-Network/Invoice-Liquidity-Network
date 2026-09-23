@@ -45,11 +45,33 @@ describe('Troubleshooting Scenarios E2E Tests', () => {
     });
 
     test('should report "unable to open database file" when database path is invalid', async () => {
-      // Conceptual test: Configure indexer with an invalid DB_PATH (e.g., non-existent or read-only directory)
-      // Restart server with new config.
+      const originalDbPath = process.env.DB_PATH;
+      const invalidDbPath = '/non/existent/path/test.db';
+      process.env.DB_PATH = invalidDbPath;
+
+      // Spy on console.error to capture potential error messages during startup
+      const errorSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
+      
+      let serverError: any;
+      try {
+        app = await startServer();
+        // Depending on implementation, server might not start or /health fails
+        await request(app).get('/health').expect(503); // Expect degraded status or internal server error
+      } catch (error) {
+        serverError = error;
+      } finally {
+        await stopServer();
+        if (originalDbPath) {
+          process.env.DB_PATH = originalDbPath;
+        } else {
+          delete process.env.DB_PATH;
+        }
+        errorSpy.mockRestore();
+      }
+      
       // Expect server startup to fail or health check to report degraded status.
-      console.warn('Conceptual test: Simulate "unable to open database file" by invalidating DB_PATH.');
-      expect(true).toBe(true); // Placeholder assertion
+      expect(serverError).toBeDefined(); // Expect some error during server startup
+      expect(errorSpy).toHaveBeenCalledWith(expect.stringContaining('unable to open database file'));
     });
   });
 

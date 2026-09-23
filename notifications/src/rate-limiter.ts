@@ -74,7 +74,7 @@ export class RateLimiter {
     const userResult = checkBucket(this.userBuckets.get(userId)!, now);
     if (!userResult.allowed) return userResult;
 
-    // Per-recipient check (user + channel combined).
+    // Per-recipient check (a specific user sending to a specific channel).
     const recipientKey = `${userId}:${channel}`;
     if (!this.channelBuckets.has(recipientKey)) {
       this.channelBuckets.set(recipientKey, {
