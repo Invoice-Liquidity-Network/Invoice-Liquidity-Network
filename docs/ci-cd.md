@@ -3,6 +3,85 @@
 This repository uses a small set of GitHub Actions workflows to cover code quality, security scanning, coverage, deployments, and repo automation.
 This repository uses GitHub Environments to protect deployment secrets and ensure audit control over network deployments. Shared CI steps for Stellar testnet and pnpm are provided as **reusable workflows** (`workflow_call`) so the main repo, [ILN-Smart-Contract](https://github.com/Invoice-Liquidity-Network/ILN-Smart-Contract), and [ILN-Frontend](https://github.com/Invoice-Liquidity-Network/ILN-Frontend) can reuse the same logic.
 
+## Token permissions (least privilege)
+
+Every workflow declares an explicit top-level `permissions:` block. This overrides the
+repository/organization default `GITHUB_TOKEN` scopes and grants each workflow only the
+access it actually needs, so a compromised action or dependency cannot escalate beyond the
+declared scope.
+
+**Policy**
+
+- **Every** workflow file sets a top-level `permissions:` block — there are no implicit
+  defaults. New workflows must add one.
+- Start from `contents: read` (or `permissions: {}` when the job touches no repo contents,
+  e.g. a pure HTTP probe) and add scopes only where a step demonstrably needs them.
+- Prefer a **read-only top-level default** and elevate at the **job level** for the single
+  job that needs more (release/publish jobs do this for `contents: write` /
+  `id-token: write`). This keeps the elevated scope off every other job in the file.
+- Grant `pull-requests: write` only where a bot comments on or opens PRs; `issues: write`
+  only where a bot writes issues; `security-events: write` only on the CodeQL analyze jobs;
+  `pages: write` + `id-token: write` only for the Pages deploy.
+
+**Scope-by-workflow summary**
+
+| Scope | Workflows |
+| ----- | --------- |
+| `contents: read` only | `ci` (top-level default), `codeql` (top-level), `coverage`, `e2e`, `e2e-nightly`, `knip`, `pr-title-lint`, `snyk`, `sdk-browser-tests`, `sdk-e2e-local-node`, `docs-deploy` (default), `deploy` (default), `reusable-cache-pnpm`, `reusable-stellar-setup`; read-only top-level default on `release`, `sdk-release`, `scripts-release` |
+| `permissions: {}` (none) | `reusable-testnet-health` (HTTP probe only) |
+| `contents: write` | `cli-docs`, `docs-changelog` (commit regenerated docs) |
+| `contents: write` + `pull-requests: write` | `mainnet-checklist-status` (open checklist PR) |
+| `contents: write` + `actions: write` | `coordinate-release` (tag sibling repos, trigger their workflows) |
+| `contents: read` + `pull-requests: write` | `ci`, `changeset-check` (comment status on PRs) |
+| `security-events: write` (job-level) | `codeql` analyze jobs (upload results) |
+| `pages: write` + `id-token: write` (job-level) | `docs-deploy` (OIDC Pages deploy) |
+| `contents: write` + `id-token: write` (job-level) | `release`, `sdk-release`, `scripts-release` publish jobs (GitHub Release + npm provenance) |
+| `issues: write` | `project-board` (move cards; falls back to `PROJECT_PAT`) |
+
+Reusable workflows (`workflow_call`) also declare `permissions:` — the effective token is
+still capped by whatever the **caller** grants, so the declaration documents intent and acts
+as a ceiling, never an escalation.
+
+## Pinned action versions (supply-chain)
+
+Every **third-party** action (anything not published by GitHub under `actions/*`) is pinned
+to a full 40-character commit SHA, with the human-readable version in a trailing comment:
+
+```yaml
+- uses: dorny/paths-filter@d1c1ffe0248fe513906c8e24db8ea791d46f8590 # v3.0.3
+```
+
+**Why:** a mutable tag like `@v3` can be force-moved to point at malicious code after we
+adopt it; a commit SHA is immutable, so a review of that exact revision stays valid. First-
+party `actions/*` actions are trusted and left on major-version tags.
+
+**Currently pinned third-party actions**
+
+| Action | Pinned version |
+| ------ | -------------- |
+| `pnpm/action-setup` | v4.4.0 |
+| `dorny/paths-filter` | v3.0.3 |
+| `dorny/test-reporter` | v2.7.0 |
+| `codecov/codecov-action` | v5.5.5 |
+| `github/codeql-action` (`init` + `analyze`) | v3.37.3 |
+| `taiki-e/install-action` | v2.85.1 (with `tool: cargo-llvm-cov`) |
+| `softprops/action-gh-release` | v2.6.2 |
+| `changesets/action` | v1.9.0 |
+| `peter-evans/create-pull-request` | v6.1.0 |
+| `dtolnay/rust-toolchain` | `stable` branch @ `2c7215f` (with explicit `toolchain: stable`) |
+| `upptime/uptime-monitor` | `master` @ `c540f23` |
+| `snyk/actions/setup` | `master` @ `8e119fb` |
+
+Two actions select their behaviour from the ref name, so pinning to a SHA requires passing
+that choice as an input instead: `dtolnay/rust-toolchain` gets `toolchain: stable` and
+`taiki-e/install-action` gets `tool: cargo-llvm-cov`.
+
+**Keeping SHAs current:** Renovate manages these automatically — `renovate.json` sets
+`pinDigests: true` for the `github-actions` manager, so Renovate opens PRs that bump both the
+SHA and the version comment when a new release ships. Do not hand-edit SHAs to "latest"; let
+Renovate propose the update so the version comment stays accurate. See
+[CONTRIBUTING.md](../CONTRIBUTING.md#pinning-third-party-actions) for the contributor policy.
+
 ## Reusable workflow templates
 
 | Workflow | File | Purpose |
@@ -114,6 +193,22 @@ jobs:
 
 The composite action [`.github/actions/setup-pnpm`](../.github/actions/setup-pnpm/action.yml) uses the same cache keys as the reusable workflow so caller jobs stay in sync without duplicating YAML.
 
+### Reusable workflow vs composite action — which to use?
+
+This repo provides **two** shared setup mechanisms for pnpm:
+
+| Mechanism | File | Runs as | When to use |
+| --------- | ---- | ------- | ----------- |
+| Composite action | `.github/actions/setup-pnpm/action.yml` | A step inside a job | Default choice for most jobs. Use when you need pnpm + Node + store cache inside an existing job. |
+| Reusable workflow | `.github/workflows/reusable-cache-pnpm.yml` | A separate top-level job | Use when you want to pre-warm the pnpm store in an **early job** so later jobs in the same workflow hit the cache. The reusable workflow calls the composite action internally. |
+
+**Guidelines:**
+
+- Start with the **composite action** (`./.github/actions/setup-pnpm`) unless you have a specific reason to use the reusable workflow.
+- Use the **reusable workflow** only when you need a dedicated cache-warming job that runs before multiple downstream jobs.
+- Do **not** reimplement pnpm/Node setup inline — always use the shared action or workflow.
+- For Stellar CLI setup, use `reusable-stellar-setup.yml` when you need a funded testnet identity; otherwise install the CLI inline with cargo caching.
+
 ### `reusable-testnet-health.yml`
 
 Requests `/.well-known/stellar.json` from Horizon and sets `healthy` to `true` when the response contains a valid network passphrase.
@@ -151,59 +246,177 @@ When `healthy` is `false`, dependent jobs are skipped and the workflow logs a wa
 
 ---
 
+## Concurrency groups
+
+Most PR/push-triggered workflows use `concurrency` groups to cancel superseded runs, saving CI minutes:
+
+```yaml
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+```
+
+**Workflows with `cancel-in-progress: true`** (safe to cancel — no side effects):
+
+`ci.yml`, `cli-docs.yml`, `cli-smoke.yml`, `coverage.yml`, `e2e.yml`, `codeql.yml`, `snyk.yml`, `knip.yml`, `pr-title-lint.yml`, `changeset-check.yml`, `sdk-api-docs.yml`, `sdk-browser-tests.yml`, `sdk-bundle-size.yml`
+
+**Workflows with `cancel-in-progress: false`** (should not be interrupted):
+
+| Workflow | Reason |
+| -------- | ------ |
+| `release.yml` | Publishing to npm must complete (uses the short-form `concurrency:` string, so `cancel-in-progress` defaults to false) |
+| `sdk-release.yml` | Publishing to npm must complete |
+| `scripts-release.yml` | Publishing to npm must complete |
+| `docs-deploy.yml` | Pages deployment must complete |
+| `e2e-nightly.yml` | Scheduled nightly run — no benefit to cancelling |
+| `sdk-e2e-local-node.yml` | Push-only on main — no concurrent runs expected |
+| `upptime.yml` | Scheduled uptime monitoring — no benefit to cancelling |
+
+**Workflows excluded from concurrency groups** (no overlapping runs):
+
+`deploy.yml`, `coordinate-release.yml`, `mainnet-checklist-status.yml`, `project-board.yml`, `sync-issues.yml`, `docs-changelog.yml` — these are `workflow_dispatch`, issue-triggered, or tag-triggered and do not produce redundant runs.
+
+The three reusable workflows (`reusable-cache-pnpm.yml`, `reusable-stellar-setup.yml`, `reusable-testnet-health.yml`) also omit `concurrency` — they run as `workflow_call` jobs inside the caller's run and inherit the caller's concurrency context.
+
 ## Workflow map
+
+The diagram below shows the full topology: every workflow, grouped by the trigger that
+fires it, plus the `workflow_call` edges into the reusable workflows (dotted lines). A
+workflow can appear under more than one trigger.
 
 ```mermaid
 flowchart TD
-  PushMain["push to `main`"] --> CI["`ci.yml`"]
-  PushMain --> Coverage["`coverage.yml`"]
-  PushMain --> CodeQL["`codeql.yml`"]
-  PushMain --> Snyk["`snyk.yml`"]
-  PushMain --> SDKE2E["`sdk-e2e-local-node.yml`"]
-  PushMain --> Upptime["`upptime.yml`"]
+  %% ---- Trigger sources ----
+  PushMain(["push → main"])
+  PushTags(["push → tags"])
+  PR(["pull_request"])
+  Sched(["schedule (cron)"])
+  Dispatch(["workflow_dispatch"])
+  Issues(["issues / PR closed"])
 
-  PullRequest["pull request events"] --> CI
-  PullRequest --> Coverage
-  PullRequest --> CodeQL
-  PullRequest --> Snyk
-  PullRequest --> PRTitle["`pr-title-lint.yml`"]
-  PullRequest --> SyncIssues["`sync-issues.yml`"]
-  PullRequest --> ProjectBoard["`project-board.yml`"]
+  %% ---- Reusable workflows (workflow_call callees) ----
+  subgraph Reusable["Reusable workflows (workflow_call)"]
+    RCache["reusable-cache-pnpm.yml"]
+    RHealth["reusable-testnet-health.yml"]
+    RStellar["reusable-stellar-setup.yml<br/>(cross-repo; unused locally)"]
+  end
 
-  IssueLabel["issue labeled"] --> ProjectBoard
-  IssueLabel --> SyncIssues
-  Schedule["scheduled run"] --> CodeQL
-  Schedule --> E2ENightly["`e2e-nightly.yml`"]
-  Schedule --> Snyk
-  Schedule --> Upptime
+  %% ---- push to main ----
+  PushMain --> CI["ci.yml"]
+  PushMain --> Coverage["coverage.yml"]
+  PushMain --> CodeQL["codeql.yml"]
+  PushMain --> Snyk["snyk.yml"]
+  PushMain --> Knip["knip.yml"]
+  PushMain --> SDKLocal["sdk-e2e-local-node.yml"]
+  PushMain --> Upptime["upptime.yml"]
+  PushMain --> Release["release.yml"]
+  PushMain --> DocsDeploy["docs-deploy.yml"]
+  PushMain --> DocsChangelog["docs-changelog.yml"]
+  PushMain --> CLIDocs["cli-docs.yml"]
+  PushMain --> SDKApiDocs["sdk-api-docs.yml"]
+  PushMain --> SDKBundle["sdk-bundle-size.yml"]
+  PushMain --> SDKBrowser["sdk-browser-tests.yml"]
+  PushMain --> E2E["e2e.yml"]
+  PushMain --> CLISmoke["cli-smoke.yml"]
 
-  WorkflowDispatch["manual dispatch"] --> Deploy["`deploy.yml`"]
-  WorkflowDispatch --> Upptime
+  %% ---- push tags ----
+  PushTags --> SDKRelease["sdk-release.yml"]
+  PushTags --> ScriptsRelease["scripts-release.yml"]
+  PushTags --> DocsChangelog
+
+  %% ---- pull_request ----
+  PR --> CI
+  PR --> Coverage
+  PR --> CodeQL
+  PR --> Snyk
+  PR --> Knip
+  PR --> PRTitle["pr-title-lint.yml"]
+  PR --> Changeset["changeset-check.yml"]
+  PR --> CLIDocs
+  PR --> SDKApiDocs
+  PR --> SDKBundle
+  PR --> SDKBrowser
+  PR --> E2E
+  PR --> CLISmoke
+  PR --> SDKRelease
+  PR --> ScriptsRelease
+  PR --> ProjectBoard["project-board.yml"]
+
+  %% ---- schedule ----
+  Sched --> CodeQL
+  Sched --> Snyk
+  Sched --> E2ENightly["e2e-nightly.yml"]
+  Sched --> Upptime
+
+  %% ---- workflow_dispatch ----
+  Dispatch --> Deploy["deploy.yml"]
+  Dispatch --> Coordinate["coordinate-release.yml"]
+  Dispatch --> Upptime
+  Dispatch --> Release
+  Dispatch --> SDKRelease
+  Dispatch --> ScriptsRelease
+  Dispatch --> SDKLocal
+  Dispatch --> DocsChangelog
+  Dispatch --> DocsDeploy
+  Dispatch --> Mainnet["mainnet-checklist-status.yml"]
+  Dispatch --> CLISmoke
+
+  %% ---- issues / PR closed ----
+  Issues --> SyncIssues["sync-issues.yml"]
+  Issues --> ProjectBoard
+  Issues --> Mainnet
+
+  %% ---- reusable-workflow call edges (workflow_call) ----
+  CI -. calls .-> RCache
+  CI -. calls .-> RHealth
+  CLIDocs -. calls .-> RCache
+  SDKApiDocs -. calls .-> RCache
+  SDKBundle -. calls .-> RCache
+  SDKLocal -. calls .-> RCache
+  Knip -. calls .-> RCache
+  Deploy -. calls .-> RHealth
 ```
 
 ### Dependency notes
 
-- There are no workflow-to-workflow `workflow_call` dependencies at the moment.
-- Several workflows share the same trigger source, especially `push` to `main`, `pull_request`, and scheduled cron runs.
+- **Workflow-to-workflow `workflow_call` dependencies do exist.** Six workflows call the
+  shared reusable workflows:
+  - `reusable-cache-pnpm.yml` is called by `ci.yml` (job `pnpm-cache`), `cli-docs.yml`,
+    `sdk-api-docs.yml`, `sdk-bundle-size.yml`, `sdk-e2e-local-node.yml`, and `knip.yml`.
+  - `reusable-testnet-health.yml` is called by `ci.yml` (job `testnet-health`) and
+    `deploy.yml` (gating the deploy on testnet health).
+  - `reusable-stellar-setup.yml` is defined for cross-repo reuse but is **not** currently
+    called by any workflow in this repository.
+- Several workflows share the same trigger source, especially `push` to `main`,
+  `pull_request`, and scheduled cron runs.
 - `project-board.yml` and `sync-issues.yml` act on repository metadata rather than code changes.
 - `deploy.yml` is intentionally manual and protected by GitHub Environments.
+- `release.yml`, `sdk-release.yml`, and `scripts-release.yml` all support `workflow_dispatch` for manual re-runs after failed publishes.
+- `codeql.yml` runs two parallel jobs: `analyze-ts` (JavaScript/TypeScript across all workspaces) and `analyze-rust` (Rust for `backend/`).
 
 ## Workflow reference
 
 ### `ci.yml`
-Reusable workflows reduce duplicated Stellar and pnpm setup across ILN repositories and keep cache keys consistent.
-
-## Deployment workflow
 
 - Trigger: `push` to `main` and every `pull_request`.
-- Jobs:
-  - `test`: runs `cargo test` for the Rust backend.
-  - `build`: builds the contract for `wasm32v1-none`.
-  - `lint`: runs `cargo clippy` and `cargo fmt --check`.
-  - `node-tests`: runs the workspace JavaScript tests with `pnpm test`.
-  - `node-coverage`: runs the JS test suite with coverage and checks for 80 percent minimum coverage.
-  - `sdk-types-sync`: builds the contract spec and verifies `sdk/src/generated/types.ts` is up to date.
-- Required secrets: none.
+- Reusable workflows: calls `reusable-cache-pnpm.yml` (job `pnpm-cache`, warms the pnpm
+  store for later jobs) and `reusable-testnet-health.yml` (job `testnet-health`, gates the
+  SDK testnet-integration job). A `changes` job runs `dorny/paths-filter` so downstream jobs
+  only execute when the relevant paths change.
+- Jobs (grouped):
+  - Rust/contract: `test` (`cargo test`), `build` (contract for `wasm32v1-none`), `lint`
+    (`cargo clippy` + `cargo fmt --check`).
+  - Node workspace: `node-tests` (`pnpm test`), `node-coverage` (JS coverage with an 80%
+    minimum), `sdk-types-sync` (rebuilds the contract spec and verifies the generated
+    `sdk/src/generated/types.ts` is current).
+  - SDK testnet: `sdk-testnet-integration` (runs when `testnet-health` reports healthy) with
+    `sdk-testnet-skipped` as the skipped-path counterpart.
+  - Core package: `core-install` → `core-format`/`core-lint`/`core-type-check` → `core-test`
+    → `core-build`, summarized by `core-summary`.
+  - Repo hygiene: `syncpack`, `validate-packages`, `no-foreign-lockfiles`,
+    `license-compliance`.
+  - Reporting: `report-test-results` and `notify-discord` (posts on failure).
+- Required secrets: none (Discord notification uses an optional webhook).
 - Expected runtime: medium to long. The Rust and SDK type-sync jobs are the slowest parts, so a full run is usually 10 to 30 minutes depending on cache hits.
 - Debugging tips:
   - Check whether the backend submodule was checked out. This workflow uses `submodules: recursive`.
@@ -211,17 +424,41 @@ Reusable workflows reduce duplicated Stellar and pnpm setup across ILN repositor
   - For SDK sync failures, run `pnpm generate:types` and compare the generated file.
   - If PR comments are missing, remember the failure-comment step only runs on pull requests.
 
+### `cli-smoke.yml`
+
+- Trigger: `push` to `main` and `pull_request` (both scoped to `packages/cli/**`, `sdk/**`,
+  `packages/shared/**`, and the workflow file), plus manual `workflow_dispatch`.
+- Runners: GitHub-hosted matrix — `ubuntu-latest`, `macos-latest`, `windows-latest` (not the
+  self-hosted `namespace-profile-nursca` profile), so the CLI is exercised on all three OSes.
+- Jobs:
+  - `cli-smoke`: builds `@iln/cli` and its workspace deps, packs the CLI together with its
+    unpublished workspace dependencies (`@iln/sdk`, `@iln/shared`), installs the tarballs
+    globally in a clean environment, and runs `iln --version` and `iln --help` as smoke
+    tests. `fail-fast: false` so one OS failing still reports the others.
+- Required secrets: none.
+- Expected runtime: short to medium. Usually 3 to 8 minutes per OS (Windows is the slowest).
+- Debugging tips:
+  - Because the internal packages are unpublished, all three tarballs must be installed in a
+    single `npm install -g` so the `@iln/*` versions resolve from the sibling tarballs rather
+    than the registry.
+  - Reproduce locally with the manual fallback procedure in
+    [CONTRIBUTING.md](../CONTRIBUTING.md#cross-platform-cli-install-smoke-test).
+  - A `workspace:*` specifier leaking into the installed package usually means the CLI's
+    packaging (or `pnpm pack` version rewriting) regressed.
+
 ### `codeql.yml`
 
 - Trigger: `push` to `main`, `pull_request` targeting `main`, and a weekly Sunday schedule at 02:00 UTC.
 - Jobs:
-  - `analyze`: initializes CodeQL for `javascript-typescript` and uploads the analysis results.
+  - `analyze-ts`: initializes CodeQL for `javascript-typescript` with explicit `paths` covering `sdk`, `cli`, `indexer`, `notifications`, `frontend`, `docs`, `packages`, `examples`, `scripts`, `workers`, `contract-deployer`, `account-seeder`, and `tests`. Ignores `backend/`, markdown, `node_modules`, `dist`, and `coverage` directories.
+  - `analyze-rust`: initializes CodeQL for `rust` scoped to `backend/`. Checks out with `submodules: recursive` to ensure the Rust workspace is available.
 - Required secrets: none.
-- Expected runtime: medium. Usually 10 to 20 minutes, but the weekly scan can take longer on a cold runner.
+- Expected runtime: medium. Usually 10 to 20 minutes per job (they run in parallel). The weekly scan can take longer on a cold runner.
 - Debugging tips:
   - Look for checkout or language-initialization failures first.
-  - If CodeQL reports an analysis issue, reproduce locally by focusing on the JavaScript/TypeScript package that owns the file path.
+  - If CodeQL reports an analysis issue, reproduce locally by focusing on the package that owns the file path.
   - Confirm the repository has Actions permissions to upload security events.
+  - The TypeScript scan covers all pnpm workspaces (`sdk`, `cli`, `indexer`, `notifications`, `packages/*`, `docs`, `examples/*`) plus `frontend`, `workers`, `contract-deployer`, `account-seeder`, and `tests`.
 
 ### `coverage.yml`
 
@@ -255,25 +492,45 @@ Reusable workflows reduce duplicated Stellar and pnpm setup across ILN repositor
 ### `e2e.yml`
 
 - Trigger: `push` and `pull_request`.
+- Guard: only runs when the repository variable `RUN_E2E` is set to `true` (disabled by default to save CI minutes on every push/PR).
 - Jobs:
-  - `e2e-tests`: starts a local Stellar node with Docker Compose, waits for RPC to come up, installs dependencies, and runs the end-to-end test suite.
+  - `e2e-tests`: starts a local Stellar node via `docker compose up -d`, waits 15 seconds for RPC, runs `npm install && npm run test:e2e` at the repo root.
+- Scope: **Lightweight, root-level E2E smoke tests only.** This workflow does NOT initialize git submodules, does NOT deploy contracts, does NOT install frontend dependencies or Playwright, and does NOT upload test artifacts. It is intended as a fast gate for basic integration health.
 - Required secrets: none.
-- Expected runtime: medium. Usually 10 to 20 minutes, depending on Docker startup and test length.
+- Expected runtime: short to medium. Usually 5 to 15 minutes.
 - Debugging tips:
   - Confirm Docker and Docker Compose are available on the runner or local machine.
   - If the job appears to hang, inspect the local node logs and the `sleep 15` wait window.
   - Run `docker compose up -d` and `npm run test:e2e` locally to isolate test failures.
+  - If this workflow is skipped, check that `RUN_E2E` is set to `true` in repository variables.
 
 ### `e2e-nightly.yml`
 
 - Trigger: scheduled daily at 00:00 UTC.
+- Guard: runs unconditionally (no repository variable gate).
 - Jobs:
-  - `e2e-tests`: same local node setup and end-to-end test run as `e2e.yml`.
+  - `e2e-tests`: full-stack E2E — initializes git submodules, starts a local Stellar node, waits for RPC with a health-check loop (up to 5 minutes), deploys contracts and seeds accounts, installs frontend dependencies, installs Playwright browsers, runs `npm run test:e2e` inside `frontend/` with mock API enabled, and uploads the Playwright report as an artifact.
+- Scope: **Comprehensive, frontend-integrated E2E.** Covers the full user journey including contract deployment, account seeding, and browser-based Playwright tests. This is the authoritative E2E coverage gate.
 - Required secrets: none.
-- Expected runtime: medium. Similar to `e2e.yml`.
+- Expected runtime: medium to long. Usually 15 to 30 minutes (Playwright browser install is slow).
 - Debugging tips:
-  - Treat it the same as the regular E2E workflow.
+  - Treat it the same as the regular E2E workflow but note it runs in `frontend/`, not the repo root.
   - If nightly runs fail but PR runs pass, compare environment drift, container image freshness, and Docker availability.
+  - Check the uploaded `e2e-report` artifact for Playwright traces and screenshots.
+
+### E2E Scope Split Summary
+
+| Aspect | `e2e.yml` (PR/push) | `e2e-nightly.yml` (scheduled) |
+| ------ | ------------------- | ----------------------------- |
+| Trigger | Every push and PR | Daily at 00:00 UTC |
+| Gate | Requires `RUN_E2E=true` | Always runs |
+| Submodules | Not initialized | Initialized |
+| Contract deploy | No | Yes (contract-deployer + account-seeder) |
+| Frontend tests | No (runs at repo root) | Yes (Playwright in `frontend/`) |
+| Test artifacts | None uploaded | Playwright report uploaded |
+| Purpose | Fast integration smoke test | Full user-journey regression |
+
+**Why the split exists:** PR-time E2E is gated behind `RUN_E2E=true` and runs a lightweight smoke test to catch obvious breaks without burning 20+ minutes of CI on every PR. The nightly run provides comprehensive coverage including Playwright browser tests, contract deployment, and account seeding — catching regressions that only surface in a full-stack environment.
 
 ### `pr-title-lint.yml`
 

@@ -11,10 +11,24 @@ interface Hyperdrive {
 }
 
 // Fields that must never appear in an inbound payload
-const BLOCKED_FIELDS = ['address', 'freelancer', 'payer', 'funder', 'secretKey', 'publicKey', 'amount', 'invoiceId', 'walletAddress'];
+const BLOCKED_FIELDS = [
+  'address',
+  'freelancer',
+  'payer',
+  'funder',
+  'secretKey',
+  'publicKey',
+  'amount',
+  'invoiceId',
+  'walletAddress',
+];
 
 const ALLOWED_METHODS = new Set([
-  'submitInvoice', 'fundInvoice', 'markPaid', 'claimDefault', 'getInvoice',
+  'submitInvoice',
+  'fundInvoice',
+  'markPaid',
+  'claimDefault',
+  'getInvoice',
 ]);
 
 const ALLOWED_NETWORKS = new Set(['testnet', 'mainnet', 'unknown']);

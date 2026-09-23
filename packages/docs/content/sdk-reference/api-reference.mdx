@@ -8,9 +8,10 @@ Main class for interacting with the ILN protocol.
 
 ```typescript
 new ILNClient(config: ILNClientConfig)
+```
 
+#### ILNClientConfig
 
-ILNClientConfig
 | Property     | Type                                   | Required | Description                       |
 | ------------ | -------------------------------------- | -------- | --------------------------------- |
 | `network`    | `Networks`                             | Yes      | Stellar network (TESTNET, PUBLIC) |
@@ -18,19 +19,31 @@ ILNClientConfig
 | `rpcUrl`     | `string`                               | Yes      | Soroban RPC endpoint              |
 | `wallet`     | `FreighterWallet \| Keypair \| string` | Yes      | Wallet configuration              |
 
+### Methods
 
-Methods
-connectWallet()
+#### `connectWallet()`
+
+```typescript
 async connectWallet(): Promise<void>
-Initializes the wallet connection. Required before calling state-changing methods.
-Throws:
-WalletNotFoundError — Freighter extension not installed
-WalletConnectionError — User rejected connection
+```
 
-submitInvoice()
+Initializes the wallet connection. Required before calling state-changing methods.
+
+Throws:
+
+- `WalletNotFoundError` — Freighter extension not installed
+- `WalletConnectionError` — User rejected connection
+
+#### `submitInvoice()`
+
+```typescript
 async submitInvoice(params: SubmitInvoiceParams): Promise<number>
+```
+
 Creates a new invoice on-chain.
+
 Parameters:
+
 | Property       | Type     | Description                               |
 | -------------- | -------- | ----------------------------------------- |
 | `payer`        | `string` | Stellar address of the invoice payer      |
@@ -39,43 +52,63 @@ Parameters:
 | `dueDate`      | `number` | Unix timestamp when invoice is due        |
 | `token`        | `string` | Contract ID of the payment token          |
 
+Returns: `Promise<number>` — The newly created invoice ID
 
-Returns: Promise<number> — The newly created invoice ID
 Example:
+
+```typescript
 const invoiceId = await client.submitInvoice({
   payer: 'GDRMKYQMTNZ3XPRF7K7L3PFBJQI2S2Y2E3KJQF3KHKY3XT3LZXG3G5X2',
   amount: 100_0000000, // 100 USDC
-  discountRate: 300,   // 3%
+  discountRate: 300, // 3%
   dueDate: 1735689600,
   token: 'USDC_CONTRACT_ID',
 });
+```
 
-fundInvoice()
+#### `fundInvoice()`
+
+```typescript
 async fundInvoice(invoiceId: number): Promise<TransactionResult>
+```
 
 Funds a pending invoice as a liquidity provider.
+
 Parameters:
+
 | Property    | Type     | Description               |
 | ----------- | -------- | ------------------------- |
 | `invoiceId` | `number` | ID of the invoice to fund |
 
+Returns: `Promise<TransactionResult>`
 
-Returns: Promise<TransactionResult>
+```typescript
 interface TransactionResult {
   success: boolean;
   transactionHash: string;
   ledger: number;
 }
+```
 
-markPaid()
+#### `markPaid()`
+
+```typescript
 async markPaid(invoiceId: number): Promise<TransactionResult>
+```
+
 Marks an invoice as paid. Typically called by the payer or an oracle.
 
-getInvoice()
+#### `getInvoice()`
+
+```typescript
 async getInvoice(invoiceId: number): Promise<Invoice>
+```
+
 Retrieves invoice details from the contract.
 
-Returns: Invoice
+Returns: `Invoice`
+
+```typescript
 interface Invoice {
   id: number;
   issuer: string;
@@ -95,17 +128,29 @@ enum InvoiceStatus {
   Defaulted = 3,
   Liquidated = 4,
 }
+```
 
-getInvoicesByIssuer()
+#### `getInvoicesByIssuer()`
+
+```typescript
 async getInvoicesByIssuer(issuer: string): Promise<Invoice[]>
+```
+
 Returns all invoices created by a specific address.
 
-getInvoicesByStatus()
+#### `getInvoicesByStatus()`
+
+```typescript
 async getInvoicesByStatus(status: InvoiceStatus): Promise<Invoice[]>
+```
+
 Returns all invoices with a specific status (useful for LP marketplace).
 
-Types
-InvoiceStatus
+## Types
+
+### InvoiceStatus
+
+```typescript
 enum InvoiceStatus {
   Pending = 0,
   Funded = 1,
@@ -114,8 +159,10 @@ enum InvoiceStatus {
   Liquidated = 4,
   Cancelled = 5,
 }
+```
 
-Error Types
+### Error Types
+
 | Error                    | Description                              |
 | ------------------------ | ---------------------------------------- |
 | `InvoiceNotFoundError`   | Invoice ID does not exist                |
@@ -123,6 +170,3 @@ Error Types
 | `InsufficientFundsError` | Wallet balance too low                   |
 | `ExpiredInvoiceError`    | Invoice past due date                    |
 | `UnauthorizedError`      | Caller not authorized for this operation |
-
-
-

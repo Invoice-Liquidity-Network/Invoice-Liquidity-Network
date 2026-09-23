@@ -1,4 +1,4 @@
-import * as readline from "readline";
+import * as readline from 'readline';
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -62,13 +62,13 @@ export async function prompt(options: PromptOptions): Promise<string> {
   const rl = createInterface();
 
   return new Promise<string>((resolve) => {
-    const defaultDisplay = options.defaultValue ? ` (${options.defaultValue})` : "";
-    const maskChar = options.mask ? "*".repeat(8) : "";
-    const promptText = `${options.message}${defaultDisplay}${maskChar ? " " + maskChar : ""}: `;
+    const defaultDisplay = options.defaultValue ? ` (${options.defaultValue})` : '';
+    const maskChar = options.mask ? '*'.repeat(8) : '';
+    const promptText = `${options.message}${defaultDisplay}${maskChar ? ' ' + maskChar : ''}: `;
 
     const ask = () => {
       rl.question(promptText, (answer) => {
-        const value = answer.trim() || options.defaultValue || "";
+        const value = answer.trim() || options.defaultValue || '';
 
         if (options.validate) {
           const error = options.validate(value);
@@ -111,7 +111,7 @@ export async function select(options: SelectPromptOptions): Promise<string> {
   return new Promise<string>((resolve) => {
     console.error(`\n${options.message}`);
     options.options.forEach((opt, i) => {
-      const marker = opt.value === options.defaultValue ? " (default)" : "";
+      const marker = opt.value === options.defaultValue ? ' (default)' : '';
       console.error(`  ${i + 1}. ${opt.label}${marker}`);
       if (opt.description) {
         console.error(`     ${opt.description}`);
@@ -121,7 +121,7 @@ export async function select(options: SelectPromptOptions): Promise<string> {
     const defaultIndex = options.defaultValue
       ? options.options.findIndex((o) => o.value === options.defaultValue)
       : -1;
-    const defaultDisplay = defaultIndex >= 0 ? ` [${defaultIndex + 1}]` : "";
+    const defaultDisplay = defaultIndex >= 0 ? ` [${defaultIndex + 1}]` : '';
 
     rl.question(`\nSelect an option${defaultDisplay}: `, (answer) => {
       rl.close();
@@ -154,16 +154,17 @@ export async function select(options: SelectPromptOptions): Promise<string> {
  */
 export async function confirm(options: ConfirmPromptOptions): Promise<boolean> {
   const rl = createInterface();
-  const defaultStr = options.defaultValue === true ? "Y/n" : options.defaultValue === false ? "y/N" : "y/n";
+  const defaultStr =
+    options.defaultValue === true ? 'Y/n' : options.defaultValue === false ? 'y/N' : 'y/n';
 
   return new Promise<boolean>((resolve) => {
     rl.question(`${options.message} [${defaultStr}]: `, (answer) => {
       rl.close();
 
       const normalized = answer.trim().toLowerCase();
-      if (normalized === "" || normalized === "y" || normalized === "yes") {
+      if (normalized === '' || normalized === 'y' || normalized === 'yes') {
         resolve(options.defaultValue !== false);
-      } else if (normalized === "n" || normalized === "no") {
+      } else if (normalized === 'n' || normalized === 'no') {
         resolve(false);
       } else {
         resolve(options.defaultValue ?? false);
@@ -219,13 +220,13 @@ export interface ArgumentDefinition {
  */
 export async function promptMissingArguments(
   definitions: ArgumentDefinition[],
-  providedValues: Record<string, string | undefined>,
+  providedValues: Record<string, string | undefined>
 ): Promise<Record<string, string>> {
   const resolved: Record<string, string> = {};
 
   for (const def of definitions) {
     const provided = providedValues[def.name];
-    if (provided !== undefined && provided !== "") {
+    if (provided !== undefined && provided !== '') {
       resolved[def.name] = provided;
       continue;
     }
@@ -241,7 +242,7 @@ export async function promptMissingArguments(
     if (!process.stdin.isTTY) {
       throw new Error(
         `Missing required argument: --${def.name}. ${def.description}. ` +
-        `Provide it via --${def.name} <value> or run interactively in a terminal.`
+          `Provide it via --${def.name} <value> or run interactively in a terminal.`
       );
     }
 
@@ -263,8 +264,8 @@ export async function promptMissingArguments(
  * Validate a Stellar address (G... format).
  */
 export function validateStellarAddress(value: string): string | null {
-  if (!value.startsWith("G") || value.length < 56) {
-    return "Must be a valid Stellar address (starts with G, 56 characters)";
+  if (!value.startsWith('G') || value.length < 56) {
+    return 'Must be a valid Stellar address (starts with G, 56 characters)';
   }
   return null;
 }
@@ -274,7 +275,7 @@ export function validateStellarAddress(value: string): string | null {
  */
 export function validatePositiveInteger(value: string): string | null {
   if (!/^\d+$/.test(value) || parseInt(value, 10) <= 0) {
-    return "Must be a positive integer";
+    return 'Must be a positive integer';
   }
   return null;
 }
@@ -284,7 +285,7 @@ export function validatePositiveInteger(value: string): string | null {
  */
 export function validatePositiveNumber(value: string): string | null {
   if (!/^\d+(\.\d+)?$/.test(value) || parseFloat(value) <= 0) {
-    return "Must be a positive number";
+    return 'Must be a positive number';
   }
   return null;
 }
@@ -297,7 +298,7 @@ export function validateDate(value: string): string | null {
   if (/^\d+$/.test(value)) {
     const ts = parseInt(value, 10);
     if (ts <= Math.floor(Date.now() / 1000)) {
-      return "Timestamp must be in the future";
+      return 'Timestamp must be in the future';
     }
     return null;
   }
@@ -305,16 +306,16 @@ export function validateDate(value: string): string | null {
   // Check if it's a YYYY-MM-DD date
   const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
   if (!dateRegex.test(value)) {
-    return "Must be a date (YYYY-MM-DD) or Unix timestamp";
+    return 'Must be a date (YYYY-MM-DD) or Unix timestamp';
   }
 
-  const date = new Date(value + "T00:00:00Z");
+  const date = new Date(value + 'T00:00:00Z');
   if (isNaN(date.getTime())) {
-    return "Invalid date";
+    return 'Invalid date';
   }
 
   if (date <= new Date()) {
-    return "Date must be in the future";
+    return 'Date must be in the future';
   }
 
   return null;
@@ -325,11 +326,11 @@ export function validateDate(value: string): string | null {
  */
 export function validateBasisPoints(value: string): string | null {
   if (!/^\d+$/.test(value)) {
-    return "Must be a non-negative integer";
+    return 'Must be a non-negative integer';
   }
   const bps = parseInt(value, 10);
   if (bps < 0 || bps > 10000) {
-    return "Must be between 0 and 10000 basis points";
+    return 'Must be between 0 and 10000 basis points';
   }
   return null;
 }

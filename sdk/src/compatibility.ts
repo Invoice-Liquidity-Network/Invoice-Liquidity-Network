@@ -1,9 +1,9 @@
-import type { CompatibilityResult } from "./types";
+import type { CompatibilityResult } from './types';
 
 /** Current SDK version. */
-export const SDK_VERSION = "0.1.0";
+export const SDK_VERSION = '0.1.0';
 /** Minimum contract version required by this SDK. */
-export const MIN_CONTRACT_VERSION = "0.1.0";
+export const MIN_CONTRACT_VERSION = '0.1.0';
 
 export interface VersionInfo {
   major: number;
@@ -26,23 +26,23 @@ export interface MigrationGuide {
 }
 
 export interface MigrationChange {
-  type: "breaking" | "deprecated" | "added" | "removed";
+  type: 'breaking' | 'deprecated' | 'added' | 'removed';
   description: string;
   migration?: string;
 }
 
 const DEPRECATION_WARNINGS: DeprecationWarning[] = [
   {
-    method: "getVersion",
-    message: "getVersion() is deprecated. Use checkCompatibility() instead.",
-    alternative: "checkCompatibility",
-    removedIn: "1.0.0",
+    method: 'getVersion',
+    message: 'getVersion() is deprecated. Use checkCompatibility() instead.',
+    alternative: 'checkCompatibility',
+    removedIn: '1.0.0',
   },
   {
-    method: "getContractVersion",
-    message: "getContractVersion() is deprecated. Use checkCompatibility() instead.",
-    alternative: "checkCompatibility",
-    removedIn: "1.0.0",
+    method: 'getContractVersion',
+    message: 'getContractVersion() is deprecated. Use checkCompatibility() instead.',
+    alternative: 'checkCompatibility',
+    removedIn: '1.0.0',
   },
 ];
 
@@ -60,8 +60,8 @@ const DEPRECATION_WARNINGS: DeprecationWarning[] = [
  * ```
  */
 export function parseVersion(version: string): VersionInfo {
-  const clean = version.trim().replace(/^v/i, "").split("-")[0];
-  const parts = clean.split(".").map(Number);
+  const clean = version.trim().replace(/^v/i, '').split('-')[0];
+  const parts = clean.split('.').map(Number);
   return {
     major: parts[0] || 0,
     minor: parts[1] || 0,
@@ -117,7 +117,7 @@ export function compareVersions(a: string, b: string): number {
 export function isVersionCompatible(
   version: string,
   minVersion: string,
-  maxVersion?: string,
+  maxVersion?: string
 ): boolean {
   const compareMin = compareVersions(version, minVersion);
   if (compareMin < 0) return false;
@@ -159,16 +159,16 @@ export function detectSdkVersion(): VersionInfo {
  * ```
  */
 export async function checkCompatibility(
-  invoke: (method: string) => Promise<any>,
+  invoke: (method: string) => Promise<any>
 ): Promise<CompatibilityResult> {
   const issues: string[] = [];
-  let contractVersion = "unknown";
+  let contractVersion = 'unknown';
 
   try {
-    const res = await invoke("get_version");
-    if (typeof res === "string") {
+    const res = await invoke('get_version');
+    if (typeof res === 'string') {
       contractVersion = res;
-    } else if (res && typeof res === "object" && "version" in res) {
+    } else if (res && typeof res === 'object' && 'version' in res) {
       contractVersion = String(res.version);
     } else {
       contractVersion = String(res);
@@ -176,25 +176,24 @@ export async function checkCompatibility(
   } catch (error: any) {
     return {
       compatible: false,
-      contractVersion: "unknown",
+      contractVersion: 'unknown',
       sdkVersion: SDK_VERSION,
       issues: [`Failed to retrieve contract version: ${error.message || String(error)}`],
     };
   }
 
   const contract = parseVersion(contractVersion);
-  const minContract = parseVersion(MIN_CONTRACT_VERSION);
   const sdk = parseVersion(SDK_VERSION);
 
   if (isVersionCompatible(contractVersion, MIN_CONTRACT_VERSION) === false) {
     issues.push(
-      `Deployed contract version (${contractVersion}) is older than the minimum required version (${MIN_CONTRACT_VERSION}) supported by this SDK.`,
+      `Deployed contract version (${contractVersion}) is older than the minimum required version (${MIN_CONTRACT_VERSION}) supported by this SDK.`
     );
   }
 
   if (contract.major > sdk.major) {
     issues.push(
-      `Deployed contract version (${contractVersion}) has a higher major version than the SDK (${SDK_VERSION}), which may introduce breaking changes.`,
+      `Deployed contract version (${contractVersion}) has a higher major version than the SDK (${SDK_VERSION}), which may introduce breaking changes.`
     );
   }
 
@@ -254,7 +253,7 @@ export function getAllDeprecationWarnings(): DeprecationWarning[] {
 export function withDeprecationWarning<T>(
   method: string,
   fn: () => T,
-  logger?: (message: string) => void,
+  logger?: (message: string) => void
 ): T {
   const warning = getDeprecationWarning(method);
   if (warning) {
@@ -293,27 +292,25 @@ export function getMigrationGuide(fromVersion: string, toVersion: string): Migra
 
   if (to.major > from.major) {
     changes.push({
-      type: "breaking",
-      description: "Major version bump indicates breaking changes.",
-      migration: "Review the changelog for breaking changes and update your code accordingly.",
+      type: 'breaking',
+      description: 'Major version bump indicates breaking changes.',
+      migration: 'Review the changelog for breaking changes and update your code accordingly.',
     });
   }
 
   if (to.minor > from.minor) {
     changes.push({
-      type: "added",
-      description: "New features have been added in this version.",
+      type: 'added',
+      description: 'New features have been added in this version.',
     });
   }
 
   DEPRECATION_WARNINGS.forEach((warning) => {
     if (warning.removedIn && isVersionCompatible(warning.removedIn, fromVersion, toVersion)) {
       changes.push({
-        type: "deprecated",
+        type: 'deprecated',
         description: `${warning.method}: ${warning.message}`,
-        migration: warning.alternative
-          ? `Migrate to ${warning.alternative}.`
-          : undefined,
+        migration: warning.alternative ? `Migrate to ${warning.alternative}.` : undefined,
       });
     }
   });

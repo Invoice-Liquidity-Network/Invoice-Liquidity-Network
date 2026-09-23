@@ -576,6 +576,46 @@ To modify trigger events or notification behavior:
 
 ---
 
+## Safety Mechanisms
+
+### Dry-Run Mode
+
+Both `scripts/deploy.ts` and `scripts/verify-deployment.ts` support a `--dry-run`
+flag that prints what would happen without executing any state-changing action.
+
+```bash
+# Preview a mainnet deployment without actually deploying
+npx ts-node scripts/deploy.ts --network=mainnet --dry-run
+
+# Preview verification without fetching on-chain bytecode
+npx ts-node scripts/verify-deployment.ts --contract-id <id> --dry-run
+```
+
+### Interactive Confirmation for Non-Testnet Targets
+
+When deploying to any network other than `testnet` (e.g. `mainnet`), the deploy
+script prompts the user to type the network name to confirm:
+
+```
+⚠️  WARNING: You are about to deploy to "mainnet".
+   Type "mainnet" to confirm, or press Ctrl-C to abort:
+> mainnet
+```
+
+This prompt is automatically skipped when:
+
+- `--dry-run` is active (no state change occurs)
+- `--yes` or `--ci` is passed (for automated/CI environments)
+
+### Rollback
+
+The deploy script automatically backs up `.env` and `README.md` before making
+changes. If deployment fails after the contract is deployed but before the
+runtime config is updated, the script restores the original files. The deployed
+contract is left orphaned (safe to ignore or clean up manually).
+
+---
+
 **Status**: ✅ Ready for Production  
 **Date**: 2026-06-02  
 **Branch**: `docs/changelog-page`  

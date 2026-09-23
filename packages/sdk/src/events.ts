@@ -14,8 +14,20 @@ export interface RawEvent {
 
 // ---------------------------------------------------------------------------
 // Event type definitions
+//
+// These are flat XDR-parsed projections — a subset of the fields in @iln/shared's
+// ContractEventBase-extending event types. They represent what the Soroban XDR
+// parser extracts from raw event data, not the full contract event shape.
+// Prefer @iln/shared's event types when you need the complete payload.
 // ---------------------------------------------------------------------------
 
+/**
+ * Parsed InvoiceSubmitted event (XDR projection).
+ *
+ * Intentionally differs from @iln/shared's InvoiceSubmittedEvent which extends
+ * ContractEventBase and nests a full `Invoice` struct. This type is a flat
+ * extraction of the fields available directly from the Soroban event XDR.
+ */
 export interface InvoiceSubmittedEvent {
   type: 'InvoiceSubmitted';
   /** Unique invoice identifier. */
@@ -28,6 +40,10 @@ export interface InvoiceSubmittedEvent {
   timestamp: bigint;
 }
 
+/**
+ * Parsed InvoiceFunded event (XDR projection).
+ * See InvoiceSubmittedEvent comment for why this differs from @iln/shared.
+ */
 export interface InvoiceFundedEvent {
   type: 'InvoiceFunded';
   /** Unique invoice identifier. */
@@ -40,6 +56,10 @@ export interface InvoiceFundedEvent {
   timestamp: bigint;
 }
 
+/**
+ * Parsed InvoicePaid event (XDR projection).
+ * See InvoiceSubmittedEvent comment for why this differs from @iln/shared.
+ */
 export interface InvoicePaidEvent {
   type: 'InvoicePaid';
   /** Unique invoice identifier. */
@@ -78,6 +98,10 @@ export interface InvoiceDisputedEvent {
   timestamp: bigint;
 }
 
+/**
+ * Parsed ReputationUpdated event (XDR projection).
+ * See InvoiceSubmittedEvent comment for why this differs from @iln/shared.
+ */
 export interface ReputationUpdatedEvent {
   type: 'ReputationUpdated';
   /** Stellar address whose reputation was updated. */
@@ -94,6 +118,10 @@ export interface ContractPausedEvent {
   timestamp: bigint;
 }
 
+/**
+ * Parsed TokenAdded event (XDR projection).
+ * See InvoiceSubmittedEvent comment for why this differs from @iln/shared.
+ */
 export interface TokenAddedEvent {
   type: 'TokenAdded';
   /** Stellar Asset Contract address of the newly supported token. */
@@ -117,6 +145,11 @@ export interface LPPositionTransferredEvent {
 /**
  * Discriminated union of all known contract events.
  * Discriminated by the `type` field.
+ *
+ * Intentionally differs from @iln/shared's ContractEvent: this union contains
+ * the SDK's flat XDR-parsed event types (InvoiceCancelledEvent, etc.) which
+ * are not in @iln/shared. The shared version extends ContractEventBase and
+ * includes governance events not parsed here.
  */
 export type ContractEvent =
   | InvoiceSubmittedEvent

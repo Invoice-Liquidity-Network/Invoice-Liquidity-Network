@@ -1,17 +1,13 @@
-import { withFilter } from "graphql-subscriptions";
-import {
-  getInvoiceById,
-  getProtocolStats,
-  queryInvoicesPaginated,
-} from "../db";
-import type { Invoice, ILNEvent } from "../types";
+import { withFilter } from 'graphql-subscriptions';
+import { getInvoiceById, getProtocolStats, queryInvoicesPaginated } from '../db';
+import type { Invoice, ILNEvent } from '../types';
 import {
   pubsub,
   INVOICE_UPDATED,
   EVENT_STREAM,
   type InvoiceUpdatedPayload,
   type EventStreamPayload,
-} from "./pubsub";
+} from './pubsub';
 
 interface InvoicesArgs {
   status?: string;
@@ -54,7 +50,7 @@ const ilnEventFieldResolvers = {
 
 export function filterInvoiceUpdated(
   payload: InvoiceUpdatedPayload,
-  variables: InvoiceUpdatedArgs,
+  variables: InvoiceUpdatedArgs
 ): boolean {
   const inv = payload.invoiceUpdated;
   if (variables.id !== undefined && inv.id !== variables.id) return false;
@@ -67,7 +63,7 @@ export function filterInvoiceUpdated(
 
 export function filterEventStream(
   payload: EventStreamPayload,
-  variables: EventStreamArgs,
+  variables: EventStreamArgs
 ): boolean {
   const ev = payload.eventStream;
   if (variables.invoiceId !== undefined && ev.invoice_id !== variables.invoiceId) return false;
@@ -95,7 +91,7 @@ export const resolvers = {
           funder: args.funder || undefined,
         },
         limit,
-        args.cursor,
+        args.cursor
       );
     },
 
@@ -108,7 +104,7 @@ export const resolvers = {
     invoiceUpdated: {
       subscribe: withFilter(
         () => pubsub.asyncIterableIterator<InvoiceUpdatedPayload>(INVOICE_UPDATED),
-        filterInvoiceUpdated,
+        filterInvoiceUpdated
       ),
       resolve: (payload: InvoiceUpdatedPayload) => payload.invoiceUpdated,
     },
@@ -116,7 +112,7 @@ export const resolvers = {
     eventStream: {
       subscribe: withFilter(
         () => pubsub.asyncIterableIterator<EventStreamPayload>(EVENT_STREAM),
-        filterEventStream,
+        filterEventStream
       ),
       resolve: (payload: EventStreamPayload) => payload.eventStream,
     },

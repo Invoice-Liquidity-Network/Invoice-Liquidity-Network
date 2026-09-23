@@ -13,9 +13,9 @@
  *   interpolate(template, vars) → string
  */
 
-import fs from "fs";
-import os from "os";
-import path from "path";
+import fs from 'fs';
+import os from 'os';
+import path from 'path';
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -58,35 +58,50 @@ export function interpolate(template: string, vars: Record<string, string>): str
 
 const BUILTIN: TemplateDefinition[] = [
   {
-    name: "invoice-client",
-    description: "Bootstrapped ILN client for a new integration",
-    outputFile: "iln-client.ts",
+    name: 'invoice-client',
+    description: 'Bootstrapped ILN client for a new integration',
+    outputFile: 'iln-client.ts',
     variables: [
-      { name: "contractId", description: "Stellar contract ID", default: "CXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX" },
-      { name: "rpcUrl", description: "Stellar RPC URL", default: "https://soroban-testnet.stellar.org" },
-      { name: "networkPassphrase", description: "Network passphrase", default: "Test SDF Network ; September 2015" },
+      {
+        name: 'contractId',
+        description: 'Stellar contract ID',
+        default: 'CXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX',
+      },
+      {
+        name: 'rpcUrl',
+        description: 'Stellar RPC URL',
+        default: 'https://soroban-testnet.stellar.org',
+      },
+      {
+        name: 'networkPassphrase',
+        description: 'Network passphrase',
+        default: 'Test SDF Network ; September 2015',
+      },
     ],
     render: (vars) =>
-      `import { ILNClient } from "@invoice-liquidity/sdk";
-import { createKeypairFileSigner } from "@invoice-liquidity/sdk/signers";
+      `import { ILNSdk, createKeypairSigner } from "@iln/sdk";
 
-const client = new ILNClient({
+const client = new ILNSdk({
   contractId: "${vars.contractId}",
   rpcUrl: "${vars.rpcUrl}",
   networkPassphrase: "${vars.networkPassphrase}",
-  signer: createKeypairFileSigner(process.env.ILN_KEYPAIR_PATH!),
+  signer: createKeypairSigner(process.env.ILN_SECRET_KEY!),
 });
 
 export default client;
 `,
   },
   {
-    name: "webhook-handler",
-    description: "Express webhook endpoint with HMAC signature verification",
-    outputFile: "webhook-handler.ts",
+    name: 'webhook-handler',
+    description: 'Express webhook endpoint with HMAC signature verification',
+    outputFile: 'webhook-handler.ts',
     variables: [
-      { name: "secret", description: "Webhook signing secret (from subscription)", default: "your-webhook-secret" },
-      { name: "port", description: "HTTP listener port", default: "3001" },
+      {
+        name: 'secret',
+        description: 'Webhook signing secret (from subscription)',
+        default: 'your-webhook-secret',
+      },
+      { name: 'port', description: 'HTTP listener port', default: '3001' },
     ],
     render: (vars) =>
       `import express from "express";
@@ -129,24 +144,28 @@ app.listen(PORT, () => console.log(\`ILN webhook listener on :\${PORT}\`));
 `,
   },
   {
-    name: "subscription-config",
-    description: "Notification subscription payload for POST /subscribe",
-    outputFile: "subscription.json",
+    name: 'subscription-config',
+    description: 'Notification subscription payload for POST /subscribe',
+    outputFile: 'subscription.json',
     variables: [
-      { name: "stellarAddress", description: "Your Stellar public key (G…)", default: "GXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX" },
-      { name: "email", description: "Notification email", default: "you@example.com" },
+      {
+        name: 'stellarAddress',
+        description: 'Your Stellar public key (G…)',
+        default: 'GXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX',
+      },
+      { name: 'email', description: 'Notification email', default: 'you@example.com' },
     ],
     render: (vars) =>
       JSON.stringify(
         {
           stellar_address: vars.stellarAddress,
-          channel: "email",
+          channel: 'email',
           destination: vars.email,
-          triggers: ["invoice_funded", "invoice_paid", "invoice_defaulted", "invoice_due_soon"],
+          triggers: ['invoice_funded', 'invoice_paid', 'invoice_defaulted', 'invoice_due_soon'],
         },
         null,
         2
-      ) + "\n",
+      ) + '\n',
   },
 ];
 
@@ -154,16 +173,16 @@ app.listen(PORT, () => console.log(\`ILN webhook listener on :\${PORT}\`));
 
 function loadCustomTemplates(): TemplateDefinition[] {
   const searchDirs = [
-    path.join(os.homedir(), ".iln", "templates"),
-    path.join(process.cwd(), ".iln", "templates"),
+    path.join(os.homedir(), '.iln', 'templates'),
+    path.join(process.cwd(), '.iln', 'templates'),
   ];
   const result: TemplateDefinition[] = [];
 
   for (const dir of searchDirs) {
     if (!fs.existsSync(dir)) continue;
-    for (const file of fs.readdirSync(dir).filter((f) => f.endsWith(".tpl"))) {
-      const name = file.replace(/\.tpl$/, "");
-      const raw = fs.readFileSync(path.join(dir, file), "utf8");
+    for (const file of fs.readdirSync(dir).filter((f) => f.endsWith('.tpl'))) {
+      const name = file.replace(/\.tpl$/, '');
+      const raw = fs.readFileSync(path.join(dir, file), 'utf8');
       // Extract declared variables from {{NAME}} placeholders
       const varNames = [...new Set([...raw.matchAll(/\{\{(\w+)\}\}/g)].map((m) => m[1]))];
       result.push({
@@ -205,13 +224,13 @@ export function generate(options: GenerateOptions): GenerateResult {
   // Merge caller-supplied vars with per-variable defaults
   const vars: Record<string, string> = {};
   for (const v of def.variables) {
-    vars[v.name] = options.vars?.[v.name] ?? v.default ?? "";
+    vars[v.name] = options.vars?.[v.name] ?? v.default ?? '';
   }
   // Allow extra vars the caller passes even if not declared in the template
   Object.assign(vars, options.vars);
 
   const content = def.render(vars);
-  const outputFile = path.join(options.outDir ?? ".", def.outputFile);
+  const outputFile = path.join(options.outDir ?? '.', def.outputFile);
   const written = !options.preview;
 
   if (written) {

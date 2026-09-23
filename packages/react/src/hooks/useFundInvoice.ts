@@ -4,6 +4,12 @@ import { useILNClient } from '../context';
 export interface FundInvoiceParams {
   invoiceId: number;
   funder: string;
+  /**
+   * Displayed Dutch-auction discount at the moment the LP chooses to fund.
+   * Current contracts compute the canonical rate inside fund_invoice; clients
+   * that support slippage checks can use this as the LP's expected rate.
+   */
+  expectedDiscountBps?: number;
 }
 
 export interface UseFundInvoiceResult {
@@ -51,25 +57,23 @@ export function useFundInvoice(): UseFundInvoiceResult {
     { previous: unknown }
   >({
     mutationFn: (params: FundInvoiceParams): Promise<void> =>
-      (client as unknown as { fundInvoice(p: FundInvoiceParams): Promise<void> })
-        .fundInvoice(params),
+      (client as unknown as { fundInvoice(p: FundInvoiceParams): Promise<void> }).fundInvoice(
+        params
+      ),
 
     onMutate: async (params: FundInvoiceParams) => {
       const queryKey = ['invoices', 'detail', params.invoiceId];
       await queryClient.cancelQueries({ queryKey });
       const previous = queryClient.getQueryData(queryKey);
       queryClient.setQueryData(queryKey, (old: unknown) =>
-        old && typeof old === 'object' ? { ...old, status: 'Funded' } : old,
+        old && typeof old === 'object' ? { ...old, status: 'Funded' } : old
       );
       return { previous };
     },
 
     onError: (_err, params, context) => {
       if (context?.previous !== undefined) {
-        queryClient.setQueryData(
-          ['invoices', 'detail', params.invoiceId],
-          context.previous,
-        );
+        queryClient.setQueryData(['invoices', 'detail', params.invoiceId], context.previous);
       }
     },
 

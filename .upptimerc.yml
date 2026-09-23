@@ -11,7 +11,7 @@ sites:
     url: https://soroban-testnet.stellar.org
     method: POST
     headers:
-      - "Content-Type: application/json"
+      - 'Content-Type: application/json'
     body: '{"jsonrpc":"2.0","id":1,"method":"getContractData","params":{"contract":"CCPASLHKRFBMVV5PZG3LKDGKFEDXZMB5U7DK42CVLUVWCMUCSRPVBIMO"}}'
     expectedStatusCodes:
       - 200
@@ -39,14 +39,14 @@ assignees:
 
 skipDeleteIssues: false
 commitMessages:
-  readmeContent: "docs: update status summary [skip ci]"
+  readmeContent: 'docs: update status summary [skip ci]'
 
 i18n:
   langCode: en
 
 workflowSchedule:
-  graphs: "0 0 * * *"
-  responseTime: "0 23 * * 0"
-  staticSite: "0 1 * * *"
-  summary: "0 0 * * *"
-  updates: "*/5 * * * *"
+  graphs: '0 0 * * *'
+  responseTime: '0 23 * * 0'
+  staticSite: '0 1 * * *'
+  summary: '0 0 * * *'
+  updates: '*/5 * * * *'

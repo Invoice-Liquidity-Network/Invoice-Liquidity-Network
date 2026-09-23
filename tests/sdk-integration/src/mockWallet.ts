@@ -1,3 +1,8 @@
+/**
+ * @todo audit-sdk-fixtures
+ * Periodically review this mock against the real SDK wallet interface to catch
+ * API drift. If the SDK's wallet contract changes, update or retire this fixture.
+ */
 import { EventEmitter } from 'events';
 
 export interface MockWalletOptions {

@@ -1,0 +1,518 @@
+---
+title: CLI Reference
+description: Auto-generated CLI command reference for the Invoice Liquidity Network
+---
+
+# CLI Command Reference
+
+This document is auto-generated from the CLI source code. Do not edit manually.
+
+## `iln`
+
+Invoice Liquidity Network CLI
+
+### Global Options
+
+| Option          | Description                                               | Default |
+| --------------- | --------------------------------------------------------- | ------- |
+| `-v, --version` | output the current version                                |         |
+| `--json`        | output machine-readable JSON (applies to: status, list)   |         |
+| `--quiet`       | suppress informational messages; show only command output |         |
+
+## `iln submit`
+
+Submit a new invoice from the configured signer account.
+
+### Usage
+
+```bash
+iln submit [options]
+```
+
+### Options
+
+| Option                 | Description                                              | Default |
+| ---------------------- | -------------------------------------------------------- | ------- |
+| `--payer <address>`    | payer Stellar address                                    |         |
+| `--amount <amount>`    | invoice amount in display units, for example 100 or 12.5 |         |
+| `--due <date>`         | due date as YYYY-MM-DD or Unix timestamp                 |         |
+| `--rate <bps>`         | discount rate in basis points                            |         |
+| `--token <contractId>` | override token contract ID from config                   |         |
+| `--yes`                | skip interactive prompts and use defaults                |         |
+
+## `iln fund`
+
+Fund an invoice using the configured signer account.
+
+### Usage
+
+```bash
+iln fund [options]
+```
+
+### Options
+
+| Option              | Description                                                        | Default |
+| ------------------- | ------------------------------------------------------------------ | ------- |
+| `--id <invoiceId>`  | invoice ID                                                         |         |
+| `--amount <amount>` | amount to fund in display units; defaults to the remaining balance |         |
+| `--yes`             | skip interactive prompts and use defaults                          |         |
+
+## `iln pay`
+
+Mark an invoice as paid using the configured signer account.
+
+### Usage
+
+```bash
+iln pay [options]
+```
+
+### Options
+
+| Option             | Description                               | Default |
+| ------------------ | ----------------------------------------- | ------- |
+| `--id <invoiceId>` | invoice ID                                |         |
+| `--yes`            | skip interactive prompts and use defaults |         |
+
+## `iln status`
+
+Show the current state of an invoice.
+
+### Usage
+
+```bash
+iln status [options]
+```
+
+### Options
+
+| Option             | Description                               | Default |
+| ------------------ | ----------------------------------------- | ------- |
+| `--id <invoiceId>` | invoice ID                                |         |
+| `--yes`            | skip interactive prompts and use defaults |         |
+
+## `iln list`
+
+List all invoices associated with a Stellar address.
+
+### Usage
+
+```bash
+iln list [options]
+```
+
+### Options
+
+| Option                | Description                                  | Default |
+| --------------------- | -------------------------------------------- | ------- |
+| `--address <address>` | freelancer, payer, or funder Stellar address |         |
+| `--yes`               | skip interactive prompts and use defaults    |         |
+
+## `iln history`
+
+Show past invoice submissions, fundings, and payments for a Stellar address.
+
+### Usage
+
+```bash
+iln history [options]
+```
+
+### Options
+
+| Option                | Description                                                            | Default |
+| --------------------- | ---------------------------------------------------------------------- | ------- |
+| `--address <address>` | Stellar address to query history for                                   |         |
+| `--id <invoiceId>`    | filter to a specific invoice ID                                        |         |
+| `--action <type>`     | filter by action type: submit (freelancer), fund (funder), pay (payer) |         |
+| `--limit <n>`         | maximum number of results to return                                    |         |
+| `--format <fmt>`      | output format: table (default) or json                                 | `table` |
+| `--yes`               | skip interactive prompts and use defaults                              |         |
+
+## `iln compat`
+
+SDK and contract compatibility utilities
+
+### Usage
+
+```bash
+iln compat [options]
+```
+
+## `iln compat check`
+
+Check SDK compatibility with the deployed contract version.
+
+### Usage
+
+```bash
+iln compat check [options]
+```
+
+## `iln protocol-config`
+
+Show live protocol configuration from the ILN contract.
+
+### Usage
+
+```bash
+iln protocol-config [options]
+```
+
+## `iln config`
+
+Manage the local ILN config file (.ilnrc.json).
+
+### Usage
+
+```bash
+iln config [options]
+```
+
+## `iln config init`
+
+Generate a starter .ilnrc.json config file in the current directory.
+
+### Usage
+
+```bash
+iln config init [options]
+```
+
+### Options
+
+| Option        | Description                                                             | Default |
+| ------------- | ----------------------------------------------------------------------- | ------- |
+| `--cwd <dir>` | directory to write the config file into (defaults to current directory) |         |
+
+## `iln config show`
+
+Show the resolved configuration that would be used for the current directory.
+
+### Usage
+
+```bash
+iln config show [options]
+```
+
+## `iln xdr`
+
+Inspect Soroban XDR values
+
+### Usage
+
+```bash
+iln xdr [options]
+```
+
+## `iln xdr decode`
+
+Decode a base64 Soroban ScVal XDR value.
+
+### Usage
+
+```bash
+iln xdr decode [base64] [options]
+```
+
+## `iln dashboard`
+
+Launch the real-time dashboard for monitoring invoice activity.
+
+### Usage
+
+```bash
+iln dashboard [options]
+```
+
+### Options
+
+| Option            | Description                        | Default |
+| ----------------- | ---------------------------------- | ------- |
+| `--refresh <ms>`  | Refresh interval in milliseconds   | `5000`  |
+| `--export <file>` | Export dashboard data to JSON file |         |
+
+## `iln generate`
+
+Generate boilerplate code from a built-in or custom template.
+
+### Usage
+
+```bash
+iln generate [template] [options]
+```
+
+### Options
+
+| Option              | Description                                                    | Default |
+| ------------------- | -------------------------------------------------------------- | ------- |
+| `--list`            | list available templates and exit                              |         |
+| `--preview`         | print generated output without writing to disk                 |         |
+| `--out <dir>`       | output directory (default: current directory)                  | `.`     |
+| `--var <key=value>` | set a template variable, repeatable (e.g. --var contractId=C…) | ``      |
+
+## `iln dev`
+
+Development utilities
+
+### Usage
+
+```bash
+iln dev [options]
+```
+
+## `iln dev start`
+
+Start a local Stellar node, deploy contracts, fund accounts, and write .env.local.
+
+### Usage
+
+```bash
+iln dev start [options]
+```
+
+## `iln dev stop`
+
+Stop and remove the local Stellar node container.
+
+### Usage
+
+```bash
+iln dev stop [options]
+```
+
+## `iln dev reset`
+
+Stop, clear local state, and start a fresh local environment.
+
+### Usage
+
+```bash
+iln dev reset [options]
+```
+
+## `iln dev status`
+
+Show local node, contract, and account environment status.
+
+### Usage
+
+```bash
+iln dev status [options]
+```
+
+### Options
+
+| Option   | Description                  | Default |
+| -------- | ---------------------------- | ------- |
+| `--json` | output machine-readable JSON |         |
+
+## `iln dev seed`
+
+Create and fund testnet accounts with USDC/EURC trustlines for development.
+
+### Usage
+
+```bash
+iln dev seed [options]
+```
+
+### Options
+
+| Option              | Description                                     | Default |
+| ------------------- | ----------------------------------------------- | ------- |
+| `--scenario <type>` | seeding scenario: new-user, active-lp, disputed |         |
+| `--count <n>`       | number of records to seed per scenario          | `1`     |
+| `--token <symbol>`  | specific token to use: USDC or EURC             |         |
+
+## `iln update`
+
+Check for and install CLI updates.
+
+### Usage
+
+```bash
+iln update [version] [options]
+```
+
+## `iln changelog`
+
+Show the changelog for the installed or specified version.
+
+### Usage
+
+```bash
+iln changelog [version] [options]
+```
+
+## `iln wallet`
+
+Manage Stellar keypairs for use with ILN.
+
+### Usage
+
+```bash
+iln wallet [options]
+```
+
+## `iln wallet create`
+
+Generate a new Stellar keypair and store it encrypted.
+
+### Usage
+
+```bash
+iln wallet create [options]
+```
+
+### Options
+
+| Option                  | Description                        | Default |
+| ----------------------- | ---------------------------------- | ------- |
+| `--name <name>`         | wallet name identifier             |         |
+| `--password <password>` | encryption password for the wallet |         |
+
+## `iln wallet import`
+
+Import an existing Stellar secret key into an encrypted wallet.
+
+### Usage
+
+```bash
+iln wallet import [options]
+```
+
+### Options
+
+| Option                  | Description                        | Default |
+| ----------------------- | ---------------------------------- | ------- |
+| `--name <name>`         | wallet name identifier             |         |
+| `--secret <secret>`     | Stellar secret key (starts with S) |         |
+| `--password <password>` | encryption password for the wallet |         |
+
+## `iln wallet list`
+
+List all stored wallets.
+
+### Usage
+
+```bash
+iln wallet list [options]
+```
+
+### Options
+
+| Option   | Description                  | Default |
+| -------- | ---------------------------- | ------- |
+| `--json` | output machine-readable JSON |         |
+
+## `iln wallet fund`
+
+Fund a wallet from Stellar Friendbot (testnet only).
+
+### Usage
+
+```bash
+iln wallet fund [options]
+```
+
+### Options
+
+| Option                  | Description                        | Default                         |
+| ----------------------- | ---------------------------------- | ------------------------------- |
+| `--name <name>`         | wallet name to fund                |                                 |
+| `--password <password>` | encryption password for the wallet |                                 |
+| `--friendbot <url>`     | Friendbot URL                      | `https://friendbot.stellar.org` |
+
+## `iln wallet delete`
+
+Delete a stored wallet.
+
+### Usage
+
+```bash
+iln wallet delete [options]
+```
+
+### Options
+
+| Option          | Description           | Default |
+| --------------- | --------------------- | ------- |
+| `--name <name>` | wallet name to delete |         |
+
+## `iln interactive`
+
+Start an interactive guided session for invoice operations.
+
+### Usage
+
+```bash
+iln interactive [options]
+```
+
+## `iln tutorial`
+
+Step-by-step guided tutorial for submitting your first invoice.
+
+### Usage
+
+```bash
+iln tutorial [options]
+```
+
+## `iln man`
+
+Print a roff man page for iln or a subcommand.
+
+### Usage
+
+```bash
+iln man [command] [options]
+```
+
+## `iln alias`
+
+Manage CLI command aliases
+
+### Usage
+
+```bash
+iln alias [options]
+```
+
+## `iln alias list`
+
+List all configured aliases
+
+### Usage
+
+```bash
+iln alias list [options]
+```
+
+### Options
+
+| Option   | Description                  | Default |
+| -------- | ---------------------------- | ------- |
+| `--json` | output machine-readable JSON |         |
+
+## `iln alias add`
+
+Add a new custom alias
+
+### Usage
+
+```bash
+iln alias add <alias> <command> [options]
+```
+
+## `iln alias remove`
+
+Remove a custom alias
+
+### Usage
+
+```bash
+iln alias remove <alias> [options]
+```

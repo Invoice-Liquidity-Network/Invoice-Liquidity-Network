@@ -1,0 +1,30 @@
+name: Indexer migration schema
+
+on:
+  pull_request:
+    paths:
+      - 'indexer/src/db.ts'
+      - 'indexer/tests/migrations.test.ts'
+      - 'scripts/migrations/**'
+      - '.github/workflows/indexer-migrations.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'indexer/src/db.ts'
+      - 'indexer/tests/migrations.test.ts'
+      - 'scripts/migrations/**'
+
+jobs:
+  pnpm-cache:
+    uses: ./.github/workflows/reusable-cache-pnpm.yml
+
+  migration-schema:
+    needs: [pnpm-cache]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup pnpm with store cache
+        uses: ./.github/actions/setup-pnpm
+      - name: Verify fresh database schema
+        working-directory: indexer
+        run: pnpm exec vitest run tests/migrations.test.ts

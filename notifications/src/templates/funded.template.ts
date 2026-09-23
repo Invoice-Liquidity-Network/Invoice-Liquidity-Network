@@ -5,15 +5,18 @@
  * funds their invoice.
  */
 
-import { emailShell, escapeHtml, formatAmount, formatDate, shortAddress } from "./helpers";
-import type { InvoiceEvent } from "../types";
+import { emailShell, escapeHtml, formatAmount, formatDate, shortAddress } from './helpers';
+import type { InvoiceEvent } from '../types';
 
 export interface FundedTemplateVars {
   event: InvoiceEvent;
   /** Role of the recipient: "freelancer" | "payer" */
-  recipientRole: "freelancer" | "payer";
+  recipientRole: 'freelancer' | 'payer';
   /** Optional dashboard link for the invoice */
   dashboardUrl?: string;
+  /** Optional tokenized one-click unsubscribe URL. Falls back to the
+   *  public marketing URL when omitted. */
+  unsubscribeUrl?: string;
 }
 
 /**
@@ -27,16 +30,16 @@ export function buildFundedSubject(event: InvoiceEvent): string {
  * Render the full HTML email body for an invoice-funded event.
  */
 export function renderFundedEmail(vars: FundedTemplateVars): string {
-  const { event, recipientRole, dashboardUrl } = vars;
+  const { event, recipientRole, dashboardUrl, unsubscribeUrl } = vars;
 
-  const isFreelancer = recipientRole === "freelancer";
+  const isFreelancer = recipientRole === 'freelancer';
   const greeting = isFreelancer
-    ? "Great news — your invoice has been funded!"
-    : "An invoice you are associated with has been funded.";
+    ? 'Great news — your invoice has been funded!'
+    : 'An invoice you are associated with has been funded.';
 
   const formattedAmount = escapeHtml(formatAmount(event.amount));
   const formattedDue = escapeHtml(formatDate(event.dueDate));
-  const funderDisplay = event.funder ? escapeHtml(shortAddress(event.funder)) : "Unknown";
+  const funderDisplay = event.funder ? escapeHtml(shortAddress(event.funder)) : 'Unknown';
   const freelancerDisplay = escapeHtml(shortAddress(event.freelancer));
   const payerDisplay = escapeHtml(shortAddress(event.payer));
   const invoiceId = String(event.invoiceId);
@@ -52,7 +55,11 @@ export function renderFundedEmail(vars: FundedTemplateVars): string {
       <p>
         A liquidity provider has funded
         <strong>Invoice #${escapeHtml(invoiceId)}</strong>.
-        ${isFreelancer ? "The discounted amount will be released according to the contract terms." : ""}
+        ${
+          isFreelancer
+            ? 'The discounted amount will be released according to the contract terms.'
+            : ''
+        }
       </p>
 
       <div class="invoice-card">
@@ -91,8 +98,8 @@ export function renderFundedEmail(vars: FundedTemplateVars): string {
       <p>
         ${
           isFreelancer
-            ? "You can view the full details and track payment progress in your dashboard."
-            : "Please ensure payment is made by the due date to avoid penalties."
+            ? 'You can view the full details and track payment progress in your dashboard.'
+            : 'Please ensure payment is made by the due date to avoid penalties.'
         }
       </p>
 
@@ -101,5 +108,5 @@ export function renderFundedEmail(vars: FundedTemplateVars): string {
       </div>
     </div>`;
 
-  return emailShell(`Invoice #${invoiceId} Funded`, body);
+  return emailShell(`Invoice #${invoiceId} Funded`, body, { unsubscribeUrl });
 }

@@ -8,9 +8,17 @@ on:
     paths:
       - 'packages/sdk/**'
 
+# Least-privilege: read code to build the SDK and run browser compatibility tests.
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   browser-tests:
-    runs-on: namespace-profile-nursca
+    runs-on: ubuntu-latest
     defaults:
       run:
         working-directory: packages/sdk

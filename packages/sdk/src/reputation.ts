@@ -1,5 +1,5 @@
 import {
-  SorobanRpc,
+  rpc as SorobanRpc,
   nativeToScVal,
   scValToNative,
   Keypair,
@@ -16,6 +16,12 @@ import {
  *
  * Returned by {@link ReputationClient.getReputation} and
  * {@link ReputationClient.getTopPayers}.
+ *
+ * Intentionally differs from @iln/shared's ReputationScore: this SDK version
+ * includes client-computed fields (`totalPaid`, `invoiceCount`, `lastActivity`,
+ * `rank`) that are derived from the contract data but not part of the on-chain
+ * struct. The shared version uses `invoicesSubmitted`/`invoicesPaid`/`invoicesDefaulted`
+ * and `lastActivityLedger` which are the raw contract fields.
  */
 export interface ReputationScore {
   /** Stellar public address (G...) or contract address (C...). */
@@ -97,7 +103,7 @@ export class ReputationClient {
   constructor(
     rpcUrl: string,
     contractId: string,
-    options?: { networkPassphrase?: string; source?: string },
+    options?: { networkPassphrase?: string; source?: string }
   ) {
     this.server = new SorobanRpc.Server(rpcUrl);
     this.contractId = contractId;
@@ -153,9 +159,7 @@ export class ReputationClient {
     return native.map((entry: unknown) => {
       if (entry && typeof entry === 'object') {
         const get = (key: string) =>
-          entry instanceof Map
-            ? entry.get(key)
-            : (entry as Record<string, unknown>)[key];
+          entry instanceof Map ? entry.get(key) : (entry as Record<string, unknown>)[key];
         const addr = String(get('address') ?? '');
         return parseReputationScore(entry, addr);
       }

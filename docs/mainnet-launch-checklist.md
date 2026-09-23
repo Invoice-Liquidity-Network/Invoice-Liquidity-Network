@@ -15,7 +15,7 @@ Status values:
 | --- | --- | --- | --- | --- |
 | External security audit | Complete an external audit of Soroban contracts, upgrade controls, SDK signing paths, indexer APIs, and notification webhooks. | Security lead | Not started | [Create audit tracking issue](https://github.com/Invoice-Liquidity-Network/Invoice-Liquidity-Network/issues/new) |
 | Coverage thresholds met | Confirm contract, SDK, CLI, indexer, and notifications coverage thresholds pass in CI before release branch freeze. | QA lead | In progress | [Coverage workflow](../.github/workflows/coverage.yml) |
-| Fuzz tests run | Run fuzz or property-based tests for invoice lifecycle, XDR encoding, amount math, and settlement state transitions. | Protocol lead | In progress | [`sdk/src/xdr.test.ts`](../sdk/src/xdr.test.ts) |
+| Fuzz tests run | Run fuzz or property-based tests for invoice lifecycle, XDR encoding, amount math, and settlement state transitions. | Protocol lead | In progress | [`packages/sdk/src/xdr.test.ts`](../packages/sdk/src/xdr.test.ts) |
 | Unified security policy | Publish ecosystem-wide reporting, severity, safe-harbour, and response timeline policy. | Security lead | In progress | [#299](https://github.com/Invoice-Liquidity-Network/Invoice-Liquidity-Network/issues/299) |
 
 ## Contracts
