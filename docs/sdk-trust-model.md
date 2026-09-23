@@ -346,4 +346,6 @@ The SDK's security posture is only as strong as the key management, RPC node, an
 - [threat-model.md](./threat-model.md) — Protocol-wide attack surface (frontend, API, indexer, governance)
 - [contracts/invoice-contract.md](./contracts/invoice-contract.md) — On-chain authorization and state machine
 - [security.md](./security.md) — Package provenance and SLSA Level 3 verification
+- [Security Guide](./security-guide.md) — Security best practices for SDK integrators
+- [SECURITY.md](../SECURITY.md) — Root-level security policy
 - [notifications.md](./notifications.md) — Webhook HMAC signing and WebSocket subscription security

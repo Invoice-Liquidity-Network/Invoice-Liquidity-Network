@@ -24,6 +24,8 @@ ILN protects three classes of assets:
 - Every API response, SDK input, and wallet connection is treated as potentially attacker-controlled until validated.
 - SLSA Level 3 provenance attestations are published with every SDK release, proving that packages were built by the official GitHub Actions workflow and not from a developer machine.
 
+For the complete SDK trust model — including trust assumptions per component, key management guidelines for browser and backend environments, and the SDK-specific threat model — see the [SDK Trust Model](sdk-trust-model.md).
+
 ---
 
 ## Vulnerability Reporting Process
@@ -57,6 +59,8 @@ const { transaction } = await sdk.buildWriteTransaction(...);
 
 - Detect the Freighter wallet via its published extension ID, not via duck-typing on `window.freighter`.
 - Do not trust wallet providers injected by unknown browser extensions.
+
+For the full SDK trust model — including trust assumptions, key management guidelines, threat model, and what the SDK validates vs. delegates — see [SDK Trust Model](../sdk-trust-model.md). This is the authoritative reference for SDK-level security and should be consulted before integrating the SDK into any application.
 
 **Dependency management**
 
@@ -245,6 +249,7 @@ After the fix is deployed and downstream integrators have had time to update:
 
 ## Related Documents
 
+- [SDK Trust Model](../sdk-trust-model.md) — trust assumptions, key management, threat model, and best practices for the SDK
 - [Threat Model](./threat-model.md) — full attack surface analysis across SDK, frontend, API, and governance
 - [SECURITY.md](../SECURITY.md) — canonical root-level disclosure policy and supported versions
 - [Security](./security.md) — stub that redirects to `SECURITY.md`, kept for existing links
