@@ -57,4 +57,6 @@ export interface ILNEvent {
   /** ISO 8601 timestamp of ledger close. */
   ledger_closed_at: string;
   created_at: number;
+  /** True once the event's ledger is confirmation-depth behind the canonical chain tip. */
+  confirmed: boolean;
 }

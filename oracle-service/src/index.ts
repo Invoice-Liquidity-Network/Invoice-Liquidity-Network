@@ -1,6 +1,5 @@
 import type { Server } from 'node:http';
 
-import express, { type Request, type Response } from 'express';
 import express, { type Request, type Response, type NextFunction } from 'express';
 import { Address } from '@stellar/stellar-sdk';
 

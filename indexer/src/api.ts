@@ -11,11 +11,14 @@ import {
   getTopLPs,
   queryInvoicesPaginated,
   getCursorUpdatedAt,
+  latestKnownLedger,
+  latestConfirmedLedger,
 } from './db';
 import { cacheGet, cacheSet } from './cache';
 import { openApiSpec } from './openapi';
 import { createGraphQLHandler } from './graphql';
 import { createApiRateLimiter } from './rateLimit';
+import { CONFIG } from './config';
 import {
   getArchiveStats,
   queryArchiveInvoices,
@@ -136,6 +139,23 @@ export function createApp(): express.Application {
     });
   });
 
+  // GET /indexer/status
+  // Surfaces the confirmation boundary so consumers can distinguish final vs
+  // provisional chain state (which may still be reorged).
+  router.get('/indexer/status', (_req: Request, res: Response) => {
+    const confirmationDepth = CONFIG.confirmationDepth;
+    const latestLedger = latestKnownLedger();
+    res.json({
+      latestLedger,
+      latestConfirmedLedger: latestConfirmedLedger(confirmationDepth),
+      confirmationDepth,
+      provisionalWindowLedgers: Math.max(
+        0,
+        latestLedger - latestConfirmedLedger(confirmationDepth)
+      ),
+    });
+  });
+
   // GET /invoices
   // Supported query parameters (all optional, ANDed together):
   //   ?status=Pending|Funded|Paid|Defaulted
@@ -151,7 +171,7 @@ export function createApp(): express.Application {
     const pa = typeof payer === 'string' ? payer : '';
     const fu = typeof funder === 'string' ? funder : '';
     const limit = typeof rawLimit === 'string' ? Math.min(parseInt(rawLimit, 10) || 100, 100) : 100;
-    
+
     // Hash query parameters to prevent cache key collisions and poisoning
     const params = { s, fl, pa, fu, limit, cursor: cursor ?? '' };
     const hash = crypto.createHash('sha256').update(JSON.stringify(params)).digest('hex');

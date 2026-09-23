@@ -13,6 +13,7 @@
     "test:load:indexer": "ts-node --esm scripts/load-test-indexer.ts",
     "test:load:notifications": "ts-node --esm scripts/load-test-notifications.ts",
     "build": "turbo run build",
+    "bundle-size:check": "node scripts/check-bundle-size.js",
     "changeset:version": "changeset version",
     "licence:check": "node scripts/check-licenses.js",
     "generate:types": "ts-node --esm scripts/generate-types.ts",

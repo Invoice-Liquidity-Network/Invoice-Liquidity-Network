@@ -1,5 +1,13 @@
 import { withFilter } from 'graphql-subscriptions';
-import { getInvoiceById, getProtocolStats, queryInvoicesPaginated } from '../db';
+import {
+  getInvoiceById,
+  getProtocolStats,
+  queryInvoicesPaginated,
+  invoiceIsProvisional,
+  latestKnownLedger,
+  latestConfirmedLedger,
+} from '../db';
+import { CONFIG } from '../config';
 import type { Invoice, ILNEvent } from '../types';
 import {
   pubsub,
@@ -38,6 +46,7 @@ const invoiceFieldResolvers = {
   fundedAt: (inv: Invoice) => inv.funded_at,
   createdAt: (inv: Invoice) => inv.created_at,
   updatedAt: (inv: Invoice) => inv.updated_at,
+  provisional: (inv: Invoice) => invoiceIsProvisional(inv.id, CONFIG.confirmationDepth),
 };
 
 const ilnEventFieldResolvers = {
@@ -46,6 +55,7 @@ const ilnEventFieldResolvers = {
   invoiceId: (e: ILNEvent) => e.invoice_id,
   ledgerClosedAt: (e: ILNEvent) => e.ledger_closed_at,
   createdAt: (e: ILNEvent) => e.created_at,
+  confirmed: (e: ILNEvent) => e.confirmed === true,
 };
 
 export function filterInvoiceUpdated(
@@ -97,6 +107,14 @@ export const resolvers = {
 
     stats() {
       return getProtocolStats();
+    },
+
+    indexerStatus() {
+      return {
+        latestLedger: latestKnownLedger(),
+        latestConfirmedLedger: latestConfirmedLedger(CONFIG.confirmationDepth),
+        confirmationDepth: CONFIG.confirmationDepth,
+      };
     },
   },
 

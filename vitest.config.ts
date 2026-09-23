@@ -15,6 +15,7 @@ export default defineConfig({
     globals: true,
     restoreMocks: true,
     clearMocks: true,
+    exclude: ['**/node_modules/**', '**/dist/**', '**/.git/**', 'backend/**', 'frontend/**'],
     coverage: {
       provider: 'v8',
       reporter: ['text', 'lcov', 'html'],

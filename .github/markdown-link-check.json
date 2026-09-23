@@ -35,6 +35,10 @@
     {
       "comment": "npmjs.com blocks automated link checkers with 403; package pages are valid",
       "pattern": "^https://www\\.npmjs\\.com/package/"
+    },
+    {
+      "comment": "opensource.org blocks automated link checkers with 403; license pages are valid",
+      "pattern": "^https://opensource\\.org/"
     }
   ],
   "aliveStatusCodes": [200, 206, 301, 302, 429],

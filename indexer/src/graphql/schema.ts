@@ -11,6 +11,12 @@ export const typeDefs = `#graphql
     fundedAt: Int
     createdAt: Int!
     updatedAt: Int!
+    """
+    True when this invoice is referenced by an event still inside the
+    confirmation window - its state may yet change due to a ledger reorg.
+    Invoices are only surfaced once confirmed, so this is normally false.
+    """
+    provisional: Boolean!
   }
 
   enum InvoiceStatus {
@@ -34,6 +40,12 @@ export const typeDefs = `#graphql
     ledger: Int!
     ledgerClosedAt: String!
     createdAt: Int!
+    """
+    True once this event's ledger is confirmation-depth behind the chain tip.
+    The indexer only persists confirmed events, so this is always true for
+    surfaced events - it exists so consumers can enforce the same policy.
+    """
+    confirmed: Boolean!
   }
 
   type InvoicePage {
@@ -49,6 +61,24 @@ export const typeDefs = `#graphql
     defaultRate: Float!
   }
 
+  """
+  Reorg/confirmation status of the indexer's chain view.
+  """
+  type IndexerStatus {
+    """
+    Highest ledger the indexer has observed (events + cursor + recorded hashes).
+    """
+    latestLedger: Int!
+    """
+    Ledger boundary below which state is final: latestLedger - confirmationDepth.
+    """
+    latestConfirmedLedger: Int!
+    """
+    Number of ledgers a block must be behind the tip before state is final.
+    """
+    confirmationDepth: Int!
+  }
+
   type Query {
     invoice(id: Int!): Invoice
     invoices(
@@ -60,6 +90,7 @@ export const typeDefs = `#graphql
       cursor: String
     ): InvoicePage!
     stats: ProtocolStats!
+    indexerStatus: IndexerStatus!
   }
 
   type Subscription {

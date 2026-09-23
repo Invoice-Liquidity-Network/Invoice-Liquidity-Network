@@ -90,8 +90,8 @@ export function formatAmount(amount: bigint, token: AmountToken): string {
     return whole.toString();
   }
 
-  const fraction = (amount % scale).toString().padStart(decimals, '0');
-  return `${whole.toString()}.${fraction}`;
+  const fraction = (amount % scale).toString().padStart(decimals, '0').replace(/0+$/, '');
+  return fraction.length > 0 ? `${whole.toString()}.${fraction}` : whole.toString();
 }
 
 // ── Enhanced formatting ───────────────────────────────────────────────────────

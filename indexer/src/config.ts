@@ -16,6 +16,18 @@ export const CONFIG = {
    * 0 = automatically start from (latestLedger - 1000).
    */
   startLedger: Number(process.env.START_LEDGER ?? '0'),
+  /**
+   * Number of ledgers a block must be behind the tip before its state is
+   * considered final. Events inside this window are not persisted (they are
+   * provisional and could be reorged). Default: 10 (~50 seconds).
+   */
+  confirmationDepth: Number(process.env.CONFIRMATION_DEPTH ?? '10'),
+  /**
+   * Save a backfill checkpoint every N confirmed ledgers. Checkpoints store the
+   * canonical block hash plus the event count so a crashed backfill can be
+   * resumed AND integrity-verified. Set to 0 to disable.
+   */
+  checkpointIntervalLedgers: Number(process.env.CHECKPOINT_INTERVAL_LEDGERS ?? '500'),
   /** Optional Redis connection URL (e.g. redis://localhost:6379). Caching is disabled when unset. */
   redisUrl: process.env.REDIS_URL,
   /** Rate limit window for the public API, in ms (default: 60 seconds). */
@@ -38,13 +50,9 @@ export const CONFIG = {
    */
   subscriptionAuthToken: process.env.SUBSCRIPTION_AUTH_TOKEN,
   /** Max concurrent GraphQL WebSocket connections allowed (default: 100). */
-  subscriptionMaxConnections: Number(
-    process.env.SUBSCRIPTION_MAX_CONNECTIONS ?? '100'
-  ),
+  subscriptionMaxConnections: Number(process.env.SUBSCRIPTION_MAX_CONNECTIONS ?? '100'),
   /** Max GraphQL WebSocket connections allowed per client IP (default: 10). */
-  subscriptionMaxConnectionsPerIp: Number(
-    process.env.SUBSCRIPTION_MAX_CONNECTIONS_PER_IP ?? '10'
-  ),
+  subscriptionMaxConnectionsPerIp: Number(process.env.SUBSCRIPTION_MAX_CONNECTIONS_PER_IP ?? '10'),
   /** Archival schedule interval in ms (default: 24 hours). */
   archiveIntervalMs: Number(process.env.ARCHIVE_INTERVAL_MS ?? '86400000'),
   /** Retention period in days (default: 90 days). */

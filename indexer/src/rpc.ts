@@ -84,6 +84,23 @@ export async function fetchInvoice(
   }
 }
 
+// ─── Ledger hash helper ───────────────────────────────────────────────────────
+
+/**
+ * Fetch the canonical hash of a ledger from Soroban RPC.
+ * Returns null if the ledger is not available or the RPC call fails.
+ */
+export async function fetchLedgerHash(ledger: number): Promise<string | null> {
+  try {
+    const res = await server.getLedgers({ startLedger: ledger });
+    const entry = res.ledgers.find((l) => l.sequence === ledger);
+    return entry?.hash ?? res.ledgers[0]?.hash ?? null;
+  } catch (err) {
+    console.error(`[rpc] Failed to fetch hash for ledger ${ledger}:`, err);
+    return null;
+  }
+}
+
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function parseStatus(raw: unknown): Invoice['status'] {
