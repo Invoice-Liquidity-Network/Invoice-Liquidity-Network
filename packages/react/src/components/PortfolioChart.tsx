@@ -48,15 +48,15 @@ export const PortfolioChart: React.FC<PortfolioChartProps> = ({
   const [resolvedTheme, setResolvedTheme] = useState<'light' | 'dark'>('light');
 
   useEffect(() => {
-    if (theme === 'system') {
-      const mq = window.matchMedia('(prefers-color-scheme: dark)');
-      setResolvedTheme(mq.matches ? 'dark' : 'light');
-      const handler = (e: MediaQueryListEvent) => setResolvedTheme(e.matches ? 'dark' : 'light');
-      mq.addEventListener('change', handler);
-      return () => mq.removeEventListener('change', handler);
-    } else {
+    if (theme !== 'system') {
       setResolvedTheme(theme);
+      return;
     }
+    const mq = window.matchMedia('(prefers-color-scheme: dark)');
+    setResolvedTheme(mq.matches ? 'dark' : 'light');
+    const handler = (e: MediaQueryListEvent) => setResolvedTheme(e.matches ? 'dark' : 'light');
+    mq.addEventListener('change', handler);
+    return () => mq.removeEventListener('change', handler);
   }, [theme]);
 
   const isDark = resolvedTheme === 'dark';
@@ -131,7 +131,9 @@ export const PortfolioChart: React.FC<PortfolioChartProps> = ({
 
   return (
     <>
-      <style dangerouslySetInnerHTML={{ __html: `
+      <style
+        dangerouslySetInnerHTML={{
+          __html: `
         @keyframes iln-draw {
           to { stroke-dashoffset: 0; }
         }
@@ -148,7 +150,9 @@ export const PortfolioChart: React.FC<PortfolioChartProps> = ({
           fill: ${accentColor};
           cursor: pointer;
         }
-      `}} />
+      `,
+        }}
+      />
       <div
         className={className}
         style={{
@@ -163,11 +167,19 @@ export const PortfolioChart: React.FC<PortfolioChartProps> = ({
           ...style,
         }}
       >
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+        <div
+          style={{
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            marginBottom: '16px',
+          }}
+        >
           <h3 style={{ margin: 0, fontSize: '15px', fontWeight: 600 }}>{title}</h3>
           {hoveredIndex !== null && points[hoveredIndex] && (
             <div style={{ fontSize: '13px', fontWeight: 700, color: accentColor }}>
-              {points[hoveredIndex].data.label}: {points[hoveredIndex].data.value.toLocaleString()} USDC
+              {points[hoveredIndex].data.label}: {points[hoveredIndex].data.value.toLocaleString()}{' '}
+              USDC
             </div>
           )}
         </div>
@@ -215,12 +227,7 @@ export const PortfolioChart: React.FC<PortfolioChartProps> = ({
             })}
 
             {/* Area under the line */}
-            {areaPath && (
-              <path
-                d={areaPath}
-                fill={`url(#gradient-${accentColor})`}
-              />
-            )}
+            {areaPath && <path d={areaPath} fill={`url(#gradient-${accentColor})`} />}
 
             {/* Main Path Line */}
             {linePath && (

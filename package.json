@@ -1,30 +1,35 @@
 {
   "name": "invoice-liquidity-network",
   "private": true,
-  "workspaces": [
-    "packages/*",
-    "frontend"
-  ],
   "scripts": {
     "test": "turbo run test",
     "test:coverage": "turbo run test:coverage",
+    "test:checklist": "node --test scripts/__tests__/mainnet-checklist-parser.test.js",
+    "test:compatibility": "vitest run scripts/__tests__/check-compatibility.test.ts",
+    "test:audit": "node --test scripts/__tests__/dependency-audit.test.js",
     "test:load": "ts-node --esm scripts/load-test.ts",
     "test:load:indexer": "ts-node --esm scripts/load-test-indexer.ts",
     "test:load:notifications": "ts-node --esm scripts/load-test-notifications.ts",
     "build": "turbo run build",
+    "changeset:version": "changeset version",
     "licence:check": "node scripts/check-licenses.js",
     "generate:types": "ts-node --esm scripts/generate-types.ts",
+    "generate:shared-types": "node --import tsx/esm scripts/generate-shared-types.mts --spec backend/target/spec.json --out packages/shared/src/types.ts",
     "dev": "turbo run dev",
     "lint": "turbo run lint",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "type-check": "turbo run type-check",
     "docs:dev": "npm run dev -w @invoice-liquidity/docs",
-    "docs:build": "npm run docs:generate -w @iln/sdk && npm run build -w @invoice-liquidity/docs",
+    "docs:build": "npm run docs:generate -w @iln/sdk && npm run docs:generate -w @invoice-liquidity/cli && npm run build -w @invoice-liquidity/docs",
     "docs:api": "npm run docs:generate -w @iln/sdk",
+    "docs:cli": "npm run docs:generate -w @invoice-liquidity/cli",
     "react:dev": "npm run dev -w @iln/react",
     "react:build": "npm run build -w @iln/react",
     "react:test": "npm run test -w @iln/react",
+    "oracle:dev": "npm run dev -w @iln/oracle-service",
+    "oracle:build": "npm run build -w @iln/oracle-service",
+    "oracle:test": "npm run test -w @iln/oracle-service",
     "dead-code:check": "knip",
     "gitleaks:scan": "pnpm exec gitleaks detect --no-git -s . --config gitleaks.toml --baseline-path .secrets.baseline",
     "gitleaks:baseline": "pnpm exec gitleaks detect --no-git -s . --config gitleaks.toml --report-format json --report-path .secrets.baseline",
@@ -36,21 +41,27 @@
     "security:report": "node scripts/dependency-audit.js report",
     "syncpack:check": "syncpack list-mismatches",
     "validate:packages": "node scripts/validate-packages.mjs",
-    "validate:lockfiles": "node scripts/check-no-foreign-lockfiles.mjs"
+    "validate:lockfiles": "node scripts/check-no-foreign-lockfiles.mjs",
+    "validate:meta-nav": "node scripts/check-meta-nav.mjs",
+    "check:shared-types": "node scripts/check-no-duplicate-types.mjs"
   },
   "devDependencies": {
-    "@changesets/cli": "2.31.0",
+    "@changesets/cli": "^2.31.0",
     "@commitlint/cli": "^17.6.0",
     "@commitlint/config-conventional": "^17.6.0",
-    "chromatic": "^17.4.1",
-    "gitleaks-secret-scanner": "^2.1.1",
+    "@stellar/stellar-sdk": "^15.0.1",
+    "@vitest/coverage-v8": "^4.1.5",
     "husky": "^8.0.0",
+    "jsdom": "^29.1.1",
+    "knip": "^6.15.0",
     "license-checker-rseidelsohn": "^5.0.1",
     "prettier": "^2.8.8",
     "syncpack": "^13.0.0",
     "ts-node": "^10.9.2",
+    "tsx": "^4.15.0",
     "turbo": "^2.5.4",
-    "typescript": "^5.9.3"
+    "typescript": "^5.9.3",
+    "vitest": "^4.1.5"
   },
   "engines": {
     "node": ">=20",
@@ -58,12 +69,12 @@
   },
   "prepare": "husky install || true",
   "bin": {
-    "iln": "packages/scripts/bin/iln.js"
+    "iln-dev": "packages/scripts/bin/iln.js"
   },
+  "packageManager": "pnpm@9.0.0",
   "pnpm": {
     "overrides": {
       "axios": ">=1.16.0"
     }
-  },
-  "packageManager": "pnpm@9.0.0"
+  }
 }

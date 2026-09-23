@@ -1,4 +1,4 @@
-import type { ILNPlugin, PluginContext } from "@iln/sdk";
+import type { ILNPlugin, PluginContext } from '@iln/sdk';
 
 export interface AnalyticsConfig {
   endpoint?: string;
@@ -16,7 +16,7 @@ export interface OperationMetrics {
 
 interface PendingEvent {
   operation: string;
-  outcome: "success" | "error";
+  outcome: 'success' | 'error';
   durationMs: number;
   timestamp: number;
 }
@@ -42,8 +42,8 @@ interface PendingEvent {
  * ```
  */
 export class AnalyticsPlugin implements ILNPlugin {
-  readonly name = "iln-analytics";
-  readonly version = "1.0.0";
+  readonly name = 'iln-analytics';
+  readonly version = '1.0.0';
 
   private readonly config: Required<AnalyticsConfig>;
   private readonly metrics = new Map<string, OperationMetrics>();
@@ -53,16 +53,16 @@ export class AnalyticsPlugin implements ILNPlugin {
 
   constructor(config: AnalyticsConfig = {}) {
     this.config = {
-      endpoint: config.endpoint ?? "",
-      apiKey: config.apiKey ?? "",
+      endpoint: config.endpoint ?? '',
+      apiKey: config.apiKey ?? '',
       batchSize: config.batchSize ?? 10,
     };
   }
 
   async install(ctx: PluginContext): Promise<void> {
     this.ctx = ctx;
-    ctx.logger("Analytics plugin installed", {
-      endpoint: this.config.endpoint || "(none)",
+    ctx.logger('Analytics plugin installed', {
+      endpoint: this.config.endpoint || '(none)',
       batchSize: this.config.batchSize,
     });
   }
@@ -83,7 +83,7 @@ export class AnalyticsPlugin implements ILNPlugin {
 
     this.pendingEvents.push({
       operation: name,
-      outcome: "success",
+      outcome: 'success',
       durationMs,
       timestamp: Date.now(),
     });
@@ -100,7 +100,7 @@ export class AnalyticsPlugin implements ILNPlugin {
 
     this.pendingEvents.push({
       operation: name,
-      outcome: "error",
+      outcome: 'error',
       durationMs,
       timestamp: Date.now(),
     });
@@ -111,7 +111,7 @@ export class AnalyticsPlugin implements ILNPlugin {
     if (this.pendingEvents.length > 0) {
       await this.flush();
     }
-    this.ctx?.logger("Analytics plugin destroyed");
+    this.ctx?.logger('Analytics plugin destroyed');
   }
 
   /** Returns a snapshot of all collected metrics keyed by operation name. */
@@ -153,9 +153,9 @@ export class AnalyticsPlugin implements ILNPlugin {
     const batch = this.pendingEvents.splice(0, this.pendingEvents.length);
     try {
       await fetch(this.config.endpoint, {
-        method: "POST",
+        method: 'POST',
         headers: {
-          "Content-Type": "application/json",
+          'Content-Type': 'application/json',
           ...(this.config.apiKey ? { Authorization: `Bearer ${this.config.apiKey}` } : {}),
         },
         body: JSON.stringify({ events: batch }),

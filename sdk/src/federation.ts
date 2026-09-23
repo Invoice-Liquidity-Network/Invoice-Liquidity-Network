@@ -1,4 +1,4 @@
-import { FederationServer } from '@stellar/stellar-sdk';
+import { Federation } from '@stellar/stellar-sdk';
 
 const DEFAULT_FEDERATION_BASE_URL = 'https://federation.iln.finance';
 
@@ -61,7 +61,7 @@ export async function resolveFederationAddress(fedAddress: string): Promise<stri
   }
 
   try {
-    const response = await FederationServer.resolve(fedAddress);
+    const response = await Federation.Server.resolve(fedAddress);
     if (!response.account_id) {
       throw new FederationResolutionError('Address not registered');
     }
@@ -112,8 +112,12 @@ export async function lookupFederationAddress(gAddress: string): Promise<string 
     // For a generic reverse lookup, stellar-sdk requires a domain. Since this is an SDK, we'll
     // pass the account ID to resolve, which works in some stellar-sdk versions if the federation
     // server is globally known or if we use an external service, but here we'll simulate the standard behavior.
-    const response = await FederationServer.resolve(gAddress);
-    const fedAddress = response.stellar_address || null;
+    const response = await Federation.Server.resolve(gAddress);
+    // `stellar_address` isn't part of the standard Federation.Api.Record shape
+    // (reverse lookups aren't part of the federation protocol) — some
+    // non-standard servers may still include it, so read it defensively.
+    const fedAddress =
+      (response as unknown as { stellar_address?: string }).stellar_address || null;
     lookupCache.set(gAddress, { value: fedAddress, timestamp: Date.now() });
     return fedAddress;
   } catch (error: any) {
@@ -175,7 +179,7 @@ export class FederationRecordManager {
     if (!res.ok) {
       const text = await res.text().catch(() => '');
       throw new FederationResolutionError(
-        `Federation server error (${res.status}): ${text || res.statusText}`,
+        `Federation server error (${res.status}): ${text || res.statusText}`
       );
     }
     return res;
@@ -226,7 +230,10 @@ export class FederationRecordManager {
    * await manager.updateRecord("alice", { stellarAddress: "GDEF..." });
    * ```
    */
-  async updateRecord(name: string, updates: Partial<Omit<FederationRecord, 'name'>>): Promise<void> {
+  async updateRecord(
+    name: string,
+    updates: Partial<Omit<FederationRecord, 'name'>>
+  ): Promise<void> {
     if (!name) {
       throw new FederationResolutionError('Record name is required');
     }

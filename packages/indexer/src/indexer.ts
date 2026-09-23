@@ -1,14 +1,14 @@
-import { HorizonClient, FetchFn } from "./horizon-client";
-import { parseContractEvent, RawHorizonEvent } from "./parse";
+import { HorizonClient, FetchFn } from './horizon-client';
+import { parseContractEvent, RawHorizonEvent } from './parse';
 import {
-  ContractEvent,
+  ParsedHorizonEvent,
   EventCallback,
   ILNEventType,
   IndexerOptions,
   SubscriptionHandle,
-} from "./types";
+} from './types';
 
-const DEFAULT_HORIZON_URL = "https://horizon.stellar.org";
+const DEFAULT_HORIZON_URL = 'https://horizon.stellar.org';
 const DEFAULT_PAGE_SIZE = 200;
 const DEFAULT_TIMEOUT_MS = 30_000;
 
@@ -36,11 +36,7 @@ export class ILNEventIndexer {
   /** The ILN contract address to index events against. */
   private contractId: string;
 
-  constructor(
-    contractId: string,
-    options: IndexerOptions = {},
-    fetchFn?: FetchFn
-  ) {
+  constructor(contractId: string, options: IndexerOptions = {}, fetchFn?: FetchFn) {
     this.contractId = contractId;
 
     this.client = new HorizonClient(
@@ -59,7 +55,7 @@ export class ILNEventIndexer {
    *
    * @param id  The invoice identifier (contract topic value)
    */
-  async getEventsForInvoice(id: string): Promise<ContractEvent[]> {
+  async getEventsForInvoice(id: string): Promise<ParsedHorizonEvent[]> {
     const all = await this._fetchAllContractEvents();
     return all.filter((e) => {
       // ILN events encode the invoice ID as the first topic
@@ -78,9 +74,9 @@ export class ILNEventIndexer {
   async getEventsForAddress(
     address: string,
     types?: ILNEventType[]
-  ): Promise<ContractEvent[]> {
+  ): Promise<ParsedHorizonEvent[]> {
     const startUrl = this.client.accountTransactionsUrl(address);
-    const events: ContractEvent[] = [];
+    const events: ParsedHorizonEvent[] = [];
 
     for await (const records of this.client.paginateAll(startUrl)) {
       for (const raw of records) {
@@ -99,11 +95,8 @@ export class ILNEventIndexer {
    *
    * @param timestamp  Unix epoch seconds (or ISO-8601 string)
    */
-  async getEventsSince(timestamp: number | string): Promise<ContractEvent[]> {
-    const cutoff =
-      typeof timestamp === "number"
-        ? new Date(timestamp * 1000)
-        : new Date(timestamp);
+  async getEventsSince(timestamp: number | string): Promise<ParsedHorizonEvent[]> {
+    const cutoff = typeof timestamp === 'number' ? new Date(timestamp * 1000) : new Date(timestamp);
 
     const all = await this._fetchAllContractEvents();
     return all.filter((e) => new Date(e.ledgerClosedAt) >= cutoff);
@@ -127,10 +120,7 @@ export class ILNEventIndexer {
    * setTimeout(() => sub.close(), 60_000);
    * ```
    */
-  subscribe(
-    callback: EventCallback,
-    onError?: (err: Error) => void
-  ): SubscriptionHandle {
+  subscribe(callback: EventCallback, onError?: (err: Error) => void): SubscriptionHandle {
     const streamUrl = this.client.contractEventsUrl(this.contractId);
 
     const abortController = this.client.openStream(
@@ -158,9 +148,9 @@ export class ILNEventIndexer {
   /**
    * Fetch and parse every page of events for this.contractId.
    */
-  private async _fetchAllContractEvents(): Promise<ContractEvent[]> {
+  private async _fetchAllContractEvents(): Promise<ParsedHorizonEvent[]> {
     const startUrl = this.client.contractEventsUrl(this.contractId);
-    const events: ContractEvent[] = [];
+    const events: ParsedHorizonEvent[] = [];
 
     for await (const records of this.client.paginateAll(startUrl)) {
       for (const raw of records) {

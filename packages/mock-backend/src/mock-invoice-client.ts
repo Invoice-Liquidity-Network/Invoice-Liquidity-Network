@@ -7,7 +7,7 @@ import type {
   SubmittedInvoiceResult,
   TokenMetadata,
   UpdateInvoiceArgs,
-} from "./types.js";
+} from './types.js';
 
 import {
   SEED_INVOICES,
@@ -16,14 +16,16 @@ import {
   SEED_ALLOWANCES,
   TOKEN_METADATA_MAP,
   USDC_ID,
-} from "./seed.js";
+} from './seed.js';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function fakeTxHash(): string {
   return Array.from({ length: 32 }, () =>
-    Math.floor(Math.random() * 256).toString(16).padStart(2, "0")
-  ).join("");
+    Math.floor(Math.random() * 256)
+      .toString(16)
+      .padStart(2, '0')
+  ).join('');
 }
 
 function delay(ms = 80): Promise<void> {
@@ -75,7 +77,7 @@ export class MockInvoiceClient implements InvoiceClient {
     this.reputation = options?.reputation ?? new Map(SEED_REPUTATION);
     this.balances = options?.balances ?? new Map(SEED_BALANCES);
     this.allowances = options?.allowances ?? new Map(SEED_ALLOWANCES);
-    this.contractId = options?.contractId ?? "MOCK_CONTRACT";
+    this.contractId = options?.contractId ?? 'MOCK_CONTRACT';
   }
 
   // ─── Read: invoices ─────────────────────────────────────────────────────────
@@ -115,7 +117,7 @@ export class MockInvoiceClient implements InvoiceClient {
     // Unknown token — return a generic placeholder
     return {
       contractId: tokenId,
-      name: "Unknown Token",
+      name: 'Unknown Token',
       symbol: tokenId.slice(0, 4).toUpperCase(),
       decimals: 7,
     };
@@ -147,9 +149,7 @@ export class MockInvoiceClient implements InvoiceClient {
     return this.reputation.get(payerAddress) ?? null;
   }
 
-  async getPayerScoresBatch(
-    addresses: string[]
-  ): Promise<Map<string, PayerScore | null>> {
+  async getPayerScoresBatch(addresses: string[]): Promise<Map<string, PayerScore | null>> {
     await delay();
     const result = new Map<string, PayerScore | null>();
     for (const addr of addresses) {
@@ -171,7 +171,7 @@ export class MockInvoiceClient implements InvoiceClient {
       amount: args.amount,
       due_date: BigInt(args.dueDate),
       discount_rate: args.discountRate,
-      status: "Pending",
+      status: 'Pending',
       funder: null,
       funded_at: null,
       token: args.token ?? USDC_ID,
@@ -185,9 +185,9 @@ export class MockInvoiceClient implements InvoiceClient {
     await delay(150);
 
     const invoice = this.requireInvoice(invoiceId);
-    this.assertStatus(invoice, "Pending", "fund");
+    this.assertStatus(invoice, 'Pending', 'fund');
 
-    invoice.status = "Funded";
+    invoice.status = 'Funded';
     invoice.funder = funder;
     invoice.funded_at = BigInt(Math.floor(Date.now() / 1000));
     this.invoices.set(invoiceId, invoice);
@@ -202,9 +202,9 @@ export class MockInvoiceClient implements InvoiceClient {
     if (invoice.payer !== payer) {
       throw new Error(`Address ${payer} is not the payer for invoice ${invoiceId}`);
     }
-    this.assertStatus(invoice, "Funded", "mark as paid");
+    this.assertStatus(invoice, 'Funded', 'mark as paid');
 
-    invoice.status = "Paid";
+    invoice.status = 'Paid';
     this.invoices.set(invoiceId, invoice);
 
     // Update reputation for the payer
@@ -226,14 +226,14 @@ export class MockInvoiceClient implements InvoiceClient {
     if (invoice.funder !== funder) {
       throw new Error(`Address ${funder} is not the funder for invoice ${invoiceId}`);
     }
-    this.assertStatus(invoice, "Funded", "claim default");
+    this.assertStatus(invoice, 'Funded', 'claim default');
 
     const nowSec = BigInt(Math.floor(Date.now() / 1000));
     if (invoice.due_date > nowSec) {
       throw new Error(`Invoice ${invoiceId} is not past its due date yet`);
     }
 
-    invoice.status = "Defaulted";
+    invoice.status = 'Defaulted';
     this.invoices.set(invoiceId, invoice);
 
     // Update reputation for the payer
@@ -257,9 +257,9 @@ export class MockInvoiceClient implements InvoiceClient {
     if (invoice.freelancer !== freelancer) {
       throw new Error(`Address ${freelancer} is not the freelancer for invoice ${invoiceId}`);
     }
-    this.assertStatus(invoice, "Pending", "cancel");
+    this.assertStatus(invoice, 'Pending', 'cancel');
 
-    invoice.status = "Cancelled";
+    invoice.status = 'Cancelled';
     this.invoices.set(invoiceId, invoice);
     return { txHash: fakeTxHash() };
   }
@@ -269,9 +269,11 @@ export class MockInvoiceClient implements InvoiceClient {
 
     const invoice = this.requireInvoice(args.invoiceId);
     if (invoice.freelancer !== args.freelancer) {
-      throw new Error(`Address ${args.freelancer} is not the freelancer for invoice ${args.invoiceId}`);
+      throw new Error(
+        `Address ${args.freelancer} is not the freelancer for invoice ${args.invoiceId}`
+      );
     }
-    this.assertStatus(invoice, "Pending", "update");
+    this.assertStatus(invoice, 'Pending', 'update');
 
     invoice.amount = args.amount;
     invoice.due_date = BigInt(args.dueDate);

@@ -34,9 +34,7 @@ export function resolveRequestTimeouts(config: {
     readMs: config.timeouts?.readMs ?? config.timeoutMs ?? DEFAULT_READ_TIMEOUT_MS,
     writeMs: config.timeouts?.writeMs ?? config.timeoutMs ?? DEFAULT_REQUEST_TIMEOUT_MS,
     simulationMs:
-      config.timeouts?.simulationMs ??
-      config.timeoutMs ??
-      DEFAULT_SIMULATION_TIMEOUT_MS,
+      config.timeouts?.simulationMs ?? config.timeoutMs ?? DEFAULT_SIMULATION_TIMEOUT_MS,
   };
 }
 
@@ -58,7 +56,7 @@ export function resolveRequestTimeouts(config: {
 export async function withTimeout<T>(
   operation: string,
   timeoutMs: number,
-  promise: Promise<T>,
+  promise: Promise<T>
 ): Promise<T> {
   let timer: ReturnType<typeof setTimeout> | undefined;
 
@@ -89,7 +87,7 @@ export class TimeoutError extends Error {
 
   constructor(operation: string, timeoutMs: number) {
     super(`${operation} timed out after ${timeoutMs}ms.`);
-    this.name = "TimeoutError";
+    this.name = 'TimeoutError';
     this.operation = operation;
     this.timeoutMs = timeoutMs;
   }

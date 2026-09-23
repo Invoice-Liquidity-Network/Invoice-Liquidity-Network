@@ -20,26 +20,20 @@ function makeScoreScVal(overrides: Partial<Record<string, unknown>> = {}) {
         new xdr.ScMapEntry({
           key: nativeToScVal(key, { type: 'symbol' }),
           val: val as xdr.ScVal,
-        }),
-    ),
+        })
+    )
   );
 }
 
 describe('ReputationClient', () => {
   it('should initialize correctly', () => {
-    const client = new ReputationClient(
-      'https://soroban-testnet.stellar.org',
-      TEST_CONTRACT_ID,
-    );
+    const client = new ReputationClient('https://soroban-testnet.stellar.org', TEST_CONTRACT_ID);
     expect(client).toBeDefined();
   });
 
   describe('getReputation', () => {
     it('returns a zeroed ReputationScore when the address is not found', async () => {
-      const client = new ReputationClient(
-        'https://soroban-testnet.stellar.org',
-        TEST_CONTRACT_ID,
-      );
+      const client = new ReputationClient('https://soroban-testnet.stellar.org', TEST_CONTRACT_ID);
       jest.spyOn(client as any, 'simulate').mockRejectedValue(new Error('not found'));
 
       const result = await client.getReputation(TEST_PUBLIC_KEY);
@@ -54,13 +48,8 @@ describe('ReputationClient', () => {
     it('parses a valid contract response into a ReputationScore', async () => {
       const mapScVal = makeScoreScVal();
 
-      const client = new ReputationClient(
-        'https://soroban-testnet.stellar.org',
-        TEST_CONTRACT_ID,
-      );
-      jest.spyOn(client as any, 'simulate').mockImplementation(
-        async () => mapScVal,
-      );
+      const client = new ReputationClient('https://soroban-testnet.stellar.org', TEST_CONTRACT_ID);
+      jest.spyOn(client as any, 'simulate').mockImplementation(async () => mapScVal);
 
       const result = await client.getReputation(TEST_PUBLIC_KEY);
       expect(result.address).toBe(TEST_PUBLIC_KEY);
@@ -74,10 +63,7 @@ describe('ReputationClient', () => {
 
   describe('getReputationScore', () => {
     it('returns 0 for an unknown address', async () => {
-      const client = new ReputationClient(
-        'https://soroban-testnet.stellar.org',
-        TEST_CONTRACT_ID,
-      );
+      const client = new ReputationClient('https://soroban-testnet.stellar.org', TEST_CONTRACT_ID);
       jest.spyOn(client as any, 'simulate').mockRejectedValue(new Error('not found'));
 
       const score = await client.getReputationScore(TEST_PUBLIC_KEY);
@@ -87,13 +73,8 @@ describe('ReputationClient', () => {
     it('returns the score from a valid response', async () => {
       const mapScVal = makeScoreScVal({ score: nativeToScVal(92, { type: 'u32' }) });
 
-      const client = new ReputationClient(
-        'https://soroban-testnet.stellar.org',
-        TEST_CONTRACT_ID,
-      );
-      jest.spyOn(client as any, 'simulate').mockImplementation(
-        async () => mapScVal,
-      );
+      const client = new ReputationClient('https://soroban-testnet.stellar.org', TEST_CONTRACT_ID);
+      jest.spyOn(client as any, 'simulate').mockImplementation(async () => mapScVal);
 
       const score = await client.getReputationScore(TEST_PUBLIC_KEY);
       expect(score).toBe(92);
@@ -104,13 +85,8 @@ describe('ReputationClient', () => {
     it('returns an empty array when the contract has no data', async () => {
       const emptyVec = xdr.ScVal.scvVec([]);
 
-      const client = new ReputationClient(
-        'https://soroban-testnet.stellar.org',
-        TEST_CONTRACT_ID,
-      );
-      jest.spyOn(client as any, 'simulate').mockImplementation(
-        async () => emptyVec,
-      );
+      const client = new ReputationClient('https://soroban-testnet.stellar.org', TEST_CONTRACT_ID);
+      jest.spyOn(client as any, 'simulate').mockImplementation(async () => emptyVec);
 
       const result = await client.getTopPayers(10);
       expect(result).toEqual([]);
@@ -135,13 +111,8 @@ describe('ReputationClient', () => {
         }),
       ]);
 
-      const client = new ReputationClient(
-        'https://soroban-testnet.stellar.org',
-        TEST_CONTRACT_ID,
-      );
-      jest.spyOn(client as any, 'simulate').mockImplementation(
-        async () => vecScVal,
-      );
+      const client = new ReputationClient('https://soroban-testnet.stellar.org', TEST_CONTRACT_ID);
+      jest.spyOn(client as any, 'simulate').mockImplementation(async () => vecScVal);
 
       const result = await client.getTopPayers(2);
       expect(result).toHaveLength(2);

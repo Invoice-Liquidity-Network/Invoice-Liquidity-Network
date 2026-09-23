@@ -1,9 +1,4 @@
-import {
-  Account,
-  Keypair,
-  Networks,
-  nativeToScVal,
-} from '@stellar/stellar-sdk';
+import { Account, Keypair, Networks, nativeToScVal } from '@stellar/stellar-sdk';
 
 import { ContractCallError } from '../errors';
 
@@ -104,9 +99,7 @@ describe('InvoiceClient.getTransactionHistory', () => {
   });
 
   it('maps native XLM asset correctly', async () => {
-    const { queryChain } = mockServer([
-      makeOp({ asset_type: 'native', asset_code: undefined }),
-    ]);
+    const { queryChain } = mockServer([makeOp({ asset_type: 'native', asset_code: undefined })]);
     (client as any).server = { payments: () => queryChain };
 
     const page = await client.getTransactionHistory('GABC');
@@ -204,7 +197,7 @@ describe('InvoiceClient.getTransactionHistory', () => {
   // Pagination
   it('respects the limit option', async () => {
     const ops = Array.from({ length: 10 }, (_, i) =>
-      makeOp({ id: `op-${i}`, paging_token: `token-${i}` }),
+      makeOp({ id: `op-${i}`, paging_token: `token-${i}` })
     );
     const { queryChain } = mockServer(ops);
     (client as any).server = { payments: () => queryChain };
@@ -224,7 +217,7 @@ describe('InvoiceClient.getTransactionHistory', () => {
 
   it('returns nextCursor when more pages exist', async () => {
     const ops = Array.from({ length: 5 }, (_, i) =>
-      makeOp({ id: `op-${i}`, paging_token: `token-${i}` }),
+      makeOp({ id: `op-${i}`, paging_token: `token-${i}` })
     );
     const { queryChain } = mockServer(ops);
     (client as any).server = { payments: () => queryChain };
@@ -312,10 +305,10 @@ describe('InvoiceClient invoice lifecycle writes', () => {
     expect(rpcServer.getAccount).toHaveBeenCalledWith(freelancer);
     expect(rpcServer.simulateTransaction).toHaveBeenCalledTimes(1);
     expect(rpcServer.prepareTransaction).toHaveBeenCalledTimes(1);
-    expect(signer.signTransaction).toHaveBeenCalledWith(
-      expect.any(String),
-      { address: freelancer, networkPassphrase: Networks.TESTNET },
-    );
+    expect(signer.signTransaction).toHaveBeenCalledWith(expect.any(String), {
+      address: freelancer,
+      networkPassphrase: Networks.TESTNET,
+    });
     expect(rpcServer.sendTransaction).toHaveBeenCalledTimes(1);
     expect(rpcServer.pollTransaction).toHaveBeenCalledWith('tx-hash-123', { attempts: 30 });
   });
@@ -336,10 +329,10 @@ describe('InvoiceClient invoice lifecycle writes', () => {
     expect(result.hash).toBe('tx-hash-123');
     expect(rpcServer.getAccount).toHaveBeenCalledWith(funder);
     expect(rpcServer.simulateTransaction).toHaveBeenCalledTimes(1);
-    expect(signer.signTransaction).toHaveBeenCalledWith(
-      expect.any(String),
-      { address: funder, networkPassphrase: Networks.TESTNET },
-    );
+    expect(signer.signTransaction).toHaveBeenCalledWith(expect.any(String), {
+      address: funder,
+      networkPassphrase: Networks.TESTNET,
+    });
   });
 
   it('reads invoice state to compute the remaining funding amount when amount is omitted', async () => {
@@ -349,7 +342,7 @@ describe('InvoiceClient invoice lifecycle writes', () => {
       new Map<string, unknown>([
         ['amount', 1_000_000n],
         ['amount_funded', 250_000n],
-      ]),
+      ])
     );
     const rpcServer = makeRpcServer(funder, {
       simulateTransaction: jest
@@ -389,10 +382,10 @@ describe('InvoiceClient invoice lifecycle writes', () => {
     await client.markPaid({ invoiceId: 42n, amount: 1_000_000n });
 
     expect(rpcServer.getAccount).toHaveBeenCalledWith(payer);
-    expect(signer.signTransaction).toHaveBeenCalledWith(
-      expect.any(String),
-      { address: payer, networkPassphrase: Networks.TESTNET },
-    );
+    expect(signer.signTransaction).toHaveBeenCalledWith(expect.any(String), {
+      address: payer,
+      networkPassphrase: Networks.TESTNET,
+    });
   });
 
   it('wraps Soroban simulation failures in ContractCallError', async () => {
@@ -417,7 +410,7 @@ describe('InvoiceClient invoice lifecycle writes', () => {
         dueDate: 1_800_000_000n,
         discountRate: 300,
         token: TOKEN_ID,
-      }),
+      })
     ).rejects.toBeInstanceOf(ContractCallError);
   });
 });

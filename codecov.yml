@@ -11,17 +11,38 @@ flags:
   sdk:
     paths:
       - sdk/
+      - packages/sdk/
   indexer:
     paths:
       - indexer/
+      - packages/indexer/
   frontend:
     paths:
       - frontend/
   notifications:
     paths:
       - notifications/
+  cli:
+    paths:
+      - cli/
+      - packages/cli/
+  shared:
+    paths:
+      - packages/shared/
+  react:
+    paths:
+      - packages/react/
+  mock-backend:
+    paths:
+      - packages/mock-backend/
+  opentelemetry:
+    paths:
+      - packages/opentelemetry/
+  scripts:
+    paths:
+      - packages/scripts/
 
 comment:
-  layout: "reach, diff, flags, files"
+  layout: 'reach, diff, flags, files'
   behavior: default
   require_changes: false

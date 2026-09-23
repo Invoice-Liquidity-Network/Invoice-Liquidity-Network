@@ -21,8 +21,13 @@
   "devDependencies": {
     "@iln/eslint-config": "workspace:*",
     "@types/json2csv": "^5.0.7",
-    "@types/node": "^24.7.2",
+    "@types/node": "^20.0.0",
+    "@typescript-eslint/eslint-plugin": "^6.0.0",
+    "@typescript-eslint/parser": "^6.0.0",
+    "eslint": "^8.0.0",
+    "eslint-config-prettier": "^9.0.0",
     "ts-node": "^10.9.2",
     "typescript": "^5.9.3"
-  }
+  },
+  "private": true
 }

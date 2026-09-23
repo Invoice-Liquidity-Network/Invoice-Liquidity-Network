@@ -1,0 +1,90 @@
+---
+title: Versioning
+description: Which protocol version this documentation describes, and how to check it against your own deployment
+---
+
+import { Callout } from 'nextra/components';
+
+# Versioning
+
+## This site is not versioned
+
+There is a single documentation track: **latest**. Every page describes the newest
+development version of the protocol — the build currently deployed to Stellar
+testnet — and is updated in place when that build changes. There are no
+per-release snapshots of this site, and no version switcher.
+
+That is a deliberate trade-off. The protocol has not shipped to mainnet yet, so
+maintaining parallel documentation trees would cost more than it is worth while the
+contract surface is still moving. The consequence is that a page may describe a
+method, event, or field that only exists in a release you have not deployed — which
+is why the banner at the top of every page states exactly which release the prose
+was written against.
+
+<Callout type="info">
+  If this policy changes once the protocol is live on mainnet, versioned docs would be tracked as a
+  separate piece of work. This page records the current single-track policy; it is not a commitment
+  to keep it forever.
+</Callout>
+
+## What these docs currently describe
+
+- **Network** — Stellar testnet
+- **Contract** — `invoice_liquidity` v0.1.0
+- **Contract ID** — `CCPASLHKRFBMVV5PZG3LKDGKFEDXZMB5U7DK42CVLUVWCMUCSRPVBIMO`
+- **SDK** — `@invoice-liquidity/sdk` v0.1.0
+
+These are the same values rendered in the version banner. They are declared once in
+`docs/version-manifest.json` and mirrored into `packages/docs/lib/docs-version.ts`.
+`scripts/check-compatibility.ts` fails CI if the mirror drifts from the manifest, if
+this page drifts from either, or if the contract/SDK pair above is missing from the
+compatibility matrix described below.
+
+## Checking the version you are actually running
+
+The contract exposes a `get_version()` view, so you never have to take the banner's
+word for it.
+
+With the Stellar CLI:
+
+```bash
+stellar contract invoke \
+  --id CCPASLHKRFBMVV5PZG3LKDGKFEDXZMB5U7DK42CVLUVWCMUCSRPVBIMO \
+  --network testnet \
+  -- get_version
+```
+
+From the SDK, `checkCompatibility()` calls the same view and reports whether the
+deployed contract is within the range your SDK build supports:
+
+```ts
+import { checkCompatibility } from '@invoice-liquidity/sdk';
+
+const result = await checkCompatibility((method) => client.invoke(method));
+
+if (!result.compatible) {
+  console.warn(result.issues);
+}
+```
+
+If the version you get back does not match the banner, trust the contract and treat
+the affected pages as ahead of — or behind — your deployment.
+
+## Compatibility matrix
+
+The contract, SDK, and frontend are released from three separate repositories, and
+only certain combinations are tested together. Those combinations are recorded in the
+[cross-repo dependency compatibility matrix][matrix], enforced in CI by
+`scripts/check-compatibility.ts` — the same check that keeps this page and the version
+banner honest.
+
+Use the matrix to answer "which SDK version goes with the contract I have deployed?".
+Use the banner and this page to answer "which version were these docs written for?".
+
+[matrix]: https://github.com/Invoice-Liquidity-Network/Invoice-Liquidity-Network/blob/main/docs/cross-repo-dependencies.md#compatibility-matrix
+
+## Mainnet
+
+ILN is testnet-only until the audit completes. Nothing documented here should be used
+with real funds before then. Mainnet contract IDs will be added to the compatibility
+matrix and reflected in the banner once they exist.

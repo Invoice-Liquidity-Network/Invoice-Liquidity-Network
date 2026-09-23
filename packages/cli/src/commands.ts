@@ -1,11 +1,17 @@
-import { Command } from "commander";
-import pc from "picocolors";
-import Table from "cli-table3";
-import { ILNSdk, AnalyticsSDK, createKeypairSigner } from "@iln/sdk";
-import { loadConfig, saveConfig, ILNConfig } from "./config";
-import { Keypair } from "@stellar/stellar-sdk";
-import fs from "fs";
-import { handleOutput, OutputFormat } from "./output";
+import { Command } from 'commander';
+import pc from 'picocolors';
+import Table from 'cli-table3';
+import {
+  ILNSdk,
+  AnalyticsSDK,
+  createKeypairSigner,
+  type ContractStats,
+  type Invoice,
+} from '@iln/sdk';
+import { loadConfig, saveConfig, ILNConfig } from './config';
+import { Keypair } from '@stellar/stellar-sdk';
+import fs from 'fs';
+import { handleOutput, OutputFormat } from './output';
 
 // Constants
 const STROOPS_PER_UNIT = 10_000_000n;
@@ -16,11 +22,11 @@ export function parseDisplayAmount(input: string): bigint {
   const match = trimmed.match(/^(\d+)(?:\.(\d{1,7}))?$/);
   if (!match) {
     throw new Error(
-      "Invalid amount. Use a positive decimal value with up to 7 fractional digits (e.g. 100 or 12.5)."
+      'Invalid amount. Use a positive decimal value with up to 7 fractional digits (e.g. 100 or 12.5).'
     );
   }
   const whole = BigInt(match[1]);
-  const fraction = (match[2] ?? "").padEnd(7, "0");
+  const fraction = (match[2] ?? '').padEnd(7, '0');
   return whole * STROOPS_PER_UNIT + BigInt(fraction);
 }
 
@@ -28,7 +34,7 @@ export function formatAmount(stroops: bigint): string {
   const negative = stroops < 0n;
   const absolute = negative ? -stroops : stroops;
   const whole = absolute / STROOPS_PER_UNIT;
-  const fraction = (absolute % STROOPS_PER_UNIT).toString().padStart(7, "0").replace(/0+$/, "");
+  const fraction = (absolute % STROOPS_PER_UNIT).toString().padStart(7, '0').replace(/0+$/, '');
   const rendered = fraction ? `${whole}.${fraction}` : `${whole}`;
   return negative ? `-${rendered}` : rendered;
 }
@@ -42,7 +48,7 @@ export function parseDueDate(input: string): number {
   const isoValue = isoDateOnly ? `${trimmed}T23:59:59Z` : trimmed;
   const timestamp = Date.parse(isoValue);
   if (Number.isNaN(timestamp)) {
-    throw new Error("Invalid due date. Use a Unix timestamp or an ISO date like YYYY-MM-DD.");
+    throw new Error('Invalid due date. Use a Unix timestamp or an ISO date like YYYY-MM-DD.');
   }
   return Math.floor(timestamp / 1000);
 }
@@ -55,7 +61,7 @@ function getSignerPublicKey(secretKey: string): string {
   try {
     return Keypair.fromSecret(secretKey).publicKey();
   } catch (error) {
-    throw new Error("Invalid secret key format.");
+    throw new Error('Invalid secret key format.');
   }
 }
 
@@ -63,7 +69,7 @@ function getSignerPublicKey(secretKey: string): string {
 function createSdkInstance(config: ILNConfig, requireSigner = false): ILNSdk {
   if (!config.contractId) {
     throw new Error(
-      "Missing contract ID. Set `contractId` in ~/.iln/config.json or define the `ILN_CONTRACT_ID` environment variable."
+      'Missing contract ID. Set `contractId` in ~/.iln/config.json or define the `ILN_CONTRACT_ID` environment variable.'
     );
   }
 
@@ -71,7 +77,7 @@ function createSdkInstance(config: ILNConfig, requireSigner = false): ILNSdk {
   if (requireSigner) {
     if (!config.secretKey) {
       throw new Error(
-        "Missing secret key. Set `secretKey` in ~/.iln/config.json or define the `ILN_SECRET_KEY` environment variable."
+        'Missing secret key. Set `secretKey` in ~/.iln/config.json or define the `ILN_SECRET_KEY` environment variable.'
       );
     }
     signer = createKeypairSigner(config.secretKey);
@@ -91,19 +97,20 @@ function handleOutputLocal(data: any, renderHuman: () => string, format: OutputF
 
 export function registerCommands(program: Command) {
   // Invoice Subcommands
-  const invoice = program
-    .command("invoice")
-    .description("Manage and interact with invoices");
+  const invoice = program.command('invoice').description('Manage and interact with invoices');
 
   // iln invoice submit
   invoice
-    .command("submit")
-    .description("Submit a new invoice")
-    .requiredOption("--payer <address>", "Stellar address of the payer")
-    .requiredOption("--amount <amount>", "Invoice amount (e.g. 100 or 12.5)")
-    .requiredOption("--due-date <date>", "Due date (Unix timestamp or YYYY-MM-DD)")
-    .requiredOption("--discount-rate <rate>", "Discount rate in basis points (e.g., 300 for 3%)")
-    .option("--freelancer <address>", "Stellar address of the freelancer (defaults to signer address)")
+    .command('submit')
+    .description('Submit a new invoice')
+    .requiredOption('--payer <address>', 'Stellar address of the payer')
+    .requiredOption('--amount <amount>', 'Invoice amount (e.g. 100 or 12.5)')
+    .requiredOption('--due-date <date>', 'Due date (Unix timestamp or YYYY-MM-DD)')
+    .requiredOption('--discount-rate <rate>', 'Discount rate in basis points (e.g., 300 for 3%)')
+    .option(
+      '--freelancer <address>',
+      'Stellar address of the freelancer (defaults to signer address)'
+    )
     .action(async (options) => {
       try {
         const config = loadConfig();
@@ -115,7 +122,7 @@ export function registerCommands(program: Command) {
         const discountRateInt = parseInt(options.discount_rate, 10);
 
         if (Number.isNaN(discountRateInt) || discountRateInt < 0) {
-          throw new Error("Discount rate must be a non-negative integer.");
+          throw new Error('Discount rate must be a non-negative integer.');
         }
 
         const invoiceId = await sdk.submitInvoice({
@@ -139,10 +146,10 @@ export function registerCommands(program: Command) {
 
   // iln invoice fund
   invoice
-    .command("fund")
-    .description("Fund an existing invoice")
-    .requiredOption("--id <id>", "Invoice ID")
-    .option("--funder <address>", "Stellar address of the funder (defaults to signer address)")
+    .command('fund')
+    .description('Fund an existing invoice')
+    .requiredOption('--id <id>', 'Invoice ID')
+    .option('--funder <address>', 'Stellar address of the funder (defaults to signer address)')
     .action(async (options) => {
       try {
         const config = loadConfig();
@@ -168,9 +175,9 @@ export function registerCommands(program: Command) {
 
   // iln invoice pay
   invoice
-    .command("pay")
-    .description("Mark an invoice as paid")
-    .requiredOption("--id <id>", "Invoice ID")
+    .command('pay')
+    .description('Mark an invoice as paid')
+    .requiredOption('--id <id>', 'Invoice ID')
     .action(async (options) => {
       try {
         const config = loadConfig();
@@ -194,12 +201,12 @@ export function registerCommands(program: Command) {
 
   // iln invoice get [id]
   invoice
-    .command("get [id]")
-    .description("Get details of a specific invoice")
+    .command('get [id]')
+    .description('Get details of a specific invoice')
     .action(async (id, options) => {
       try {
         if (!id) {
-          throw new Error("Missing invoice ID.");
+          throw new Error('Missing invoice ID.');
         }
         const config = loadConfig();
         const sdk = createSdkInstance(config);
@@ -224,20 +231,20 @@ export function registerCommands(program: Command) {
           serialized,
           () => {
             const table = new Table({
-              head: [pc.cyan("Field"), pc.cyan("Value")],
+              head: [pc.cyan('Field'), pc.cyan('Value')],
               colWidths: [20, 60],
             });
 
             table.push(
-              ["ID", serialized.id],
-              ["Status", serialized.status],
-              ["Amount", formatAmount(data.amount)],
-              ["Discount Rate", `${serialized.discountRate} bps`],
-              ["Due Date", formatTimestamp(serialized.dueDate)],
-              ["Freelancer", serialized.freelancer],
-              ["Payer", serialized.payer],
-              ["Funder", serialized.funder || "-"],
-              ["Funded At", serialized.fundedAt ? formatTimestamp(serialized.fundedAt) : "-"]
+              ['ID', serialized.id],
+              ['Status', serialized.status],
+              ['Amount', formatAmount(data.amount)],
+              ['Discount Rate', `${serialized.discountRate} bps`],
+              ['Due Date', formatTimestamp(serialized.dueDate)],
+              ['Freelancer', serialized.freelancer],
+              ['Payer', serialized.payer],
+              ['Funder', serialized.funder || '-'],
+              ['Funded At', serialized.fundedAt ? formatTimestamp(serialized.fundedAt) : '-']
             );
 
             return table.toString();
@@ -252,15 +259,15 @@ export function registerCommands(program: Command) {
 
   // iln invoice list
   invoice
-    .command("list")
-    .description("List all invoices (optionally filtered by address)")
-    .option("--address <address>", "Filter by freelancer, payer, or funder address")
+    .command('list')
+    .description('List all invoices (optionally filtered by address)')
+    .option('--address <address>', 'Filter by freelancer, payer, or funder address')
     .action(async (options) => {
       try {
         const config = loadConfig();
         const sdk = createSdkInstance(config);
-        const count = await sdk.getInvoiceCount();
-        const invoices = [];
+        const count = ((await sdk.getStats()) as ContractStats).totalInvoices;
+        const invoices: Invoice[] = [];
 
         for (let i = 1n; i <= count; i++) {
           try {
@@ -297,17 +304,17 @@ export function registerCommands(program: Command) {
           serialized,
           () => {
             if (serialized.length === 0) {
-              return "No invoices found.";
+              return 'No invoices found.';
             }
             const table = new Table({
               head: [
-                pc.cyan("ID"),
-                pc.cyan("Status"),
-                pc.cyan("Amount"),
-                pc.cyan("Due Date"),
-                pc.cyan("Freelancer"),
-                pc.cyan("Payer"),
-                pc.cyan("Funder"),
+                pc.cyan('ID'),
+                pc.cyan('Status'),
+                pc.cyan('Amount'),
+                pc.cyan('Due Date'),
+                pc.cyan('Freelancer'),
+                pc.cyan('Payer'),
+                pc.cyan('Funder'),
               ],
             });
 
@@ -317,9 +324,9 @@ export function registerCommands(program: Command) {
                 inv.status,
                 formatAmount(inv.amount),
                 formatTimestamp(inv.dueDate).slice(0, 10),
-                inv.freelancer.slice(0, 8) + "...",
-                inv.payer.slice(0, 8) + "...",
-                inv.funder ? inv.funder.slice(0, 8) + "..." : "-",
+                inv.freelancer.slice(0, 8) + '...',
+                inv.payer.slice(0, 8) + '...',
+                inv.funder ? inv.funder.slice(0, 8) + '...' : '-',
               ]);
             });
 
@@ -335,24 +342,24 @@ export function registerCommands(program: Command) {
 
   // iln invoice watch
   invoice
-    .command("watch")
-    .description("Watch an invoice for real-time status updates")
-    .requiredOption("--id <id>", "Invoice ID")
-    .option("--interval <ms>", "Poll interval in milliseconds", "3000")
+    .command('watch')
+    .description('Watch an invoice for real-time status updates')
+    .requiredOption('--id <id>', 'Invoice ID')
+    .option('--interval <ms>', 'Poll interval in milliseconds', '3000')
     .action(async (options) => {
       const config = loadConfig();
       const sdk = createSdkInstance(config);
       const invoiceId = BigInt(options.id);
       const intervalMs = Math.max(1000, parseInt(options.interval, 10) || 3000);
-      const TERMINAL = new Set(["Paid", "Defaulted", "Disputed"]);
+      const TERMINAL = new Set(['Paid', 'Defaulted', 'Disputed']);
 
       let lastStatus: string | undefined;
 
       const print = (inv: any) => {
         const ts = new Date().toISOString();
-        if (program.opts().format === "json") {
+        if (program.opts().format === 'json') {
           console.log(JSON.stringify({ ts, id: inv.id.toString(), status: inv.status }));
-        } else if (program.opts().format === "yaml") {
+        } else if (program.opts().format === 'yaml') {
           console.log(`ts: ${ts}\nid: ${inv.id.toString()}\nstatus: ${inv.status}`);
         } else {
           console.log(`[${ts}] Invoice ${inv.id} — ${pc.cyan(inv.status)}`);
@@ -380,25 +387,25 @@ export function registerCommands(program: Command) {
       await poll();
       const timer = setInterval(poll, intervalMs);
 
-      process.on("SIGINT", () => {
+      process.on('SIGINT', () => {
         clearInterval(timer);
-        console.log("\nStopped watching.");
+        console.log('\nStopped watching.');
         process.exit(0);
       });
     });
 
   // iln invoice export
   invoice
-    .command("export")
-    .description("Export invoices to CSV")
-    .option("--address <address>", "Filter by freelancer, payer, or funder address")
-    .option("--output <file>", "Output file path (use - for stdout)", "invoices.csv")
+    .command('export')
+    .description('Export invoices to CSV')
+    .option('--address <address>', 'Filter by freelancer, payer, or funder address')
+    .option('--output <file>', 'Output file path (use - for stdout)', 'invoices.csv')
     .action(async (options) => {
       try {
         const config = loadConfig();
         const sdk = createSdkInstance(config);
-        const count = await sdk.getInvoiceCount();
-        const invoices = [];
+        const count = ((await sdk.getStats()) as ContractStats).totalInvoices;
+        const invoices: Invoice[] = [];
 
         for (let i = 1n; i <= count; i++) {
           try {
@@ -419,7 +426,7 @@ export function registerCommands(program: Command) {
           }
         }
 
-        const header = "id,freelancer,payer,amount,discountRate,dueDate,status,funder,fundedAt";
+        const header = 'id,freelancer,payer,amount,discountRate,dueDate,status,funder,fundedAt';
         const rows = invoices.map((inv) =>
           [
             inv.id.toString(),
@@ -429,16 +436,16 @@ export function registerCommands(program: Command) {
             inv.discountRate,
             inv.dueDate,
             inv.status,
-            inv.funder ?? "",
-            inv.fundedAt ?? "",
-          ].join(",")
+            inv.funder ?? '',
+            inv.fundedAt ?? '',
+          ].join(',')
         );
-        const csv = [header, ...rows].join("\n");
+        const csv = [header, ...rows].join('\n');
 
-        if (options.output === "-") {
+        if (options.output === '-') {
           console.log(csv);
         } else {
-          fs.writeFileSync(options.output, csv, "utf8");
+          fs.writeFileSync(options.output, csv, 'utf8');
           console.log(pc.green(`✓ Exported ${invoices.length} invoice(s) to ${options.output}`));
         }
       } catch (err: any) {
@@ -449,35 +456,35 @@ export function registerCommands(program: Command) {
 
   // iln stats
   program
-    .command("stats")
-    .description("Show protocol analytics/stats")
+    .command('stats')
+    .description('Show protocol analytics/stats')
     .action(async () => {
       try {
         const config = loadConfig();
         const api = new AnalyticsSDK(
-          config.network === "mainnet" ? "https://api.iln.network" : "http://localhost:3001"
+          config.network === 'mainnet' ? 'https://api.iln.network' : 'http://localhost:3001'
         );
         const stats = await api.getProtocolStats();
 
         const serialized = {
           totalInvoices: stats.totalInvoices,
+          totalFunded: stats.totalFunded,
+          totalPaid: stats.totalPaid,
           totalVolume: stats.totalVolume.toString(),
-          totalYield: stats.totalYield.toString(),
-          defaultRate: stats.defaultRate,
         };
 
         handleOutputLocal(
           serialized,
           () => {
             const table = new Table({
-              head: [pc.cyan("Metric"), pc.cyan("Value")],
+              head: [pc.cyan('Metric'), pc.cyan('Value')],
             });
 
             table.push(
-              ["Total Invoices", serialized.totalInvoices],
-              ["Total Volume", formatAmount(stats.totalVolume)],
-              ["Total Yield", formatAmount(stats.totalYield)],
-              ["Default Rate", `${(serialized.defaultRate * 100).toFixed(2)}%`]
+              ['Total Invoices', serialized.totalInvoices],
+              ['Total Funded', serialized.totalFunded],
+              ['Total Paid', serialized.totalPaid],
+              ['Total Volume', formatAmount(stats.totalVolume)]
             );
 
             return table.toString();
@@ -491,20 +498,19 @@ export function registerCommands(program: Command) {
     });
 
   // iln reputation get [address]
-  const reputation = program
-    .command("reputation")
-    .description("Query user reputation score");
+  const reputation = program.command('reputation').description('Query user reputation score');
 
   reputation
-    .command("get [address]")
-    .description("Get the reputation score of an address")
+    .command('get [address]')
+    .description('Get the reputation score of an address')
     .action(async (address) => {
       try {
         const config = loadConfig();
-        const targetAddress = address || (config.secretKey ? getSignerPublicKey(config.secretKey) : null);
+        const targetAddress =
+          address || (config.secretKey ? getSignerPublicKey(config.secretKey) : null);
 
         if (!targetAddress) {
-          throw new Error("Missing address. Pass [address] or set `secretKey` in config.");
+          throw new Error('Missing address. Pass [address] or set `secretKey` in config.');
         }
 
         const sdk = createSdkInstance(config);
@@ -522,16 +528,14 @@ export function registerCommands(program: Command) {
     });
 
   // iln network switch [testnet|mainnet]
-  const network = program
-    .command("network")
-    .description("Network settings");
+  const network = program.command('network').description('Network settings');
 
   network
-    .command("switch <target>")
-    .description("Switch active network (testnet or mainnet)")
+    .command('switch <target>')
+    .description('Switch active network (testnet or mainnet)')
     .action(async (target) => {
       try {
-        if (target !== "testnet" && target !== "mainnet") {
+        if (target !== 'testnet' && target !== 'mainnet') {
           throw new Error('Unsupported network. Choose either "testnet" or "mainnet".');
         }
 

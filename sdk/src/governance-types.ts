@@ -3,18 +3,22 @@
  */
 export enum ProposalActionKind {
   /** Update the protocol fee rate. */
-  UpdateFeeRate = "UpdateFeeRate",
+  UpdateFeeRate = 'UpdateFeeRate',
   /** Add a new token to the protocol. */
-  AddToken = "AddToken",
+  AddToken = 'AddToken',
   /** Remove a token from the protocol. */
-  RemoveToken = "RemoveToken",
+  RemoveToken = 'RemoveToken',
   /** Update the maximum discount rate. */
-  UpdateMaxDiscountRate = "UpdateMaxDiscountRate",
+  UpdateMaxDiscountRate = 'UpdateMaxDiscountRate',
 }
 
 /**
  * A governance proposal action with its parameters.
  * Discriminated union on the `kind` field.
+ *
+ * Intentionally differs from @iln/shared's ProposalAction (which uses `type`
+ * and `value` fields). This SDK version uses explicit property names
+ * (`rate`, `tokenAddress`) for better ergonomics with TypeScript narrowing.
  */
 export type ProposalAction =
   | { kind: ProposalActionKind.UpdateFeeRate; rate: number }
@@ -24,17 +28,26 @@ export type ProposalAction =
 
 /**
  * Enumeration of governance proposal statuses.
+ *
+ * Intentionally a TypeScript enum (not a type alias) so SDK consumers get
+ * runtime values. Keep in sync with @iln/shared's ProposalStatus.
  */
 export enum ProposalStatus {
-  Active = "Active",
-  Passed = "Passed",
-  Rejected = "Rejected",
-  Executed = "Executed",
-  Vetoed = "Vetoed",
+  Active = 'Active',
+  Passed = 'Passed',
+  Rejected = 'Rejected',
+  Executed = 'Executed',
+  Vetoed = 'Vetoed',
 }
 
 /**
  * A governance proposal as returned by the contract.
+ *
+ * Intentionally differs from @iln/shared's GovernanceProposal:
+ * - `descriptionHash` is `Buffer` (not `Uint8Array`) for Node.js compatibility
+ * - `action` uses the SDK's `ProposalAction` (not the shared type alias)
+ * - `votingEnd` (not `votingEndsAt`) for brevity
+ * - `etaLedger` is non-nullable (defaulted to 0 when unknown)
  */
 export interface GovernanceProposal {
   id: bigint;
@@ -152,7 +165,7 @@ export interface VotingResult {
 /**
  * Configuration for the GovernanceClient.
  */
-import type { RpcServerLike } from "./types";
+import type { RpcServerLike } from './types';
 
 export interface GovernanceClientConfig {
   contractId: string;

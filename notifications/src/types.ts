@@ -1,20 +1,36 @@
-export type InvoiceStatus = "Pending" | "Funded" | "Paid" | "Defaulted";
-export type ILNEventType = "submitted" | "funded" | "paid" | "defaulted";
+/**
+ * All nine on-chain invoice states.
+ *
+ * Intentionally differs from @iln/shared's InvoiceStatus only in that this is
+ * a local copy kept in sync with the contract. If a new status is added to the
+ * contract, it must be added here as well.
+ */
+export type InvoiceStatus =
+  | 'Pending'
+  | 'PartiallyFunded'
+  | 'Funded'
+  | 'Paid'
+  | 'Defaulted'
+  | 'Appealed'
+  | 'Disputed'
+  | 'Expired'
+  | 'Cancelled';
+export type ILNEventType = 'submitted' | 'funded' | 'paid' | 'defaulted';
 
 export type NotificationTrigger =
-  | "invoice_funded"
-  | "invoice_paid"
-  | "invoice_defaulted"
-  | "invoice_due_soon"
-  | "invoice_overdue";
+  | 'invoice_funded'
+  | 'invoice_paid'
+  | 'invoice_defaulted'
+  | 'invoice_due_soon'
+  | 'invoice_overdue';
 
-export type SubscriptionChannel = "email" | "webhook" | "sms" | "websocket";
+export type SubscriptionChannel = 'email' | 'webhook' | 'sms' | 'websocket';
 
 /** Roles used in the service layer (service.ts / NotificationService). */
-export type ActorRole = "freelancer" | "lp" | "payer";
+export type ActorRole = 'freelancer' | 'lp' | 'payer';
 
 /** Webhook health status tracked per subscription. */
-export type WebhookStatus = "active" | "failed" | "disabled";
+export type WebhookStatus = 'active' | 'failed' | 'disabled';
 
 /**
  * A normalised invoice event emitted by the contract poller and consumed by
@@ -35,7 +51,7 @@ export interface InvoiceEvent {
 /** Result returned by the service after attempting delivery to one subscriber. */
 export interface DeliveryResult {
   success: boolean;
-  channel: "email" | "webhook";
+  channel: 'email' | 'webhook';
   subscriptionId: string;
 }
 
@@ -47,13 +63,21 @@ export interface Subscription {
   id: string;
   address: string;
   role: ActorRole;
-  channel: "email" | "webhook";
+  channel: 'email' | 'webhook';
   email?: string;
   webhookUrl?: string;
   webhookStatus: WebhookStatus;
   active: boolean;
 }
 
+/**
+ * Invoice as stored in the notifications database.
+ *
+ * This is a DB-specific projection, not a duplicate of @iln/shared's Invoice.
+ * Field names use snake_case to match the SQL schema, `amount` is a string
+ * (i128 exceeds JS Number.MAX_SAFE_INTEGER), and it omits contract-only fields
+ * like `token`, `amountFunded`, `submitterReputation`, auction fields, etc.
+ */
 export interface Invoice {
   id: number;
   freelancer: string;
@@ -68,16 +92,6 @@ export interface Invoice {
   updated_at: number;
 }
 
-export interface LegacySubscription {
-  id: number;
-  stellar_address: string;
-  channel: SubscriptionChannel;
-  destination: string;
-  triggers: NotificationTrigger[];
-  created_at: number;
-  webhook_secret?: string;
-}
-
 export interface WebhookDeliveryLog {
   id: number;
   subscription_id: number;
@@ -85,7 +99,7 @@ export interface WebhookDeliveryLog {
   trigger: NotificationTrigger;
   invoice_id: number;
   recipient_address: string;
-  status: "pending" | "success" | "failed";
+  status: 'pending' | 'success' | 'failed';
   attempts: number;
   response_status: number | null;
   error: string | null;
@@ -99,7 +113,7 @@ export interface NotificationPayload {
   recipientAddress: string;
   subject: string;
   message: string;
-  actor: "freelancer" | "lp" | "payer";
+  actor: 'freelancer' | 'lp' | 'payer';
   eventId?: string;
   eventType?: ILNEventType;
 }
@@ -114,13 +128,8 @@ export interface WebSocketClient {
 }
 
 export interface WebSocketMessage {
-  type: "subscribe" | "unsubscribe" | "event" | "heartbeat" | "error";
+  type: 'subscribe' | 'unsubscribe' | 'event' | 'heartbeat' | 'error';
   payload?: unknown;
   address?: string;
   timestamp?: number;
-}
-
-export interface WebSocketSubscription {
-  address: string;
-  triggers?: NotificationTrigger[];
 }

@@ -114,4 +114,4 @@ The current analytics API surfaces aggregate default rates per payer but does no
 - **Not a lending protocol.** LPs buy the right to receive a future payment from a payer; they are not lending to the freelancer.
 - **Not a credit bureau.** Reputation scores reflect on-chain settlement history only. Off-chain payer identity, credit reports, and KYC are out of scope.
 - **Not escrow.** The freelancer receives funds as soon as an LP calls `fund_invoice()`. There is no hold waiting for payer confirmation.
-- **Not governed by a single entity.** Protocol parameters are managed by an on-chain governance contract (`ILN-Governance`). See [governance.md](governance.md) for details.
+- **Not governed by a single entity.** Protocol parameters are managed by an on-chain governance contract (`ILN-Governance`). See [governance-guide.md](governance-guide.md) for details.

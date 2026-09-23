@@ -1,135 +1,129 @@
-# ILN SDK Error Codes
+# SDK Error Code Catalog
 
-This page catalogs error codes emitted by `@iln/sdk` so you can handle failures programmatically and recover quickly.
-
-> Tip: SDK errors include a `code` plus a `remediation` string and optional `context`. Each code also links here (e.g. `docsUrl`).
-
-## Error Code Index
-
-- [`INVALID_DISCOUNT_RATE`](#invalid_discount_rate)
-- [`TOKEN_MISMATCH`](#token_mismatch)
-- [`PAYER_REPUTATION_TOO_LOW`](#payer_reputation_too_low)
-- [`INSUFFICIENT_BALANCE`](#insufficient_balance)
-- [`NETWORK_ERROR`](#network_error)
-- [`TRANSACTION_FAILED`](#transaction_failed)
-- [`VALIDATION_ERROR`](#validation_error)
-- [`WALLET_NOT_CONNECTED`](#wallet_not_connected)
-- [`CONTRACT_ERROR`](#contract_error)
-- [`SIMULATION_FAILED`](#simulation_failed)
+This reference documents all structured error codes produced by the `@iln/sdk` package. Every consumer-facing error thrown or returned by the SDK inherits from [`ILNError`](../sdk/src/errors.ts) and contains machine-readable fields (`code`, `message`, `remediation`, `docsUrl`, `context`, `retryable`).
 
 ---
 
-## INVALID_DISCOUNT_RATE
+## Error Codes
 
-**What it means**: The provided `discountRate` is outside the allowed protocol bounds.
+### `invalid_discount_rate`
+- **Class:** `InvalidDiscountRateError`
+- **Code:** `INVALID_DISCOUNT_RATE`
+- **Description:** Thrown when the provided invoice discount rate is outside protocol limits or malformed.
+- **Retryable:** `false`
+- **Remediation:** Check `discountRate` is within bounds (`getProtocolConfig().maxDiscountRate`). If using basis points, ensure the value is in bps (e.g. 300 = 3%).
 
-**How to fix**:
-1. Call `sdk.getProtocolConfig()` and check `maxDiscountRate` / allowed range.
-2. Ensure you are passing **basis points (bps)** (e.g., `300 = 3%`).
-3. Retry the operation.
+---
 
-**Example**:
-```ts
+### `token_mismatch`
+- **Class:** `TokenMismatchError`
+- **Code:** `TOKEN_MISMATCH`
+- **Description:** Thrown when the token contract address specified in a transaction does not match the token contract configured for the invoice or protocol.
+- **Retryable:** `false`
+- **Remediation:** Verify that the token contract ID/address used to build the transaction matches the token configured for the invoice/protocol.
+
+---
+
+### `payer_reputation_too_low`
+- **Class:** `PayerReputationTooLowError`
+- **Code:** `PAYER_REPUTATION_TOO_LOW`
+- **Description:** Thrown when the designated payer does not satisfy the protocol's minimum reputation score requirement.
+- **Retryable:** `false`
+- **Remediation:** Verify the payer reputation score and select an eligible payer or request a reputation re-evaluation.
+
+---
+
+### `insufficient_balance`
+- **Class:** `InsufficientBalanceError`
+- **Code:** `INSUFFICIENT_BALANCE`
+- **Description:** Thrown when the account balance is insufficient to cover transaction amounts or fee reserves.
+- **Retryable:** `true`
+- **Remediation:** Ensure the account has enough funds (including transaction fees) before retrying. On testnet, use `iln dev seed` to request funds.
+
+---
+
+### `network_error`
+- **Class:** `NetworkError`
+- **Code:** `NETWORK_ERROR`
+- **Description:** Thrown when an HTTP or RPC connection to the Stellar Horizon / Soroban RPC node fails or times out.
+- **Retryable:** `true`
+- **Remediation:** Check `rpcUrl`, verify network connectivity, and confirm the RPC node status.
+
+---
+
+### `transaction_failed`
+- **Class:** `TransactionFailedError`
+- **Code:** `TRANSACTION_FAILED`
+- **Description:** Thrown when a transaction fails execution on-chain after submission.
+- **Retryable:** `false`
+- **Remediation:** Review transaction parameters, inspect invoice state, and check fee/resource allocations.
+
+---
+
+### `validation_error`
+- **Class:** `ValidationError`
+- **Code:** `VALIDATION_ERROR`
+- **Description:** Thrown when SDK parameter validation fails before sending requests.
+- **Retryable:** `false`
+- **Remediation:** Inspect input values and use `Validators` utilities to identify constraint violations.
+
+---
+
+### `wallet_not_connected`
+- **Class:** `WalletNotConnectedError`
+- **Code:** `WALLET_NOT_CONNECTED`
+- **Description:** Thrown when a transaction signer is required but missing or unauthenticated.
+- **Retryable:** `false`
+- **Remediation:** Ensure a valid `signer` (e.g. keypair signer or Freighter wallet adapter) is provided in `ILNSdk` configuration.
+
+---
+
+### `contract_error`
+- **Class:** `GenericContractError`
+- **Code:** `CONTRACT_ERROR`
+- **Description:** Thrown when a smart contract reverts with an unclassified custom error code or panic.
+- **Retryable:** `false`
+- **Remediation:** Inspect `context.rawError` and `context.matchedSignature` for raw contract error output.
+
+---
+
+### `simulation_failed`
+- **Class:** `SimulationError`
+- **Code:** `SIMULATION_FAILED`
+- **Description:** Thrown when transaction pre-flight simulation fails before submission.
+- **Retryable:** `false`
+- **Remediation:** Ensure contract state is consistent and parameters match on-chain preconditions.
+
+---
+
+## Worked Example: Handling SDK Errors
+
+```typescript
+import { ILNSdk, normalizeError, ILNError } from '@iln/sdk';
+
+const sdk = new ILNSdk({
+  rpcUrl: 'https://soroban-testnet.stellar.org',
+  networkPassphrase: 'Test SDF Network ; September 2015',
+});
+
 try {
-  await sdk.submitInvoice({ /* ... */, discountRate: 999999 })
-} catch (err) {
-  if ((err as any).code === 'INVALID_DISCOUNT_RATE') {
-    // prompt user to adjust discountRate
+  await sdk.submitInvoice({
+    amount: '1000000',
+    discountRate: 15000, // Invalid: exceeds max discount rate
+    payer: 'GBRPYHIL2CI3FNQ4BXLFMNDLFIMTXHRGY2TEWLYYACGNDWDRV4TVTBU5',
+  });
+} catch (err: unknown) {
+  // Normalize any caught exception to a consistent ILNError
+  const ilnErr: ILNError = normalizeError(err, 'SUBMIT_INVOICE_FAILED');
+
+  console.error(`[Error ${ilnErr.code}]: ${ilnErr.message}`);
+  console.error(`Remediation: ${ilnErr.remediation}`);
+  if (ilnErr.docsUrl) {
+    console.error(`Documentation: ${ilnErr.docsUrl}`);
+  }
+
+  if (ilnErr.retryable) {
+    console.log('This error is retryable. Retrying in 2 seconds...');
   }
 }
 ```
-
----
-
-## TOKEN_MISMATCH
-
-**What it means**: The token contract ID/address used to build the transaction does not match the token expected for the invoice/protocol.
-
-**How to fix**:
-1. Compare the token addresses/contract IDs from `getInvoice()` and/or `getProtocolConfig()`.
-2. Rebuild the transaction using the expected token configuration.
-
----
-
-## PAYER_REPUTATION_TOO_LOW
-
-**What it means**: The payer does not meet the protocol minimum reputation threshold.
-
-**How to fix**:
-1. Check payer reputation and ensure the payer account is eligible.
-2. Use a different payer or re-evaluate the invoice workflow.
-
----
-
-## INSUFFICIENT_BALANCE
-
-**What it means**: The account does not have enough funds (including fees) to complete the transaction.
-
-**How to fix**:
-1. Fund the account (testnet: Friendbot / mainnet: transfer XLM).
-2. Retry.
-
----
-
-## NETWORK_ERROR
-
-**What it means**: The SDK failed to reach the configured Stellar RPC endpoint.
-
-**How to fix**:
-1. Verify `rpcUrl`.
-2. Check connectivity and RPC server health.
-3. Retry.
-
----
-
-## TRANSACTION_FAILED
-
-**What it means**: The contract rejected the transaction during on-chain execution.
-
-**How to fix**:
-1. Review the failure reason (enable debug logging if available).
-2. Verify the invoice state matches the operation (e.g., funded/paid/defaulted).
-3. Confirm fee/resource settings and try isolating the failing operation (especially in batches).
-
----
-
-## VALIDATION_ERROR
-
-**What it means**: Input validation failed before submitting to the network.
-
-**How to fix**:
-1. Validate your inputs using `Validators`.
-2. Ensure field types/constraints match expectations.
-
----
-
-## WALLET_NOT_CONNECTED
-
-**What it means**: A signer is required for state-changing operations, but no signer is configured/available.
-
-**How to fix**:
-1. Provide `signer` in `ILNSdk` configuration.
-2. In browser apps, ensure Freighter is installed/unlocked and the signer is accessible.
-
----
-
-## CONTRACT_ERROR
-
-**What it means**: The contract rejected the transaction, and the SDK could not classify the specific failure reason.
-
-**How to fix**:
-1. Inspect the raw on-chain error details (available via `context.rawError` when present).
-2. Check the invoice/operation parameters and contract state.
-3. Retry with corrected inputs.
-
----
-
-## SIMULATION_FAILED
-
-**What it means**: The SDK could not simulate the transaction successfully.
-
-**How to fix**:
-1. Verify transaction parameters.
-2. Ensure contract state is consistent with the operation.
-3. Retry.
-

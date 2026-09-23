@@ -1,49 +1,88 @@
-# Mutation Testing — Invoice Liquidity Contract
+# Mutation Testing — Invoice Liquidity Network
 
 ## Overview
 
 Mutation testing verifies that the test suite actually detects real bugs by
 introducing small code changes ("mutations") and confirming the tests fail.
-This project uses [cargo-mutants](https://mutants.rs/) against
-`contracts/invoice_liquidity/src/lib.rs`.
 
-**Target mutation score: > 70%** (≥ 70% of generated mutations caught).
+This project currently uses mutation testing in two contexts:
 
----
+| Context | Tool | Target | Status |
+|---|---|---|---|
+| TypeScript SDK | [Stryker](https://stryker-mutator.io/) | `packages/sdk/src/errors.ts` | ✅ Implemented & CI-wired |
+| Rust Smart Contract | [cargo-mutants](https://mutants.rs/) | `contracts/invoice_liquidity/src/lib.rs` | ⏳ Proposal (see below) |
 
-## Running
-
-```bash
-# From the invoice_liquidity contract directory:
-make mutants
-
-# Or directly:
-cargo mutants --package invoice_liquidity
-```
-
-Results are written to `mutants.out/` in the workspace root.
+**Target mutation score: ≥ 80%** for the SDK errors module.
 
 ---
 
-## Mutation Categories Tested
+## Stryker (TypeScript SDK) — Implemented
 
-| Category | Example mutation | Killing test |
-|---|---|---|
-| Comparison flip | `due_date <= now` → `due_date < now` | `mt01_due_date_equal_to_now_is_rejected` |
-| Equality to relational | `amount_funded == amount` → `>=` | `mt02_partial_fund_keeps_status_partially_funded` |
-| Arithmetic increment | `current_score + 1` → `current_score` | `mt03_payer_score_increases_by_exactly_one_on_settlement` |
-| Arithmetic decrement | `current_score - 5` → `current_score - 4` | `mt04_payer_score_decreases_by_exactly_five_on_default` |
-| Guard flip | `current_score > 5` → `current_score > 0` | `mt05_payer_score_floors_at_zero_not_negative` |
-| Boundary off-by-one | `discount_rate > max_rate` → `>=` | `mt06_discount_rate_at_cap_is_accepted` |
-| Formula constant | `500 + (100 - score) * 5` constants mutated | `mt07_suggested_discount_rate_formula` |
+### Configuration
+
+- Config file: `packages/sdk/stryker.config.mjs`
+- Runner: `pnpm test:mutation` (from `packages/sdk/`)
+- CI: `.github/workflows/mutation-testing.yml`
+  - **Scheduled**: runs weekly (Sunday 06:00 UTC)
+  - **PR-triggered**: runs on changes to `errors.ts`, `errors.test.ts`, or Stryker config
+  - **Non-blocking**: results are advisory; the job uses `continue-on-error: true`
+  - **Artifact**: HTML mutation report is uploaded as a workflow artifact (`mutation-report-sdk-errors`) with 30-day retention
+
+### Current Target
+
+**`packages/sdk/src/errors.ts`** — a high-value, self-contained module:
+
+- 20+ structured error classes (ILNError hierarchy)
+- `parseContractError()` — mapping numeric/string contract errors to typed errors
+- `normalizeError()` — converting arbitrary thrown values to ILNError
+- 35+ test cases in `packages/sdk/src/errors.test.ts`
+- No external dependencies (pure TypeScript logic)
+- Fast mutation run (< 30 seconds on CI)
+
+### Adding New Stryker Targets
+
+To add mutation testing for another SDK module:
+
+1. Add the file path to the `mutate` array in `stryker.config.mjs`.
+2. Ensure the module has a corresponding `.test.ts` file with adequate coverage.
+3. The CI workflow automatically picks up the new target on the next run.
+
+---
+
+## cargo-mutants (Rust Smart Contract) — Proposed / Future Work
+
+The original vision for mutation testing was to run
+[cargo-mutants](https://mutants.rs/) against the Rust smart contract at
+`contracts/invoice_liquidity/src/lib.rs`. This capability is **not yet
+implemented** for the following reasons:
+
+- The smart contract lives in a separate repository
+  (`Invoice-Liquidity-Network/ILN-Smart-Contract`), included here as a git
+  submodule.
+- Setting up `cargo-mutants` requires Rust toolchain and is slower than the
+  TypeScript Stryker runs (10-30 minutes per run).
+- A CI workflow for Rust mutation testing would need to be implemented in the
+  `ILN-Smart-Contract` repo or in this repo with access to the submodule.
+
+**To implement in the future:**
+
+1. Install `cargo-mutants`: `cargo install cargo-mutants`
+2. Run: `cargo mutants --package invoice_liquidity`
+3. Results are written to `mutants.out/` in the workspace root.
+4. Add a CI workflow similar to `mutation-testing.yml` targeting
+   `./backend/contracts/invoice_liquidity/`.
+
+> **Status:** This doc has been updated to describe the **actual current state**
+> (Stryker for SDK errors) alongside the **proposed future work** (cargo-mutants
+> for the Rust contract).
 
 ---
 
 ## Known Surviving Mutations
 
-The following mutations are **expected survivors** — they are semantically
-equivalent to the original code in all reachable paths, or they affect code
-paths that are intentionally left unchecked:
+The following mutations are **expected survivors** for the Rust contract target
+— they are semantically equivalent to the original code in all reachable paths,
+or they affect code paths that are intentionally left unchecked:
 
 ### 1. `notify_distribution_*` early-return branches
 
@@ -93,7 +132,16 @@ a constant) would be caught by existing arithmetic tests.
 
 ## Adding New Tests
 
-When cargo-mutants reports a new survivor:
+When a mutation testing tool reports a new survivor:
+
+### Stryker (TypeScript)
+
+1. Identify the mutated line and what invariant it violates.
+2. Add a targeted test to the relevant `.test.ts` file that asserts the exact
+   boundary value differentiating the original from the mutant.
+3. Re-run `pnpm test:mutation` to confirm the new test kills the mutation.
+
+### cargo-mutants (Rust)
 
 1. Identify the mutated line and what invariant it violates.
 2. Add a targeted test to `src/tests_mutation.rs` that asserts the exact
