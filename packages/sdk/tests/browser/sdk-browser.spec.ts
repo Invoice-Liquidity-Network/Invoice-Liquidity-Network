@@ -3,7 +3,6 @@ import { test, expect } from '@playwright/test';
 test.describe('ILN SDK browser bundle', () => {
   test.beforeEach(async ({ page }) => {
     await page.goto('/tests/browser/index.html');
-    // Wait until the module script has run
     await page.waitForFunction(() => (window as any).__ilnReady !== undefined || (window as any).__ilnError !== null);
   });
 
