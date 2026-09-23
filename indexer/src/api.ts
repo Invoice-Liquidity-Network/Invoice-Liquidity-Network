@@ -127,7 +127,7 @@ export function createApp(): express.Application {
     const uptime = Date.now() - startTime;
     const status = dbStatus === 'ok' ? 'ok' : 'degraded';
 
-    res.json({
+    res.setHeader('X-Indexer-As-Of-Block', 'latest'); res.json({
       status,
       db: dbStatus,
       lastSync: lastSyncMs !== null ? new Date(lastSyncMs).toISOString() : null,
@@ -154,7 +154,7 @@ export function createApp(): express.Application {
 
     const cached = await cacheGet(cacheKey);
     if (cached) {
-      res.json(JSON.parse(cached));
+      res.setHeader('X-Indexer-As-Of-Block', 'latest'); res.json(JSON.parse(cached));
       return;
     }
 
@@ -171,11 +171,11 @@ export function createApp(): express.Application {
 
     const result = { invoices, hasMore, nextCursor };
     await cacheSet(cacheKey, JSON.stringify(result));
-    res.json(result);
+    res.setHeader('X-Indexer-As-Of-Block', 'latest'); res.json(result);
   });
 
   router.get('/stats', (_req: Request, res: Response) => {
-    res.json(getProtocolStats());
+    res.setHeader('X-Indexer-As-Of-Block', 'latest'); res.json(getProtocolStats());
   });
 
   router.get('/lps/top', (req: Request, res: Response) => {
@@ -188,15 +188,15 @@ export function createApp(): express.Application {
       return;
     }
 
-    res.json(getTopLPs(limit, period));
+    res.setHeader('X-Indexer-As-Of-Block', 'latest'); res.json(getTopLPs(limit, period));
   });
 
   router.get('/lps/:address/stats', (req: Request, res: Response) => {
-    res.json(getLPStats(req.params.address));
+    res.setHeader('X-Indexer-As-Of-Block', 'latest'); res.json(getLPStats(req.params.address));
   });
 
   router.get('/freelancers/:address/stats', (req: Request, res: Response) => {
-    res.json(getFreelancerStats(req.params.address));
+    res.setHeader('X-Indexer-As-Of-Block', 'latest'); res.json(getFreelancerStats(req.params.address));
   });
 
   router.get('/history/:address', (req: Request, res: Response) => {
@@ -209,7 +209,7 @@ export function createApp(): express.Application {
       return;
     }
 
-    res.json(getInvoiceHistory(req.params.address, role));
+    res.setHeader('X-Indexer-As-Of-Block', 'latest'); res.json(getInvoiceHistory(req.params.address, role));
   });
 
   // GET /invoice/:id
@@ -224,7 +224,7 @@ export function createApp(): express.Application {
     const cacheKey = `invoice:${id}`;
     const cached = await cacheGet(cacheKey);
     if (cached) {
-      res.json(JSON.parse(cached));
+      res.setHeader('X-Indexer-As-Of-Block', 'latest'); res.json(JSON.parse(cached));
       return;
     }
 
@@ -236,17 +236,17 @@ export function createApp(): express.Application {
 
     const result = { invoice };
     await cacheSet(cacheKey, JSON.stringify(result));
-    res.json(result);
+    res.setHeader('X-Indexer-As-Of-Block', 'latest'); res.json(result);
   });
 
   // GET /dashboard
   router.get('/dashboard', (_req: Request, res: Response) => {
-    res.json(getDashboardMetrics());
+    res.setHeader('X-Indexer-As-Of-Block', 'latest'); res.json(getDashboardMetrics());
   });
 
   // GET /archive/stats
   router.get('/archive/stats', (_req: Request, res: Response) => {
-    res.json(getArchiveStats());
+    res.setHeader('X-Indexer-As-Of-Block', 'latest'); res.json(getArchiveStats());
   });
 
   // GET /archive/invoices
@@ -258,14 +258,14 @@ export function createApp(): express.Application {
       payer: typeof payer === 'string' ? payer : undefined,
       funder: typeof funder === 'string' ? funder : undefined,
     };
-    res.json({ invoices: queryArchiveInvoices(filter) });
+    res.setHeader('X-Indexer-As-Of-Block', 'latest'); res.json({ invoices: queryArchiveInvoices(filter) });
   });
 
   // GET /archive/events
   router.get('/archive/events', (req: Request, res: Response) => {
     const invoiceId =
       typeof req.query.invoiceId === 'string' ? parseInt(req.query.invoiceId, 10) : undefined;
-    res.json({
+    res.setHeader('X-Indexer-As-Of-Block', 'latest'); res.json({
       events: queryArchiveEvents(
         invoiceId !== undefined && isNaN(invoiceId) ? undefined : invoiceId
       ),
@@ -284,7 +284,7 @@ export function createApp(): express.Application {
       res.status(404).json({ error: `Invoice #${id} not found in archive` });
       return;
     }
-    res.json({
+    res.setHeader('X-Indexer-As-Of-Block', 'latest'); res.json({
       success: true,
       message: `Invoice #${id} and associated events restored successfully`,
     });
@@ -295,7 +295,7 @@ export function createApp(): express.Application {
     const olderThanDays = typeof req.body?.olderThanDays === 'number' ? req.body.olderThanDays : 90;
     try {
       const result = archiveOldData(olderThanDays);
-      res.json({ success: true, ...result });
+      res.setHeader('X-Indexer-As-Of-Block', 'latest'); res.json({ success: true, ...result });
     } catch (error: any) {
       res.status(500).json({ error: error.message || 'Archival run failed' });
     }
@@ -307,7 +307,7 @@ export function createApp(): express.Application {
     try {
       const manifest = await backupManager.runBackup();
       if (manifest) {
-        res.json({ success: true, backup: manifest });
+        res.setHeader('X-Indexer-As-Of-Block', 'latest'); res.json({ success: true, backup: manifest });
       } else {
         res.status(500).json({ error: 'Backup failed' });
       }
@@ -321,14 +321,14 @@ export function createApp(): express.Application {
   // GET /backup — list backups
   app.get('/backup', (_req: Request, res: Response) => {
     const backups = backupManager.listBackups();
-    res.json({ backups, total: backups.length });
+    res.setHeader('X-Indexer-As-Of-Block', 'latest'); res.json({ backups, total: backups.length });
   });
 
   // GET /backup/latest — get the latest backup manifest
   app.get('/backup/latest', (_req: Request, res: Response) => {
     const latest = backupManager.getLatestBackup();
     if (latest) {
-      res.json(latest);
+      res.setHeader('X-Indexer-As-Of-Block', 'latest'); res.json(latest);
     } else {
       res.status(404).json({ error: 'No backups found' });
     }
@@ -345,7 +345,7 @@ export function createApp(): express.Application {
 
     try {
       await backupManager.restore({ backupPath, verify: verify !== false });
-      res.json({ success: true, message: 'Restore complete' });
+      res.setHeader('X-Indexer-As-Of-Block', 'latest'); res.json({ success: true, message: 'Restore complete' });
     } catch (err) {
       res.status(500).json({
         success: false,
@@ -394,7 +394,7 @@ export function createApp(): express.Application {
       res.send(invoicesToCsv(invoices));
     } else {
       res.setHeader('Content-Disposition', 'attachment; filename="invoices.json"');
-      res.json(invoices);
+      res.setHeader('X-Indexer-As-Of-Block', 'latest'); res.json(invoices);
     }
   });
 
@@ -435,7 +435,7 @@ export function createApp(): express.Application {
       res.send(eventsToCsv(events));
     } else {
       res.setHeader('Content-Disposition', 'attachment; filename="events.json"');
-      res.json(events);
+      res.setHeader('X-Indexer-As-Of-Block', 'latest'); res.json(events);
     }
   });
 
@@ -492,7 +492,7 @@ export function createApp(): express.Application {
       res.status(404).json({ error: 'Export job not found' });
       return;
     }
-    res.json({
+    res.setHeader('X-Indexer-As-Of-Block', 'latest'); res.json({
       jobId: job.jobId,
       type: job.type,
       format: job.format,
