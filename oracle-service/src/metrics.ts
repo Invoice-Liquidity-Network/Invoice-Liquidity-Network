@@ -37,15 +37,41 @@ export interface OracleMetrics {
   cacheMissesTotal: client.Counter<string>;
   staleResponsesTotal: client.Counter<string>;
   verificationDuration: client.Histogram<string>;
-  fetchDuration: client.Histogram<string>;
-  aggregateDuration: client.Histogram<string>;
-  publishDuration: client.Histogram<string>;
-  fetchSloViolationsTotal: client.Counter<string>;
-  aggregateSloViolationsTotal: client.Counter<string>;
-  publishSloViolationsTotal: client.Counter<string>;
-  degradedResponsesTotal: client.Counter<string>;
-  lastKnownGoodAgeSeconds: client.Gauge<string>;
+  /** Verdicts partitioned by composition outcome — the alerting signal. */
+  verificationOutcomeTotal: client.Counter<string>;
+  /** Individual fraud heuristics as they fire, by signal name. */
+  fraudSignalTotal: client.Counter<string>;
+  /** Rolling share of verdicts carrying at least one fraud signal, 0..1. */
+  fraudFlagRatio: client.Gauge<string>;
+  /** External provider lookups by resulting status. */
+  externalVerificationTotal: client.Counter<string>;
+  /** Attributed cost in USD */
+  costUsdTotal: client.Counter<string>;
+  /** SLO error-budget burn rate */
+  sloErrorBudgetBurn: client.Gauge<string>;
+  /** Latency SLO violations */
+  latencySloViolationsTotal: client.Counter<string>;
+  /** Record one verdict against the outcome, fraud and ratio metrics. */
+  recordVerificationOutcome(result: VerificationOutcomeSample): void;
 }
+
+export interface VerificationOutcomeSample {
+  outcome: string;
+  fraudSignals: string[];
+  externalStatus: string;
+  cacheHit: boolean;
+}
+
+/**
+ * Window over which the fraud-flag ratio is computed.
+ *
+ * A counter alone cannot answer "is the *share* of flagged submissions
+ * abnormal?" without a rate() over two series, and the alert we actually want
+ * — a sudden spike in fraud-flagged submissions, which signals either an attack
+ * or a broken heuristic — is naturally expressed against a ratio. Keeping a
+ * bounded in-process window makes that ratio available directly.
+ */
+export const FRAUD_RATIO_WINDOW = 200;
 
 export function createOracleMetrics(): OracleMetrics {
   const registry = new client.Registry();
@@ -82,56 +108,96 @@ export function createOracleMetrics(): OracleMetrics {
     registers: [registry],
   });
 
-  const fetchDuration = new client.Histogram({
-    name: 'oracle_fetch_duration_seconds',
-    help: 'Oracle source-fetch stage latency in seconds (indexer history + on-chain reputation)',
-    buckets: [0.01, 0.05, 0.1, 0.25, 0.5, 1, 2, 5],
+  const verificationOutcomeTotal = new client.Counter({
+    name: 'oracle_verification_outcome_total',
+    help: 'Oracle verification verdicts by composition outcome',
+    labelNames: ['outcome', 'external_status', 'cache_hit'] as const,
     registers: [registry],
   });
 
-  const aggregateDuration = new client.Histogram({
-    name: 'oracle_aggregate_duration_seconds',
-    help: 'Oracle aggregate stage latency in seconds (trust-score computation)',
-    buckets: [0.01, 0.05, 0.1, 0.25, 0.5, 1, 2, 5],
+  const fraudSignalTotal = new client.Counter({
+    name: 'oracle_fraud_signal_total',
+    help: 'Individual fraud heuristics fired, by signal',
+    labelNames: ['signal'] as const,
     registers: [registry],
   });
 
-  const publishDuration = new client.Histogram({
-    name: 'oracle_publish_duration_seconds',
-    help: 'Oracle publish stage latency in seconds (cache write + response serialization)',
-    buckets: [0.01, 0.05, 0.1, 0.25, 0.5, 1, 2, 5],
+  const fraudFlagRatio = new client.Gauge({
+    name: 'oracle_fraud_flag_ratio',
+    help: `Share of the last ${FRAUD_RATIO_WINDOW} verdicts carrying a fraud signal (0..1)`,
     registers: [registry],
   });
 
-  const fetchSloViolationsTotal = new client.Counter({
-    name: 'oracle_fetch_slo_violations_total',
-    help: 'Total number of fetch-stage executions breaching FETCH_SLO_MS',
+  const externalVerificationTotal = new client.Counter({
+    name: 'oracle_external_verification_total',
+    help: 'External provider lookups by resulting status',
+    labelNames: ['status'] as const,
     registers: [registry],
   });
 
-  const aggregateSloViolationsTotal = new client.Counter({
-    name: 'oracle_aggregate_slo_violations_total',
-    help: 'Total number of aggregate-stage executions breaching AGGREGATE_SLO_MS',
+  const costUsdTotal = new client.Counter({
+    name: 'oracle_cost_usd_total',
+    help: 'Attributed cost in USD by operation',
+    labelNames: ['operation'] as const,
     registers: [registry],
   });
 
-  const publishSloViolationsTotal = new client.Counter({
-    name: 'oracle_publish_slo_violations_total',
-    help: 'Total number of publish-stage executions breaching PUBLISH_SLO_MS',
+  const sloErrorBudgetBurn = new client.Gauge({
+    name: 'oracle_slo_error_budget_burn',
+    help: 'Current SLO error-budget burn rate by SLO name',
+    labelNames: ['slo'] as const,
     registers: [registry],
   });
 
-  const degradedResponsesTotal = new client.Counter({
-    name: 'oracle_degraded_responses_total',
-    help: 'Total number of degraded-mode (last-known-good) responses served',
+  const latencySloViolationsTotal = new client.Counter({
+    name: 'oracle_latency_slo_violations_total',
+    help: 'Count of verification latency SLO violations (p95 > threshold)',
     registers: [registry],
   });
 
-  const lastKnownGoodAgeSeconds = new client.Gauge({
-    name: 'oracle_last_known_good_age_seconds',
-    help: 'Age in seconds of the last-known-good cached response served in degraded mode',
-    registers: [registry],
-  });
+  // Bounded ring of recent verdicts backing the ratio gauge.
+  const recentFlags: boolean[] = [];
+
+  function recordVerificationOutcome(result: VerificationOutcomeSample): void {
+    verificationOutcomeTotal.inc({
+      outcome: result.outcome,
+      external_status: result.externalStatus,
+      cache_hit: String(result.cacheHit),
+    });
+
+    externalVerificationTotal.inc({ status: result.externalStatus });
+
+    for (const signal of result.fraudSignals) {
+      fraudSignalTotal.inc({ signal });
+    }
+
+    // Cache hits are replays of an earlier verdict, not new observations.
+    // Counting them would let one flagged payer retrying in a loop drag the
+    // ratio up and page someone for a single actor.
+    if (result.cacheHit) {
+      return;
+    }
+
+    recentFlags.push(result.fraudSignals.length > 0);
+    if (recentFlags.length > FRAUD_RATIO_WINDOW) {
+      recentFlags.shift();
+    }
+
+    const flagged = recentFlags.filter(Boolean).length;
+    fraudFlagRatio.set(recentFlags.length === 0 ? 0 : flagged / recentFlags.length);
+  }
+
+  // Cost attribution: $0.001 per verification (RPC + attestation)
+  function observeVerificationCost(): void {
+    try {
+      costUsdTotal.inc({ operation: 'verification' }, 0.001);
+    } catch {}
+  }
+
+  const wrappedRecordVerificationOutcome = (result: VerificationOutcomeSample): void => {
+    recordVerificationOutcome(result);
+    observeVerificationCost();
+  };
 
   return {
     registry,
@@ -140,13 +206,13 @@ export function createOracleMetrics(): OracleMetrics {
     cacheMissesTotal,
     staleResponsesTotal,
     verificationDuration,
-    fetchDuration,
-    aggregateDuration,
-    publishDuration,
-    fetchSloViolationsTotal,
-    aggregateSloViolationsTotal,
-    publishSloViolationsTotal,
-    degradedResponsesTotal,
-    lastKnownGoodAgeSeconds,
+    verificationOutcomeTotal,
+    fraudSignalTotal,
+    fraudFlagRatio,
+    externalVerificationTotal,
+    costUsdTotal,
+    sloErrorBudgetBurn,
+    latencySloViolationsTotal,
+    recordVerificationOutcome: wrappedRecordVerificationOutcome,
   };
 }

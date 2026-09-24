@@ -58,14 +58,16 @@ jobs:
         run: pnpm --filter "@invoice-liquidity/cli..." build
 
       - name: Pack the CLI and its unpublished workspace dependencies
-        # The CLI depends on @iln/sdk, which is not published to npm. `pnpm pack`
-        # rewrites the `workspace:*` specifiers to the real versions, so installing
-        # both tarballs together lets npm resolve the internal graph locally while
-        # fetching the published deps (commander, @stellar/*, ...) normally.
+        # The CLI depends on @iln/sdk, which depends on @iln/shared; neither is
+        # published to npm. `pnpm pack` rewrites the `workspace:*` specifiers to
+        # the real versions, so installing all of the tarballs together lets npm
+        # resolve the internal graph locally while fetching the published deps
+        # (commander, @stellar/*, ...) normally.
         run: |
           set -euo pipefail
           TARBALLS="$RUNNER_TEMP/iln-tarballs"
           mkdir -p "$TARBALLS"
+          ( cd packages/shared && pnpm pack --pack-destination "$TARBALLS" )
           ( cd sdk && pnpm pack --pack-destination "$TARBALLS" )
           ( cd cli && pnpm pack --pack-destination "$TARBALLS" )
           echo "Packed tarballs:"

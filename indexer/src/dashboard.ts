@@ -60,18 +60,38 @@ export function recordError(errorType: string, message: string): void {
 export function sanitizeOperationalError(message: string): string {
   const firstLine = message.split(/\r?\n/, 1)[0];
   return firstLine
+    // Full connection strings for known database schemes - drop the whole thing.
     .replace(
-      /(?:postgres(?:ql)?|mysql|mongodb(?:\+srv)?|redis):\/\/\S+/gi,
+      /(?:postgres(?:ql)?|mysql|mongodb(?:\+srv)?|redis|sqlite|amqp):\/\/\S+/gi,
       '[REDACTED_CONNECTION_URL]'
     )
-    .replace(/(api[_-]?key|token|secret|password)\s*[=:]\s*\S+/gi, '$1=[REDACTED]')
+    // user:password@ embedded in any URL (http, https, custom schemes, ...).
+    .replace(/([a-z][a-z0-9+.-]*):\/\/([^/\s:@]+):([^/\s@]+)@/gi, '$1://[REDACTED_CREDENTIALS]@')
+    // key=value / key: value for well-known secret field names, tolerating
+    // JSON-style quoting ("password":"hunter2") around the separator.
+    .replace(
+      /(api[_-]?key|token|secret|password|passwd|pwd)\s*["']?\s*[=:]\s*["']?[^\s"',}\]\\]+/gi,
+      '$1=[REDACTED]'
+    )
+    // Authorization header values (Bearer/Basic/Digest <credential>).
+    .replace(/(Bearer|Basic|Digest)\s+[A-Za-z0-9._~+/-]+=*/gi, '$1 [REDACTED_AUTH]')
+    // AWS-style access key ids.
+    .replace(/AKIA[0-9A-Z]{16}/g, '[REDACTED_AWS_KEY]')
     .replace(/(?:[A-Za-z]:\\|\/(?:home|Users|var|opt|srv)\/)[^\s:]+/g, '[REDACTED_PATH]')
     .slice(0, 240);
 }
 
 export function getDashboardMetrics(): DashboardMetrics {
   const now = Date.now();
-  const lastSyncMs = getCursorUpdatedAt();
+  // The dashboard is externally readable - a failing metrics query must degrade
+  // to nulls instead of throwing (which would surface an error page + stack
+  // trace to the caller).
+  let lastSyncMs: number | null = null;
+  try {
+    lastSyncMs = getCursorUpdatedAt();
+  } catch {
+    lastSyncMs = null;
+  }
   const uptimeSeconds = Math.floor((now - startTime) / 1000);
 
   return {

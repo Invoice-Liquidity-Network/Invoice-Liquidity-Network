@@ -19,19 +19,24 @@ const request: OracleVerificationRequest = {
   invoiceId: '99',
 };
 
+// A genuinely healthy history: amounts spread far outside the 5% similar-amount
+// band, creations five days apart so the rapid-succession heuristic stays
+// quiet, and every settlement taking exactly ten days so variance is zero.
+// The previous fixture had four amounts within 2% of the request, which tripped
+// the similar-amount heuristic and made `isVerified: true` unreachable.
 const healthyHistory: IndexerInvoiceHistoryEntry[] = [
   {
     id: 1,
     freelancer: 'G1',
     payer: request.payer,
-    amount: '9800000',
+    amount: '8000000',
     due_date: 0,
     discount_rate: 300,
     status: 'Paid',
     funder: 'G2',
-    funded_at: 1_700_000_000,
-    created_at: 1_700_000_000_000,
-    updated_at: 1_700_259_200_000,
+    funded_at: 1700000000000,
+    created_at: 1700000000000,
+    updated_at: 1700864000000,
   },
   {
     id: 2,
@@ -42,37 +47,40 @@ const healthyHistory: IndexerInvoiceHistoryEntry[] = [
     discount_rate: 300,
     status: 'Paid',
     funder: 'G2',
-    funded_at: 1_700_300_000,
-    created_at: 1_700_300_000_000,
-    updated_at: 1_700_560_000_000,
+    funded_at: 1700432000000,
+    created_at: 1700432000000,
+    updated_at: 1701296000000,
   },
   {
     id: 3,
     freelancer: 'G1',
     payer: request.payer,
-    amount: '10200000',
+    amount: '12000000',
     due_date: 0,
     discount_rate: 300,
     status: 'Paid',
     funder: 'G2',
-    funded_at: 1_700_600_000,
-    created_at: 1_700_600_000_000,
-    updated_at: 1_700_860_000_000,
+    funded_at: 1700864000000,
+    created_at: 1700864000000,
+    updated_at: 1701728000000,
   },
   {
     id: 4,
     freelancer: 'G1',
     payer: request.payer,
-    amount: '10100000',
+    amount: '14000000',
     due_date: 0,
     discount_rate: 300,
     status: 'Defaulted',
     funder: 'G2',
-    funded_at: 1_700_900_000,
-    created_at: 1_700_900_000_000,
-    updated_at: 1_701_000_000_000,
+    funded_at: 1701296000000,
+    created_at: 1701296000000,
+    updated_at: 1702160000000,
   },
 ];
+
+/** Newest source timestamp across the healthy fixture. */
+const HEALTHY_LATEST_MS = 1702160000000;
 
 const fraughtHistory: IndexerInvoiceHistoryEntry[] = [
   {
@@ -133,19 +141,24 @@ describe('oracle verifier calculations', () => {
   });
 
   it('computes a strong trust score for healthy history', () => {
+    // Anchored just past the fixture's newest timestamp so the data stays
+    // inside maxOracleAgeMs. The previous value sat 240,000,000 ms past it, so
+    // the assessment was always stale and `isVerified` could never be true.
     const assessment = assessOracleRequest({
       request,
       reputation,
       history: healthyHistory,
-      nowMs: 1_701_100_000_000,
+      nowMs: HEALTHY_LATEST_MS + 60_000,
       maxOracleAgeMs: 10_000_000,
+      nowMs: 1_701_100_000_000,
+      maxOracleAgeMs: 150_000_000,
     });
 
     expect(assessment.response.trustScore).toBeGreaterThan(60);
     expect(assessment.response.confidence).toBeGreaterThan(0.5);
     expect(assessment.response.isVerified).toBe(true);
     expect(assessment.response.historicalDefaultRate).toBeCloseTo(0.25, 2);
-    expect(assessment.response.averageHistoricalAmount).toBe('10025000');
+    expect(assessment.response.averageHistoricalAmount).toBe('11000000');
   });
 
   it('flags concentrated short-window activity as risk', () => {
@@ -371,3 +384,70 @@ describe('oracle verifier numeric normalization - property-based tests', () => {
     expect(normalizeTimestampToMs('1700000000000')).toBe(1_700_000_000_000);
   });
 });
+
+describe('pluggable KYB provider integration (#868)', () => {
+  it('composes external KYB provider results into oracle verification', async () => {
+    const { MockKYBProvider } = await import('./kyb/mockProvider');
+    const mockKyb = new MockKYBProvider({
+      knownBusinesses: {
+        [request.payer]: {
+          isVerified: true,
+          businessName: 'Acme Corp Technologies Inc.',
+          registrationNumber: 'US-DE-12345678',
+          jurisdiction: 'US-DE',
+          riskScore: 5,
+        },
+      },
+    });
+
+    const verifier = new OracleVerifier({
+      historyProvider: async () => healthyHistory,
+      reputationProvider: async () => reputation,
+      kybProvider: mockKyb,
+      now: () => 1_701_000_100_000,
+    });
+
+    const response = await verifier.verify(request);
+
+    expect(response.isVerified).toBe(true);
+    expect(response.kybResult).toBeDefined();
+    expect(response.kybResult?.provider).toBe('MockKYBProvider');
+    expect(response.kybResult?.isVerified).toBe(true);
+    expect(response.kybResult?.businessName).toBe('Acme Corp Technologies Inc.');
+    expect(
+      response.evidence.some((e) => e.includes('KYB verification (MockKYBProvider): VERIFIED'))
+    ).toBe(true);
+  });
+
+  it('fails verification when external KYB provider rejects business entity', async () => {
+    const { MockKYBProvider } = await import('./kyb/mockProvider');
+    const mockKyb = new MockKYBProvider({
+      knownBusinesses: {
+        [request.payer]: {
+          isVerified: false,
+          businessName: 'Suspicious Ghost Entity LLC',
+          registrationNumber: 'INVALID-000',
+          jurisdiction: 'XX',
+          signals: ['Registration revoked by corporate registrar'],
+        },
+      },
+    });
+
+    const verifier = new OracleVerifier({
+      historyProvider: async () => healthyHistory,
+      reputationProvider: async () => reputation,
+      kybProvider: mockKyb,
+      now: () => 1_701_000_100_000,
+    });
+
+    const response = await verifier.verify(request);
+
+    expect(response.isVerified).toBe(false);
+    expect(response.kybResult?.isVerified).toBe(false);
+    expect(response.fraudSignals.some((s) => s.includes('KYB provider'))).toBe(true);
+    expect(
+      response.evidence.some((e) => e.includes('KYB verification (MockKYBProvider): UNVERIFIED'))
+    ).toBe(true);
+  });
+});
+

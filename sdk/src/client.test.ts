@@ -549,3 +549,89 @@ describe('ILNSdk', () => {
     vi.useRealTimers();
   });
 });
+
+describe('Signer Identity Trust Model Verification', () => {
+  // Trust Model: "State-changing operations verify the signer public key matches
+  // the expected freelancer, funder, or payer address when required.
+  // This prevents SDK calls from being signed by the wrong account."
+
+  it('submitInvoice rejects signer mismatch with freelancer address', async () => {
+    const wrongSigner = createKeypairSigner(Keypair.random().secret());
+    const correctFreelancer = Keypair.random().publicKey();
+    const server = {} as RpcServerLike;
+
+    const sdk = createSdk(server, wrongSigner);
+
+    await expect(
+      sdk.submitInvoice({
+        freelancer: correctFreelancer,
+        payer: Keypair.random().publicKey(),
+        amount: 10000000n,
+        dueDate: Math.floor(Date.now() / 1000) + 86400,
+        discountRate: 250,
+      })
+    ).rejects.toThrow('submitInvoice must be signed by the freelancer address.');
+  });
+
+  it('fundInvoice rejects signer mismatch with funder address', async () => {
+    const wrongSigner = createKeypairSigner(Keypair.random().secret());
+    const correctFunder = Keypair.random().publicKey();
+    const server = {} as RpcServerLike;
+
+    const sdk = createSdk(server, wrongSigner);
+
+    await expect(
+      sdk.fundInvoice({
+        funder: correctFunder,
+        invoiceId: 1n,
+      })
+    ).rejects.toThrow('fundInvoice must be signed by the funder address.');
+  });
+
+  it('claimDefault rejects signer mismatch with funder address', async () => {
+    const wrongSigner = createKeypairSigner(Keypair.random().secret());
+    const correctFunder = Keypair.random().publicKey();
+    const server = {} as RpcServerLike;
+
+    const sdk = createSdk(server, wrongSigner);
+
+    await expect(
+      sdk.claimDefault({
+        funder: correctFunder,
+        invoiceId: 1n,
+      })
+    ).rejects.toThrow('claimDefault must be signed by the funder address.');
+  });
+
+  it('submitInvoice succeeds when signer matches freelancer', async () => {
+    const freelancerKeypair = Keypair.random();
+    const signer = createKeypairSigner(freelancerKeypair.secret());
+    const server = {
+      getAccount: vi.fn().mockResolvedValue(new Account(freelancerKeypair.publicKey(), '12')),
+      prepareTransaction: vi.fn().mockImplementation(async (tx) => tx),
+      sendTransaction: vi.fn().mockResolvedValue({
+        hash: 'a'.repeat(64),
+        status: 'PENDING',
+      }),
+      pollTransaction: vi.fn().mockResolvedValue({
+        status: rpc.Api.GetTransactionStatus.SUCCESS,
+      }),
+      simulateTransaction: vi.fn().mockResolvedValue({
+        result: {
+          retval: nativeToScVal(11n, { type: 'u64' }),
+        },
+      }),
+    } satisfies RpcServerLike;
+
+    const sdk = createSdk(server, signer);
+    const invoiceId = await sdk.submitInvoice({
+      amount: 10000000n,
+      discountRate: 250,
+      dueDate: Math.floor(Date.now() / 1000) + 86400,
+      freelancer: freelancerKeypair.publicKey(),
+      payer: Keypair.random().publicKey(),
+    });
+
+    expect(invoiceId).toBe(11n);
+  });
+});

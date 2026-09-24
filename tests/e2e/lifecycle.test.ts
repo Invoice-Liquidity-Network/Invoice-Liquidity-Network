@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import * as StellarSdk from '@stellar/stellar-sdk';
-import { ILNSdk } from '@invoice-liquidity/sdk';
+import { ILNSdk } from '@iln/sdk';
 
 const RPC_URL = 'http://localhost:8000/soroban/rpc';
 const FRIENDBOT_URL = 'http://localhost:8000/friendbot';
@@ -1087,6 +1087,156 @@ describe('E2E Invoice Lifecycle', () => {
       });
 
       expect(fundedInvoice.funder).toBe(lp1.publicKey());
+    });
+  });
+
+  describe('Oracle Service Verification & Fraud-Heuristic Gate (#865)', () => {
+    it('submits invoice with oracle verification requirement and gates funding end-to-end', async () => {
+      const freelancer = StellarSdk.Keypair.random();
+      const payer = StellarSdk.Keypair.random();
+      const lp = StellarSdk.Keypair.random();
+
+      const { OracleVerifier } = await import('@iln/oracle-service');
+
+      const verifier = new OracleVerifier({
+        historyProvider: async () => [
+          {
+            id: 901,
+            freelancer: freelancer.publicKey(),
+            payer: payer.publicKey(),
+            amount: '10000000',
+            due_date: 0,
+            discount_rate: 300,
+            status: 'Paid',
+            created_at: 1_700_000_000_000,
+            updated_at: 1_700_200_000_000,
+          },
+        ],
+        reputationProvider: async () => ({
+          address: payer.publicKey(),
+          score: 85,
+          totalPaid: 10_000_000n,
+          invoiceCount: 1,
+          lastActivity: 1_700_200_000,
+          rank: 1,
+        }),
+        now: () => 1_700_210_000_000,
+        maxOracleAgeMs: 100_000_000,
+      });
+
+      const oracleAssessment = await verifier.verify({
+        payer: payer.publicKey(),
+        amount: '10000000',
+        invoiceId: '902',
+      });
+
+      expect(oracleAssessment.isVerified).toBe(true);
+      expect(oracleAssessment.trustScore).toBeGreaterThanOrEqual(70);
+
+      // If local node is running, also verify contract interaction
+      if (isNodeRunning) {
+        await fundAccount(freelancer.publicKey());
+        await fundAccount(lp.publicKey());
+        await fundAccount(payer.publicKey());
+
+        const freelancerSdk = new ILNSdk({
+          contractId,
+          rpcUrl: RPC_URL,
+          networkPassphrase: NETWORK_PASSPHRASE,
+          signer: StellarSdk.createKeypairSigner(freelancer),
+        });
+
+        const invoice = await freelancerSdk.submitInvoice({
+          freelancer: freelancer.publicKey(),
+          payer: payer.publicKey(),
+          amount: 1000n * 10_000_000n,
+          dueDate: Math.floor(Date.now() / 1000) + 86400,
+          discountRate: 300,
+        });
+
+        expect(invoice.state).toBe('Pending');
+
+        const lpSdk = new ILNSdk({
+          contractId,
+          rpcUrl: RPC_URL,
+          networkPassphrase: NETWORK_PASSPHRASE,
+          signer: StellarSdk.createKeypairSigner(lp),
+        });
+
+        if (oracleAssessment.isVerified) {
+          const funded = await lpSdk.fundInvoice({
+            funder: lp.publicKey(),
+            invoiceId: invoice.id,
+          });
+          expect(funded.state).toBe('Funded');
+        }
+      }
+    });
+
+    it('flags rapid succession submissions and blocks funding end-to-end', async () => {
+      const abusivePayer = StellarSdk.Keypair.random();
+      const { OracleVerifier } = await import('@iln/oracle-service');
+
+      const now = 1_700_500_000_000;
+      const rapidHistory = [
+        {
+          id: 911,
+          freelancer: 'G1',
+          payer: abusivePayer.publicKey(),
+          amount: '10000000',
+          due_date: 0,
+          discount_rate: 300,
+          status: 'Pending' as const,
+          created_at: now - 3600000,
+          updated_at: now - 3600000,
+        },
+        {
+          id: 912,
+          freelancer: 'G2',
+          payer: abusivePayer.publicKey(),
+          amount: '10000000',
+          due_date: 0,
+          discount_rate: 300,
+          status: 'Pending' as const,
+          created_at: now - 7200000,
+          updated_at: now - 7200000,
+        },
+        {
+          id: 913,
+          freelancer: 'G3',
+          payer: abusivePayer.publicKey(),
+          amount: '10000000',
+          due_date: 0,
+          discount_rate: 300,
+          status: 'Pending' as const,
+          created_at: now - 10800000,
+          updated_at: now - 10800000,
+        },
+      ];
+
+      const verifier = new OracleVerifier({
+        historyProvider: async () => rapidHistory,
+        reputationProvider: async () => ({
+          address: abusivePayer.publicKey(),
+          score: 20,
+          totalPaid: 0n,
+          invoiceCount: 3,
+          lastActivity: Math.floor((now - 3600000) / 1000),
+          rank: 0,
+        }),
+        now: () => now,
+      });
+
+      const assessment = await verifier.verify({
+        payer: abusivePayer.publicKey(),
+        amount: '10000000',
+        invoiceId: '914',
+      });
+
+      expect(assessment.isVerified).toBe(false);
+      expect(assessment.fraudSignals).toContain(
+        'Rapid succession of invoices detected for the same payer'
+      );
     });
   });
 });

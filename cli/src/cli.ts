@@ -1628,6 +1628,12 @@ export async function runCli(
     await program.parseAsync(resolvedArgv, { from: 'user' });
     return 0;
   } catch (error: any) {
+    // commander's .exitOverride() converts informational exits (--help,
+    // --version) into thrown CommanderError instances with exitCode 0.
+    // Treat those as success instead of printing them as errors.
+    if (typeof error?.exitCode === 'number' && error.exitCode === 0) {
+      return 0;
+    }
     const isJson = program.opts().json;
     if (isJson) {
       if (isStructuredError(error)) {

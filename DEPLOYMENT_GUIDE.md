@@ -576,47 +576,33 @@ To modify trigger events or notification behavior:
 
 ---
 
-## Safety Mechanisms
-
-### Dry-Run Mode
-
-Both `scripts/deploy.ts` and `scripts/verify-deployment.ts` support a `--dry-run`
-flag that prints what would happen without executing any state-changing action.
-
-```bash
-# Preview a mainnet deployment without actually deploying
-npx ts-node scripts/deploy.ts --network=mainnet --dry-run
-
-# Preview verification without fetching on-chain bytecode
-npx ts-node scripts/verify-deployment.ts --contract-id <id> --dry-run
-```
-
-### Interactive Confirmation for Non-Testnet Targets
-
-When deploying to any network other than `testnet` (e.g. `mainnet`), the deploy
-script prompts the user to type the network name to confirm:
-
-```
-⚠️  WARNING: You are about to deploy to "mainnet".
-   Type "mainnet" to confirm, or press Ctrl-C to abort:
-> mainnet
-```
-
-This prompt is automatically skipped when:
-
-- `--dry-run` is active (no state change occurs)
-- `--yes` or `--ci` is passed (for automated/CI environments)
-
-### Rollback
-
-The deploy script automatically backs up `.env` and `README.md` before making
-changes. If deployment fails after the contract is deployed but before the
-runtime config is updated, the script restores the original files. The deployed
-contract is left orphaned (safe to ignore or clean up manually).
-
----
-
-**Status**: ✅ Ready for Production  
-**Date**: 2026-06-02  
-**Branch**: `docs/changelog-page`  
 **Deployment Target**: Main repository with CI automation
+
+## Docker Deployment Tooling
+
+The network uses Docker-based tooling for repeatable, isolated deployments and environment seeding.
+
+### Contract Deployer
+
+The `contract-deployer/` directory contains the Dockerfile and script used to deploy the Soroban contracts.
+It compiles the contracts, generates a deployment admin key, funds it, and deploys the WASM to the network.
+
+To use the deployer:
+```bash
+cd contract-deployer
+docker build -t iln-contract-deployer .
+docker run --network host -v $(pwd)/../.docker-output:/workspace/.docker-output iln-contract-deployer
+```
+The deployed contract ID will be written to `.docker-output/contract-id.txt`.
+
+### Account Seeder
+
+The `account-seeder/` directory contains tooling to bootstrap test accounts and assets.
+It is primarily used for local development and testnet environments.
+
+To use the seeder:
+```bash
+cd account-seeder
+docker build -t iln-account-seeder .
+docker run --network host -v $(pwd)/../.docker-output:/workspace/.docker-output iln-account-seeder
+```

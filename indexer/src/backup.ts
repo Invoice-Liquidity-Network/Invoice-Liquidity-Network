@@ -1,4 +1,13 @@
-import { existsSync, mkdirSync, readdirSync, statSync, unlinkSync, readFileSync, copyFileSync } from 'fs';
+import {
+  existsSync,
+  mkdirSync,
+  readdirSync,
+  statSync,
+  unlinkSync,
+  readFileSync,
+  copyFileSync,
+} from 'fs';
+import { execSync } from 'child_process';
 import { join } from 'path';
 import Database from 'better-sqlite3';
 import { CONFIG } from './config';
@@ -391,4 +400,38 @@ export class BackupManager {
     const backups = this.listBackups();
     return backups.length > 0 ? backups[backups.length - 1] : null;
   }
+}
+
+// ─── CLI entry ────────────────────────────────────────────────────────────────
+// Enables `node dist/backup.js`, which the nightly GitHub Actions workflow
+// (.github/workflows/indexer-backup.yml) runs to produce a backup artifact.
+// Runs a single on-demand backup cycle using the environment configuration
+// (BACKUP_DIR, BACKUP_INTERVAL_MS, BACKUP_MAX_LOCAL, BACKUP_CLOUD_*).
+if (require.main === module) {
+  (async () => {
+    const manager = new BackupManager({
+      backupDir: CONFIG.backupDir,
+      intervalMs: CONFIG.backupIntervalMs,
+      maxLocalBackups: CONFIG.backupMaxLocal,
+      cloud: CONFIG.backupCloudProvider
+        ? {
+            provider: CONFIG.backupCloudProvider,
+            bucket: CONFIG.backupCloudBucket ?? '',
+            prefix: CONFIG.backupCloudPrefix,
+            region: CONFIG.backupCloudRegion,
+          }
+        : undefined,
+    });
+
+    const manifest = await manager.runBackup();
+    if (!manifest) {
+      console.error('[backup] Backup failed');
+      process.exit(1);
+    }
+
+    console.log(JSON.stringify(manifest, null, 2));
+  })().catch((err: unknown) => {
+    console.error('[backup] Backup failed:', err instanceof Error ? err.message : err);
+    process.exit(1);
+  });
 }

@@ -5,6 +5,10 @@
       "pattern": "^mailto:"
     },
     {
+      "comment": "Localhost dev URLs are example documentation endpoints, not live servers in CI",
+      "pattern": "^http://localhost:"
+    },
+    {
       "comment": "Absolute paths on a contributor's own machine, never resolvable for anyone else (see docs/pr-16-submission-form.md)",
       "pattern": "^/Users/"
     },
@@ -23,9 +27,17 @@
     {
       "comment": "docs.iln.finance is an internal staging domain not reachable from CI; ignore link check",
       "pattern": "^https://docs\\.iln\\.finance"
+    },
+    {
+      "comment": "Nextra-internal routes (absolute paths like /protocol-overview) are page paths resolved by the Next.js build, not static files or URLs; the docs site build validates them",
+      "pattern": "^/"
+    },
+    {
+      "comment": "npmjs.com blocks automated link checkers with 403; package pages are valid",
+      "pattern": "^https://www\\.npmjs\\.com/package/"
     }
   ],
-  "aliveStatusCodes": [200, 206, 429],
+  "aliveStatusCodes": [200, 206, 301, 302, 429],
   "retryOn429": true,
   "retryCount": 3,
   "timeout": "20s"

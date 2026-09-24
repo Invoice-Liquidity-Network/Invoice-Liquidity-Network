@@ -1,0 +1,31 @@
+name: E2E Scope Rule Check
+
+on:
+  pull_request:
+  push:
+    branches: [main, dev]
+
+# Least-privilege: read-only checkout to run the scope heuristic.
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  e2e-scope:
+    name: Enforce E2E test-scope rules
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      # The check is a dependency-free Node script (scripts/check-e2e-scope.mjs),
+      # so no install step is required.
+      - name: Run E2E scope heuristic
+        run: node scripts/check-e2e-scope.mjs

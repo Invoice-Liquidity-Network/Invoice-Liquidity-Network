@@ -4,6 +4,12 @@ This document covers the protocol-wide attack surface for Invoice Liquidity Netw
 
 It complements the smart contract threat model maintained with the Soroban contracts. Contract-specific risks such as authorization logic, state transitions, and on-chain invariants should be reviewed alongside this document before audit.
 
+This document is part of a deliberately structured set of security-adjacent
+documents. For the security documentation map, the unified disclosure policy,
+and the reporter-facing entryway, see [Security](../SECURITY.md),
+[Security Guide](./security-guide.md), [Security](./security.md), and
+[Vulnerability Disclosure](./vulnerability-disclosure.md).
+
 ## Scope
 
 In scope:
@@ -301,5 +307,5 @@ Before merging, this document should be reviewed by at least two maintainers, wi
 - [Transactions and envelopes](https://developers.stellar.org/docs/learn/fundamentals/transactions/operations-and-transactions)
 - [Stellar RPC](https://developers.stellar.org/docs/data/apis/rpc)
 - [Horizon rate limiting](https://developers.stellar.org/docs/data/apis/horizon/api-reference/structure/rate-limiting)
-- [OWASP Content Security Policy Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/Content_Security_Policy_Cheat_Sheet.html)
+- [OWASP Content Security Policy](https://owasp.org/www-community/controls/Content_Security_Policy)
 - [OWASP Clickjacking](https://owasp.org/www-community/attacks/Clickjacking)

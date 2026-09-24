@@ -4,6 +4,7 @@
  */
 import type { ContractStats, GovernanceProposal, Invoice, ReputationScore } from '@iln/shared';
 import type { CacheConfig } from './cache';
+import type { BackoffOptions } from './backoff';
 
 // Note: GovernanceProposal and ProposalStatus are intentionally NOT
 // re-exported here — the SDK's public API surfaces the SDK-specific
@@ -186,7 +187,12 @@ export interface ILNSdkConfig {
     writeMs?: number;
     simulationMs?: number;
   };
-  cache?: CacheConfig;
+  /**
+   * Whether to verify the contractId against known official ILN deployment IDs on initialization.
+   * Defaults to true. If set to true (or omitted) and the contractId does not match a known official deployment,
+   * a loud warning will be logged to alert integrators of possible misconfiguration.
+   */
+  verifyContractId?: boolean;
   /**
    * Enable the offline transaction queue.
    * When provided, write methods (`submitInvoice`, `fundInvoice`, `markPaid`,
@@ -195,6 +201,18 @@ export interface ILNSdkConfig {
    * Set to `{}` to use all defaults.
    */
   offline?: import('./offline').OfflineConfig;
+  /**
+   * Backoff/retry configuration for transient RPC failures.
+   * Set to `false` to disable automatic retries. When not provided,
+   * defaults to 3 retries with exponential backoff and jitter.
+   */
+  backoff?: BackoffOptions | false;
+  /**
+   * Cache configuration for read operations.
+   * Set to `{ enabled: false }` to disable caching.
+   * Defaults to `{ ttl: 60000, storage: 'memory', enabled: true }`.
+   */
+  cache?: CacheConfig;
 }
 
 /**

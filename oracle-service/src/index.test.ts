@@ -2,47 +2,20 @@ import request from 'supertest';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { createOracleApp } from './index';
+import { TEST_PAYER, healthyHistory, makeReputation } from './testFixtures';
 import type { IndexerInvoiceHistoryEntry, ReputationSnapshot } from './types';
 
-const payer = 'GC5GY2JTEOIVJDNFPEZQNMGZBTZJ5LFTJFWL5UB3LV4BGVVQAHC3D4S';
+// A real 56-character Stellar public key. The previous literal was 55
+// characters, so `isValidStellarAddress` rejected every request as malformed.
+const payer = TEST_PAYER;
 
-const history: IndexerInvoiceHistoryEntry[] = [
-  {
-    id: 1,
-    freelancer: 'G1',
-    payer,
-    amount: '10000000',
-    due_date: 0,
-    discount_rate: 300,
-    status: 'Paid',
-    funder: 'G2',
-    funded_at: 1_700_000_000,
-    created_at: 1_700_000_000_000,
-    updated_at: 1_700_250_000_000,
-  },
-  {
-    id: 2,
-    freelancer: 'G1',
-    payer,
-    amount: '10100000',
-    due_date: 0,
-    discount_rate: 300,
-    status: 'Paid',
-    funder: 'G2',
-    funded_at: 1_700_300_000,
-    created_at: 1_700_300_000_000,
-    updated_at: 1_700_550_000_000,
-  },
-];
+// Anchored to the current clock so the fixtures never age past
+// `maxOracleAgeMs` and silently turn every verdict stale.
+const NOW = Date.now();
 
-const reputation: ReputationSnapshot = {
-  address: payer,
-  score: 90,
-  totalPaid: 20_000_000n,
-  invoiceCount: 2,
-  lastActivity: 1_700_550_000,
-  rank: 3,
-};
+const history: IndexerInvoiceHistoryEntry[] = healthyHistory(NOW);
+
+const reputation: ReputationSnapshot = makeReputation(NOW, { score: 90 });
 
 let app: Awaited<ReturnType<typeof createOracleApp>>['app'];
 let closeApp: Awaited<ReturnType<typeof createOracleApp>>['close'];

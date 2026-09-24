@@ -25,4 +25,15 @@ describe('Rate limit whitelist', () => {
       expect(res.status).toBe(200);
     }
   });
+
+  it('does not treat a spoofed arbitrary identifier as a whitelisted IP', async () => {
+    const spoofed = await request(app)
+      .get('/health')
+      .set('X-Forwarded-For', 'monitoring-service');
+    expect(spoofed.status).toBe(200);
+    const next = await request(app).get('/health').set('X-Forwarded-For', 'monitoring-service');
+    expect(next.status).toBe(200);
+    const blocked = await request(app).get('/health').set('X-Forwarded-For', 'monitoring-service');
+    expect(blocked.status).toBe(429);
+  });
 });

@@ -36,6 +36,7 @@ packages:
   - cli
   - indexer
   - notifications
+  - oracle-service
   - docs
 
   # All packages/* subdirectories (covers packages/shared and every other package)

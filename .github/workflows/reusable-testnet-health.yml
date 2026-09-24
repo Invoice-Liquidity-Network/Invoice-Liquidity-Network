@@ -1,4 +1,21 @@
 # Reusable workflow: probe public Stellar testnet Horizon availability.
+#
+# Contract
+# ─────────────────────────────────────────────────────────────────────────────
+# Inputs (all optional — safe defaults for this repo):
+#   horizon-url          string  Horizon base URL              (default: https://horizon-testnet.stellar.org)
+#   max-attempts         number  HTTP attempts before failure   (default: 3)
+#   retry-delay-seconds  number  Seconds between retries        (default: 5)
+#
+# Outputs:
+#   healthy  string  "true" when Horizon responds with valid stellar.json,
+#                    "false" otherwise (consumers should skip gracefully)
+#
+# Side effects:
+#   None — only outbound HTTP probes (no repo checkout, no cache writes).
+#
+# Consumers: e2e.yml, e2e-nightly.yml, sdk-e2e-local-node.yml
+# ─────────────────────────────────────────────────────────────────────────────
 name: Reusable testnet health
 
 on:

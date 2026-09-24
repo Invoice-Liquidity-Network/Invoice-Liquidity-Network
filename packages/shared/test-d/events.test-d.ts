@@ -11,11 +11,17 @@ import type {
   ContractEvent,
   ContractStats,
   ContractStatsUpdatedEvent,
+  DisputeEvidenceSubmittedEvent,
+  DisputeReasonCategory,
+  DisputeResolutionDecision,
+  DisputeResolvedEvent,
+  DisputeAutoResolvedEvent,
   GovernanceProposal,
   GovernanceProposalCreatedEvent,
   GovernanceProposalExecutedEvent,
   Invoice,
   InvoiceDefaultedEvent,
+  InvoiceDisputedEvent,
   InvoiceFundedEvent,
   InvoicePaidEvent,
   InvoiceStatus,
@@ -275,6 +281,49 @@ expectType<ContractStats>(contractStatsUpdated.stats);
 expectType<string>(lpStatsUpdated.address);
 expectType<LPStats>(lpStatsUpdated.stats);
 
+// ─── Dispute events ─────────────────────────────────────────────────────────
+
+const invoiceDisputed: InvoiceDisputedEvent = {
+  ...base,
+  type: 'InvoiceDisputed',
+  invoiceId: 1n,
+  disputer: 'GDISPUTER',
+  reasonCategory: 'quality',
+  evidenceCid: 'QmEvidence123',
+};
+
+const disputeEvidenceSubmitted: DisputeEvidenceSubmittedEvent = {
+  ...base,
+  type: 'DisputeEvidenceSubmitted',
+  invoiceId: 1n,
+  submitter: 'GSUBMITTER',
+  evidenceCid: 'QmEvidence456',
+};
+
+const disputeResolved: DisputeResolvedEvent = {
+  ...base,
+  type: 'DisputeResolved',
+  invoiceId: 1n,
+  resolver: 'GRESOLVER',
+  decision: 'favor_freelancer',
+};
+
+const disputeAutoResolved: DisputeAutoResolvedEvent = {
+  ...base,
+  type: 'DisputeAutoResolved',
+  invoiceId: 1n,
+  decision: 'favor_freelancer',
+};
+
+expectType<bigint>(invoiceDisputed.invoiceId);
+expectType<string>(invoiceDisputed.disputer);
+expectType<DisputeReasonCategory>(invoiceDisputed.reasonCategory);
+expectType<string>(invoiceDisputed.evidenceCid);
+expectType<bigint>(disputeEvidenceSubmitted.invoiceId);
+expectType<string>(disputeEvidenceSubmitted.submitter);
+expectType<DisputeResolutionDecision>(disputeResolved.decision);
+expectType<'favor_freelancer'>(disputeAutoResolved.decision);
+
 // ─── The union narrows on `type` ──────────────────────────────────────────────
 
 declare const event: ContractEvent;
@@ -316,6 +365,26 @@ switch (event.type) {
   case 'ContractStatsUpdated':
     expectType<ContractStats>(event.stats);
     break;
+  case 'InvoiceDisputed':
+    expectType<bigint>(event.invoiceId);
+    expectType<string>(event.disputer);
+    expectType<DisputeReasonCategory>(event.reasonCategory);
+    expectType<string>(event.evidenceCid);
+    break;
+  case 'DisputeEvidenceSubmitted':
+    expectType<bigint>(event.invoiceId);
+    expectType<string>(event.submitter);
+    expectType<string>(event.evidenceCid);
+    break;
+  case 'DisputeResolved':
+    expectType<bigint>(event.invoiceId);
+    expectType<string>(event.resolver);
+    expectType<DisputeResolutionDecision>(event.decision);
+    break;
+  case 'DisputeAutoResolved':
+    expectType<bigint>(event.invoiceId);
+    expectType<'favor_freelancer'>(event.decision);
+    break;
   case 'LPStatsUpdated':
     expectType<LPStats>(event.stats);
     expectType<string>(event.address);
@@ -346,3 +415,7 @@ expectAssignable<ContractEvent>(tokenRemoved);
 expectAssignable<ContractEvent>(reputationUpdated);
 expectAssignable<ContractEvent>(contractStatsUpdated);
 expectAssignable<ContractEvent>(lpStatsUpdated);
+expectAssignable<ContractEvent>(invoiceDisputed);
+expectAssignable<ContractEvent>(disputeEvidenceSubmitted);
+expectAssignable<ContractEvent>(disputeResolved);
+expectAssignable<ContractEvent>(disputeAutoResolved);

@@ -31,11 +31,11 @@ describe('RateLimiter unit', () => {
     expect(r.remaining).toBe(0);
   });
 
-  it('blocks when per-channel limit is exceeded', () => {
+  it('blocks when per-recipient (user+channel) limit is exceeded', () => {
     const rl = new RateLimiter({ perUserLimit: 100, perChannelLimit: 2, windowMs: 60_000 });
     rl.check('user1', 'webhook');
-    rl.check('user2', 'webhook');
-    const r = rl.check('user3', 'webhook');
+    rl.check('user1', 'webhook');
+    const r = rl.check('user1', 'webhook');
     expect(r.allowed).toBe(false);
     expect(r.remaining).toBe(0);
   });
@@ -86,14 +86,14 @@ describe('RateLimiter boundary conditions', () => {
     expect(blocked.remaining).toBe(0);
   });
 
-  it('allows exactly at per-channel limit', () => {
+  it('allows exactly at per-recipient limit', () => {
     const rl = new RateLimiter({ perUserLimit: 100, perChannelLimit: 3, windowMs: 60_000 });
 
     rl.check('u1', 'sms');
-    rl.check('u2', 'sms');
-    rl.check('u3', 'sms');
+    rl.check('u1', 'sms');
+    rl.check('u1', 'sms');
 
-    const blocked = rl.check('u4', 'sms');
+    const blocked = rl.check('u1', 'sms');
     expect(blocked.allowed).toBe(false);
   });
 
@@ -231,22 +231,7 @@ describe('RateLimiter time-mocking edge cases', () => {
 });
 
 describe('RateLimiter concurrent requests', () => {
-  it('multiple users hitting per-channel limit simultaneously', () => {
-    const rl = new RateLimiter({ perUserLimit: 10, perChannelLimit: 3, windowMs: 60_000 });
-
-    const results = [];
-    for (let i = 0; i < 10; i++) {
-      results.push(rl.check(`concurrent-user-${i}`, 'webhook'));
-    }
-
-    const allowed = results.filter((r) => r.allowed);
-    const blocked = results.filter((r) => !r.allowed);
-
-    expect(allowed).toHaveLength(3);
-    expect(blocked).toHaveLength(7);
-  });
-
-  it('per-user limit is independent of per-channel limit', () => {
+  it('per-user limit is independent of per-recipient limit', () => {
     const rl = new RateLimiter({ perUserLimit: 1, perChannelLimit: 100, windowMs: 60_000 });
 
     rl.check('u1', 'email');
@@ -262,20 +247,29 @@ describe('RateLimiter concurrent requests', () => {
     const rl = new RateLimiter({ perUserLimit: 10, perChannelLimit: 2, windowMs: 60_000 });
 
     rl.check('rollback-user', 'sms');
-    rl.check('other', 'sms');
+    rl.check('rollback-user', 'sms');
 
-    // This will hit channel limit, causing rollback of rollback-user's timestamp
+    // This will hit per-recipient limit, causing rollback of rollback-user's timestamp
     const blocked = rl.check('rollback-user', 'sms');
     expect(blocked.allowed).toBe(false);
 
     // rollback-user should be able to use 1 request now (since rolled back)
-    // But wait: they already have 1 in user bucket from first check
-    // After rollback, user bucket is back to 1, but the 2nd check that
-    // triggered channel limit rolled back, so user bucket should be 1
-    // Actually the user had 1 before, check returns allowed=true + adds timestamp,
-    // then channel blocks and pops the last timestamp, so user is back to 1
     const r = rl.check('rollback-user', 'email');
     expect(r.allowed).toBe(true);
+  });
+
+  it('one high-volume user does not starve delivery to other users', () => {
+    const rl = new RateLimiter({ perUserLimit: 100, perChannelLimit: 2, windowMs: 60_000 });
+
+    // User1 exhausts their own per-recipient quota
+    rl.check('user1', 'email');
+    rl.check('user1', 'email');
+    const blocked = rl.check('user1', 'email');
+    expect(blocked.allowed).toBe(false);
+
+    // User2 is unaffected — independent per-recipient bucket
+    const allowed = rl.check('user2', 'email');
+    expect(allowed.allowed).toBe(true);
   });
 });
 
@@ -291,13 +285,51 @@ describe('RateLimiter channel bucket isolation', () => {
     expect(allowedSms.allowed).toBe(true);
   });
 
-  it('per-channel limit applies across users for same channel', () => {
+  it('per-recipient limit is scoped to user+channel, not shared across users', () => {
     const rl = new RateLimiter({ perUserLimit: 100, perChannelLimit: 2, windowMs: 60_000 });
 
     rl.check('user1', 'sms');
     rl.check('user2', 'sms');
-    const blocked = rl.check('user3', 'sms');
-    expect(blocked.allowed).toBe(false);
+    // user3 has their own bucket — not blocked by user1/user2
+    const allowed = rl.check('user3', 'sms');
+    expect(allowed.allowed).toBe(true);
+  });
+
+  it('one recipient hitting their limit does not block delivery to a different recipient on the same channel', () => {
+    const rl = new RateLimiter({ perUserLimit: 100, perChannelLimit: 1, windowMs: 60_000 });
+
+    // Recipient A exhausts their per-recipient quota on email
+    rl.check('recipientA', 'email');
+    const blockedA = rl.check('recipientA', 'email');
+    expect(blockedA.allowed).toBe(false);
+
+    // Recipient B on the same email channel is unaffected — independent bucket
+    const allowedB = rl.check('recipientB', 'email');
+    expect(allowedB.allowed).toBe(true);
+    expect(allowedB.remaining).toBe(0);
+
+    // Recipient C is also unaffected
+    const allowedC = rl.check('recipientC', 'email');
+    expect(allowedC.allowed).toBe(true);
+  });
+
+  it('different users on the same channel have independent per-recipient buckets', () => {
+    const rl = new RateLimiter({ perUserLimit: 100, perChannelLimit: 2, windowMs: 60_000 });
+
+    // User1 uses 2 webhook slots
+    rl.check('user1', 'webhook');
+    rl.check('user1', 'webhook');
+    const blocked1 = rl.check('user1', 'webhook');
+    expect(blocked1.allowed).toBe(false);
+
+    // User2 has their own webhook bucket
+    const allowed2 = rl.check('user2', 'webhook');
+    expect(allowed2.allowed).toBe(true);
+    expect(allowed2.remaining).toBe(1);
+
+    // User3 also independent
+    const allowed3 = rl.check('user3', 'webhook');
+    expect(allowed3.allowed).toBe(true);
   });
 });
 
