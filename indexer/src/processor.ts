@@ -4,8 +4,13 @@ import { eventsProcessedTotal, invoicesUpsertedTotal } from './metrics';
 import { invalidateInvoiceCache } from './cache';
 import { fetchInvoice } from './rpc';
 import type { ILNEvent, ILNEventType } from './types';
-import { pubsub, INVOICE_UPDATED, EVENT_STREAM } from './graphql/pubsub';
-import { pubSub } from './pubsub';
+import {
+  pubsub,
+  INVOICE_UPDATED,
+  EVENT_STREAM,
+  LEGACY_INVOICE_CREATED,
+  LEGACY_INVOICE_UPDATED,
+} from './graphql/pubsub';
 
 const KNOWN_EVENT_TYPES = new Set<ILNEventType>(['submitted', 'funded', 'paid', 'defaulted']);
 
@@ -76,17 +81,15 @@ export async function processEvent(event: rpc.Api.EventResponse): Promise<void> 
         /* metrics failure is non-fatal */
       }
     }
-
-    // Always emit the event stream since we got a new event
+    // Publish to the single shared pubsub. The modular WebSocket schema
+    // receives structured payloads, while the legacy Yoga schema receives
+    // the raw invoice on its own namespaced channels (see ./graphql/pubsub).
+    pubsub.publish(INVOICE_UPDATED, { invoiceUpdated: invoice, triggeringEvent: ilnEvent });
     pubsub.publish(EVENT_STREAM, { eventStream: ilnEvent });
-
-    if (isChanged) {
-      pubsub.publish(INVOICE_UPDATED, { invoiceUpdated: invoice, triggeringEvent: ilnEvent });
-      if (!existing) {
-        pubSub.publish('INVOICE_CREATED', invoice);
-      } else {
-        pubSub.publish('INVOICE_UPDATED', invoice);
-      }
+    if (eventType === 'submitted') {
+      pubsub.publish(LEGACY_INVOICE_CREATED, invoice);
+    } else {
+      pubsub.publish(LEGACY_INVOICE_UPDATED, invoice);
     }
   }
 }

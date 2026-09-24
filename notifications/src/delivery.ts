@@ -3,6 +3,7 @@ import { Resend } from 'resend';
 import Twilio from 'twilio';
 import { CONFIG } from './config';
 import { createWebhookDeliveryLog, updateWebhookDeliveryLog } from './db';
+import { SSRFError, assertWebhookTargetPublic } from './ssrf';
 import type { NotificationPayload, Subscription, NotificationTrigger, Invoice } from './types';
 
 const resend = new Resend(CONFIG.resendApiKey);
@@ -271,6 +272,28 @@ export async function sendWebhook(
 
   let response;
   let errorMessage: string | null = null;
+
+  try {
+    await assertWebhookTargetPublic(subscription.destination);
+  } catch (error: unknown) {
+    const reason =
+      error instanceof SSRFError ? error.message : 'Destination URL rejected as unsafe';
+    console.error(`[delivery] Refusing unsafe webhook target for ${subscription.id}: ${reason}`);
+    await updateWebhookDeliveryLog(id, { status: 'failed', attempts: attempt, error: reason });
+    deadLetterQueue.push({
+      channel: 'webhook',
+      destination: subscription.destination,
+      subscriptionId: subscription.id,
+      trigger: payload.trigger,
+      invoice: payload.invoice,
+      subject: payload.subject,
+      message: payload.message,
+      lastError: reason,
+      attempts: attempt,
+      timestamp: Date.now(),
+    });
+    return;
+  }
 
   try {
     const headers: Record<string, string> = {

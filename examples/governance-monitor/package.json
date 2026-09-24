@@ -1,33 +1,24 @@
 {
-  "name": "governance-monitor",
+  "name": "@iln/governance-monitor",
   "version": "1.0.0",
-  "description": "Governance proposal monitor for Invoice Liquidity Network with Discord notifications",
+  "description": "Reference implementation for monitoring ILN governance contract proposals via live contract calls",
+  "private": true,
+  "type": "module",
   "main": "index.ts",
   "scripts": {
     "start": "ts-node index.ts",
-    "dev": "ts-node index.ts --verbose"
+    "dev": "ts-node index.ts --verbose",
+    "verify": "ts-node index.ts --verify"
   },
-  "keywords": [
-    "iln",
-    "governance",
-    "proposals",
-    "discord",
-    "notifications"
-  ],
   "dependencies": {
-    "@invoice-liquidity/sdk": "file:../../sdk",
-    "@stellar/stellar-sdk": "^15.0.1",
-    "axios": "^1.16.0",
-    "commander": "^14.0.3"
-  },
-  "license": "MIT",
-  "engines": {
-    "node": ">=20"
+    "@iln/sdk": "workspace:*",
+    "@stellar/stellar-sdk": "^15.0.1"
   },
   "devDependencies": {
-    "@types/node": "^20.0.0",
-    "ts-node": "^10.9.1",
-    "typescript": "^5.0.0"
+    "ts-node": "^10.9.2",
+    "typescript": "^5.9.3"
   },
-  "private": true
+  "engines": {
+    "node": ">=20"
+  }
 }

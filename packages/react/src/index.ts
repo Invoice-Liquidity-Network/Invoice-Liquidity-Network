@@ -28,6 +28,13 @@ export {
   useDepositPremium,
   useSubmitClaim,
   useReviewClaim,
+  useDispute,
+  useDisputeList,
+  useFileDispute,
+  useSubmitDisputeEvidence,
+  useResolveDispute,
+  useAutoResolveDispute,
+  useDisputeAnalytics,
 } from './hooks';
 
 export type {
@@ -67,6 +74,17 @@ export type {
   UseDepositPremiumResult,
   UseSubmitClaimResult,
   UseReviewClaimResult,
+  UseDisputeResult,
+  UseDisputeListResult,
+  UseFileDisputeResult,
+  UseSubmitDisputeEvidenceResult,
+  UseResolveDisputeResult,
+  UseAutoResolveDisputeResult,
+  UseDisputeAnalyticsResult,
+  FileDisputeParams,
+  SubmitDisputeEvidenceParams,
+  ResolveDisputeParams,
+  AutoResolveDisputeParams,
 } from './hooks';
 
 // Components

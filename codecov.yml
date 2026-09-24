@@ -3,9 +3,25 @@ coverage:
     project:
       default:
         target: 80%
+      # oracle-service gates fund_invoice()'s require_oracle_verification path,
+      # so it is held to a higher bar than the rest of the monorepo. The hard
+      # gate is in oracle-service/vitest.config.ts; this mirrors it on the
+      # Codecov status check.
+      oracle-service:
+        target: 95%
+        flags:
+          - oracle-service
+        paths:
+          - oracle-service/
     patch:
       default:
         target: 70%
+      oracle-service:
+        target: 95%
+        flags:
+          - oracle-service
+        paths:
+          - oracle-service/
 
 flags:
   sdk:
@@ -22,10 +38,12 @@ flags:
   notifications:
     paths:
       - notifications/
+  oracle-service:
+    paths:
+      - oracle-service/
   cli:
     paths:
       - cli/
-      - packages/cli/
   shared:
     paths:
       - packages/shared/

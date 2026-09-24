@@ -381,6 +381,93 @@ export interface ReputationUpdatedEvent extends ContractEventBase {
   reputation: ReputationScore;
 }
 
+// =============================================================================
+// Dispute Workflow Types
+// =============================================================================
+
+export type DisputeReasonCategory = 'quality' | 'timing' | 'amount' | 'other';
+
+export interface DisputeEvidence {
+  id: string;
+  submitter: string;
+  role: 'payer' | 'freelancer' | 'admin';
+  evidenceCid: string;
+  description: string;
+  fileName?: string;
+  fileType?: string;
+  fileSize?: number;
+  submittedAt: number;
+}
+
+export type DisputeStatus =
+  | 'Pending'
+  | 'ResolvedFavorPayer'
+  | 'ResolvedFavorFreelancer'
+  | 'AutoResolvedFavorFreelancer';
+
+export type DisputeResolutionDecision = 'favor_payer' | 'favor_freelancer';
+
+export interface DisputeRecord {
+  invoiceId: bigint;
+  disputer: string;
+  reasonCategory: DisputeReasonCategory;
+  reasonDescription: string;
+  evidenceCid: string;
+  evidence: DisputeEvidence[];
+  filedAt: number;
+  evidenceDeadline: number;
+  autoResolveAt: number;
+  status: DisputeStatus;
+  resolvedAt: number | null;
+  resolvedBy: string | null;
+  resolutionDecision: DisputeResolutionDecision | null;
+  resolutionNotes: string | null;
+}
+
+export interface DisputeAnalytics {
+  totalDisputes: number;
+  disputeRateByPayer: Record<string, number>;
+  averageResolutionTimeSeconds: number;
+  winRateByParty: {
+    payer: number;
+    freelancer: number;
+  };
+  commonDisputeReasons: Record<DisputeReasonCategory, number>;
+}
+
+/** contract event: InvoiceDisputed */
+export interface InvoiceDisputedEvent extends ContractEventBase {
+  type: 'InvoiceDisputed';
+  invoiceId: bigint;
+  disputer: string;
+  reasonCategory: DisputeReasonCategory;
+  evidenceCid: string;
+}
+
+/** contract event: DisputeEvidenceSubmitted */
+export interface DisputeEvidenceSubmittedEvent extends ContractEventBase {
+  type: 'DisputeEvidenceSubmitted';
+  invoiceId: bigint;
+  submitter: string;
+  evidenceCid: string;
+}
+
+/** contract event: DisputeResolved */
+export interface DisputeResolvedEvent extends ContractEventBase {
+  type: 'DisputeResolved';
+  invoiceId: bigint;
+  resolver: string;
+  decision: DisputeResolutionDecision;
+  notes?: string;
+}
+
+/** contract event: DisputeAutoResolved */
+export interface DisputeAutoResolvedEvent extends ContractEventBase {
+  type: 'DisputeAutoResolved';
+  invoiceId: bigint;
+  decision: 'favor_freelancer';
+}
+
 /**
  * Not a contract-emitted event. Retained as a client-side utility type
  * for consumers that synthesise stats update notifications locally.
@@ -407,6 +494,10 @@ export type ContractEvent =
   | InvoiceFundedEvent
   | InvoicePaidEvent
   | InvoiceDefaultedEvent
+  | InvoiceDisputedEvent
+  | DisputeEvidenceSubmittedEvent
+  | DisputeResolvedEvent
+  | DisputeAutoResolvedEvent
   // Governance events
   | GovernanceProposalCreatedEvent
   | VoteCastEvent
@@ -419,3 +510,4 @@ export type ContractEvent =
   // Client-side synthetic events (not emitted by contract)
   | ContractStatsUpdatedEvent
   | LPStatsUpdatedEvent;
+

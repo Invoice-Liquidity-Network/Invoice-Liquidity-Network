@@ -37,6 +37,11 @@ The SDK has a peer dependency on `@stellar/stellar-sdk`. Install it if you don't
 npm install @stellar/stellar-sdk
 ```
 
+> **Supply-Chain Security Note:**
+> All official `@iln/sdk` releases are published with SLSA Level 3 provenance attestations.
+> To cryptographically verify that your installed package was built directly from our audited source repository, see
+> [Verifying SDK Provenance](./sdk-trust-model.md#verifying-sdk-provenance).
+
 ---
 
 ## 2. Initialize the SDK Client
