@@ -496,3 +496,13 @@ export function setCursorLedger(ledger: number): void {
     /* metrics failure is non-fatal */
   }
 }
+
+/** Rollback events and cursor to a specific ledger. */
+export function rollbackToLedger(ledger: number): void {
+  const db = getDb();
+  db.prepare('DELETE FROM events WHERE ledger > ?').run(ledger);
+  db.prepare('UPDATE cursor SET last_ledger = ? WHERE id = 1').run(ledger);
+  try {
+    lastProcessedLedger.set(ledger);
+  } catch {}
+}

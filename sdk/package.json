@@ -38,7 +38,7 @@
     }
   },
   "scripts": {
-    "build": "tsup",
+    "build": "tsup && node ../scripts/check-bundle-size.js",
     "prepare": "husky install || true",
     "lint": "eslint src --ext .ts",
     "test": "vitest run",
@@ -47,7 +47,8 @@
     "test:e2e-local": "vitest run src/e2e/*.test.ts",
     "test:coverage": "vitest run --coverage",
     "type-check": "tsc --noEmit",
-    "docs:generate": "typedoc --out ../docs/sdk-api src/index.ts"
+    "docs:generate": "typedoc --out ../docs/sdk-api src/index.ts",
+    "check-size": "node ../scripts/check-bundle-size.js"
   },
   "dependencies": {
     "@iln/shared": "workspace:*",
