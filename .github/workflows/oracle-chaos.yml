@@ -1,0 +1,33 @@
+name: Oracle Service Chaos Tests
+
+on:
+  schedule:
+    - cron: '0 0 * * *' # Run daily at midnight
+  pull_request:
+    paths:
+      - 'oracle-service/**'
+      - '.github/workflows/oracle-chaos.yml'
+
+jobs:
+  chaos-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install pnpm
+        uses: pnpm/action-setup@v2
+        with:
+          version: 8
+      - name: Use Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'pnpm'
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Run chaos test
+        run: pnpm --filter @iln/oracle-service run test src/upstream-outage.test.ts
+      - name: Alert on Failure
+        if: failure()
+        run: |
+          echo "Chaos test failed! Simulating PagerDuty/Slack alert..."
+          # Real implementation would curl an alerting webhook here

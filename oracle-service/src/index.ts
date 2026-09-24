@@ -3,6 +3,8 @@ import { Address } from '@stellar/stellar-sdk';
 
 import { createOracleCache } from './cache';
 import { createOracleMetrics } from './metrics';
+import { AuditTrail } from './audit-trail';
+import { OracleSignerStore, createOracleSignerStoreFromEnv } from './signer';
 import {
   type IndexerInvoiceHistoryEntry,
   type OracleServiceHealth,
@@ -168,6 +170,10 @@ export async function createOracleApp(
     maxOracleAgeMs: resolved.maxOracleAgeMs,
   });
 
+  // Issue 1055 — immutable append-only audit trail
+  const auditTrail = new AuditTrail();
+  const signerStore = createOracleSignerStoreFromEnv();
+
   const startedAt = Date.now();
   let lastVerificationAt: string | null = null;
   let healthy = true;
@@ -212,6 +218,31 @@ export async function createOracleApp(
     res.status(405).json({ error: 'Use POST /v1/verify' });
   });
 
+  app.get('/v1/audit-trail', async (req: Request, res: Response) => {
+    const payer = req.query.payer ? String(req.query.payer) : undefined;
+    const from = req.query.from ? String(req.query.from) : undefined;
+    const to = req.query.to ? String(req.query.to) : undefined;
+    res.json({ entries: auditTrail.getEntries({ payer, from, to }) });
+  });
+
+  app.get('/v1/audit-trail/verify', async (_req: Request, res: Response) => {
+    res.json(auditTrail.verifyIntegrity());
+  });
+
+  app.post('/v1/verify-signed', async (req: Request, res: Response) => {
+    const update = req.body;
+    if (!update || typeof update.payload !== 'string') {
+      res.status(400).json({ error: 'Invalid signed update' });
+      return;
+    }
+    const outcome = signerStore.verifySignedUpdate(update);
+    if (!outcome.valid) {
+      res.status(400).json({ error: outcome.reason });
+      return;
+    }
+    res.json({ verified: true, payload: JSON.parse(update.payload) });
+  });
+
   async function handleVerification(req: Request, res: Response): Promise<void> {
     const body = (req.body ?? {}) as Partial<OracleVerificationRequest> & Record<string, unknown>;
     const payer = String(body.payer ?? '').trim();
@@ -253,6 +284,8 @@ export async function createOracleApp(
       if (!response.isVerified && response.dataAgeMs > resolved.maxOracleAgeMs) {
         metrics.staleResponsesTotal.inc();
       }
+
+      auditTrail.append(response);
 
       lastVerificationAt = response.generatedAt;
       res.json(response);

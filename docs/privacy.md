@@ -162,3 +162,6 @@ a working, address-scoped endpoint (see `notifications/src/templates/helpers.ts`
 
 _Last reviewed: 2026-07-26 — see PR #_-linked-to-Issue-#741 for the
 implementation history._
+
+### Oracle Audit Trail Retention
+The oracle-service append-only historical price audit trail retains entries for 30 days. After this period, older entries are purged to comply with privacy requirements while maintaining sufficient forensic history for audits.
