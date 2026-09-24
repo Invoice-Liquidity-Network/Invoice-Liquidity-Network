@@ -111,3 +111,27 @@ docker run -d \
 ---
 
 *For more details, see the SDK and service source code.*
+
+## Dead-letter queue — Issue #1060
+
+Sends use exponential backoff (`webhookBackoffBaseMs`, default 500ms,
+doubling per attempt, capped at 30s) with a bounded retry budget
+(`maxWebhookRetry`, default 3). A notification that exhausts its retries is
+**dead-lettered, never silently dropped**: it lands in the in-process
+dead-letter queue with its channel, destination, trigger, invoice, subject,
+message, failure reason, attempt count, and timestamp.
+
+Operator surface (`notifications/src/api.ts`, also on `NotificationService`
+as `inspectDeadLetter()` / `replayDeadLetter()`):
+
+- `GET /dead-letter` — `{ count, entries }`
+- `GET /dead-letter/metrics` — `{ totalRetries, activeRetries, deadLetterCount, deadLetterEntries }`
+- `POST /dead-letter/:id/replay` — re-queues one entry for redelivery
+  (`200 { success: true }`, `404` for unknown ids)
+
+Accumulation alerting: every push checks the queue depth and logs
+`[DLQ ALERT] Dead-letter queue accumulation exceeds threshold: N > 10`
+(`DLQ_ALERT_THRESHOLD`). Wire that log line into your alerting pipeline.
+
+Known limit: the queue is in-process memory — it does not survive restarts.
+Drain or replay entries before redeploying.

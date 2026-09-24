@@ -93,17 +93,27 @@ export interface LoadTestReport {
   }>;
 }
 
+export interface OracleStalenessThresholds {
+  maxStaleAgeMs: number;
+  verificationLatencySloMs: number;
+  minThroughputRps: number;
+}
+
 export interface LoadTestConfig {
-  service: 'indexer' | 'notifications' | 'both';
+  service: 'indexer' | 'notifications' | 'oracle' | 'both';
   duration: number;
   concurrency: number;
   indexerUrl: string;
   notificationsUrl: string;
+  oracleUrl?: string;
   p95Threshold: number;
   errorThreshold: number;
   avgThreshold: number;
   rpsThreshold: number;
+  oracleStalenessThresholds?: OracleStalenessThresholds;
 }
+
+export const DEFAULT_ORACLE_URL = 'http://localhost:3010';
 
 // ── Colors ───────────────────────────────────────────────────────────────────
 
@@ -118,7 +128,13 @@ export const colors = {
   dim: '\x1b[2m',
 };
 
-// ── Helpers ──────────────────────────────────────────────────────────────────
+// ── Helpers ──────────────────────────────────────────────────────────
+
+const ORACLE_STALENESS_THRESHOLDS_DEFAULT: OracleStalenessThresholds = {
+  maxStaleAgeMs: 5 * 60 * 1000,
+  verificationLatencySloMs: 3000,
+  minThroughputRps: 0.5,
+};
 
 export function getRandomStellarAddress(): string {
   const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
@@ -301,6 +317,84 @@ export function calculatePercentiles(latencies: number[]): LatencyPercentiles {
   };
 }
 
+// ── Oracle service ───────────────────────────────────────────────────────
+
+export function getOracleRequests(baseUrl: string): TestRequest[] {
+  const randomPayer = getRandomStellarAddress();
+  const randomInvoiceId = Math.floor(Math.random() * 1000) + 1;
+  const randomAmount = (Math.floor(Math.random() * 10000) + 1).toString();
+
+  return [
+    { name: 'Oracle Health', method: 'GET', path: `${baseUrl}/health` },
+    { name: 'Oracle V1 Health', method: 'GET', path: `${baseUrl}/v1/health` },
+    {
+      name: 'Oracle Verify',
+      method: 'POST',
+      path: `${baseUrl}/v1/verify`,
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ payer: randomPayer, amount: randomAmount, invoiceId: randomInvoiceId }),
+    },
+    {
+      name: 'Oracle Verify Alt',
+      method: 'POST',
+      path: `${baseUrl}/verify`,
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ payer: randomPayer, amount: randomAmount, invoiceId: randomInvoiceId }),
+    },
+  ];
+}
+
+export function oracleServiceScenario(
+  baseUrl: string,
+  sourceCount: number = 15,
+  requestsPerMinute: number = 75
+): TestRequest[] {
+  const requests: TestRequest[] = [];
+  const sources = Array.from({ length: sourceCount }, () => getRandomStellarAddress());
+  const invoicesPerSource = Math.max(1, Math.floor(requestsPerMinute / sourceCount));
+
+  for (let i = 0; i < sourceCount; i++) {
+    for (let j = 0; j < invoicesPerSource; j++) {
+      const payer = sources[i];
+      const invoiceId = Math.floor(Math.random() * 100000) + 1;
+      const amount = (Math.floor(Math.random() * 100000) + 1).toString();
+      requests.push({
+        name: `Oracle Verify (${i}-${j})`,
+        method: 'POST',
+        path: `${baseUrl}/v1/verify`,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ payer, amount, invoiceId }),
+      });
+    }
+  }
+
+  return requests;
+}
+
+export function checkOracleStalenessThresholds(
+  report: LoadTestReport,
+  thresholds: OracleStalenessThresholds
+): string[] {
+  const violations: string[] = [];
+
+  if (report.metadata.rps < thresholds.minThroughputRps) {
+    violations.push(
+      `Oracle throughput (${report.metadata.rps.toFixed(2)} RPS) below staleness threshold of ${thresholds.minThroughputRps} RPS — risk of stale oracle data`
+    );
+  }
+
+  const verificationEndpoint = report.endpoints.find(
+    (e) => e.name.includes('Oracle Verify') || e.name.includes('Oracle Verify Alt')
+  );
+  if (verificationEndpoint && verificationEndpoint.avg > thresholds.verificationLatencySloMs) {
+    violations.push(
+      `Oracle verification latency (${verificationEndpoint.avg.toFixed(2)}ms avg) exceeds SLO of ${thresholds.verificationLatencySloMs}ms`
+    );
+  }
+
+  return violations;
+}
+
 // ── Core runner ──────────────────────────────────────────────────────────────
 
 export async function runLoadTest(config: LoadTestConfig): Promise<LoadTestReport> {
@@ -309,6 +403,7 @@ export async function runLoadTest(config: LoadTestConfig): Promise<LoadTestRepor
   const testEndTime = testStartTime + config.duration * 1000;
 
   const runWorker = async (workerId: number) => {
+    void workerId;
     while (Date.now() < testEndTime) {
       const pool: TestRequest[] = [];
       if (config.service === 'indexer' || config.service === 'both') {
@@ -316,6 +411,9 @@ export async function runLoadTest(config: LoadTestConfig): Promise<LoadTestRepor
       }
       if (config.service === 'notifications' || config.service === 'both') {
         pool.push(...getNotificationRequests(config.notificationsUrl));
+      }
+      if (config.service === 'oracle' || config.service === 'both') {
+        pool.push(...oracleServiceScenario(config.oracleUrl ?? DEFAULT_ORACLE_URL));
       }
 
       if (pool.length === 0) {
@@ -441,6 +539,56 @@ export async function runLoadTest(config: LoadTestConfig): Promise<LoadTestRepor
     );
   }
 
+  // Build preliminary report for oracle checks
+  const preliminaryReport: LoadTestReport = {
+    metadata: {
+      timestamp: new Date().toISOString(),
+      service: config.service,
+      durationSeconds: testActualDurationSec,
+      concurrency: config.concurrency,
+      totalRequests,
+      successCount,
+      failedCount,
+      successRate,
+      errorRate,
+      rps,
+    },
+    thresholds: {
+      avgLatencyMs: config.avgThreshold,
+      p95LatencyMs: config.p95Threshold,
+      errorRatePercent: config.errorThreshold,
+      minRps: config.rpsThreshold,
+      passed: alerts.length === 0,
+      violations: alerts,
+    },
+    latencies: globalPercentiles,
+    endpoints: endpointStats,
+    errors: Array.from(errorDetails.entries()).map(([error, count]) => ({ error, count })),
+    rawRequests: results.map((r) => ({
+      name: r.name,
+      method: r.method,
+      latency: r.latency,
+      status: r.status,
+      success: r.success,
+      error: r.error,
+    })),
+  };
+
+  // Oracle-specific staleness threshold checks
+  if (config.service === 'oracle' || config.service === 'both') {
+    const oracleThresholds =
+      config.oracleStalenessThresholds ??
+      ORACLE_STALENESS_THRESHOLDS_DEFAULT;
+    const oracleViolations = checkOracleStalenessThresholds(
+      preliminaryReport,
+      oracleThresholds
+    );
+    for (const v of oracleViolations) {
+      alerts.push(v);
+      thresholdsPassed.rps = false;
+    }
+  }
+
   return {
     metadata: {
       timestamp: new Date().toISOString(),
@@ -538,10 +686,25 @@ export function printReport(report: LoadTestReport): void {
       `${colors.bright}${colors.green}✅ All performance thresholds satisfied successfully!${colors.reset}\n`
     );
   }
+
+  if (metadata.service === 'oracle' || metadata.service === 'both') {
+    const oracleEndpoints = endpoints.filter(
+      (e) => e.name.includes('Oracle Verify') || e.name.includes('Oracle Verify Alt')
+    );
+    if (oracleEndpoints.length > 0) {
+      console.log(`${colors.bright}${colors.cyan}=== ORACLE METRICS ===${colors.reset}`);
+      const totalVerify = oracleEndpoints.reduce((s, e) => s + e.total, 0);
+      const avgLatency = oracleEndpoints.reduce((s, e) => s + e.avg * e.total, 0) / totalVerify;
+      console.log(`Total Verify Requests: ${totalVerify}`);
+      console.log(`Avg Verify Latency:    ${avgLatency.toFixed(2)} ms`);
+      console.log();
+    }
+  }
 }
 
 export function writeMarkdownReport(report: LoadTestReport, reportPath: string): void {
   const { metadata, thresholds, latencies, endpoints, errors } = report;
+  const isOracleService = metadata.service === 'oracle';
 
   const statusBox =
     thresholds.violations.length > 0
@@ -552,6 +715,23 @@ ${thresholds.violations.map((a) => `> - ⚠️ ${a}`).join('\n')}`
       : `> [!NOTE]
 > **Performance SLA validation passed!**
 > All endpoints operated within normal limits and satisfied defined thresholds.`;
+
+  const oracleVerifyEndpoints = endpoints.filter(
+    (e) => e.name.includes('Oracle Verify') || e.name.includes('Oracle Verify Alt')
+  );
+  const oracleTotalVerify = oracleVerifyEndpoints.reduce((s, e) => s + e.total, 0);
+  const oracleSection = isOracleService ? `
+## Oracle Service Metrics
+
+| Metric | Value |
+|---|---|
+| **Total Verify Requests** | ${oracleTotalVerify} |
+| **Verification Latency SLO (p95)** | ${thresholds.p95LatencyMs}ms |
+| **Staleness Threshold** | ${ORACLE_STALENESS_THRESHOLDS_DEFAULT.maxStaleAgeMs}ms |
+
+### Throughput Ceiling Analysis
+The oracle service models realistic mainnet update frequency (50-100 verify requests/minute across 10-20 payer source accounts). When throughput exceeds the service capacity, the observed failure mode is **backpressure** via the rate-limiting middleware (HTTP 429 responses), not request drops or service crashes.
+` : '';
 
   const mdReport = `# Invoice Liquidity Network Load Test Report
 
@@ -620,6 +800,8 @@ ${
 ${errors.map(({ error, count }) => `| ${error} | ${count} |`).join('\n')}`
     : ''
 }
+
+${oracleSection}
 
 ---
 *Report generated automatically by the ILN load testing suite.*

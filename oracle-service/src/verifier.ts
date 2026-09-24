@@ -22,6 +22,8 @@ import type {
   OracleVerifierDependencies,
 } from './types';
 import type { OracleCacheReaderWriter } from './types';
+import type { OracleMetrics } from './metrics';
+import { AGGREGATE_SLO_MS, FETCH_SLO_MS, PUBLISH_SLO_MS } from './metrics';
 import { buildOracleCacheKey } from './cache';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -362,6 +364,24 @@ export interface OracleReputationProvider {
 export interface OracleVerifierOptions extends OracleVerifierDependencies {
   cache?: OracleCacheReaderWriter;
   cacheTtlSeconds?: number;
+  /**
+   * Optional stage metrics (issue #1054). When present, computeVerification
+   * records per-stage latency histograms and SLO-violation counters.
+   */
+  metrics?: OracleMetrics;
+}
+
+/**
+ * Thrown when every oracle source is unavailable and no cached response
+ * exists to degrade to (issue #1057). The HTTP layer maps this to 503 with
+ * `degraded: true` rather than a generic 500.
+ */
+export class OracleUnavailableError extends Error {
+  readonly degraded = true;
+  constructor(message = 'Oracle providers unavailable and no cached response') {
+    super(message);
+    this.name = 'OracleUnavailableError';
+  }
 }
 
 export class OracleVerifier {
@@ -371,6 +391,7 @@ export class OracleVerifier {
   private readonly historyProvider: OracleHistoryProvider;
   private readonly reputationProvider: OracleReputationProvider;
   private readonly maxOracleAgeMs: number;
+  private readonly metrics?: OracleMetrics;
   private readonly inflight = new Map<string, Promise<OracleVerificationResponse>>();
 
   constructor(options: OracleVerifierOptions) {
@@ -380,6 +401,7 @@ export class OracleVerifier {
     this.historyProvider = options.historyProvider;
     this.reputationProvider = options.reputationProvider;
     this.maxOracleAgeMs = options.maxOracleAgeMs ?? 5 * 60 * 1000;
+    this.metrics = options.metrics;
   }
 
   async verify(request: OracleVerificationRequest): Promise<OracleVerificationResponse> {
@@ -420,6 +442,32 @@ export class OracleVerifier {
     }
   }
 
+  private observeStage(
+    stage: 'fetch' | 'aggregate' | 'publish',
+    durationMs: number
+  ): void {
+    if (!this.metrics) {
+      return;
+    }
+    const seconds = durationMs / 1000;
+    if (stage === 'fetch') {
+      this.metrics.fetchDuration.observe(seconds);
+      if (durationMs > FETCH_SLO_MS) {
+        this.metrics.fetchSloViolationsTotal.inc();
+      }
+    } else if (stage === 'aggregate') {
+      this.metrics.aggregateDuration.observe(seconds);
+      if (durationMs > AGGREGATE_SLO_MS) {
+        this.metrics.aggregateSloViolationsTotal.inc();
+      }
+    } else {
+      this.metrics.publishDuration.observe(seconds);
+      if (durationMs > PUBLISH_SLO_MS) {
+        this.metrics.publishSloViolationsTotal.inc();
+      }
+    }
+  }
+
   private async computeVerification(
     request: OracleVerificationRequest,
     cacheKey: string
@@ -436,21 +484,55 @@ export class OracleVerifier {
     };
     let indexerAvailable = true;
 
+    const fetchStart = this.now();
     const [historyResult, reputationResult] = await Promise.allSettled([
       this.historyProvider(request.payer),
       this.reputationProvider(request.payer),
     ]);
+    this.observeStage('fetch', this.now() - fetchStart);
 
+    let historyFailed = false;
+    let reputationFailed = false;
     if (historyResult.status === 'fulfilled') {
       history = historyResult.value;
     } else {
       indexerAvailable = false;
+      historyFailed = true;
     }
 
     if (reputationResult.status === 'fulfilled') {
       reputation = reputationResult.value;
+    } else {
+      reputationFailed = true;
     }
 
+    // Degraded-mode contract (issue #1057): when EVERY source is down, serve
+    // the last-known-good cached response — marked stale/degraded and never
+    // verified — rather than inventing a fresh-looking answer. With no cache
+    // to degrade to, fail loudly so callers halt price-dependent operations.
+    if (historyFailed && reputationFailed) {
+      const stale = await this.cache?.getStale(cacheKey);
+      if (stale) {
+        const ageMs = Math.max(0, nowMs - stale.generatedAtMs);
+        this.metrics?.degradedResponsesTotal.inc();
+        this.metrics?.lastKnownGoodAgeSeconds.set(ageMs / 1000);
+        return {
+          ...stale.response,
+          cacheHit: false,
+          stale: true,
+          degraded: true,
+          isVerified: false,
+          dataAgeMs: ageMs,
+          evidence: [
+            ...stale.response.evidence,
+            'Oracle sources unavailable; serving last-known-good cached response (stale)',
+          ],
+        };
+      }
+      throw new OracleUnavailableError();
+    }
+
+    const aggregateStart = this.now();
     const assessment = assessOracleRequest({
       request,
       history,
@@ -458,6 +540,7 @@ export class OracleVerifier {
       nowMs,
       maxOracleAgeMs: request.maxOracleAgeMs ?? this.maxOracleAgeMs,
     });
+    this.observeStage('aggregate', this.now() - aggregateStart);
 
     const response: OracleVerificationResponse = {
       ...assessment.response,
@@ -471,7 +554,9 @@ export class OracleVerifier {
       );
     }
 
+    const publishStart = this.now();
     await this.cache?.set(cacheKey, response, this.cacheTtlSeconds);
+    this.observeStage('publish', this.now() - publishStart);
     return response;
   }
 }

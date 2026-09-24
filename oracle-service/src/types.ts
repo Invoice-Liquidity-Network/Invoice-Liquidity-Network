@@ -54,6 +54,14 @@ export interface OracleVerificationResponse {
   settlementVarianceDays: number;
   fraudSignals: string[];
   evidence: string[];
+  /**
+   * Degraded-mode contract (issue #1057): when oracle-service cannot reach
+   * any source, it serves the last-known-good cached response with
+   * `stale: true, degraded: true, isVerified: false` instead of failing
+   * silently or returning fresh-looking data.
+   */
+  stale?: boolean;
+  degraded?: boolean;
 }
 
 export interface OracleAssessmentInput {
@@ -89,6 +97,16 @@ export interface OracleServiceHealth {
   indexerBaseUrl: string;
   reputationConfigured: boolean;
   lastVerificationAt?: string | null;
+  /** Issue #1057: true once the service has served a degraded response. */
+  degradedMode: boolean;
+  degradedResponses?: number;
+  lastSuccessfulVerificationAt?: string | null;
+  /** Issue #1054: per-stage SLO violation totals served by this instance. */
+  sloViolations?: {
+    fetch: number;
+    aggregate: number;
+    publish: number;
+  };
 }
 
 export interface OracleServiceMetricsSnapshot {
@@ -111,6 +129,13 @@ export interface OracleVerifierDependencies {
 export interface OracleCacheReaderWriter {
   get(key: string): Promise<OracleCacheEntry | null>;
   set(key: string, response: OracleVerificationResponse, ttlSeconds: number): Promise<void>;
+  /**
+   * Last-known-good read for degraded mode (issue #1057): returns the most
+   * recent response for key even when its TTL has expired, or null when the
+   * key was never written. Backends that cannot retain expired entries
+   * return null and the caller fails loudly instead of degrading.
+   */
+  getStale(key: string): Promise<OracleCacheEntry | null>;
 }
 
 export interface OracleServiceOptions {

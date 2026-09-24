@@ -235,6 +235,38 @@ As invoices are settled (paid or defaulted) and indexed by `indexer/`, subsequen
 - Load tests: Verify concurrency handling, cache hit rates, and rate limiting behavior
 - Downtime simulation: Confirm graceful degradation when indexer is unavailable
 
+## Degraded-Mode Contract — Issue #1057
+
+When oracle-service cannot reach **any** source (indexer history *and* on-chain
+reputation both fail), it does not invent a fresh-looking answer. The contract
+integrators code against is:
+
+| Situation | Response | Meaning for the caller |
+|---|---|---|
+| Sources healthy | `200`, `isVerified` per trust rules | Proceed normally |
+| All sources down, last-known-good cached | `200` with `stale: true, degraded: true, isVerified: false`, plus `dataAgeMs` and a staleness evidence entry | **Halt price-dependent operations.** The payload is the most recent cached answer; `dataAgeMs` says how old it is |
+| All sources down, nothing cached | `503` with `degraded: true` | **Halt price-dependent operations.** Retry with backoff |
+| Oracle process itself dead | TCP connection refused / timeout | Treat exactly like the `503` row: halt and retry |
+
+Design decision: **last-known-good with a staleness flag**, not a hard halt
+inside the service. A halt-everything rule would turn every indexer blip into
+a protocol outage; a silent fallback would let stale scores pass as fresh.
+The flag forces the choice onto the caller, where the business context lives.
+
+Mechanics:
+
+- Fresh cache hits (within `ORACLE_CACHE_TTL_SECONDS`, default 300s) are
+  served normally — their staleness is already bounded by the TTL.
+- On a cache miss (or `forceRefresh`) with all sources down, the verifier
+  reads the last-known-good entry (`getStale`, retained past TTL in memory
+  and for 24h in Redis) and marks it stale/degraded/unverified.
+- Every degraded response increments `oracle_degraded_responses_total` and
+  sets `oracle_last_known_good_age_seconds`; `/v1/health` flips
+  `degradedMode: true` and counts `degradedResponses`.
+- End-to-end coverage lives in `oracle-service/src/degraded-mode.test.ts`:
+  it kills all sources over HTTP and asserts the 503 row, the stale row, the
+  health flip, and the Prometheus counters.
+
 ## Known Limitations & Future Improvements
 
 1. **Reputation contract optional**: On-chain reputation is currently optional; if not configured, all payers get 0 reputation score

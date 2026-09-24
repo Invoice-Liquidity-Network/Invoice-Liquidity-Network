@@ -10,7 +10,7 @@ import {
   type OracleVerificationRequest,
   type ReputationSnapshot,
 } from './types';
-import { OracleVerifier, fetchOnChainReputation } from './verifier';
+import { OracleVerifier, fetchOnChainReputation, OracleUnavailableError } from './verifier';
 
 const DEFAULT_PORT = 3010;
 const DEFAULT_INDEXER_BASE_URL = 'http://localhost:3001';
@@ -216,10 +216,13 @@ export async function createOracleApp(
     reputationProvider,
     cacheTtlSeconds: resolved.cacheTtlSeconds,
     maxOracleAgeMs: resolved.maxOracleAgeMs,
+    metrics,
   });
 
   const startedAt = Date.now();
   let lastVerificationAt: string | null = null;
+  let lastSuccessfulVerificationAt: string | null = null;
+  let degradedResponses = 0;
   let healthy = true;
 
   const app = express();
@@ -235,6 +238,7 @@ export async function createOracleApp(
   app.get('/health', async (_req: Request, res: Response) => {
     res.json({
       ...health(),
+      sloViolations: await sloViolationSnapshot(),
       route: '/health',
     });
   });
@@ -242,6 +246,7 @@ export async function createOracleApp(
   app.get('/v1/health', async (_req: Request, res: Response) => {
     res.json({
       ...health(),
+      sloViolations: await sloViolationSnapshot(),
       route: '/v1/health',
     });
   });
@@ -311,15 +316,45 @@ export async function createOracleApp(
       }
 
       lastVerificationAt = response.generatedAt;
+      if (response.degraded) {
+        degradedResponses += 1;
+      } else {
+        lastSuccessfulVerificationAt = response.generatedAt;
+      }
       res.json(response);
     } catch (error) {
       healthy = false;
       metrics.verificationDuration.observe(Number(process.hrtime.bigint() - start) / 1e9);
+      if (error instanceof OracleUnavailableError) {
+        // Degraded-mode contract (issue #1057): no source and no cache.
+        // Tell the caller to halt price-dependent operations (503) rather
+        // than serving a fabricated answer.
+        metrics.degradedResponsesTotal.inc();
+        degradedResponses += 1;
+        res.status(503).json({
+          error: 'Oracle unavailable',
+          degraded: true,
+          message: error.message,
+        });
+        return;
+      }
       res.status(500).json({
         error: 'Oracle verification failed',
         message: error instanceof Error ? error.message : String(error),
       });
     }
+  }
+
+  async function sloViolationSnapshot(): Promise<{ fetch: number; aggregate: number; publish: number }> {
+    const counters = [
+      metrics.fetchSloViolationsTotal,
+      metrics.aggregateSloViolationsTotal,
+      metrics.publishSloViolationsTotal,
+    ];
+    const values = await Promise.all(
+      counters.map(async (c) => (await c.get()).values[0]?.value ?? 0)
+    );
+    return { fetch: values[0], aggregate: values[1], publish: values[2] };
   }
 
   function health(): OracleServiceHealth {
@@ -330,6 +365,9 @@ export async function createOracleApp(
       indexerBaseUrl: resolved.indexerBaseUrl,
       reputationConfigured: Boolean(resolved.reputationRpcUrl && resolved.reputationContractId),
       lastVerificationAt,
+      degradedMode: degradedResponses > 0,
+      degradedResponses,
+      lastSuccessfulVerificationAt,
     };
   }
 

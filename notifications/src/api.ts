@@ -22,7 +22,7 @@ import {
   validateTrigger,
 } from './config';
 import type { NotificationTrigger } from './types';
-import { sendWebhook } from './delivery';
+import { getDeadLetterCount, getDeadLetterEntries, getRetryMetrics, replayDeadLetter, sendWebhook } from './delivery';
 import { createPreferencesRouter } from './preferences-api';
 
 interface SubscribeRequest {
@@ -240,6 +240,31 @@ export function createApp() {
     const rawDays = typeof req.query.days === 'string' ? parseInt(req.query.days, 10) : 30;
     const days = Number.isFinite(rawDays) && rawDays > 0 ? Math.min(rawDays, 365) : 30;
     return res.json({ trends: getTrendAnalytics(days) });
+  });
+
+  // Issue #1060: operator-facing dead-letter queue inspection and replay.
+  // Permanently-failing notifications land here with their failure reason
+  // instead of being silently dropped; operators can list them, check retry
+  // metrics (including the accumulation alert), and manually replay one.
+  app.get('/dead-letter', (_req: Request, res: Response) => {
+    return res.json({ count: getDeadLetterCount(), entries: getDeadLetterEntries() });
+  });
+
+  app.get('/dead-letter/metrics', (_req: Request, res: Response) => {
+    return res.json(getRetryMetrics());
+  });
+
+  app.post('/dead-letter/:id/replay', (req: Request, res: Response) => {
+    const id = req.params.id;
+    if (!id) {
+      return res.status(400).json({ error: 'dead-letter entry id is required' });
+    }
+    try {
+      replayDeadLetter(id);
+      return res.json({ success: true, id });
+    } catch (error: any) {
+      return res.status(404).json({ error: error?.message ?? 'Dead-letter entry not found' });
+    }
   });
 
   // Issue #718: digest preview endpoint — returns pending buffer items
