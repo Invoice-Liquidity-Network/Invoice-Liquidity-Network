@@ -111,3 +111,6 @@ docker run -d \
 ---
 
 *For more details, see the SDK and service source code.*
+
+## Delivery Guarantees
+The notifications service guarantees **at-least-once** delivery. Before any notification is sent via email, SMS, or webhook, the intent to deliver is durably persisted to an internal dispatch table (`dispatch_attempts`) using a deduplication key. If the process crashes mid-dispatch or encounters a transient failure, the poller will automatically resume delivery of pending notifications on the next cycle, ensuring no notifications are silently dropped. The deduplication key ensures that successful deliveries are not duplicated.

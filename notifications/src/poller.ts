@@ -1,7 +1,7 @@
 import type { rpc } from '@stellar/stellar-sdk';
 import { CONFIG } from './config';
 import { getCursorLedger, setCursorLedger } from './db';
-import { processEvent, processScheduledNotifications } from './processor';
+import { processEvent, processScheduledNotifications, flushPendingNotifications } from './processor';
 import { server } from './rpc';
 import { isRetryableError, normalizeError } from './errors';
 
@@ -69,6 +69,7 @@ export async function pollOnce(): Promise<void> {
   }
 
   await processScheduledNotifications();
+  await flushPendingNotifications();
 }
 
 export async function startPolling(): Promise<void> {

@@ -73,6 +73,14 @@ function runMigrations(db: SQLiteDatabase): void {
       created_at      INTEGER NOT NULL
     );
 
+    CREATE TABLE IF NOT EXISTS dispatch_attempts (
+      id                TEXT PRIMARY KEY,
+      subscription      TEXT NOT NULL,
+      payload           TEXT NOT NULL,
+      status            TEXT NOT NULL DEFAULT 'pending',
+      created_at        INTEGER NOT NULL
+    );
+
     CREATE TABLE IF NOT EXISTS sent_notifications (
       id                INTEGER PRIMARY KEY,
       invoice_id        INTEGER NOT NULL,
@@ -471,4 +479,54 @@ export function getTrendAnalytics(days: number): TrendRow[] {
        ORDER BY date ASC`
     )
     .all(cutoffMs) as TrendRow[];
+}
+
+import type { NotificationPayload } from './types';
+
+export interface DispatchAttempt {
+  id: string;
+  subscription: Subscription;
+  payload: NotificationPayload;
+  status: 'pending' | 'delivered';
+  createdAt: number;
+}
+
+export function enqueueDispatchAttempt(
+  dedupKey: string,
+  subscription: Subscription,
+  payload: NotificationPayload
+): void {
+  getDb()
+    .prepare(
+      `INSERT OR IGNORE INTO dispatch_attempts
+         (id, subscription, payload, status, created_at)
+       VALUES (?, ?, ?, 'pending', ?)`
+    )
+    .run(dedupKey, JSON.stringify(subscription), JSON.stringify(payload), Date.now());
+}
+
+export function getPendingDispatchAttempts(): DispatchAttempt[] {
+  const rows = getDb()
+    .prepare(`SELECT id, subscription, payload, status, created_at FROM dispatch_attempts WHERE status = 'pending' ORDER BY created_at ASC`)
+    .all() as Array<{
+      id: string;
+      subscription: string;
+      payload: string;
+      status: string;
+      created_at: number;
+    }>;
+
+  return rows.map((row) => ({
+    id: row.id,
+    subscription: JSON.parse(row.subscription) as Subscription,
+    payload: JSON.parse(row.payload) as NotificationPayload,
+    status: row.status as 'pending' | 'delivered',
+    createdAt: row.created_at,
+  }));
+}
+
+export function markDispatchAttemptDelivered(dedupKey: string): void {
+  getDb()
+    .prepare(`UPDATE dispatch_attempts SET status = 'delivered' WHERE id = ?`)
+    .run(dedupKey);
 }

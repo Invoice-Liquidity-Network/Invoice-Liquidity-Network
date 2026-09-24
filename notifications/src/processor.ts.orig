@@ -9,8 +9,6 @@ import {
   hasSentNotification,
   logSentNotification,
   enqueueDispatchAttempt,
-  getPendingDispatchAttempts,
-  markDispatchAttemptDelivered,
 } from './db';
 import { fetchInvoice } from './rpc';
 import { deliverNotification } from './delivery';
@@ -67,26 +65,6 @@ export async function processEvent(event: rpc.Api.EventResponse): Promise<void> 
 export async function processScheduledNotifications(): Promise<void> {
   await notifyDueSoon();
   await notifyOverdue();
-}
-
-export async function flushPendingNotifications(): Promise<void> {
-  const pending = getPendingDispatchAttempts();
-  for (const attempt of pending) {
-    try {
-      await deliverNotification(attempt.subscription, attempt.payload);
-      markDispatchAttemptDelivered(attempt.id);
-      logSentNotification(
-        attempt.payload.invoice.id,
-        attempt.payload.trigger,
-        attempt.payload.recipientAddress,
-        attempt.subscription.channel,
-        attempt.subscription.destination,
-        attempt.payload.eventId
-      );
-    } catch (error) {
-      console.error(`[processor] Failed to deliver pending notification ${attempt.id}:`, error);
-    }
-  }
 }
 
 async function notifyDueSoon(): Promise<void> {

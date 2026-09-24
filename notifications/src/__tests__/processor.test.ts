@@ -9,7 +9,7 @@ import { nativeToScVal } from '@stellar/stellar-sdk';
 import { createDb, setDb, createSubscription, upsertInvoice } from '../db';
 import * as rpc from '../rpc';
 import * as delivery from '../delivery';
-import { processEvent, processScheduledNotifications } from '../processor';
+import { processEvent, processScheduledNotifications, flushPendingNotifications } from '../processor';
 
 let db: InstanceType<typeof Database>;
 
@@ -120,5 +120,37 @@ describe('Notification processor', () => {
     await processScheduledNotifications();
 
     expect(deliverySpy).toHaveBeenCalledTimes(1);
+  });
+
+  it('guarantees at-least-once delivery and resumes mid-dispatch crashes without duplication', async () => {
+    const invoice = {
+      id: 3,
+      freelancer: 'GACRASHFREE',
+      payer: 'GACRASHPAY',
+      amount: '50000',
+      due_date: Math.floor(Date.now() / 1000) + 86400,
+      discount_rate: 100,
+      funder: null,
+      status: 'Submitted' as const,
+    };
+
+    vi.spyOn(rpc, 'fetchInvoice').mockResolvedValue(invoice);
+    
+    // Simulate a crash by rejecting the first delivery
+    const deliverySpy = vi.spyOn(delivery, 'deliverNotification')
+      .mockRejectedValueOnce(new Error('simulated process crash'))
+      .mockResolvedValueOnce();
+
+    createSubscription({
+      stellar_address: invoice.freelancer,
+      channel: 'email',
+      destination: 'crash@example.com',
+      triggers: ['invoice_funded'],
+    });
+
+    await processEvent({ id: 'ev-crash', type: 'contract', ledger: 1, ledgerClosedAt: '2023-01-01T00:00:00Z', contractId: 'C123', topic: ['invoice_funded'], value: nativeToScVal(3) });
+    await flushPendingNotifications(); // This simulates the resume/restart picking it up
+    
+    expect(deliverySpy).toHaveBeenCalledTimes(2);
   });
 });
