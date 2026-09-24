@@ -5,6 +5,7 @@
  */
 
 import { createLogger } from './logger';
+import { ILNError, OfflineQueueFullError, ValidationError } from './errors';
 
 const logger = createLogger('offline');
 
@@ -58,12 +59,19 @@ export type SubmitCallback = (item: OfflineQueueItem) => Promise<boolean>;
  * to the user — the operation will be retried automatically when connectivity
  * is restored.
  */
-export class OfflineQueuedError extends Error {
+export class OfflineQueuedError extends ILNError {
   public readonly item: OfflineQueueItem;
 
   constructor(item: OfflineQueueItem) {
-    super(`Operation "${item.operation}" queued for submission when back online (id: ${item.id})`);
-    this.name = 'OfflineQueuedError';
+    super(
+      `Operation "${item.operation}" queued for submission when back online (id: ${item.id})`,
+      'OFFLINE_QUEUED',
+      'The operation was queued because the client is offline. It will be submitted automatically when connectivity is restored, or manually via `processQueue()`.',
+      {
+        context: { item: { id: item.id, operation: item.operation } },
+        retryable: false,
+      }
+    );
     this.item = item;
   }
 }
@@ -146,7 +154,10 @@ export class OfflineManager {
    */
   enqueue(operation: string, params: unknown): OfflineQueueItem {
     if (this.queue.length >= this.config.maxQueueSize) {
-      throw new Error(`Queue is full (max ${this.config.maxQueueSize} items)`);
+      throw new OfflineQueueFullError(`Queue is full (max ${this.config.maxQueueSize} items)`, {
+        maxQueueSize: this.config.maxQueueSize,
+        queueSize: this.queue.length,
+      });
     }
 
     const item: OfflineQueueItem = {
@@ -211,7 +222,7 @@ export class OfflineManager {
   async retryItem(id: string): Promise<void> {
     const item = this.queue.find((i) => i.id === id && i.status === 'failed');
     if (!item) {
-      throw new Error(`Item ${id} not found or not in failed state`);
+      throw new ValidationError(`Item ${id} not found or not in failed state`, undefined, { id });
     }
 
     item.status = 'pending';

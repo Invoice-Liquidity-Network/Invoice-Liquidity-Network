@@ -8,6 +8,8 @@
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
+import { ValidationError } from './errors';
+
 export type Listener<T> = (state: T, prev: T) => void;
 export type Unsubscribe = () => void;
 
@@ -181,7 +183,7 @@ export function createStateStore<T>(
 
     patch(partial: Partial<T>): void {
       if (typeof current !== 'object' || current === null) {
-        throw new TypeError('patch() can only be used with object states');
+        throw new ValidationError('patch() can only be used with object states');
       }
       store.setState({ ...current, ...partial });
     },

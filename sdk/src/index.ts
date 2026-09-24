@@ -13,6 +13,8 @@ export * from './types';
 export * from './timeouts';
 export * from './backoff';
 export { ContractError } from './generated/types';
+export * from './xdr';
+export * from './failover';
 export * from './notifications';
 export * from './analytics';
 export * from './analytics-computations';

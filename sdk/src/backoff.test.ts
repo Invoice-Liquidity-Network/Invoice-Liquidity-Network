@@ -3,6 +3,7 @@ import { withBackoff, computeDelay, isTransientError } from './backoff';
 
 describe('computeDelay', () => {
   const baseOptions = {
+    maxRetries: 4,
     baseDelayMs: 1000,
     maxDelayMs: 10_000,
     multiplier: 2,
@@ -126,10 +127,11 @@ describe('withBackoff', () => {
 
     const promise = withBackoff(fn, { maxRetries: 2, baseDelayMs: 100, jitter: 0 });
 
+    const rejection = expect(promise).rejects.toThrow('fetch failed');
     await vi.advanceTimersByTimeAsync(100);
     await vi.advanceTimersByTimeAsync(200);
 
-    await expect(promise).rejects.toThrow('fetch failed');
+    await rejection;
     expect(fn).toHaveBeenCalledTimes(3); // initial + 2 retries
   });
 
@@ -155,10 +157,11 @@ describe('withBackoff', () => {
       isRetryable,
     });
 
+    const rejection = expect(promise).rejects.toThrow();
     await vi.advanceTimersByTimeAsync(100);
     await vi.advanceTimersByTimeAsync(200);
 
-    await expect(promise).rejects.toThrow();
+    await rejection;
     expect(fn).toHaveBeenCalledTimes(3); // retries because isRetryable says 400 is retryable
   });
 

@@ -188,6 +188,18 @@ export interface ILNSdkConfig {
     simulationMs?: number;
   };
   /**
+   * Optional list of additional Soroban RPC endpoint URLs, ordered by priority
+   * (first = primary). When provided, the SDK transparently fails over between
+   * `rpcUrl` and these endpoints on transient RPC failures. See
+   * `docs/sdk-trust-model.md`.
+   */
+  rpcEndpoints?: string[];
+  /**
+   * Configuration for multi-endpoint RPC failover and health scoring.
+   * Only applies when `rpcEndpoints` is provided (or `server` is absent).
+   */
+  rpcFailover?: import('./failover').RpcFailoverOptions;
+  /**
    * Whether to verify the contractId against known official ILN deployment IDs on initialization.
    * Defaults to true. If set to true (or omitted) and the contractId does not match a known official deployment,
    * a loud warning will be logged to alert integrators of possible misconfiguration.

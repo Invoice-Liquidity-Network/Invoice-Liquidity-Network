@@ -21,7 +21,6 @@ import { createHash } from 'crypto';
 // ---------------------------------------------------------------------------
 
 const SDK_VERSION = '0.1.0';
-const GENERATED_AT = new Date().toISOString();
 
 /**
  * Compute a hash of the spec file for version tracking.
@@ -223,6 +222,7 @@ function generateErrorEnum(entry: ErrorEntry): string {
 const args = process.argv.slice(2);
 const specFlagIdx = args.indexOf('--spec');
 const outputFlagIdx = args.indexOf('--output');
+const dryRun = args.includes('--dry-run');
 
 const specPath =
   specFlagIdx !== -1 ? args[specFlagIdx + 1] : path.resolve('backend', 'target', 'spec.json');
@@ -251,7 +251,6 @@ const sections: string[] = [
   `// Source: ${path.relative(process.cwd(), specPath)}`,
   `// Spec hash: ${specHash}`,
   `// SDK version: ${SDK_VERSION}`,
-  `// Generated at: ${GENERATED_AT}`,
   ``,
 ];
 
@@ -279,10 +278,15 @@ for (const entry of spec) {
 }
 
 fs.mkdirSync(path.dirname(outPath), { recursive: true });
-fs.writeFileSync(outPath, sections.join('\n'));
-console.log(
-  `Generated ${typeCount} type blocks from spec (hash: ${specHash}) → ${path.relative(
-    process.cwd(),
-    outPath
-  )}`
-);
+const output = sections.join('\n');
+if (dryRun) {
+  process.stdout.write(output);
+} else {
+  fs.writeFileSync(outPath, output);
+  console.log(
+    `Generated ${typeCount} type blocks from spec (hash: ${specHash}) → ${path.relative(
+      process.cwd(),
+      outPath
+    )}`
+  );
+}

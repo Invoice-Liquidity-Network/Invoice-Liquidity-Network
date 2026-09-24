@@ -172,4 +172,11 @@ export interface GovernanceClientConfig {
   rpcUrl: string;
   networkPassphrase: string;
   server?: RpcServerLike;
+  /**
+   * Optional list of additional Soroban RPC endpoint URLs, ordered by priority.
+   * Enables multi-endpoint failover with health scoring when `server` is absent.
+   */
+  rpcEndpoints?: string[];
+  /** Configuration for multi-endpoint RPC failover and health scoring. */
+  rpcFailover?: import('./failover').RpcFailoverOptions;
 }

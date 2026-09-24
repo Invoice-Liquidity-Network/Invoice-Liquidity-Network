@@ -250,6 +250,8 @@ jobs:
       - node-tests
       - license-compliance
       - sdk-types-sync
+      - generated-types-drift
+      - sdk-api-compat
       - core-install
       - core-format
       - core-lint
@@ -276,7 +278,7 @@ jobs:
 
           # Collect which jobs failed
           FAILED_JOBS=""
-          for job in test build lint node-tests license-compliance sdk-types-sync core-install core-format core-lint core-type-check core-test core-build; do
+          for job in test build lint node-tests license-compliance sdk-types-sync generated-types-drift sdk-api-compat core-install core-format core-lint core-type-check core-test core-build; do
             result=$(echo '${{ toJSON(needs) }}' | jq -r --arg job "$job" '.[$job].result // "skipped"')
             if [ "$result" = "failure" ]; then
               FAILED_JOBS="$FAILED_JOBS\n- **$job**: ❌ $result"
@@ -592,6 +594,18 @@ jobs:
             exit 1
           fi
 
+      - name: Regenerate shared types
+        run: pnpm generate:shared-types || echo "Skipped (no spec.json)"
+
+      - name: Check if shared types changed
+        run: |
+          if [ -n "$(git diff --name-only packages/shared/src/types.ts)" ]; then
+            echo "❌ Shared types are out of sync!"
+            git diff packages/shared/src/types.ts
+            echo "Run: pnpm generate:shared-types"
+            exit 1
+          fi
+
       - name: Comment PR on failure
         if: failure() && github.event_name == 'pull_request' && !github.event.pull_request.head.repo.fork
         continue-on-error: true
@@ -602,7 +616,63 @@ jobs:
               issue_number: context.issue.number,
               owner: context.repo.owner,
               repo: context.repo.repo,
-              body: '🚨 **SDK types are out of sync!** Run `pnpm generate:types` and commit the changes.'
+              body: '🚨 **SDK types are out of sync!** Run `pnpm generate:types && pnpm generate:shared-types` and commit the changes.'
+            })
+
+  generated-types-drift:
+    name: Generated types drift check
+    needs: [pnpm-cache, changes]
+    if: needs.changes.outputs.backend == 'true' || needs.changes.outputs.sdk == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Setup pnpm with store cache
+        uses: ./.github/actions/setup-pnpm
+
+      - name: Check generated type surfaces
+        run: pnpm check:generated-types
+
+      - name: Comment PR on failure
+        if: failure() && github.event_name == 'pull_request' && !github.event.pull_request.head.repo.fork
+        continue-on-error: true
+        uses: actions/github-script@v7
+        with:
+          script: |
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: '🚨 **Generated types are out of sync!** Run `pnpm check:generated-types` locally to see the drift.'
+            })
+
+  sdk-api-compat:
+    name: SDK API compatibility
+    needs: [pnpm-cache, changes]
+    if: needs.changes.outputs.sdk == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup pnpm with store cache
+        uses: ./.github/actions/setup-pnpm
+
+      - name: Check SDK API surface against snapshot
+        run: pnpm sdk:api:check
+
+      - name: Comment PR on failure
+        if: failure() && github.event_name == 'pull_request' && !github.event.pull_request.head.repo.fork
+        continue-on-error: true
+        uses: actions/github-script@v7
+        with:
+          script: |
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: '🚨 **SDK API drift detected!** Run `pnpm sdk:api:snapshot` and commit `sdk/api-snapshot.json`; add a `major` changeset for `@iln/sdk` if the changes are breaking.'
             })
 
   sdk-testnet-integration:

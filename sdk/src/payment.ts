@@ -7,6 +7,8 @@
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
+import { ValidationError } from './errors';
+
 export type PaymentStatus =
   | 'pending'
   | 'scheduled'
@@ -147,10 +149,10 @@ export class PaymentProcessor {
     const remaining = invoice.amount - funded;
 
     if (amount <= 0n) {
-      throw new RangeError('Partial payment amount must be greater than zero');
+      throw new ValidationError('Partial payment amount must be greater than zero');
     }
     if (amount > remaining) {
-      throw new RangeError(
+      throw new ValidationError(
         `Partial payment amount ${amount} exceeds remaining balance ${remaining}`
       );
     }
@@ -195,14 +197,16 @@ export class PaymentProcessor {
     const { invoiceId, tokens, memo } = params;
 
     if (tokens.length === 0) {
-      throw new Error('At least one token amount is required for a multi-token payment');
+      throw new ValidationError('At least one token amount is required for a multi-token payment');
     }
 
     const records: PaymentRecord[] = [];
 
     for (const { tokenId, amount, symbol } of tokens) {
       if (amount <= 0n) {
-        throw new RangeError(`Token ${tokenId}: amount must be greater than zero`);
+        throw new ValidationError(`Token ${tokenId}: amount must be greater than zero`, undefined, {
+          tokenId,
+        });
       }
 
       const record: PaymentRecord = {
@@ -249,10 +253,10 @@ export class PaymentProcessor {
       executeAt instanceof Date ? Math.floor(executeAt.getTime() / 1000) : executeAt;
 
     if (executeAtTs <= Math.floor(Date.now() / 1000)) {
-      throw new RangeError('executeAt must be in the future');
+      throw new ValidationError('executeAt must be in the future');
     }
     if (amount <= 0n) {
-      throw new RangeError('Scheduled payment amount must be greater than zero');
+      throw new ValidationError('Scheduled payment amount must be greater than zero');
     }
 
     const scheduled: ScheduledPayment = {
@@ -278,10 +282,13 @@ export class PaymentProcessor {
   cancelScheduledPayment(id: string): ScheduledPayment {
     const payment = this.scheduledPayments.get(id);
     if (!payment) {
-      throw new Error(`Scheduled payment ${id} not found`);
+      throw new ValidationError(`Scheduled payment ${id} not found`, undefined, { id });
     }
     if (payment.status !== 'scheduled') {
-      throw new Error(`Cannot cancel payment in status '${payment.status}'`);
+      throw new ValidationError(`Cannot cancel payment in status '${payment.status}'`, undefined, {
+        id,
+        status: payment.status,
+      });
     }
 
     payment.status = 'cancelled';

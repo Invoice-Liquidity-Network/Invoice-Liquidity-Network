@@ -11,6 +11,12 @@ import {
 import { GOVERNANCE_READ_ACCOUNT, GOVERNANCE_TX_TIMEOUT_SEC } from './governance-constants';
 import { ProposalActionKind, ProposalStatus } from './governance-types';
 import type { ProposalAction } from './governance-types';
+import {
+  GenericContractError,
+  SimulationError,
+  TransactionBuildError,
+  ValidationError,
+} from './errors';
 import type { RpcServerLike } from './types';
 
 export type BuiltTransaction = ReturnType<TransactionBuilder['build']>;
@@ -68,7 +74,10 @@ export function toAddressScVal(address: string): xdr.ScVal {
 export function toBytesN32ScVal(value: Buffer | Uint8Array): xdr.ScVal {
   const bytes = Buffer.from(value);
   if (bytes.length !== 32) {
-    throw new Error(`Expected 32-byte hash but received ${bytes.length} bytes.`);
+    throw new ValidationError(`Expected 32-byte hash but received ${bytes.length} bytes.`, undefined, {
+      actualLength: bytes.length,
+      expectedLength: 32,
+    });
   }
   return xdr.ScVal.scvBytes(bytes);
 }
@@ -104,7 +113,7 @@ export function encodeProposalAction(action: ProposalAction): xdr.ScVal {
       ]);
     default: {
       const exhaustive: never = action;
-      throw new Error(`Unsupported proposal action: ${JSON.stringify(exhaustive)}`);
+      throw new TransactionBuildError(`Unsupported proposal action: ${JSON.stringify(exhaustive)}`);
     }
   }
 }
@@ -120,15 +129,19 @@ export function extractSimulationRetval(simulation: unknown, method: string): xd
   const typedSimulation = simulation as SimulationLike;
 
   if (typedSimulation.error) {
-    throw new Error(
+    throw new SimulationError(
       `Simulation failed for ${method}: ${
         typedSimulation.error ? String(typedSimulation.error) : 'Unknown RPC error.'
-      }`
+      }`,
+      undefined,
+      { method }
     );
   }
 
   if (!typedSimulation.result?.retval) {
-    throw new Error(`Simulation for ${method} did not return a contract result.`);
+    throw new SimulationError(`Simulation for ${method} did not return a contract result.`, undefined, {
+      method,
+    });
   }
 
   return typedSimulation.result.retval;
@@ -146,17 +159,19 @@ export function unwrapContractResult(value: unknown, method: string): unknown {
     return (value as { Ok: unknown }).Ok;
   }
   if ('err' in value) {
-    throw new Error(
+    throw new GenericContractError(
       `Contract method ${method} returned an error: ${formatContractError(
         (value as { err: unknown }).err
-      )}.`
+      )}.`,
+      { method }
     );
   }
   if ('Err' in value) {
-    throw new Error(
+    throw new GenericContractError(
       `Contract method ${method} returned an error: ${formatContractError(
         (value as { Err: unknown }).Err
-      )}.`
+      )}.`,
+      { method }
     );
   }
 
@@ -184,17 +199,19 @@ export function extractContractCall(transaction: BuiltTransaction): {
   args: xdr.ScVal[];
 } {
   if (transaction.operations.length !== 1) {
-    throw new Error('Transaction must contain exactly one operation.');
+    throw new TransactionBuildError('Transaction must contain exactly one operation.', {
+      operationCount: transaction.operations.length,
+    });
   }
 
   const operation = transaction.operations[0];
   if (!operation || operation.type !== 'invokeHostFunction') {
-    throw new Error('Transaction does not contain an invokeHostFunction operation.');
+    throw new TransactionBuildError('Transaction does not contain an invokeHostFunction operation.');
   }
 
   const hostFunction = operation.func;
   if (hostFunction.switch().name !== 'hostFunctionTypeInvokeContract') {
-    throw new Error('Transaction does not contain an invokeContract host function.');
+    throw new TransactionBuildError('Transaction does not contain an invokeContract host function.');
   }
 
   const invokeContractArgs = hostFunction.invokeContract();

@@ -1,6 +1,7 @@
 import { createLogger } from './logger';
 import type { ILNEventEmitter } from './event-emitter';
 import { AnalyticsSDK } from './analytics';
+import { PluginError } from './errors';
 
 const logger = createLogger('plugins');
 
@@ -34,7 +35,7 @@ export class PluginRegistry {
 
   async register(plugin: ILNPlugin, config?: Record<string, unknown>): Promise<void> {
     if (this.plugins.has(plugin.name)) {
-      throw new Error(`Plugin "${plugin.name}" is already registered.`);
+      throw new PluginError(`Plugin "${plugin.name}" is already registered.`, { name: plugin.name });
     }
 
     const ctx: PluginContext = {
@@ -53,7 +54,7 @@ export class PluginRegistry {
   async unregister(name: string): Promise<void> {
     const entry = this.plugins.get(name);
     if (!entry) {
-      throw new Error(`Plugin "${name}" is not registered.`);
+      throw new PluginError(`Plugin "${name}" is not registered.`, { name });
     }
     await entry.plugin.destroy?.();
     this.plugins.delete(name);
@@ -302,7 +303,7 @@ export class AnalyticsPluginLoader {
   async unload(pluginId: string): Promise<void> {
     const state = this.plugins.get(pluginId);
     if (!state) {
-      throw new Error(`Plugin "${pluginId}" is not loaded`);
+      throw new PluginError(`Plugin "${pluginId}" is not loaded`, { pluginId, action: 'unload' });
     }
     try {
       await state.plugin.destroy?.();
@@ -331,11 +332,14 @@ export class AnalyticsPluginLoader {
   async computeMetric(pluginId: string, metricId: string): Promise<number | bigint | string> {
     const state = this.plugins.get(pluginId);
     if (!state || !state.enabled) {
-      throw new Error(`Plugin "${pluginId}" is not loaded`);
+      throw new PluginError(`Plugin "${pluginId}" is not loaded`, { pluginId, action: 'computeMetric' });
     }
     const metric = state.plugin.metrics.find((m) => m.id === metricId);
     if (!metric) {
-      throw new Error(`Metric "${metricId}" not found in plugin "${pluginId}"`);
+      throw new PluginError(`Metric "${metricId}" not found in plugin "${pluginId}"`, {
+        pluginId,
+        metricId,
+      });
     }
 
     const cache = this.contextCache.get(pluginId) ?? new Map();
@@ -373,11 +377,14 @@ export class AnalyticsPluginLoader {
   async renderWidget(pluginId: string, widgetId: string): Promise<WidgetRenderResult> {
     const state = this.plugins.get(pluginId);
     if (!state || !state.enabled) {
-      throw new Error(`Plugin "${pluginId}" is not loaded`);
+      throw new PluginError(`Plugin "${pluginId}" is not loaded`, { pluginId, action: 'renderWidget' });
     }
     const widget = state.plugin.widgets.find((w) => w.id === widgetId);
     if (!widget) {
-      throw new Error(`Widget "${widgetId}" not found in plugin "${pluginId}"`);
+      throw new PluginError(`Widget "${widgetId}" not found in plugin "${pluginId}"`, {
+        pluginId,
+        widgetId,
+      });
     }
 
     const cache = this.contextCache.get(pluginId) ?? new Map();

@@ -1,4 +1,5 @@
 import { scValToNative } from '@stellar/stellar-sdk';
+import { InvalidContractResponseError } from './errors';
 
 import {
   ProposalActionKind,
@@ -19,7 +20,10 @@ function toBigInt(value: unknown): bigint {
   if (typeof value === 'string') {
     return BigInt(value);
   }
-  throw new Error(`Expected bigint-compatible value but received ${typeof value}.`);
+  throw new InvalidContractResponseError(
+    `Expected bigint-compatible value but received ${typeof value}.`,
+    { received: typeof value }
+  );
 }
 
 function toNumber(value: unknown, field: string): number {
@@ -29,14 +33,20 @@ function toNumber(value: unknown, field: string): number {
   if (typeof value === 'bigint') {
     return Number(value);
   }
-  throw new Error(`Expected numeric ${field} value but received ${typeof value}.`);
+  throw new InvalidContractResponseError(
+    `Expected numeric ${field} value but received ${typeof value}.`,
+    { field, received: typeof value }
+  );
 }
 
 function toStringValue(value: unknown, field: string): string {
   if (typeof value === 'string') {
     return value;
   }
-  throw new Error(`Expected string ${field} value but received ${typeof value}.`);
+  throw new InvalidContractResponseError(
+    `Expected string ${field} value but received ${typeof value}.`,
+    { field, received: typeof value }
+  );
 }
 
 function toBuffer(value: unknown, field: string): Buffer {
@@ -49,7 +59,10 @@ function toBuffer(value: unknown, field: string): Buffer {
   if (typeof value === 'string') {
     return Buffer.from(value, 'hex');
   }
-  throw new Error(`Expected bytes ${field} value but received ${typeof value}.`);
+  throw new InvalidContractResponseError(
+    `Expected bytes ${field} value but received ${typeof value}.`,
+    { field, received: typeof value }
+  );
 }
 
 function parseProposalStatus(value: unknown): ProposalStatus {
@@ -64,7 +77,7 @@ function parseProposalStatus(value: unknown): ProposalStatus {
     }
   }
 
-  throw new Error('Unable to parse proposal status from contract response.');
+  throw new InvalidContractResponseError('Unable to parse proposal status from contract response.');
 }
 
 function normalizeProposalStatus(value: string): ProposalStatus {
@@ -76,7 +89,7 @@ function normalizeProposalStatus(value: string): ProposalStatus {
     case ProposalStatus.Vetoed:
       return value;
     default:
-      throw new Error(`Unknown proposal status "${value}".`);
+      throw new InvalidContractResponseError(`Unknown proposal status "${value}".`, { value });
   }
 }
 
@@ -95,7 +108,7 @@ function parseProposalAction(value: unknown): ProposalAction {
     }
   }
 
-  throw new Error('Unable to parse proposal action from contract response.');
+  throw new InvalidContractResponseError('Unable to parse proposal action from contract response.');
 }
 
 function parseProposalActionFromTag(tag: string, payload: unknown): ProposalAction {
@@ -121,7 +134,7 @@ function parseProposalActionFromTag(tag: string, payload: unknown): ProposalActi
         rate: toNumber(payload, 'rate'),
       };
     default:
-      throw new Error(`Unknown proposal action "${tag}".`);
+      throw new InvalidContractResponseError(`Unknown proposal action "${tag}".`, { tag });
   }
 }
 
@@ -133,7 +146,9 @@ export function parseGovernanceProposal(value: unknown): GovernanceProposal {
     'descriptionHash'
   );
   if (descriptionHash.length !== HASH_BYTE_LENGTH) {
-    throw new Error(`Expected description hash to be ${HASH_BYTE_LENGTH} bytes.`);
+    throw new InvalidContractResponseError(`Expected description hash to be ${HASH_BYTE_LENGTH} bytes.`, {
+      actualLength: descriptionHash.length,
+    });
   }
 
   return {
@@ -168,7 +183,10 @@ export function parseGovernanceProposalListSimulation(
   const native = unwrapContractResult(scValToNative(retval), method);
 
   if (!Array.isArray(native)) {
-    throw new Error(`Expected ${method} to return an array of proposals.`);
+    throw new InvalidContractResponseError(`Expected ${method} to return an array of proposals.`, {
+      method,
+      received: typeof native,
+    });
   }
 
   return native.map((entry) => parseGovernanceProposal(entry));

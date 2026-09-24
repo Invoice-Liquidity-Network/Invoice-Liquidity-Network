@@ -1,4 +1,4 @@
-import { nativeToScVal, rpc } from '@stellar/stellar-sdk';
+import { nativeToScVal } from '@stellar/stellar-sdk';
 
 import {
   GovernanceContractMethod,
@@ -28,6 +28,7 @@ import {
   type BuiltTransaction,
 } from './governance-utils';
 import type { RpcServerLike } from './types';
+import { RpcEndpointPool } from './failover';
 
 /**
  * Client for interacting with the ILN governance contract.
@@ -54,7 +55,14 @@ export class GovernanceClient {
   constructor(config: GovernanceClientConfig) {
     this.contractId = config.contractId;
     this.networkPassphrase = config.networkPassphrase;
-    this.server = config.server ?? new rpc.Server(config.rpcUrl);
+    this.server =
+      config.server ??
+      new RpcEndpointPool(this.endpointUrls(config), config.rpcFailover);
+  }
+
+  private endpointUrls(config: GovernanceClientConfig): string[] {
+    const urls = [config.rpcUrl, ...(config.rpcEndpoints ?? [])];
+    return [...new Set(urls.map((url) => url.replace(/\/+$/, '')))].filter(Boolean);
   }
 
   /**

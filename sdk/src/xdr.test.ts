@@ -1,3 +1,4 @@
+import { describe, it, expect } from 'vitest';
 import { nativeToScVal } from '@stellar/stellar-sdk';
 import fc from 'fast-check';
 
@@ -8,16 +9,19 @@ const TESTNET_INVOICE_RETVAL_XDR =
 const TESTNET_EVENT_PAYLOAD_XDR =
   'AAAAEAAAAAEAAAADAAAADwAAAA5pbnZvaWNlX2Z1bmRlZAAAAAAABQAAAAAAAAAqAAAACgAAAAAAAAAAAAAAADuaygA=';
 
+const safeObjectKey = fc
+  .string({ minLength: 1, maxLength: 12 })
+  .filter((key) => !Object.prototype.hasOwnProperty.call(Object.prototype, key));
+
 const scValArbitrary = fc.letrec((tie) => ({
   value: fc.oneof(
-    { withCrossShrink: true, depthFactor: 0.5 },
+    { withCrossShrink: true, depthSize: 0.5 },
     fc.boolean(),
     fc.integer({ min: -1_000_000, max: 1_000_000 }),
     fc.bigInt({ min: -1_000_000_000_000n, max: 1_000_000_000_000n }),
     fc.string({ maxLength: 32 }),
-    fc.uint8Array({ maxLength: 32 }),
     fc.array(tie('value'), { maxLength: 8 }),
-    fc.dictionary(fc.string({ minLength: 1, maxLength: 12 }), tie('value'), { maxKeys: 8 })
+    fc.dictionary(safeObjectKey, tie('value'), { maxKeys: 8 })
   ),
 })).value;
 

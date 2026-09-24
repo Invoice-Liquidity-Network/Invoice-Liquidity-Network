@@ -99,7 +99,12 @@ export async function withRetry<T>(
     }
   }
 
-  throw new Error('withRetry: unexpected exit');
+  throw new ILNError(
+    'withRetry: unexpected exit',
+    'UNEXPECTED_EXIT',
+    'This should never happen. It indicates a bug in the retry loop; please report it.',
+    { retryable: false }
+  );
 }
 
 export class CircuitOpenError extends ILNError {

@@ -130,6 +130,92 @@ The SDK provides its stated security properties only when all of the following a
 
 ---
 
+## Multi-endpoint RPC failover
+
+A single Soroban RPC endpoint is a single point of failure for SDK consumers: a
+provider outage takes down every consumer of that provider at once. The SDK
+supports a prioritized list of RPC endpoints with continuous health scoring and
+transparent failover.
+
+### Configuration
+
+```typescript
+const sdk = new ILNSdk({
+  ...ILN_TESTNET,
+  rpcEndpoints: [
+    'https://primary.soroban.example',
+    'https://secondary.soroban.example', // fallback #1
+    'https://tertiary.soroban.example',  // fallback #2
+  ],
+  rpcFailover: {
+    cooldownMs: 5000,
+    maxCooldownMs: 60000,
+    failureThreshold: 3,
+  },
+});
+```
+
+- The first URL (either `rpcUrl` or the first entry of `rpcEndpoints`) is the
+  **primary**; subsequent entries are fallbacks in priority order.
+- `rpcEndpoints` are combined with `rpcUrl` (primary) when both are provided.
+- The same options are accepted by `GovernanceClient` and `InsurancePoolClient`.
+- When a custom `server` is injected, failover is bypassed entirely.
+
+### Health scoring
+
+- Each endpoint tracks an **EWMA of round-trip latency** and an **EWMA of
+  transient error rate**, plus a consecutive-failure counter.
+- After `failureThreshold` consecutive transient failures, an endpoint enters a
+  **cooldown** (`cooldownMs`, doubling up to `maxCooldownMs` on repeated trips)
+  during which it is skipped.
+- If every endpoint is cooled down, the pool **fails open** — it still attempts
+  the least-bad endpoint rather than refusing the operation, preserving
+  availability over strict health enforcement.
+- A successful response resets the consecutive-failure counter and cooldown.
+
+### What triggers failover
+
+- Failover happens **only on transient errors**: network failures (`fetch
+  failed`, `ECONNREFUSED`, DNS errors, socket hang-ups), timeouts, HTTP 429, and
+  HTTP 5xx responses.
+- **Semantic errors never trigger failover.** A contract rejection, a 4xx
+  response, or an unparseable contract payload means the request reached a
+  healthy node and produced an application-level result; retrying other
+  endpoints would not change the outcome and burns budget. Such responses are
+  still recorded as reachability signals for the endpoint.
+
+### Submission semantics and the integrity guarantee
+
+- Failover is **per RPC call** and occurs *inside* the pool, so in-flight
+  simulation/prepare/submission flows are unaffected by endpoint rotation; no
+  transaction is silently dropped because of failover.
+- For `sendTransaction`, failover to another node happens only on
+  transport-level failures (connection errors/timeouts without a received
+  submission status). If a submission response was received (`hash`/`status`),
+  the SDK does not replay the transaction to another endpoint, avoiding double
+  submission. After any ambiguous submission failure, consumers should verify
+  the outcome via `pollTransaction`/transaction lookup before retrying.
+- The **prepared-XDR integrity check** (`SimulationPreparedXdrMismatchError`)
+  runs regardless of how many endpoints were tried: a prepared transaction is
+  still verified against the locally simulated transaction before signing and
+  submission, so failover cannot relax anti-tampering guarantees.
+
+### SSE event streams
+
+- `subscribeToInvoice` / `subscribeToAddress` open the long-lived SSE stream
+  against the currently preferred (first non-cooled-down) endpoint via
+  `RpcEndpointPool.getRecommendedUrl()`.
+- SSE streams are not rebound mid-stream on primary rotation; a disconnected
+  stream must be resubscribed (the existing SSE error callback still applies).
+
+### Observability
+
+- `pool.getHealth()` returns per-endpoint snapshots (`score`, `latencyEwmaMs`,
+  `errorEwma`, `consecutiveFailures`, `cooldownUntil`, `cooldownMs`, attempt and
+  failure counts) for monitoring and dashboards.
+
+---
+
 ## Trust levels by component
 
 - **SDK input validation**: Low-to-moderate trust
