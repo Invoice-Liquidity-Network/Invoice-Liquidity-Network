@@ -92,3 +92,11 @@ These values are represented in the collection by the `get_invoice_tx_xdr` and `
 - `submit_invoice` and other write requests require a properly formed signed transaction envelope.
 - `simulateTransaction` can be used to validate contract invocation before submitting it.
 - The collection is intentionally testnet-focused and uses the official Stellar testnet Horizon and Soroban endpoints.
+
+## Bulk Export Resource Budgets
+The streaming/paginated bulk export path enforces the following per-session resource budgets:
+- Max Memory: 500 MB
+- Max Rows: 100,000
+- Max Duration: 60,000 ms
+
+If these limits are exceeded, the export is gracefully cut off and a resumption token is provided.

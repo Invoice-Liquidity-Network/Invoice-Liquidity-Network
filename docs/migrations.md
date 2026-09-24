@@ -229,3 +229,7 @@ migration chain.
 - `indexer/src/db.ts` — initial database schema definition
 - [Indexer Data Model](./indexer-data-model.md) — schema reference
 - [Local Development](./local-development.md) — how to set up the indexer locally
+## Review Checklist
+- [ ] Ensure migration does not exceed 5000ms lock duration.
+- [ ] Confirm dry-run passes on production-sized snapshot.
+- [ ] Verify rollback down-path works correctly.
