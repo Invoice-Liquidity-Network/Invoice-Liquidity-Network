@@ -31,6 +31,9 @@ Run the main test suite with:
 
 ```bash
 pnpm test
+pnpm lint
+pnpm type-check
+pnpm format:check
 ```
 
 Useful checks include:
