@@ -1,0 +1,53 @@
+name: Cross-Repository Issue Sync Automation
+
+on:
+  issues:
+    types: [labeled, closed, reopened]
+
+jobs:
+  sync-issue:
+    runs-on: ubuntu-latest
+    if: |
+      contains(github.event.issue.labels.*.name, 'sync:smart-contract') ||
+      contains(github.event.issue.labels.*.name, 'sync:frontend') ||
+      contains(github.event.issue.labels.*.name, 'sync:all')
+    steps:
+      - name: Sync Create and Backlink Issues
+        if: github.event.action == 'labeled'
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.CROSS_REPO_SYNC_TOKEN || secrets.GITHUB_TOKEN }}
+          script: |
+            const issue = context.payload.issue;
+            const labels = issue.labels.map(l => l.name);
+            const owner = context.repo.owner;
+            
+            const targetRepos = [];
+            if (labels.includes('sync:smart-contract') || labels.includes('sync:all')) {
+              targetRepos.push('ILN-Smart-Contract');
+            }
+            if (labels.includes('sync:frontend') || labels.includes('sync:all')) {
+              targetRepos.push('ILN-Frontend');
+            }
+
+            for (const repo of targetRepos) {
+              console.log(`🚀 Syncing issue to target repository: ${owner}/${repo}`);
+              
+              const syncBody = `${issue.body || ''}\n\n---\n🔗 **Cross-Repo Sync Back-Link:** Originally tracking from source issue: [${context.repo.repo}#${issue.number}](${issue.html_url})`;
+              
+              await github.rest.issues.create({
+                owner: owner,
+                repo: repo,
+                title: issue.title,
+                body: syncBody,
+                labels: ['synced-from-core']
+              });
+            }
+
+      - name: Sync Issue Close Action
+        if: github.event.action == 'closed'
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.CROSS_REPO_SYNC_TOKEN || secrets.GITHUB_TOKEN }}
+          script: |
+            console.log("ℹ️ Architectural Note: Closing an issue in the main repo logs event context but downstream target issues intentionally stay un-closed to allow independent repository tracking closures.");

@@ -1,4 +1,5 @@
 import { Keypair, Networks, TransactionBuilder } from '@stellar/stellar-sdk';
+import { WalletNotConnectedError } from './errors';
 
 import type { NetworkConfig, SignTransactionOptions, TransactionSigner } from './types';
 
@@ -96,7 +97,7 @@ export function createFreighterSigner(address?: string): TransactionSigner {
       });
 
       if (result.error || !result.signedTxXdr) {
-        throw new Error(
+        throw new WalletNotConnectedError(
           result.error ? String(result.error) : 'Freighter did not return a signed transaction.'
         );
       }
@@ -122,18 +123,20 @@ type FreighterModule = {
 
 async function loadFreighter(): Promise<FreighterModule> {
   if (typeof window === 'undefined') {
-    throw new Error('Freighter signing is only available in browser environments.');
+    throw new WalletNotConnectedError(
+      'Freighter signing is only available in browser environments.'
+    );
   }
 
   const freighter = await import('@stellar/freighter-api');
   const connected = freighter.isConnected ? await freighter.isConnected() : undefined;
 
   if (connected?.error) {
-    throw new Error(String(connected.error));
+    throw new WalletNotConnectedError(String(connected.error));
   }
 
   if (connected && !connected.isConnected) {
-    throw new Error('Freighter extension is not installed or not available.');
+    throw new WalletNotConnectedError('Freighter extension is not installed or not available.');
   }
 
   return freighter as FreighterModule;
@@ -142,7 +145,7 @@ async function loadFreighter(): Promise<FreighterModule> {
 async function resolveFreighterAddress(freighter: FreighterModule): Promise<string> {
   const current = await freighter.getAddress();
   if (current.error) {
-    throw new Error(String(current.error));
+    throw new WalletNotConnectedError(String(current.error));
   }
   if (current.address) {
     return current.address;
@@ -150,7 +153,7 @@ async function resolveFreighterAddress(freighter: FreighterModule): Promise<stri
 
   const requested = await freighter.requestAccess();
   if (requested.error || !requested.address) {
-    throw new Error(
+    throw new WalletNotConnectedError(
       requested.error ? String(requested.error) : 'Freighter did not provide an account address.'
     );
   }
@@ -171,7 +174,7 @@ async function assertFreighterNetwork(
     return;
   }
   if (network.error) {
-    throw new Error(String(network.error));
+    throw new WalletNotConnectedError(String(network.error));
   }
 
   if (
@@ -179,6 +182,6 @@ async function assertFreighterNetwork(
     expectedPassphrase &&
     network.networkPassphrase !== expectedPassphrase
   ) {
-    throw new Error('Freighter is connected to a different Stellar network.');
+    throw new WalletNotConnectedError('Freighter is connected to a different Stellar network.');
   }
 }

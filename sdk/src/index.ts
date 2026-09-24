@@ -13,6 +13,8 @@ export * from './types';
 export * from './timeouts';
 export * from './backoff';
 export { ContractError } from './generated/types';
+export * from './xdr';
+export * from './failover';
 export * from './notifications';
 export * from './analytics';
 export * from './analytics-computations';
@@ -32,6 +34,7 @@ export * from './react-native';
 export * from './insurance-types';
 export { InsurancePoolClient } from './insurance-contract';
 export type { InsuranceClientConfig } from './insurance-contract';
+export * from './registry';
 
 export const SDK_VERSION = '0.1.0';
 

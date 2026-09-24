@@ -33,15 +33,10 @@ This repository contains four release-related workflows. The following diagram s
 │                      │ Independent of coordinate-release.yml.           │
 ├──────────────────────┼──────────────────────────────────────────────────┤
 │ sdk-release.yml      │ push of v* tags OR PR touching packages/sdk/     │
-│                      │ Publishes @iln/sdk to npm with provenance;       │
-│                      │ creates GitHub Release. Dry-run on PRs.          │
-│                      │ Independent of the other three workflows.        │
-├──────────────────────┼──────────────────────────────────────────────────┤
-│ scripts-release.yml  │ push of @iln/scripts@* tags OR PR touching       │
-│                      │ packages/scripts/                                 │
-│                      │ Publishes @iln/scripts to npm with provenance;   │
-│                      │ creates GitHub Release. Dry-run on PRs.          │
-│                      │ Independent of the other three workflows.        │
+│                      │ Publishes @iln/sdk-next (packages/sdk) to npm    │
+│                      │ with provenance; creates GitHub Release.         │
+│                      │ Dry-run on PRs. Independent of the other three   │
+│                      │ workflows.                                       │
 └──────────────────────┴──────────────────────────────────────────────────┘
 ```
 
@@ -99,8 +94,8 @@ Maintainer       coordinate-release.yml     Smart Contract Repo    SDK Repo     
 
 - **No `workflow_call` dependencies exist** between the four workflows. Each is independently triggered.
 - `coordinate-release.yml` is a **manual orchestrator** — it uses `gh api` and `gh workflow run` to tag repos and trigger CI, but does not invoke `release.yml`, `sdk-release.yml`, or `scripts-release.yml` as callable workflows.
-- `release.yml` (changesets) and `sdk-release.yml` (tag-based) can **both publish `@iln/sdk`** depending on the release path chosen. This is not a bug — they serve different release strategies (changesets workflow vs. manual tag push). However, teams should pick one strategy to avoid duplicate publishes.
-- `scripts-release.yml` exclusively publishes `@iln/scripts` and has no overlap with the other workflows.
+- `release.yml` (changesets) and `sdk-release.yml` (tag-based) can **both publish `@iln/sdk-next`** (packages/sdk) depending on the release path chosen. This is not a bug — they serve different release strategies (changesets workflow vs. manual tag push). However, teams should pick one strategy to avoid duplicate publishes.
+- The former `scripts-release.yml` was removed (issue #878): its target, `@iln/scripts` (packages/scripts), is `private: true` and explicitly "not for public installation", so the workflow could never publish and was documentation ahead of reality.
 
 ## Release Order
 
@@ -314,12 +309,11 @@ All deploy and release workflows support manual triggering from the GitHub UI:
 | `coordinate-release.yml` | Yes | `version`, `dry_run`, `discord_webhook` |
 | `release.yml` | Yes | None (triggers changeset flow) |
 | `sdk-release.yml` | Yes | None (requires `v*` tag ref) |
-| `scripts-release.yml` | Yes | None (requires `@iln/scripts@*` tag ref) |
 
 ### When to use manual triggers
 
 - **Re-deploy docs** after a failed automatic deployment: run `docs-deploy.yml` → "Run workflow".
-- **Re-cut a release** after a failed publish: run `release.yml` → "Run workflow" on `main`, or push a new tag for `sdk-release.yml` / `scripts-release.yml`.
+- **Re-cut a release** after a failed publish: run `release.yml` → "Run workflow" on `main`, or push a new tag for `sdk-release.yml`.
 - **Dry-run a cross-repo release**: run `coordinate-release.yml` with `dry_run: true`.
 
 ## Future Improvements
@@ -332,6 +326,59 @@ Potential enhancements to the release process:
 - [ ] Release notes template population
 - [ ] Mainnet vs testnet release coordination
 - [ ] Automated frontend deploy to staging/production
+
+## Package Provenance Verification (issue #878)
+
+### Audit result
+
+Every npm publish path in this repository was audited on 2026-08-26 for
+provenance attestation (`--provenance` / OIDC-based publishing), and the
+verification steps below were recorded as evidence for the mainnet launch
+checklist ("Release provenance verified").
+
+| Publish path | Workflow | Provenance configured? | Package published? |
+|---|---|---|---|
+| `packages/sdk` → `@iln/sdk-next` | `sdk-release.yml` (tag `v*`) | ✅ `pnpm publish --provenance`, `id-token: write`, `NPM_CONFIG_PROVENANCE=true` | Not yet (first release pending) |
+| `packages/sdk` → `@iln/sdk-next` | `release.yml` (changesets) | ✅ `NPM_CONFIG_PROVENANCE=true`, `id-token: write` | Not yet |
+| `packages/scripts` → `@iln/scripts` | ~~`scripts-release.yml`~~ | Removed (package is private; see below) | n/a |
+
+Findings and fixes:
+
+1. **Provenance flags were already correct** in `sdk-release.yml` and
+   `release.yml` — the `--provenance` flag, `NPM_CONFIG_PROVENANCE=true`, and
+   the `id-token: write` permission are the three pieces GitHub Actions
+   OIDC-based publishing needs, and all are present.
+2. **Stale package name.** `sdk-release.yml` documented `@iln/sdk`, but
+   `packages/sdk` was renamed to `@iln/sdk-next` during the packages
+   consolidation. The workflow header now matches the package it publishes.
+3. **Dead workflow removed.** `scripts-release.yml` targeted `@iln/scripts`,
+   which is `private: true` and described as "not for public installation" —
+   `npm publish` refuses private packages, so the workflow could never
+   succeed. It was removed; nothing publishes `@iln/scripts`.
+4. **Nothing is published to npm yet** — every candidate package name returns
+   404 on the registry and there are no release tags. The provenance claim in
+   docs/security-guide.md was documentation ahead of reality; it now states
+   the configuration status and the procedure, not an achieved publication.
+
+### How to verify a published package's provenance (per release)
+
+Once a package is published, verify the attestation before announcing it:
+
+```bash
+# 1. The npm registry's attestations endpoint answers for the published version:
+curl -s https://registry.npmjs.org/-/npm/v1/attestations/@iln/sdk-next@<version> | jq
+
+# 2. Or check the version metadata carries a provenance field:
+npm view @iln/sdk-next@<version> --json | jq '.provenance'
+
+# 3. Or verify the tarball against the repo's GitHub Actions run:
+github_token=... gh attestation verify \
+  "$(npm pack @iln/sdk-next@<version> --silent)" \
+  --repo Invoice-Liquidity-Network/Invoice-Liquidity-Network
+```
+
+A passing verification links the tarball to the exact GitHub Actions workflow
+run and commit SHA that built it (SLSA Level 3).
 
 ## NPM Scope Ownership and Publishing Policy
 
@@ -357,19 +404,17 @@ they resolve from the workspace instead.
 
 | Local Name | Published Name | Status |
 |---|---|---|
-| `packages/cli` | `@iln/cli` | Unpublished |
 | `packages/test-utils` | `@iln/test-utils` | Unpublished |
 | `packages/scripts` | `@iln/scripts` | Unpublished |
 | `packages/sdk` | `@iln/sdk-next` | Unpublished |
 | `packages/mock-backend` | `@iln/mock-backend` | Unpublished |
 | `packages/indexer` | `@iln/indexer` | Unpublished |
-| `packages/invoice-sdk` | `@iln/invoice-sdk` | Unpublished |
 | `packages/eslint-config` | `@iln/eslint-config` | Unpublished |
 | `packages/upgrade-tests` | `@iln/upgrade-tests` | Unpublished |
 | `packages/shared` | `@iln/shared` | Unpublished |
 | `packages/react` | `@iln/react` | Unpublished |
 | `packages/opentelemetry` | `@iln/opentelemetry` | Unpublished |
-| `sdk/` | `@iln/sdk` | Published via `sdk-release.yml` |
+| `packages/sdk` | `@iln/sdk-next` | Publishable via `sdk-release.yml` / changesets (`release.yml`); not yet published |
 | `cli/` | `@invoice-liquidity/cli` | Unpublished |
 | `docs/` | `@invoice-liquidity/docs` | Unpublished |
 | `indexer/` | `iln-indexer` | Unpublished |

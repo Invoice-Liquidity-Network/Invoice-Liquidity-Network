@@ -27,6 +27,7 @@ jobs:
       sdk: ${{ steps.filter.outputs.sdk }}
       cli: ${{ steps.filter.outputs.cli }}
       indexer: ${{ steps.filter.outputs.indexer }}
+      oracle: ${{ steps.filter.outputs.oracle }}
       packages: ${{ steps.filter.outputs.packages }}
     steps:
       - uses: actions/checkout@v4
@@ -51,13 +52,13 @@ jobs:
               - 'sdk/**'
               - 'packages/sdk/**'
               - 'packages/shared/**'
-              - 'packages/invoice-sdk/**'
             cli:
               - 'cli/**'
-              - 'packages/cli/**'
             indexer:
               - 'indexer/**'
               - 'packages/indexer/**'
+            oracle:
+              - 'oracle-service/**'
             packages:
               - 'packages/**'
 
@@ -249,6 +250,8 @@ jobs:
       - node-tests
       - license-compliance
       - sdk-types-sync
+      - generated-types-drift
+      - sdk-api-compat
       - core-install
       - core-format
       - core-lint
@@ -275,7 +278,7 @@ jobs:
 
           # Collect which jobs failed
           FAILED_JOBS=""
-          for job in test build lint node-tests license-compliance sdk-types-sync core-install core-format core-lint core-type-check core-test core-build; do
+          for job in test build lint node-tests license-compliance sdk-types-sync generated-types-drift sdk-api-compat core-install core-format core-lint core-type-check core-test core-build; do
             result=$(echo '${{ toJSON(needs) }}' | jq -r --arg job "$job" '.[$job].result // "skipped"')
             if [ "$result" = "failure" ]; then
               FAILED_JOBS="$FAILED_JOBS\n- **$job**: ❌ $result"
@@ -366,6 +369,21 @@ jobs:
               body: '🚨 **Package.json validation failed!** Run `node scripts/validate-packages.mjs` locally and fix violations before merging.'
             })
 
+  gitleaks:
+    name: Secret scanning
+    needs: pnpm-cache
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup pnpm with store cache
+        uses: ./.github/actions/setup-pnpm
+      - name: Install gitleaks
+        run: |
+          GITLEAKS_VERSION=$(curl -s https://api.github.com/repos/gitleaks/gitleaks/releases/latest | grep '"tag_name"' | sed -E 's/.*"v([^"]+)".*/\1/')
+          curl -sSfL "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz" | sudo tar -xz -C /usr/local/bin gitleaks
+      - name: Scan repository for secrets
+        run: gitleaks detect --no-git -s . --config gitleaks.toml --baseline-path .secrets.baseline
+
   no-foreign-lockfiles:
     name: Guard against non-pnpm lockfiles
     runs-on: ubuntu-latest
@@ -409,7 +427,7 @@ jobs:
         if: always()
         continue-on-error: true
         run: |
-          for pkg in sdk cli indexer notifications packages/react packages/mock-backend packages/opentelemetry packages/upgrade-tests packages/test-utils packages/cli; do
+          for pkg in sdk cli indexer notifications packages/react packages/mock-backend packages/opentelemetry packages/upgrade-tests packages/test-utils; do
             if [ -f "$pkg/vitest.config.ts" ] || [ -f "$pkg/vitest.config.js" ]; then
               echo "Generating JUnit report for $pkg..."
               cd "$GITHUB_WORKSPACE/$pkg"
@@ -462,7 +480,7 @@ jobs:
         run: pnpm --filter @iln/shared test
 
       - name: Comment PR on failure
-        if: failure() && github.event_name == 'pull_request'
+        if: failure() && github.event_name == 'pull_request' && !github.event.pull_request.head.repo.fork
         continue-on-error: true
         uses: actions/github-script@v7
         with:
@@ -576,6 +594,18 @@ jobs:
             exit 1
           fi
 
+      - name: Regenerate shared types
+        run: pnpm generate:shared-types || echo "Skipped (no spec.json)"
+
+      - name: Check if shared types changed
+        run: |
+          if [ -n "$(git diff --name-only packages/shared/src/types.ts)" ]; then
+            echo "❌ Shared types are out of sync!"
+            git diff packages/shared/src/types.ts
+            echo "Run: pnpm generate:shared-types"
+            exit 1
+          fi
+
       - name: Comment PR on failure
         if: failure() && github.event_name == 'pull_request' && !github.event.pull_request.head.repo.fork
         continue-on-error: true
@@ -586,7 +616,63 @@ jobs:
               issue_number: context.issue.number,
               owner: context.repo.owner,
               repo: context.repo.repo,
-              body: '🚨 **SDK types are out of sync!** Run `pnpm generate:types` and commit the changes.'
+              body: '🚨 **SDK types are out of sync!** Run `pnpm generate:types && pnpm generate:shared-types` and commit the changes.'
+            })
+
+  generated-types-drift:
+    name: Generated types drift check
+    needs: [pnpm-cache, changes]
+    if: needs.changes.outputs.backend == 'true' || needs.changes.outputs.sdk == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Setup pnpm with store cache
+        uses: ./.github/actions/setup-pnpm
+
+      - name: Check generated type surfaces
+        run: pnpm check:generated-types
+
+      - name: Comment PR on failure
+        if: failure() && github.event_name == 'pull_request' && !github.event.pull_request.head.repo.fork
+        continue-on-error: true
+        uses: actions/github-script@v7
+        with:
+          script: |
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: '🚨 **Generated types are out of sync!** Run `pnpm check:generated-types` locally to see the drift.'
+            })
+
+  sdk-api-compat:
+    name: SDK API compatibility
+    needs: [pnpm-cache, changes]
+    if: needs.changes.outputs.sdk == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup pnpm with store cache
+        uses: ./.github/actions/setup-pnpm
+
+      - name: Check SDK API surface against snapshot
+        run: pnpm sdk:api:check
+
+      - name: Comment PR on failure
+        if: failure() && github.event_name == 'pull_request' && !github.event.pull_request.head.repo.fork
+        continue-on-error: true
+        uses: actions/github-script@v7
+        with:
+          script: |
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: '🚨 **SDK API drift detected!** Run `pnpm sdk:api:snapshot` and commit `sdk/api-snapshot.json`; add a `major` changeset for `@iln/sdk` if the changes are breaking.'
             })
 
   sdk-testnet-integration:
@@ -715,6 +801,12 @@ jobs:
           restore-keys: ${{ runner.os }}-turbo-test-
       - name: Test
         run: pnpm exec turbo run test --cache-dir=.turbo
+
+      - name: Root node --test suites
+        run: |
+          npm run test:checklist
+          npm run test:audit
+          npm run test:provenance
 
   core-build:
     name: Core · build

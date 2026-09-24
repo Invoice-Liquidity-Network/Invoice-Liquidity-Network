@@ -13,7 +13,7 @@ import { createLogger } from './logger';
 import type { Unsubscribe } from './state';
 import { track } from './usage-analytics';
 import { Cache, type CacheOptions } from './cache';
-import { withBackoff, isTransientError } from './backoff';
+import { withBackoff, isTransientError, type BackoffOptions } from './backoff';
 import { Validators } from './validators';
 import {
   encodeProposalAction,
@@ -60,6 +60,7 @@ import type {
 
 import { openSSE, type RawContractEvent } from './stream';
 import { ILNEventEmitter } from './event-emitter';
+import { RpcEndpointPool } from './failover';
 
 /** Callback invoked when a contract event is received via SSE. */
 export type EventCallback = (event: RawContractEvent) => void | Promise<void>;
@@ -70,6 +71,8 @@ import {
   parseContractError,
   InsufficientBalanceError,
   NetworkError,
+  SimulationError,
+  InvalidContractResponseError,
   TransactionFailedError,
   ValidationError,
   WalletNotConnectedError,
@@ -84,10 +87,11 @@ import {
 } from './offline';
 import {
   resolveRequestTimeouts,
+  type RequestTimeouts,
   TimeoutError,
   withTimeout,
-  type RequestTimeouts,
 } from './timeouts';
+import { verifyContractId } from './registry';
 
 const READ_ACCOUNT = 'GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF';
 const POLL_ATTEMPTS = 20;
@@ -137,6 +141,7 @@ export class ILNSdk {
   private readonly networkPassphrase: string;
   private readonly server: RpcServerLike;
   private readonly rpcUrl: string;
+  private readonly failover?: RpcEndpointPool;
   private readonly signer?: TransactionSigner;
   private readonly requestTimeouts: RequestTimeouts;
   private protocolConfigCache: { expiresAt: number; value: ProtocolConfig } | null = null;
@@ -154,7 +159,9 @@ export class ILNSdk {
   constructor(config: ILNSdkConfig) {
     this.contractId = config.contractId;
     this.networkPassphrase = config.networkPassphrase;
-    this.server = config.server ?? new rpc.Server(config.rpcUrl);
+    this.failover =
+      config.server === undefined ? this.createEndpointPool(config) : undefined;
+    this.server = config.server ?? (this.failover as RpcEndpointPool);
     this.rpcUrl = config.rpcUrl;
     this.signer = config.signer;
     this.requestTimeouts = resolveRequestTimeouts(config);
@@ -172,6 +179,36 @@ export class ILNSdk {
       this.offlineManager = new OfflineManager(config.offline);
       this.offlineManager.onSubmit((item) => this.executeQueuedOperation(item));
     }
+
+    if (config.verifyContractId !== false) {
+      const verification = verifyContractId(this.contractId);
+      if (!verification.isOfficial && verification.warningMessage) {
+        console.warn(verification.warningMessage);
+        this.logger.warn(verification.warningMessage);
+      }
+    }
+  }
+
+  /**
+   * Build the multi-endpoint RPC pool from `rpcUrl` plus `rpcEndpoints`,
+   * preserving priority order and dropping duplicates.
+   */
+  private createEndpointPool(config: ILNSdkConfig): RpcEndpointPool {
+    const endpoints: string[] = [];
+    const push = (url: string): void => {
+      const normalized = url.replace(/\/+$/, '');
+      if (!normalized || endpoints.some((u) => u === normalized)) return;
+      endpoints.push(normalized);
+    };
+
+    push(config.rpcUrl);
+    for (const url of config.rpcEndpoints ?? []) push(url);
+    return new RpcEndpointPool(endpoints, config.rpcFailover);
+  }
+
+  /** Base URL of the currently recommended RPC endpoint (used for SSE). */
+  private rpcBaseUrl(): string {
+    return (this.failover ? this.failover.getRecommendedUrl() : this.rpcUrl).replace(/\/+$/, '');
   }
 
   private async wrapRpcCall<T>(promise: Promise<T>, operationName: string): Promise<T> {
@@ -585,7 +622,9 @@ export class ILNSdk {
 
     const simResult = simulation as { minResourceFee?: number; error?: unknown };
     if (simResult.error) {
-      throw new Error(`Fee estimation failed: ${String(simResult.error)}`);
+      throw new SimulationError(`Fee estimation failed: ${String(simResult.error)}`, undefined, {
+        method: 'estimateFees',
+      });
     }
 
     return BigInt(simResult?.minResourceFee ?? BASE_FEE);
@@ -650,7 +689,11 @@ export class ILNSdk {
     const typedSimulation = simulation as SimulationLike;
     if (typedSimulation.error) {
       const error = typedSimulation.error;
-      throw new Error(`Batch simulation failed: ${error ? String(error) : 'Unknown RPC error.'}`);
+      throw new SimulationError(
+        `Batch simulation failed: ${error ? String(error) : 'Unknown RPC error.'}`,
+        undefined,
+        { method: 'validateBatchSimulation' }
+      );
     }
   }
 
@@ -700,7 +743,7 @@ export class ILNSdk {
    */
   subscribeToInvoice(id: bigint | string, callback: EventCallback): Unsubscribe {
     const invoiceId = String(id);
-    const base = this.rpcUrl.replace(/\/$/, '');
+    const base = this.rpcBaseUrl();
     const url = `${base}/contracts/${this.contractId}/events?limit=200&order=asc`;
 
     const handle = openSSE(
@@ -744,7 +787,7 @@ export class ILNSdk {
    * ```
    */
   subscribeToAddress(address: string, callback: EventCallback): Unsubscribe {
-    const base = this.rpcUrl.replace(/\/$/, '');
+    const base = this.rpcBaseUrl();
     const url = `${base}/contracts/${this.contractId}/events?limit=200&order=asc`;
 
     const handle = openSSE(
@@ -1065,7 +1108,7 @@ export class ILNSdk {
     const native = scValToNative(result) as unknown;
     if (typeof native === 'number') return native;
     if (typeof native === 'bigint') return Number(native);
-    throw new Error('Unexpected reputation result type');
+    throw new InvalidContractResponseError('Unexpected reputation result type');
   }
 
   /**
@@ -1511,6 +1554,7 @@ export class ILNSdk {
       if (originalTx.operations.length !== preparedTx.operations.length) {
         throw new SimulationPreparedXdrMismatchError(
           `Prepared transaction has ${preparedTx.operations.length} operations but original had ${originalTx.operations.length}. The RPC node may have modified the transaction.`,
+          'Verify your RPC endpoint integrity and consider using a different node.',
           {
             operationName,
             originalOperationCount: originalTx.operations.length,
@@ -1527,6 +1571,7 @@ export class ILNSdk {
         if (origOp.type !== prepOp.type) {
           throw new SimulationPreparedXdrMismatchError(
             `Operation ${i} type mismatch: original is ${origOp.type} but prepared is ${prepOp.type}. The RPC node may have tampered with the transaction.`,
+            'Verify your RPC endpoint integrity and consider using a different node.',
             {
               operationName,
               operationIndex: i,
@@ -1541,6 +1586,7 @@ export class ILNSdk {
       if (originalTx.networkPassphrase !== preparedTx.networkPassphrase) {
         throw new SimulationPreparedXdrMismatchError(
           'Network passphrase mismatch between original and prepared transaction. The RPC node may be targeting a different network.',
+          'Verify your RPC endpoint integrity and consider using a different node.',
           {
             operationName,
             originalNetworkPassphrase: originalTx.networkPassphrase,
@@ -1555,6 +1601,7 @@ export class ILNSdk {
       // If XDR parsing itself fails, that's a clear sign of tampering
       throw new SimulationPreparedXdrMismatchError(
         `Failed to parse prepared transaction XDR: ${error instanceof Error ? error.message : String(error)}`,
+        'Verify your RPC endpoint integrity and consider using a different node.',
         { operationName, originalXdrLength: originalXdr.length, preparedXdrLength: preparedXdr.length }
       );
     }
@@ -1772,7 +1819,10 @@ export class ILNSdk {
 
   private parseProtocolConfig(value: unknown): ProtocolConfig {
     if (!value || typeof value !== 'object') {
-      throw new Error('Contract returned an invalid protocol config payload.');
+      throw new InvalidContractResponseError(
+        'Contract returned an invalid protocol config payload.',
+        { value: String(value) }
+      );
     }
 
     const config = value as Record<string, unknown>;
@@ -1830,7 +1880,10 @@ export class ILNSdk {
       }
     }
 
-    throw new Error(`Protocol config is missing ${keys[0]}.`);
+    throw new InvalidContractResponseError(`Protocol config is missing ${keys[0]}.`, {
+      missingKey: keys[0],
+      availableKeys: Object.keys(config),
+    });
   }
 
   private optionalNumber(config: Record<string, unknown>, ...keys: string[]): number | undefined {
@@ -1848,13 +1901,17 @@ export class ILNSdk {
 
     if (typedSimulation.error) {
       const error = typedSimulation.error;
-      throw new Error(
-        `Simulation failed for ${method}: ${error ? String(error) : 'Unknown RPC error.'}`
+      throw new SimulationError(
+        `Simulation failed for ${method}: ${error ? String(error) : 'Unknown RPC error.'}`,
+        undefined,
+        { method }
       );
     }
 
     if (!typedSimulation.result?.retval) {
-      throw new Error(`Simulation for ${method} did not return a contract result.`);
+      throw new SimulationError(`Simulation for ${method} did not return a contract result.`, undefined, {
+        method,
+      });
     }
 
     return typedSimulation.result.retval;
@@ -1925,7 +1982,10 @@ export class ILNSdk {
       return BigInt(value);
     }
 
-    throw new Error(`Expected bigint-compatible value but received ${typeof value}.`);
+    throw new InvalidContractResponseError(`Expected bigint-compatible value but received ${typeof value}.`, {
+      field: 'generic',
+      received: typeof value,
+    });
   }
 
   private toNumberValue(value: unknown, field: string): number {
@@ -1936,7 +1996,10 @@ export class ILNSdk {
       return Number(value);
     }
 
-    throw new Error(`Expected numeric ${field} value but received ${typeof value}.`);
+    throw new InvalidContractResponseError(`Expected numeric ${field} value but received ${typeof value}.`, {
+      field,
+      received: typeof value,
+    });
   }
 
   private toStringValue(value: unknown, field: string): string {
@@ -1944,7 +2007,10 @@ export class ILNSdk {
       return value;
     }
 
-    throw new Error(`Expected string ${field} value but received ${typeof value}.`);
+    throw new InvalidContractResponseError(`Expected string ${field} value but received ${typeof value}.`, {
+      field,
+      received: typeof value,
+    });
   }
 
   private parseStatus(value: unknown): InvoiceState {
@@ -1959,7 +2025,7 @@ export class ILNSdk {
       }
     }
 
-    throw new Error('Unable to parse invoice status from contract response.');
+    throw new InvalidContractResponseError('Unable to parse invoice status from contract response.');
   }
 
   private normalizeStatus(value: string): InvoiceState {
@@ -1972,7 +2038,7 @@ export class ILNSdk {
       case 'Defaulted':
         return normalized;
       default:
-        throw new Error(`Unknown invoice status "${value}".`);
+        throw new InvalidContractResponseError(`Unknown invoice status "${value}".`, { value });
     }
   }
 

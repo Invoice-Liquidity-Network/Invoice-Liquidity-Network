@@ -1,6 +1,5 @@
 import {
   nativeToScVal,
-  rpc,
   scValToNative,
   TransactionBuilder,
   Account,
@@ -10,6 +9,8 @@ import {
 } from '@stellar/stellar-sdk';
 
 import type { RpcServerLike } from './types';
+import { RpcEndpointPool, type RpcFailoverOptions } from './failover';
+import { GenericContractError, SimulationError } from './errors';
 import type {
   LPCoverage,
   InsuranceClaim,
@@ -30,6 +31,13 @@ export interface InsuranceClientConfig {
   rpcUrl: string;
   networkPassphrase: string;
   server?: RpcServerLike;
+  /**
+   * Optional list of additional Soroban RPC endpoint URLs, ordered by priority.
+   * Enables multi-endpoint failover with health scoring when `server` is absent.
+   */
+  rpcEndpoints?: string[];
+  /** Configuration for multi-endpoint RPC failover and health scoring. */
+  rpcFailover?: RpcFailoverOptions;
 }
 
 export class InsurancePoolClient {
@@ -40,7 +48,14 @@ export class InsurancePoolClient {
   constructor(config: InsuranceClientConfig) {
     this.contractId = config.contractId;
     this.networkPassphrase = config.networkPassphrase;
-    this.server = config.server ?? new rpc.Server(config.rpcUrl);
+    this.server =
+      config.server ??
+      new RpcEndpointPool(this.endpointUrls(config), config.rpcFailover);
+  }
+
+  private endpointUrls(config: InsuranceClientConfig): string[] {
+    const urls = [config.rpcUrl, ...(config.rpcEndpoints ?? [])];
+    return [...new Set(urls.map((url) => url.replace(/\/+$/, '')))].filter(Boolean);
   }
 
   private buildReadTransaction(method: string, args: xdr.ScVal[]): BuiltTransaction {
@@ -86,7 +101,9 @@ export class InsurancePoolClient {
       result?: { retval?: xdr.ScVal };
     };
     if (simulation.error) {
-      throw new Error(`Simulation failed for ${method}: ${String(simulation.error)}`);
+      throw new SimulationError(`Simulation failed for ${method}: ${String(simulation.error)}`, undefined, {
+        method,
+      });
     }
     return simulation;
   }
@@ -94,7 +111,7 @@ export class InsurancePoolClient {
   private extractRetval(simulation: unknown): unknown {
     const sim = simulation as { result?: { retval?: xdr.ScVal } };
     if (!sim.result?.retval) {
-      throw new Error('RPC simulation did not return a contract result.');
+      throw new SimulationError('RPC simulation did not return a contract result.');
     }
     return scValToNative(sim.result.retval as xdr.ScVal);
   }
@@ -110,13 +127,15 @@ export class InsurancePoolClient {
       return (value as { Ok: unknown }).Ok;
     }
     if ('err' in value) {
-      throw new Error(
-        `Contract rejected ${method}: ${JSON.stringify((value as { err: unknown }).err)}`
+      throw new GenericContractError(
+        `Contract rejected ${method}: ${JSON.stringify((value as { err: unknown }).err)}`,
+        { method }
       );
     }
     if ('Err' in value) {
-      throw new Error(
-        `Contract rejected ${method}: ${JSON.stringify((value as { Err: unknown }).Err)}`
+      throw new GenericContractError(
+        `Contract rejected ${method}: ${JSON.stringify((value as { Err: unknown }).Err)}`,
+        { method }
       );
     }
     return value;

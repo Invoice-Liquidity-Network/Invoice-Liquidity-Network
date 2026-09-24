@@ -2,6 +2,8 @@
  * Enumeration of notification trigger events.
  * Each trigger corresponds to an invoice lifecycle event.
  */
+import { NotificationsApiError } from './errors';
+
 export enum NotificationTrigger {
   InvoiceFunded = 'invoice_funded',
   InvoiceSettled = 'invoice_paid',
@@ -99,7 +101,10 @@ export class NotificationsClient {
     });
 
     if (!response.ok) {
-      throw new Error(`Failed to subscribe email: ${await response.text()}`);
+      throw new NotificationsApiError(`Failed to subscribe email: ${await response.text()}`, {
+        status: response.status,
+        channel: 'email',
+      });
     }
 
     const data = await response.json();
@@ -140,7 +145,10 @@ export class NotificationsClient {
     });
 
     if (!response.ok) {
-      throw new Error(`Failed to subscribe webhook: ${await response.text()}`);
+      throw new NotificationsApiError(`Failed to subscribe webhook: ${await response.text()}`, {
+        status: response.status,
+        channel: 'webhook',
+      });
     }
 
     const data = await response.json();
@@ -165,7 +173,9 @@ export class NotificationsClient {
     });
 
     if (!response.ok) {
-      throw new Error(`Failed to unsubscribe: ${await response.text()}`);
+      throw new NotificationsApiError(`Failed to unsubscribe: ${await response.text()}`, {
+        status: response.status,
+      });
     }
   }
 
@@ -188,7 +198,9 @@ export class NotificationsClient {
     });
 
     if (!response.ok) {
-      throw new Error(`Failed to list subscriptions: ${await response.text()}`);
+      throw new NotificationsApiError(`Failed to list subscriptions: ${await response.text()}`, {
+        status: response.status,
+      });
     }
 
     const data = await response.json();
@@ -215,7 +227,9 @@ export class NotificationsClient {
     });
 
     if (!response.ok) {
-      throw new Error(`Failed to test webhook: ${await response.text()}`);
+      throw new NotificationsApiError(`Failed to test webhook: ${await response.text()}`, {
+        status: response.status,
+      });
     }
 
     return await response.json();

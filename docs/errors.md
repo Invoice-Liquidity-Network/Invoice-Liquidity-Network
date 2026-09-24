@@ -96,6 +96,89 @@ This reference documents all structured error codes produced by the `@iln/sdk` p
 
 ---
 
+### `invalid_amount`
+- **Class:** `InvalidAmountError`
+- **Code:** `INVALID_AMOUNT`
+- **Description:** Thrown when an amount, token decimal count, basis point value, or related numeric input is malformed or outside the supported range (e.g. negative amounts, excess precision, mismatched token decimals, zero denominators in `scaledMultiply`).
+- **Retryable:** `false`
+- **Remediation:** Fix the amount input. Amounts must be non-negative decimal values within the token's precision (`0–18` decimals).
+
+---
+
+### `invalid_contract_response`
+- **Class:** `InvalidContractResponseError`
+- **Code:** `INVALID_CONTRACT_RESPONSE`
+- **Description:** Thrown when a contract or RPC response cannot be parsed into the expected SDK shape — wrong field types, missing fields (`Protocol config is missing ...`), out-of-range enum values (`Unknown invoice status ...`), or unexpected payloads (`Contract returned an invalid protocol config payload.`).
+- **Retryable:** `false`
+- **Remediation:** Verify the deployed contract version matches the SDK version. Inspect `context` for the offending field/value.
+
+---
+
+### `transaction_build_error`
+- **Class:** `TransactionBuildError`
+- **Code:** `TRANSACTION_BUILD_ERROR`
+- **Description:** Thrown when a transaction cannot be assembled — wrong number of operations, missing `invokeHostFunction` operation, unsupported proposal action/topic, or missing `invokeContract` host function.
+- **Retryable:** `false`
+- **Remediation:** Review the operation list and the contract ABI used to build the transaction.
+
+---
+
+### `notifications_api_error`
+- **Class:** `NotificationsApiError`
+- **Code:** `NOTIFICATIONS_API_ERROR`
+- **Description:** Thrown when the ILN notifications API (email/webhook subscriptions) rejects a request.
+- **Retryable:** `true`
+- **Remediation:** Verify notification endpoints, payload, and service availability.
+
+---
+
+### `plugin_error`
+- **Class:** `PluginError`
+- **Code:** `PLUGIN_ERROR`
+- **Description:** Thrown when a plugin registry operation fails — plugin already registered, not registered, not loaded, or metric/widget not found.
+- **Retryable:** `false`
+- **Remediation:** Check the plugin id/name, registration state, and metric/widget availability.
+
+---
+
+### `offline_queue_full`
+- **Class:** `OfflineQueueFullError`
+- **Code:** `OFFLINE_QUEUE_FULL`
+- **Description:** Thrown when the offline queue reaches its maximum capacity.
+- **Retryable:** `false`
+- **Remediation:** Process pending queued operations or increase `maxQueueSize` on the offline manager.
+
+---
+
+### `offline_queued`
+- **Class:** `OfflineQueuedError`
+- **Code:** `OFFLINE_QUEUED`
+- **Description:** Thrown by SDK write methods when the offline queue is enabled and the client is offline. The operation was queued and will be resubmitted automatically when connectivity is restored.
+- **Retryable:** `false`
+- **Remediation:** Present the queued state to the user; the operation is retried automatically. Inspect `context.item.id` to track it.
+
+---
+
+### `federation_resolution_failed`
+- **Class:** `FederationResolutionError`
+- **Code:** `FEDERATION_RESOLUTION_FAILED`
+- **Description:** Thrown when a Stellar Federation address cannot be resolved (invalid format, address not registered, or server error).
+- **Retryable:** `false`
+- **Remediation:** Verify the Federation address format (`name*domain`) and that the address is registered with the hosting domain.
+
+---
+
+## Internal Codes
+
+### `unexpected_exit`
+- **Class:** `ILNError`
+- **Code:** `UNEXPECTED_EXIT`
+- **Description:** Defensive "should never happen" assertion inside the retry loop.
+- **Retryable:** `false`
+- **Remediation:** Report as a bug; the SDK invariant was violated.
+
+---
+
 ## Worked Example: Handling SDK Errors
 
 ```typescript

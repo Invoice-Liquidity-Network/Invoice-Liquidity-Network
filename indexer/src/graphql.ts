@@ -1,4 +1,7 @@
 import { createYoga, createSchema } from 'graphql-yoga';
+
+import { GraphQLError, parse } from 'graphql';
+import type { DocumentNode, ValidationContext, ASTNode, ASTVisitor } from 'graphql';
 import {
   getDb,
   getInvoiceById,
@@ -11,7 +14,7 @@ import {
   getEvents,
   getCursorUpdatedAt,
 } from './db';
-import { pubSub } from './pubsub';
+import { pubsub, LEGACY_INVOICE_CREATED, LEGACY_INVOICE_UPDATED } from './graphql/pubsub';
 import type { Invoice, ILNEvent } from './types';
 
 // ─── GraphQL schema ───────────────────────────────────────────────────────────
@@ -226,11 +229,11 @@ const resolvers = {
 
   Subscription: {
     invoiceCreated: {
-      subscribe: () => pubSub.subscribe('INVOICE_CREATED'),
+      subscribe: () => pubsub.asyncIterator<Invoice>(LEGACY_INVOICE_CREATED),
       resolve: (invoice: Invoice) => invoice,
     },
     invoiceUpdated: {
-      subscribe: () => pubSub.subscribe('INVOICE_UPDATED'),
+      subscribe: () => pubsub.asyncIterator<Invoice>(LEGACY_INVOICE_UPDATED),
       resolve: (invoice: Invoice) => invoice,
     },
   },
@@ -238,13 +241,65 @@ const resolvers = {
 
 // ─── Yoga handler factory ─────────────────────────────────────────────────────
 
-export function createGraphQLHandler() {
-  return createYoga({
-    schema: createSchema({ typeDefs, resolvers }),
+const MAX_GRAPHQL_COMPLEXITY = 50;
+const MAX_GRAPHQL_DEPTH = 1;
+
+function getDepth(node: ASTNode, current = 0): number {
+  if (!('selectionSet' in node) || !node.selectionSet) return current;
+  return Math.max(
+    current + 1,
+    ...node.selectionSet.selections.map((selection) => getDepth(selection, current + 1))
+  );
+}
+
+export function validateGraphQLDocument(
+  schema: ReturnType<typeof createSchema>,
+  document: DocumentNode
+): GraphQLError[] {
+  const complexity = document.definitions.reduce((total, definition) => {
+    if (definition.kind === 'OperationDefinition' && getDepth(definition) > MAX_GRAPHQL_DEPTH) {
+      return total + MAX_GRAPHQL_COMPLEXITY + 1;
+    }
+    if (definition.kind !== 'OperationDefinition') return total;
+    return total + definition.selectionSet.selections.length;
+  }, 0);
+  const errors: GraphQLError[] = [];
+  if (complexity > MAX_GRAPHQL_COMPLEXITY) {
+    errors.push(new GraphQLError(`GraphQL query is too complex (maximum complexity is ${MAX_GRAPHQL_COMPLEXITY}).`));
+  }
+  if (getDepth(document) > MAX_GRAPHQL_DEPTH) {
+    errors.push(new GraphQLError(`GraphQL query is too deep (maximum depth is ${MAX_GRAPHQL_DEPTH}).`));
+  }
+  return errors;
+}
+
+const complexityRule = (context: ValidationContext): ASTVisitor => {
+  const document = context.getDocument();
+  for (const error of validateGraphQLDocument(createSchema({ typeDefs, resolvers }), document)) {
+    context.reportError(error);
+  }
+  return {};
+};
+
+export function createGraphQLHandler(): any {
+  const schema = createSchema({ typeDefs, resolvers });
+  const originalFetch = createYoga({
+    schema,
     graphqlEndpoint: '/graphql',
-    // GraphiQL playground is enabled automatically in non-production environments.
-    // Set NODE_ENV=production to disable it.
     graphiql: process.env.NODE_ENV !== 'production',
     logging: false,
   });
+  const handler = async (request: Request): Promise<Response> => {
+      if (request.method === 'POST' && request.headers?.get?.('content-type')?.includes('application/json')) {
+        const body = (await request.clone().json()) as { query?: string };
+        if (typeof body.query === 'string') {
+          const errors = validateGraphQLDocument(schema, parse(body.query));
+          if (errors.length > 0) {
+            return Response.json({ errors }, { status: 400 });
+          }
+        }
+      }
+      return originalFetch.fetch(request);
+  };
+  return Object.assign(handler, originalFetch, { fetch: handler });
 }

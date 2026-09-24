@@ -1,4 +1,7 @@
 import { Federation } from '@stellar/stellar-sdk';
+import { FederationResolutionError } from './errors.js';
+
+export { FederationResolutionError };
 
 const DEFAULT_FEDERATION_BASE_URL = 'https://federation.iln.finance';
 
@@ -20,12 +23,6 @@ export interface FederationRecord {
 /**
  * Error thrown when federation address resolution fails.
  */
-export class FederationResolutionError extends Error {
-  constructor(message: string) {
-    super(message);
-    this.name = 'FederationResolutionError';
-  }
-}
 
 interface CacheEntry<T> {
   value: T;

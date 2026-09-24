@@ -3,6 +3,8 @@
  *
  * @property decimals - Number of decimal places the token supports (0-18).
  */
+import { InvalidAmountError } from './errors.js';
+
 export interface AmountToken {
   decimals: number;
 }
@@ -49,12 +51,14 @@ export function parseAmount(input: string, token: AmountToken): bigint {
   const match = trimmed.match(/^(\d+)(?:\.(\d+))?$/);
 
   if (!match) {
-    throw new Error('Invalid amount. Use a non-negative decimal value.');
+    throw new InvalidAmountError('Invalid amount. Use a non-negative decimal value.');
   }
 
   const fraction = match[2] ?? '';
   if (fraction.length > decimals) {
-    throw new Error(`Invalid amount. Token supports at most ${decimals} decimal places.`);
+    throw new InvalidAmountError(
+      `Invalid amount. Token supports at most ${decimals} decimal places.`
+    );
   }
 
   const whole = BigInt(match[1]);
@@ -79,7 +83,7 @@ export function parseAmount(input: string, token: AmountToken): bigint {
  */
 export function formatAmount(amount: bigint, token: AmountToken): string {
   if (amount < 0n) {
-    throw new Error('Cannot format a negative amount.');
+    throw new InvalidAmountError('Cannot format a negative amount.');
   }
 
   const decimals = normalizeDecimals(token);
@@ -106,7 +110,7 @@ export function formatAmountOptions(
   opts: FormatOptions
 ): string {
   if (amount < 0n) {
-    throw new Error('Cannot format a negative amount.');
+    throw new InvalidAmountError('Cannot format a negative amount.');
   }
 
   const decimals = normalizeDecimals(token);
@@ -221,7 +225,7 @@ export function clampToTokenDecimals(display: string, token: AmountToken): strin
 export function applyBasisPoints(amount: bigint, bps: number, token: AmountToken): bigint {
   normalizeDecimals(token);
   if (!Number.isInteger(bps) || bps < 0 || bps > 10_000) {
-    throw new Error('Basis points must be an integer between 0 and 10,000.');
+    throw new InvalidAmountError('Basis points must be an integer between 0 and 10,000.');
   }
   return (amount * BigInt(bps)) / BASIS_POINTS_SCALE;
 }
@@ -260,7 +264,7 @@ export function scaledMultiply(
 ): bigint {
   normalizeDecimals(token);
   if (denominator === 0n) {
-    throw new Error('scaledMultiply: denominator must not be zero.');
+    throw new InvalidAmountError('scaledMultiply: denominator must not be zero.');
   }
   return (amount * numerator) / denominator;
 }
@@ -342,7 +346,7 @@ export class BigAmount {
   /** Format using `formatAmount` by default; accepts `FormatOptions` for richer output. */
   format(opts?: FormatOptions): string {
     if (this._raw < 0n) {
-      throw new Error('Cannot format a negative BigAmount.');
+      throw new InvalidAmountError('Cannot format a negative BigAmount.');
     }
     if (!opts || Object.keys(opts).length === 0) {
       return formatAmount(this._raw, this.token);
@@ -359,14 +363,14 @@ export class BigAmount {
 
 function normalizeDecimals(token: AmountToken): number {
   if (!Number.isInteger(token.decimals) || token.decimals < 0 || token.decimals > MAX_DECIMALS) {
-    throw new Error(`Token decimals must be an integer between 0 and ${MAX_DECIMALS}.`);
+    throw new InvalidAmountError(`Token decimals must be an integer between 0 and ${MAX_DECIMALS}.`);
   }
   return token.decimals;
 }
 
 function assertSameDecimals(a: AmountToken, b: AmountToken, op: string): void {
   if (a.decimals !== b.decimals) {
-    throw new Error(
+    throw new InvalidAmountError(
       `Cannot ${op} amounts with different token decimals (${a.decimals} vs ${b.decimals}).`
     );
   }

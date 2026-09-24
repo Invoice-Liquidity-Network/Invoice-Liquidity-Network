@@ -7,7 +7,6 @@ on:
       - 'sdk/**'
       - 'packages/shared/**'
       - 'packages/sdk/**'
-      - 'packages/invoice-sdk/**'
       - 'backend/**'
       - 'pnpm-workspace.yaml'
       - 'turbo.json'

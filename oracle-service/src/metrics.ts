@@ -7,7 +7,35 @@ export interface OracleMetrics {
   cacheMissesTotal: client.Counter<string>;
   staleResponsesTotal: client.Counter<string>;
   verificationDuration: client.Histogram<string>;
+  /** Verdicts partitioned by composition outcome — the alerting signal. */
+  verificationOutcomeTotal: client.Counter<string>;
+  /** Individual fraud heuristics as they fire, by signal name. */
+  fraudSignalTotal: client.Counter<string>;
+  /** Rolling share of verdicts carrying at least one fraud signal, 0..1. */
+  fraudFlagRatio: client.Gauge<string>;
+  /** External provider lookups by resulting status. */
+  externalVerificationTotal: client.Counter<string>;
+  /** Record one verdict against the outcome, fraud and ratio metrics. */
+  recordVerificationOutcome(result: VerificationOutcomeSample): void;
 }
+
+export interface VerificationOutcomeSample {
+  outcome: string;
+  fraudSignals: string[];
+  externalStatus: string;
+  cacheHit: boolean;
+}
+
+/**
+ * Window over which the fraud-flag ratio is computed.
+ *
+ * A counter alone cannot answer "is the *share* of flagged submissions
+ * abnormal?" without a rate() over two series, and the alert we actually want
+ * — a sudden spike in fraud-flagged submissions, which signals either an attack
+ * or a broken heuristic — is naturally expressed against a ratio. Keeping a
+ * bounded in-process window makes that ratio available directly.
+ */
+export const FRAUD_RATIO_WINDOW = 200;
 
 export function createOracleMetrics(): OracleMetrics {
   const registry = new client.Registry();
@@ -44,6 +72,65 @@ export function createOracleMetrics(): OracleMetrics {
     registers: [registry],
   });
 
+  const verificationOutcomeTotal = new client.Counter({
+    name: 'oracle_verification_outcome_total',
+    help: 'Oracle verification verdicts by composition outcome',
+    labelNames: ['outcome', 'external_status', 'cache_hit'] as const,
+    registers: [registry],
+  });
+
+  const fraudSignalTotal = new client.Counter({
+    name: 'oracle_fraud_signal_total',
+    help: 'Individual fraud heuristics fired, by signal',
+    labelNames: ['signal'] as const,
+    registers: [registry],
+  });
+
+  const fraudFlagRatio = new client.Gauge({
+    name: 'oracle_fraud_flag_ratio',
+    help: `Share of the last ${FRAUD_RATIO_WINDOW} verdicts carrying a fraud signal (0..1)`,
+    registers: [registry],
+  });
+
+  const externalVerificationTotal = new client.Counter({
+    name: 'oracle_external_verification_total',
+    help: 'External provider lookups by resulting status',
+    labelNames: ['status'] as const,
+    registers: [registry],
+  });
+
+  // Bounded ring of recent verdicts backing the ratio gauge.
+  const recentFlags: boolean[] = [];
+
+  function recordVerificationOutcome(result: VerificationOutcomeSample): void {
+    verificationOutcomeTotal.inc({
+      outcome: result.outcome,
+      external_status: result.externalStatus,
+      cache_hit: String(result.cacheHit),
+    });
+
+    externalVerificationTotal.inc({ status: result.externalStatus });
+
+    for (const signal of result.fraudSignals) {
+      fraudSignalTotal.inc({ signal });
+    }
+
+    // Cache hits are replays of an earlier verdict, not new observations.
+    // Counting them would let one flagged payer retrying in a loop drag the
+    // ratio up and page someone for a single actor.
+    if (result.cacheHit) {
+      return;
+    }
+
+    recentFlags.push(result.fraudSignals.length > 0);
+    if (recentFlags.length > FRAUD_RATIO_WINDOW) {
+      recentFlags.shift();
+    }
+
+    const flagged = recentFlags.filter(Boolean).length;
+    fraudFlagRatio.set(recentFlags.length === 0 ? 0 : flagged / recentFlags.length);
+  }
+
   return {
     registry,
     verificationTotal,
@@ -51,5 +138,10 @@ export function createOracleMetrics(): OracleMetrics {
     cacheMissesTotal,
     staleResponsesTotal,
     verificationDuration,
+    verificationOutcomeTotal,
+    fraudSignalTotal,
+    fraudFlagRatio,
+    externalVerificationTotal,
+    recordVerificationOutcome,
   };
 }

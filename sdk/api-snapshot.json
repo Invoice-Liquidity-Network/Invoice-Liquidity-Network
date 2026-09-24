@@ -1,0 +1,7018 @@
+{
+  "version": 1,
+  "entry": "sdk/src/index.ts",
+  "exports": {
+    "AmountToken": {
+      "kind": "interface",
+      "typeParams": [],
+      "members": {
+        "decimals": {
+          "type": "number",
+          "optional": false
+        }
+      }
+    },
+    "AmountValidationOptions": {
+      "kind": "interface",
+      "typeParams": [],
+      "members": {
+        "allowZero": {
+          "type": "boolean | undefined",
+          "optional": true
+        },
+        "decimals": {
+          "type": "number | undefined",
+          "optional": true
+        },
+        "max": {
+          "type": "bigint | undefined",
+          "optional": true
+        },
+        "min": {
+          "type": "bigint | undefined",
+          "optional": true
+        }
+      }
+    },
+    "AnalyticsInvoice": {
+      "kind": "interface",
+      "typeParams": [],
+      "members": {
+        "amount": {
+          "type": "bigint",
+          "optional": false
+        },
+        "discount_rate": {
+          "type": "number",
+          "optional": false
+        },
+        "due_date": {
+          "type": "number",
+          "optional": false
+        },
+        "freelancer": {
+          "type": "string",
+          "optional": false
+        },
+        "funder": {
+          "type": "string | null",
+          "optional": false
+        },
+        "id": {
+          "type": "number",
+          "optional": false
+        },
+        "payer": {
+          "type": "string",
+          "optional": false
+        },
+        "status": {
+          "type": "InvoiceStatus",
+          "optional": false
+        }
+      }
+    },
+    "AnalyticsPlugin": {
+      "kind": "interface",
+      "typeParams": [],
+      "members": {
+        "author": {
+          "type": "string | undefined",
+          "optional": true
+        },
+        "description": {
+          "type": "string | undefined",
+          "optional": true
+        },
+        "destroy": {
+          "type": "(() => void | Promise<void>) | undefined",
+          "optional": true
+        },
+        "icon": {
+          "type": "string | undefined",
+          "optional": true
+        },
+        "id": {
+          "type": "string",
+          "optional": false
+        },
+        "install": {
+          "type": "((context: AnalyticsPluginContext) => void | Promise<void>) | undefined",
+          "optional": true
+        },
+        "metrics": {
+          "type": "MetricDefinition[]",
+          "optional": false
+        },
+        "name": {
+          "type": "string",
+          "optional": false
+        },
+        "version": {
+          "type": "string",
+          "optional": false
+        },
+        "widgets": {
+          "type": "WidgetDefinition[]",
+          "optional": false
+        }
+      }
+    },
+    "AnalyticsPluginContext": {
+      "kind": "interface",
+      "typeParams": [],
+      "members": {
+        "cache": {
+          "type": "Map<string, { data: unknown; expiry: number; }>",
+          "optional": false
+        },
+        "config": {
+          "type": "Record<string, unknown>",
+          "optional": false
+        },
+        "fetchFromCache": {
+          "type": "<T>(key: string) => T | undefined",
+          "optional": false,
+          "callable": true
+        },
+        "logger": {
+          "type": "(msg: string, data?: unknown) => void",
+          "optional": false,
+          "callable": true
+        },
+        "sdk": {
+          "type": "AnalyticsSDK",
+          "optional": false
+        },
+        "setCache": {
+          "type": "<T>(key: string, data: T, ttlMs: number) => void",
+          "optional": false,
+          "callable": true
+        }
+      }
+    },
+    "AnalyticsPluginLoader": {
+      "kind": "class",
+      "typeParams": [],
+      "members": {
+        "computeMetric": {
+          "type": "(pluginId: string, metricId: string) => Promise<number | bigint | string>",
+          "optional": false,
+          "callable": true
+        },
+        "getAnalyticsSDK": {
+          "type": "() => AnalyticsSDK",
+          "optional": false,
+          "callable": true
+        },
+        "getLastError": {
+          "type": "(pluginId: string) => string | null",
+          "optional": false,
+          "callable": true
+        },
+        "getPlugin": {
+          "type": "(pluginId: string) => AnalyticsPlugin | undefined",
+          "optional": false,
+          "callable": true
+        },
+        "getPlugins": {
+          "type": "() => AnalyticsPlugin[]",
+          "optional": false,
+          "callable": true
+        },
+        "isLoaded": {
+          "type": "(pluginId: string) => boolean",
+          "optional": false,
+          "callable": true
+        },
+        "load": {
+          "type": "(plugin: AnalyticsPlugin) => Promise<PluginValidationResult>",
+          "optional": false,
+          "callable": true
+        },
+        "renderWidget": {
+          "type": "(pluginId: string, widgetId: string) => Promise<WidgetRenderResult>",
+          "optional": false,
+          "callable": true
+        },
+        "unload": {
+          "type": "(pluginId: string) => Promise<void>",
+          "optional": false,
+          "callable": true
+        }
+      }
+    },
+    "AnalyticsPluginState": {
+      "kind": "interface",
+      "typeParams": [],
+      "members": {
+        "enabled": {
+          "type": "boolean",
+          "optional": false
+        },
+        "installedAt": {
+          "type": "number",
+          "optional": false
+        },
+        "lastError": {
+          "type": "string | null",
+          "optional": false
+        },
+        "plugin": {
+          "type": "AnalyticsPlugin",
+          "optional": false
+        }
+      }
+    },
+    "AnalyticsSDK": {
+      "kind": "class",
+      "typeParams": [],
+      "members": {
+        "clearCache": {
+          "type": "() => void",
+          "optional": false,
+          "callable": true
+        },
+        "getFreelancerStats": {
+          "type": "(address: string) => Promise<FreelancerStats>",
+          "optional": false,
+          "callable": true
+        },
+        "getInvoiceHistory": {
+          "type": "(address: string, role: \"freelancer\" | \"payer\" | \"funder\") => Promise<AnalyticsInvoice[]>",
+          "optional": false,
+          "callable": true
+        },
+        "getLPStats": {
+          "type": "(address: string) => Promise<LPStats>",
+          "optional": false,
+          "callable": true
+        },
+        "getProtocolStats": {
+          "type": "() => Promise<ProtocolStats>",
+          "optional": false,
+          "callable": true
+        },
+        "getTopLPs": {
+          "type": "(limit?: number, period?: \"all\" | \"week\" | \"month\") => Promise<LPStat[]>",
+          "optional": false,
+          "callable": true
+        }
+      }
+    },
+    "BUILTIN_ANALYTICS_PLUGINS": {
+      "kind": "const",
+      "type": "AnalyticsPlugin[]"
+    },
+    "BackoffOptions": {
+      "kind": "interface",
+      "typeParams": [],
+      "members": {
+        "baseDelayMs": {
+          "type": "number | undefined",
+          "optional": true
+        },
+        "isRetryable": {
+          "type": "((error: unknown) => boolean) | undefined",
+          "optional": true
+        },
+        "jitter": {
+          "type": "number | undefined",
+          "optional": true
+        },
+        "maxDelayMs": {
+          "type": "number | undefined",
+          "optional": true
+        },
+        "maxRetries": {
+          "type": "number | undefined",
+          "optional": true
+        },
+        "multiplier": {
+          "type": "number | undefined",
+          "optional": true
+        },
+        "onRetry": {
+          "type": "((attempt: number, error: unknown, delayMs: number) => void) | undefined",
+          "optional": true
+        }
+      }
+    },
+    "BackoffResult": {
+      "kind": "interface",
+      "typeParams": [
+        "T"
+      ],
+      "members": {
+        "attempts": {
+          "type": "number",
+          "optional": false
+        },
+        "result": {
+          "type": "T",
+          "optional": false
+        }
+      }
+    },
+    "BatchFundParams": {
+      "kind": "interface",
+      "typeParams": [],
+      "members": {
+        "funder": {
+          "type": "string",
+          "optional": false
+        },
+        "invoiceIds": {
+          "type": "bigint[]",
+          "optional": false
+        }
+      }
+    },
+    "BatchOperationResult": {
+      "kind": "interface",
+      "typeParams": [],
+      "members": {
+        "error": {
+          "type": "string | undefined",
+          "optional": true
+        },
+        "index": {
+          "type": "number",
+          "optional": false
+        },
+        "invoiceId": {
+          "type": "bigint | undefined",
+          "optional": true
+        },
+        "success": {
+          "type": "boolean",
+          "optional": false
+        }
+      }
+    },
+    "BatchPayParams": {
+      "kind": "interface",
+      "typeParams": [],
+      "members": {
+        "invoiceIds": {
+          "type": "bigint[]",
+          "optional": false
+        }
+      }
+    },
+    "BatchResult": {
+      "kind": "interface",
+      "typeParams": [],
+      "members": {
+        "results": {
+          "type": "BatchOperationResult[]",
+          "optional": false
+        },
+        "success": {
+          "type": "boolean",
+          "optional": false
+        },
+        "totalFee": {
+          "type": "bigint",
+          "optional": false
+        },
+        "transactionHash": {
+          "type": "string | undefined",
+          "optional": true
+        }
+      }
+    },
+    "BatchSubmitParams": {
+      "kind": "interface",
+      "typeParams": [],
+      "members": {
+        "invoices": {
+          "type": "{ freelancer: string; payer: string; amount: bigint; dueDate: number; discountRate: number; }[]",
+          "optional": false
+        }
+      }
+    },
+    "BigAmount": {
+      "kind": "class",
+      "typeParams": [],
+      "members": {
+        "add": {
+          "type": "(other: BigAmount) => BigAmount",
+          "optional": false,
+          "callable": true
+        },
+        "applyBasisPoints": {
+          "type": "(bps: number) => BigAmount",
+          "optional": false,
+          "callable": true
+        },
+        "compare": {
+          "type": "(other: BigAmount) => -1 | 0 | 1",
+          "optional": false,
+          "callable": true
+        },
+        "format": {
+          "type": "(opts?: FormatOptions) => string",
+          "optional": false,
+          "callable": true
+        },
+        "isNegative": {
+          "type": "() => boolean",
+          "optional": false,
+          "callable": true
+        },
+        "isZero": {
+          "type": "() => boolean",
+          "optional": false,
+          "callable": true
+        },
+        "multiply": {
+          "type": "(factor: bigint) => BigAmount",
+          "optional": false,
+          "callable": true
+        },
+        "subtract": {
+          "type": "(other: BigAmount) => BigAmount",
+          "optional": false,
+          "callable": true
+        },
+        "toRaw": {
+          "type": "() => bigint",
+          "optional": false,
+          "callable": true
+        },
+        "toString": {
+          "type": "() => string",
+          "optional": false,
+          "callable": true
+        },
+        "token": {
+          "type": "AmountToken",
+          "optional": false
+        }
+      }
+    },
+    "Cache": {
+      "kind": "class",
+      "typeParams": [
+        "T"
+      ],
+      "members": {
+        "clear": {
+          "type": "() => void",
+          "optional": false,
+          "callable": true
+        },
+        "delete": {
+          "type": "(key: string) => boolean",
+          "optional": false,
+          "callable": true
+        },
+        "get": {
+          "type": "(key: string, options?: CacheOptions) => T | null",
+          "optional": false,
+          "callable": true
+        },
+        "getKeys": {
+          "type": "() => string[]",
+          "optional": false,
+          "callable": true
+        },
+        "getSize": {
+          "type": "() => number",
+          "optional": false,
+          "callable": true
+        },
+        "getStatistics": {
+          "type": "() => CacheStatistics",
+          "optional": false,
+          "callable": true
+        },
+        "invalidate": {
+          "type": "(pattern?: string) => number",
+          "optional": false,
+          "callable": true
+        },
+        "resetStatistics": {
+          "type": "() => void",
+          "optional": false,
+          "callable": true
+        },
+        "set": {
+          "type": "(key: string, value: T, ttl?: number) => void",
+          "optional": false,
+          "callable": true
+        }
+      }
+    },
+    "CacheConfig": {
+      "kind": "interface",
+      "typeParams": [],
+      "members": {
+        "enabled": {
+          "type": "boolean | undefined",
+          "optional": true
+        },
+        "maxSize": {
+          "type": "number | undefined",
+          "optional": true
+        },
+        "storage": {
+          "type": "\"memory\" | \"localStorage\" | undefined",
+          "optional": true
+        },
+        "ttl": {
+          "type": "number",
+          "optional": false
+        }
+      }
+    },
+    "CacheEntry": {
+      "kind": "interface",
+      "typeParams": [
+        "T"
+      ],
+      "members": {
+        "accessCount": {
+          "type": "number",
+          "optional": false
+        },
+        "createdAt": {
+          "type": "number",
+          "optional": false
+        },
+        "expiresAt": {
+          "type": "number",
+          "optional": false
+        },
+        "lastAccessedAt": {
+          "type": "number",
+          "optional": false
+        },
+        "value": {
+          "type": "T",
+          "optional": false
+        }
+      }
+    },
+    "CacheOptions": {
+      "kind": "interface",
+      "typeParams": [],
+      "members": {
+        "bypass": {
+          "type": "boolean | undefined",
+          "optional": true
+        },
+        "forceRefresh": {
+          "type": "boolean | undefined",
+          "optional": true
+        }
+      }
+    },
+    "CacheStatistics": {
+      "kind": "interface",
+      "typeParams": [],
+      "members": {
+        "deletes": {
+          "type": "number",
+          "optional": false
+        },
+        "evictions": {
+          "type": "number",
+          "optional": false
+        },
+        "hitRate": {
+          "type": "number",
+          "optional": false
+        },
+        "hits": {
+          "type": "number",
+          "optional": false
+        },
+        "misses": {
+          "type": "number",
+          "optional": false
+        },
+        "sets": {
+          "type": "number",
+          "optional": false
+        }
+      }
+    },
+    "CastVoteParams": {
+      "kind": "interface",
+      "typeParams": [],
+      "members": {
+        "proposalId": {
+          "type": "bigint",
+          "optional": false
+        },
+        "support": {
+          "type": "boolean",
+          "optional": false
+        },
+        "voter": {
+          "type": "string",
+          "optional": false
+        }
+      }
+    },
+    "CircuitBreaker": {
+      "kind": "class",
+      "typeParams": [],
+      "members": {
+        "execute": {
+          "type": "<T>(fn: () => Promise<T>) => Promise<T>",
+          "optional": false,
+          "callable": true
+        },
+        "getState": {
+          "type": "() => CircuitBreakerState",
+          "optional": false,
+          "callable": true
+        },
+        "reset": {
+          "type": "() => void",
+          "optional": false,
+          "callable": true
+        }
+      }
+    },
+    "CircuitBreakerOptions": {
+      "kind": "interface",
+      "typeParams": [],
+      "members": {
+        "cooldownMs": {
+          "type": "number",
+          "optional": false
+        },
+        "failureThreshold": {
+          "type": "number",
+          "optional": false
+        },
+        "successThreshold": {
+          "type": "number",
+          "optional": false
+        }
+      }
+    },
+    "CircuitBreakerState": {
+      "kind": "type",
+      "type": "CircuitBreakerState"
+    },
+    "CircuitOpenError": {
+      "kind": "class",
+      "typeParams": [],
+      "members": {
+        "cause": {
+          "type": "unknown",
+          "optional": true
+        },
+        "code": {
+          "type": "string",
+          "optional": false
+        },
+        "context": {
+          "type": "Record<string, unknown> | undefined",
+          "optional": true
+        },
+        "docsUrl": {
+          "type": "string | undefined",
+          "optional": true
+        },
+        "message": {
+          "type": "string",
+          "optional": false
+        },
+        "name": {
+          "type": "string",
+          "optional": false
+        },
+        "remediation": {
+          "type": "string",
+          "optional": false
+        },
+        "retryable": {
+          "type": "boolean | undefined",
+          "optional": true
+        },
+        "stack": {
+          "type": "string | undefined",
+          "optional": true
+        }
+      }
+    },
+    "ClaimDefaultParams": {
+      "kind": "interface",
+      "typeParams": [],
+      "members": {
+        "funder": {
+          "type": "string",
+          "optional": false
+        },
+        "invoiceId": {
+          "type": "bigint",
+          "optional": false
+        }
+      }
+    },
+    "ClaimStatus": {
+      "kind": "type",
+      "type": "ClaimStatus"
+    },
+    "ComparisonResult": {
+      "kind": "interface",
+      "typeParams": [],
+      "members": {
+        "difference": {
+          "type": "number",
+          "optional": false
+        },
+        "metric": {
+          "type": "string",
+          "optional": false
+        },
+        "percentDifference": {
+          "type": "number",
+          "optional": false
+        },
+        "valueA": {
+          "type": "number | bigint",
+          "optional": false
+        },
+        "valueB": {
+          "type": "number | bigint",
+          "optional": false
+        }
+      }
+    },
+    "CompatibilityResult": {
+      "kind": "interface",
+      "typeParams": [],
+      "members": {
+        "compatible": {
+          "type": "boolean",
+          "optional": false
+        },
+        "contractVersion": {
+          "type": "string",
+          "optional": false
+        },
+        "issues": {
+          "type": "string[]",
+          "optional": false
+        },
+        "sdkVersion": {
+          "type": "string",
+          "optional": false
+        }
+      }
+    },
+    "ContractError": {
+      "kind": "enum",
+      "members": {
+        "AlreadyFunded": 2,
+        "AlreadyPaid": 3,
+        "InvalidAmount": 7,
+        "InvalidDiscount": 8,
+        "InvalidDueDate": 9,
+        "InvoiceNotFound": 1,
+        "NotDueYet": 6,
+        "NotFunder": 4,
+        "NotPayer": 5,
+        "Unauthorized": 10
+      }
+    },
+    "ContractEvent": {
+      "kind": "type",
+      "type": "ContractEvent"
+    },
+    "ContractIdVerificationResult": {
+      "kind": "interface",
+      "typeParams": [],
+      "members": {
+        "isOfficial": {
+          "type": "boolean",
+          "optional": false
+        },
+        "warningMessage": {
+          "type": "string | undefined",
+          "optional": true
+        }
+      }
+    },
+    "ContractStats": {
+      "kind": "interface",
+      "typeParams": [],
+      "members": {
+        "totalFunded": {
+          "type": "bigint",
+          "optional": false
+        },
+        "totalInvoices": {
+          "type": "bigint",
+          "optional": false
+        },
+        "totalPaid": {
+          "type": "bigint",
+          "optional": false
+        },
+        "totalVolume": {
+          "type": "bigint",
+          "optional": false
+        }
+      }
+    },
+    "ContractStatsUpdatedEvent": {
+      "kind": "interface",
+      "typeParams": [],
+      "members": {
+        "contractId": {
+          "type": "string",
+          "optional": false
+        },
+        "ledger": {
+          "type": "number",
+          "optional": false
+        },
+        "ledgerClosedAt": {
+          "type": "string",
+          "optional": false
+        },
+        "pagingToken": {
+          "type": "string",
+          "optional": false
+        },
+        "stats": {
+          "type": "ContractStats",
+          "optional": false
+        },
+        "txHash": {
+          "type": "string",
+          "optional": false
+        },
+        "type": {
+          "type": "\"ContractStatsUpdated\"",
+          "optional": false
+        }
+      }
+    },
+    "CoverageInfo": {
+      "kind": "interface",
+      "typeParams": [],
+      "members": {
+        "coverage": {
+          "type": "LPCoverage | null",
+          "optional": false
+        },
+        "eligible": {
+          "type": "boolean",
+          "optional": false
+        },
+        "eligibleInvoices": {
+          "type": "number",
+          "optional": false
+        }
+      }
+    },
+    "CreateProposalParams": {
+      "kind": "interface",
+      "typeParams": [],
+      "members": {
+        "action": {
+          "type": "ProposalAction",
+          "optional": false
+        },
+        "descriptionHash": {
+          "type": "Uint8Array<ArrayBufferLike> | Buffer<ArrayBufferLike>",
+          "optional": false
+        },
+        "proposedValue": {
+          "type": "bigint",
+          "optional": false
+        },
+        "proposer": {
+          "type": "string",
+          "optional": false
+        }
+      }
+    },
+    "CustomValidator": {
+      "kind": "type",
+      "type": "CustomValidator<T>"
+    },
+    "DEFAULT_CACHE_CONFIG": {
+      "kind": "const",
+      "type": "{ ttl: number; storage: \"memory\"; enabled: boolean; }"
+    },
+    "DEFAULT_CONNECTION_STATE": {
+      "kind": "const",
+      "type": "ILNConnectionState"
+    },
+    "DEFAULT_INVOICE_LIST_STATE": {
+      "kind": "const",
+      "type": "ILNInvoiceListState"
+    },
+    "DEFAULT_READ_TIMEOUT_MS": {
+      "kind": "const",
+      "type": "10000"
+    },
+    "DEFAULT_REQUEST_TIMEOUT_MS": {
+      "kind": "const",
+      "type": "30000"
+    },
+    "DEFAULT_SIMULATION_TIMEOUT_MS": {
+      "kind": "const",
+      "type": "15000"
+    },
+    "DEFAULT_TIMEOUTS": {
+      "kind": "const",
+      "type": "{ readonly readMs: 10000; readonly writeMs: 30000; readonly simulationMs: 15000; }"
+    },
+    "DEFAULT_WRITE_TIMEOUT_MS": {
+      "kind": "const",
+      "type": "30000"
+    },
+    "DateValidationOptions": {
+      "kind": "interface",
+      "typeParams": [],
+      "members": {
+        "allowFuture": {
+          "type": "boolean | undefined",
+          "optional": true
+        },
+        "allowPast": {
+          "type": "boolean | undefined",
+          "optional": true
+        },
+        "max": {
+          "type": "Date | undefined",
+          "optional": true
+        },
+        "min": {
+          "type": "Date | undefined",
+          "optional": true
+        },
+        "unit": {
+          "type": "\"milliseconds\" | \"seconds\" | undefined",
+          "optional": true
+        }
+      }
+    },
+    "DeepLinkResult": {
+      "kind": "interface",
+      "typeParams": [],
+      "members": {
+        "params": {
+          "type": "StellarURIParams",
+          "optional": false
+        },
+        "url": {
+          "type": "string",
+          "optional": false
+        }
+      }
+    },
+    "DelegateVotesParams": {
+      "kind": "interface",
+      "typeParams": [],
+      "members": {
+        "delegate": {
+          "type": "string",
+          "optional": false
+        },
+        "delegator": {
+          "type": "string",
+          "optional": false
+        }
+      }
+    },
+    "DepositPremiumParams": {
+      "kind": "interface",
+      "typeParams": [],
+      "members": {
+        "amount": {
+          "type": "bigint",
+          "optional": false
+        },
+        "lp": {
+          "type": "string",
+          "optional": false
+        }
+      }
+    },
+    "DeprecationWarning": {
+      "kind": "interface",
+      "typeParams": [],
+      "members": {
+        "alternative": {
+          "type": "string | undefined",
+          "optional": true
+        },
+        "message": {
+          "type": "string",
+          "optional": false
+        },
+        "method": {
+          "type": "string",
+          "optional": false
+        },
+        "removedIn": {
+          "type": "string | undefined",
+          "optional": true
+        }
+      }
+    },
+    "DiscountRateValidationOptions": {
+      "kind": "interface",
+      "typeParams": [],
+      "members": {
+        "allowZero": {
+          "type": "boolean | undefined",
+          "optional": true
+        },
+        "max": {
+          "type": "number | undefined",
+          "optional": true
+        },
+        "min": {
+          "type": "number | undefined",
+          "optional": true
+        }
+      }
+    },
+    "EndpointHealth": {
+      "kind": "interface",
+      "typeParams": [],
+      "members": {
+        "attempts": {
+          "type": "number",
+          "optional": false
+        },
+        "consecutiveFailures": {
+          "type": "number",
+          "optional": false
+        },
+        "cooldownMs": {
+          "type": "number",
+          "optional": false
+        },
+        "cooldownUntil": {
+          "type": "number",
+          "optional": false
+        },
+        "errorEwma": {
+          "type": "number",
+          "optional": false
+        },
+        "latencyEwmaMs": {
+          "type": "number",
+          "optional": false
+        },
+        "score": {
+          "type": "number",
+          "optional": false
+        },
+        "transientFailures": {
+          "type": "number",
+          "optional": false
+        },
+        "url": {
+          "type": "string",
+          "optional": false
+        }
+      }
+    },
+    "EnrollParams": {
+      "kind": "interface",
+      "typeParams": [],
+      "members": {
+        "coverageAmount": {
+          "type": "bigint",
+          "optional": false
+        },
+        "lp": {
+          "type": "string",
+          "optional": false
+        },
+        "premiumRateBps": {
+          "type": "number",
+          "optional": false
+        }
+      }
+    },
+    "ErrorEventData": {
+      "kind": "interface",
+      "typeParams": [],
+      "members": {
+        "code": {
+          "type": "string",
+          "optional": false
+        },
+        "message": {
+          "type": "string",
+          "optional": false
+        },
+        "operation": {
+          "type": "string | undefined",
+          "optional": true
+        },
+        "timestamp": {
+          "type": "number",
+          "optional": false
+        }
+      }
+    },
+    "ErrorEventType": {
+      "kind": "type",
+      "type": "ErrorEventType"
+    },
+    "EventCallback": {
+      "kind": "type",
+      "type": "EventCallback"
+    },
+    "EventData": {
+      "kind": "type",
+      "type": "EventData"
+    },
+    "EventEmitterEvent": {
+      "kind": "interface",
+      "typeParams": [],
+      "members": {
+        "category": {
+          "type": "\"invoice\" | \"wallet\" | \"error\" | \"contract\"",
+          "optional": false
+        },
+        "data": {
+          "type": "ContractEvent | EventData",
+          "optional": false
+        },
+        "timestamp": {
+          "type": "number",
+          "optional": false
+        },
+        "type": {
+          "type": "string",
+          "optional": false
+        }
+      }
+    },
+    "EventHistoryEntry": {
+      "kind": "interface",
+      "typeParams": [],
+      "members": {
+        "category": {
+          "type": "string",
+          "optional": false
+        },
+        "data": {
+          "type": "ContractEvent | EventData",
+          "optional": false
+        },
+        "timestamp": {
+          "type": "number",
+          "optional": false
+        },
+        "type": {
+          "type": "string",
+          "optional": false
+        }
+      }
+    },
+    "EventListener": {
+      "kind": "type",
+      "type": "EventListener<T>"
+    },
+    "ExecuteProposalParams": {
+      "kind": "interface",
+      "typeParams": [],
+      "members": {
+        "proposalId": {
+          "type": "bigint",
+          "optional": false
+        },
+        "source": {
+          "type": "string",
+          "optional": false
+        },
+        "totalSupply": {
+          "type": "bigint",
+          "optional": false
+        }
+      }
+    },
+    "FederationRecord": {
+      "kind": "interface",
+      "typeParams": [],
+      "members": {
+        "memo": {
+          "type": "string | undefined",
+          "optional": true
+        },
+        "memoType": {
+          "type": "string | undefined",
+          "optional": true
+        },
+        "name": {
+          "type": "string",
+          "optional": false
+        },
+        "stellarAddress": {
+          "type": "string",
+          "optional": false
+        }
+      }
+    },
+    "FederationRecordManager": {
+      "kind": "class",
+      "typeParams": [],
+      "members": {
+        "createRecord": {
+          "type": "(record: FederationRecord) => Promise<void>",
+          "optional": false,
+          "callable": true
+        },
+        "deleteRecord": {
+          "type": "(name: string) => Promise<void>",
+          "optional": false,
+          "callable": true
+        },
+        "getByAddress": {
+          "type": "(fedAddress: string) => Promise<string>",
+          "optional": false,
+          "callable": true
+        },
+        "updateRecord": {
+          "type": "(name: string, updates: Partial<Omit<FederationRecord, \"name\">>) => Promise<void>",
+          "optional": false,
+          "callable": true
+        }
+      }
+    },
+    "FederationResolutionError": {
+      "kind": "class",
+      "typeParams": [],
+      "members": {
+        "cause": {
+          "type": "unknown",
+          "optional": true
+        },
+        "code": {
+          "type": "string",
+          "optional": false
+        },
+        "context": {
+          "type": "Record<string, unknown> | undefined",
+          "optional": true
+        },
+        "docsUrl": {
+          "type": "string | undefined",
+          "optional": true
+        },
+        "message": {
+          "type": "string",
+          "optional": false
+        },
+        "name": {
+          "type": "string",
+          "optional": false
+        },
+        "remediation": {
+          "type": "string",
+          "optional": false
+        },
+        "retryable": {
+          "type": "boolean | undefined",
+          "optional": true
+        },
+        "stack": {
+          "type": "string | undefined",
+          "optional": true
+        }
+      }
+    },
+    "FormatOptions": {
+      "kind": "interface",
+      "typeParams": [],
+      "members": {
+        "compact": {
+          "type": "boolean | undefined",
+          "optional": true
+        },
+        "symbol": {
+          "type": "string | undefined",
+          "optional": true
+        },
+        "trimZeros": {
+          "type": "boolean | undefined",
+          "optional": true
+        }
+      }
+    },
+    "FreelancerStats": {
+      "kind": "interface",
+      "typeParams": [],
+      "members": {
+        "avgDiscount": {
+          "type": "number",
+          "optional": false
+        },
+        "funded": {
+          "type": "number",
+          "optional": false
+        },
+        "submitted": {
+          "type": "number",
+          "optional": false
+        },
+        "totalReceived": {
+          "type": "bigint",
+          "optional": false
+        }
+      }
+    },
+    "FundInvoiceParams": {
+      "kind": "interface",
+      "typeParams": [],
+      "members": {
+        "funder": {
+          "type": "string",
+          "optional": false
+        },
+        "invoiceId": {
+          "type": "bigint",
+          "optional": false
+        }
+      }
+    },
+    "GOVERNANCE_BPS_DENOMINATOR": {
+      "kind": "const",
+      "type": "10000"
+    },
+    "GOVERNANCE_DEFAULT_MIN_PROPOSAL_BALANCE": {
+      "kind": "const",
+      "type": "1000n"
+    },
+    "GOVERNANCE_DEFAULT_MIN_QUORUM_BPS": {
+      "kind": "const",
+      "type": "1000"
+    },
+    "GOVERNANCE_MAX_DELEGATION_DEPTH": {
+      "kind": "const",
+      "type": "10"
+    },
+    "GOVERNANCE_TESTNET": {
+      "kind": "const",
+      "type": "{ contractId: string; rpcUrl: string; networkPassphrase: string; }"
+    },
+    "GOVERNANCE_TESTNET_CONTRACT_ID": {
+      "kind": "const",
+      "type": "\"CD7GOIU3GNK7EZHG7XWBC7VI4NRVGMRCU7X2FOCAPQN6EGTSW46BY4EB\""
+    },
+    "GOVERNANCE_VOTING_PERIOD_SECS": {
+      "kind": "const",
+      "type": "259200"
+    },
+    "GenericContractError": {
+      "kind": "class",
+      "typeParams": [],
+      "members": {
+        "cause": {
+          "type": "unknown",
+          "optional": true
+        },
+        "code": {
+          "type": "string",
+          "optional": false
+        },
+        "context": {
+          "type": "Record<string, unknown> | undefined",
+          "optional": true
+        },
+        "docsUrl": {
+          "type": "string | undefined",
+          "optional": true
+        },
+        "message": {
+          "type": "string",
+          "optional": false
+        },
+        "name": {
+          "type": "string",
+          "optional": false
+        },
+        "remediation": {
+          "type": "string",
+          "optional": false
+        },
+        "retryable": {
+          "type": "boolean | undefined",
+          "optional": true
+        },
+        "stack": {
+          "type": "string | undefined",
+          "optional": true
+        }
+      }
+    },
+    "GetProposalParams": {
+      "kind": "interface",
+      "typeParams": [],
+      "members": {
+        "proposalId": {
+          "type": "bigint",
+          "optional": false
+        }
+      }
+    },
+    "GetVotingResultsParams": {
+      "kind": "interface",
+      "typeParams": [],
+      "members": {
+        "minQuorumBps": {
+          "type": "number | undefined",
+          "optional": true
+        },
+        "proposal": {
+          "type": "GovernanceProposal",
+          "optional": false
+        },
+        "totalSupply": {
+          "type": "bigint",
+          "optional": false
+        }
+      }
+    },
+    "GovernanceClient": {
+      "kind": "class",
+      "typeParams": [],
+      "members": {
+        "castVote": {
+          "type": "(params: CastVoteParams) => Promise<BuiltTransaction>",
+          "optional": false,
+          "callable": true
+        },
+        "createProposal": {
+          "type": "(params: CreateProposalParams) => Promise<BuiltTransaction>",
+          "optional": false,
+          "callable": true
+        },
+        "delegateVotes": {
+          "type": "(params: DelegateVotesParams) => Promise<BuiltTransaction>",
+          "optional": false,
+          "callable": true
+        },
+        "executeProposal": {
+          "type": "(params: ExecuteProposalParams) => Promise<BuiltTransaction>",
+          "optional": false,
+          "callable": true
+        },
+        "getExecutionDelay": {
+          "type": "() => BuiltTransaction",
+          "optional": false,
+          "callable": true
+        },
+        "getMinQuorumBps": {
+          "type": "() => BuiltTransaction",
+          "optional": false,
+          "callable": true
+        },
+        "getProposal": {
+          "type": "(params: GetProposalParams) => BuiltTransaction",
+          "optional": false,
+          "callable": true
+        },
+        "listProposals": {
+          "type": "(params?: ListProposalsParams) => BuiltTransaction",
+          "optional": false,
+          "callable": true
+        },
+        "tallyVotes": {
+          "type": "(params: GetVotingResultsParams) => VotingResult",
+          "optional": false,
+          "callable": true
+        },
+        "undelegateVotes": {
+          "type": "(params: UndelegateVotesParams) => Promise<BuiltTransaction>",
+          "optional": false,
+          "callable": true
+        },
+        "vetoProposal": {
+          "type": "(params: VetoProposalParams) => Promise<BuiltTransaction>",
+          "optional": false,
+          "callable": true
+        }
+      }
+    },
+    "GovernanceClientConfig": {
+      "kind": "interface",
+      "typeParams": [],
+      "members": {
+        "contractId": {
+          "type": "string",
+          "optional": false
+        },
+        "networkPassphrase": {
+          "type": "string",
+          "optional": false
+        },
+        "rpcEndpoints": {
+          "type": "string[] | undefined",
+          "optional": true
+        },
+        "rpcFailover": {
+          "type": "RpcFailoverOptions | undefined",
+          "optional": true
+        },
+        "rpcUrl": {
+          "type": "string",
+          "optional": false
+        },
+        "server": {
+          "type": "RpcServerLike | undefined",
+          "optional": true
+        }
+      }
+    },
+    "GovernanceContractMethod": {
+      "kind": "const",
+      "type": "{ readonly CreateProposal: \"create_proposal\"; readonly CastVote: \"cast_vote\"; readonly ExecuteProposal: \"execute_proposal\"; readonly VetoProposal: \"veto_proposal\"; readonly DelegateVotes: \"delegate_votes\"; readonly UndelegateVotes: \"undelegate_votes\"; readonly GetProposal: \"get_proposal\"; readonly ListProposals: \"list_proposals\"; readonly GetMinQuorumBps: \"get_min_quorum_bps\"; readonly GetExecutionDelay: \"get_execution_delay\"; }"
+    },
+    "GovernanceParamTypes": {
+      "kind": "interface",
+      "typeParams": [],
+      "members": {
+        "maxDiscountRate": {
+          "type": "number",
+          "optional": false
+        },
+        "minInvoiceAmount": {
+          "type": "bigint",
+          "optional": false
+        },
+        "minPayerReputation": {
+          "type": "number",
+          "optional": false
+        },
+        "protocolFeeBps": {
+          "type": "number",
+          "optional": false
+        }
+      }
+    },
+    "GovernanceProposal": {
+      "kind": "interface",
+      "typeParams": [],
+      "members": {
+        "action": {
+          "type": "ProposalAction",
+          "optional": false
+        },
+        "createdAt": {
+          "type": "number",
+          "optional": false
+        },
+        "descriptionHash": {
+          "type": "Buffer<ArrayBufferLike>",
+          "optional": false
+        },
+        "etaLedger": {
+          "type": "number",
+          "optional": false
+        },
+        "id": {
+          "type": "bigint",
+          "optional": false
+        },
+        "proposedValue": {
+          "type": "bigint",
+          "optional": false
+        },
+        "proposer": {
+          "type": "string",
+          "optional": false
+        },
+        "status": {
+          "type": "ProposalStatus",
+          "optional": false
+        },
+        "votesAgainst": {
+          "type": "bigint",
+          "optional": false
+        },
+        "votesFor": {
+          "type": "bigint",
+          "optional": false
+        },
+        "votingEnd": {
+          "type": "number",
+          "optional": false
+        }
+      }
+    },
+    "GovernanceProposalCreatedEvent": {
+      "kind": "interface",
+      "typeParams": [],
+      "members": {
+        "contractId": {
+          "type": "string",
+          "optional": false
+        },
+        "ledger": {
+          "type": "number",
+          "optional": false
+        },
+        "ledgerClosedAt": {
+          "type": "string",
+          "optional": false
+        },
+        "pagingToken": {
+          "type": "string",
+          "optional": false
+        },
+        "proposal": {
+          "type": "GovernanceProposal",
+          "optional": false
+        },
+        "txHash": {
+          "type": "string",
+          "optional": false
+        },
+        "type": {
+          "type": "\"ProposalCreated\"",
+          "optional": false
+        }
+      }
+    },
+    "GovernanceProposalExecutedEvent": {
+      "kind": "interface",
+      "typeParams": [],
+      "members": {
+        "contractId": {
+          "type": "string",
+          "optional": false
+        },
+        "executor": {
+          "type": "string",
+          "optional": false
+        },
+        "ledger": {
+          "type": "number",
+          "optional": false
+        },
+        "ledgerClosedAt": {
+          "type": "string",
+          "optional": false
+        },
+        "pagingToken": {
+          "type": "string",
+          "optional": false
+        },
+        "proposalId": {
+          "type": "bigint",
+          "optional": false
+        },
+        "txHash": {
+          "type": "string",
+          "optional": false
+        },
+        "type": {
+          "type": "\"ProposalExecuted\"",
+          "optional": false
+        }
+      }
+    },
+    "GovernanceProposalVotedEvent": {
+      "kind": "type",
+      "type": "GovernanceProposalVotedEvent"
+    },
+    "HistoricalPerformance": {
+      "kind": "interface",
+      "typeParams": [],
+      "members": {
+        "avgDaysToSettlement": {
+          "type": "number",
+          "optional": false
+        },
+        "avgDiscountRate": {
+          "type": "number",
+          "optional": false
+        },
+        "defaultRate": {
+          "type": "number",
+          "optional": false
+        },
+        "defaultedCount": {
+          "type": "number",
+          "optional": false
+        },
+        "fundedCount": {
+          "type": "number",
+          "optional": false
+        },
+        "paidCount": {
+          "type": "number",
+          "optional": false
+        },
+        "totalInvoices": {
+          "type": "number",
+          "optional": false
+        },
+        "totalVolume": {
+          "type": "bigint",
+          "optional": false
+        },
+        "totalYield": {
+          "type": "bigint",
+          "optional": false
+        }
+      }
+    },
+    "ILNClient": {
+      "kind": "interface",
+      "typeParams": [],
+      "members": {
+        "connectWallet": {
+          "type": "() => Promise<string>",
+          "optional": false,
+          "callable": true
+        },
+        "createProposal": {
+          "type": "(params: Record<string, unknown>) => Promise<unknown>",
+          "optional": false,
+          "callable": true
+        },
+        "depositPremium": {
+          "type": "((params: import(\"./insurance-types\").DepositPremiumParams) => Promise<void>) | undefined",
+          "optional": true
+        },
+        "enroll": {
+          "type": "((params: import(\"./insurance-types\").EnrollParams) => Promise<void>) | undefined",
+          "optional": true
+        },
+        "fundInvoice": {
+          "type": "(params: Record<string, unknown>) => Promise<void>",
+          "optional": false,
+          "callable": true
+        },
+        "getClaim": {
+          "type": "((claimId: bigint) => Promise<import(\"./insurance-types\").InsuranceClaim>) | undefined",
+          "optional": true
+        },
+        "getContractStats": {
+          "type": "() => Promise<ContractStats>",
+          "optional": false,
+          "callable": true
+        },
+        "getInvoice": {
+          "type": "(id: number | bigint) => Promise<Invoice>",
+          "optional": false,
+          "callable": true
+        },
+        "getInvoicesByIssuer": {
+          "type": "(issuer: string) => Promise<Invoice[]>",
+          "optional": false,
+          "callable": true
+        },
+        "getInvoicesByStatus": {
+          "type": "(status: string) => Promise<Invoice[]>",
+          "optional": false,
+          "callable": true
+        },
+        "getLPCoverage": {
+          "type": "((address: string) => Promise<import(\"./insurance-types\").LPCoverage | null>) | undefined",
+          "optional": true
+        },
+        "getLPPortfolio": {
+          "type": "(address: string) => Promise<LPPortfolio>",
+          "optional": false,
+          "callable": true
+        },
+        "getPoolBalance": {
+          "type": "(() => Promise<import(\"./insurance-types\").PoolBalance>) | undefined",
+          "optional": true
+        },
+        "getProposal": {
+          "type": "(id: number | bigint) => Promise<GovernanceProposal>",
+          "optional": false,
+          "callable": true
+        },
+        "getReputationScore": {
+          "type": "(address: string) => Promise<ReputationScore>",
+          "optional": false,
+          "callable": true
+        },
+        "getTokenBalances": {
+          "type": "(address: string) => Promise<TokenBalance[]>",
+          "optional": false,
+          "callable": true
+        },
+        "listClaims": {
+          "type": "((statusFilter?: import(\"./insurance-types\").ClaimStatus, page?: number, pageSize?: number) => Promise<import(\"./insurance-types\").InsuranceClaim[]>) | undefined",
+          "optional": true
+        },
+        "markPaid": {
+          "type": "(params: Record<string, unknown>) => Promise<void>",
+          "optional": false,
+          "callable": true
+        },
+        "reviewClaim": {
+          "type": "((params: import(\"./insurance-types\").ReviewClaimParams) => Promise<void>) | undefined",
+          "optional": true
+        },
+        "submitClaim": {
+          "type": "((params: import(\"./insurance-types\").SubmitClaimParams) => Promise<bigint>) | undefined",
+          "optional": true
+        },
+        "submitInvoice": {
+          "type": "(params: Record<string, unknown>) => Promise<unknown>",
+          "optional": false,
+          "callable": true
+        },
+        "vote": {
+          "type": "(params: Record<string, unknown>) => Promise<void>",
+          "optional": false,
+          "callable": true
+        }
+      }
+    },
+    "ILNConnectionState": {
+      "kind": "interface",
+      "typeParams": [],
+      "members": {
+        "connected": {
+          "type": "boolean",
+          "optional": false
+        },
+        "contractId": {
+          "type": "string",
+          "optional": false
+        },
+        "error": {
+          "type": "string | null",
+          "optional": false
+        },
+        "lastSyncAt": {
+          "type": "string | null",
+          "optional": false
+        },
+        "network": {
+          "type": "string",
+          "optional": false
+        }
+      }
+    },
+    "ILNError": {
+      "kind": "class",
+      "typeParams": [],
+      "members": {
+        "cause": {
+          "type": "unknown",
+          "optional": true
+        },
+        "code": {
+          "type": "string",
+          "optional": false
+        },
+        "context": {
+          "type": "Record<string, unknown> | undefined",
+          "optional": true
+        },
+        "docsUrl": {
+          "type": "string | undefined",
+          "optional": true
+        },
+        "message": {
+          "type": "string",
+          "optional": false
+        },
+        "name": {
+          "type": "string",
+          "optional": false
+        },
+        "remediation": {
+          "type": "string",
+          "optional": false
+        },
+        "retryable": {
+          "type": "boolean | undefined",
+          "optional": true
+        },
+        "stack": {
+          "type": "string | undefined",
+          "optional": true
+        }
+      }
+    },
+    "ILNEventEmitter": {
+      "kind": "class",
+      "typeParams": [],
+      "members": {
+        "clearHistory": {
+          "type": "() => void",
+          "optional": false,
+          "callable": true
+        },
+        "emit": {
+          "type": "(category: string, type: string, data: EventData | ContractEvent) => void",
+          "optional": false,
+          "callable": true
+        },
+        "emitContract": {
+          "type": "(event: ContractEvent) => void",
+          "optional": false,
+          "callable": true
+        },
+        "emitError": {
+          "type": "(type: ErrorEventType, data: ErrorEventData) => void",
+          "optional": false,
+          "callable": true
+        },
+        "emitInvoice": {
+          "type": "(type: InvoiceEventType, data: InvoiceEventData) => void",
+          "optional": false,
+          "callable": true
+        },
+        "emitWallet": {
+          "type": "(type: WalletEventType, data: WalletEventData) => void",
+          "optional": false,
+          "callable": true
+        },
+        "getHistory": {
+          "type": "(options?: { category?: string; type?: string; limit?: number; }) => EventHistoryEntry[]",
+          "optional": false,
+          "callable": true
+        },
+        "getHistoryCount": {
+          "type": "() => number",
+          "optional": false,
+          "callable": true
+        },
+        "listenerCount": {
+          "type": "(eventType?: string) => number",
+          "optional": false,
+          "callable": true
+        },
+        "off": {
+          "type": "(eventType: string, listener: EventListener) => void",
+          "optional": false,
+          "callable": true
+        },
+        "on": {
+          "type": "<T extends EventData = EventData>(eventType: string, listener: EventListener<T>) => () => void",
+          "optional": false,
+          "callable": true
+        },
+        "once": {
+          "type": "<T extends EventData = EventData>(eventType: string, listener: EventListener<T>) => () => void",
+          "optional": false,
+          "callable": true
+        },
+        "removeAllListeners": {
+          "type": "(eventType?: string) => void",
+          "optional": false,
+          "callable": true
+        }
+      }
+    },
+    "ILNInvoiceListState": {
+      "kind": "interface",
+      "typeParams": [],
+      "members": {
+        "error": {
+          "type": "string | null",
+          "optional": false
+        },
+        "invoices": {
+          "type": "{ id: bigint; status: string; amount: bigint; payer: string; freelancer: string; }[]",
+          "optional": false
+        },
+        "lastFetchedAt": {
+          "type": "string | null",
+          "optional": false
+        },
+        "loading": {
+          "type": "boolean",
+          "optional": false
+        }
+      }
+    },
+    "ILNPlugin": {
+      "kind": "interface",
+      "typeParams": [],
+      "members": {
+        "destroy": {
+          "type": "(() => void | Promise<void>) | undefined",
+          "optional": true
+        },
+        "install": {
+          "type": "((ctx: PluginContext) => void | Promise<void>) | undefined",
+          "optional": true
+        },
+        "name": {
+          "type": "string",
+          "optional": false
+        },
+        "onAfterOperation": {
+          "type": "((name: string, result: unknown) => void | Promise<void>) | undefined",
+          "optional": true
+        },
+        "onBeforeOperation": {
+          "type": "((name: string, params: unknown) => void | Promise<void>) | undefined",
+          "optional": true
+        },
+        "onError": {
+          "type": "((name: string, error: unknown) => void | Promise<void>) | undefined",
+          "optional": true
+        },
+        "version": {
+          "type": "string | undefined",
+          "optional": true
+        }
+      }
+    },
+    "ILNSdk": {
+      "kind": "class",
+      "typeParams": [],
+      "members": {
+        "batch": {
+          "type": "(operations: TransactionOperation[]) => Promise<BuiltTransaction>",
+          "optional": false,
+          "callable": true
+        },
+        "batchFundInvoices": {
+          "type": "(params: BatchFundParams) => Promise<BatchResult>",
+          "optional": false,
+          "callable": true
+        },
+        "batchMarkPaid": {
+          "type": "(params: BatchPayParams) => Promise<BatchResult>",
+          "optional": false,
+          "callable": true
+        },
+        "batchSubmitInvoices": {
+          "type": "(params: BatchSubmitParams) => Promise<BatchResult>",
+          "optional": false,
+          "callable": true
+        },
+        "buildClaimDefaultOperation": {
+          "type": "(params: ClaimDefaultParams) => TransactionOperation",
+          "optional": false,
+          "callable": true
+        },
+        "buildFundInvoiceOperation": {
+          "type": "(params: FundInvoiceParams) => TransactionOperation",
+          "optional": false,
+          "callable": true
+        },
+        "buildMarkPaidOperation": {
+          "type": "(sourceAddress: string, params: MarkPaidParams) => TransactionOperation",
+          "optional": false,
+          "callable": true
+        },
+        "buildSubmitInvoiceOperation": {
+          "type": "(params: SubmitInvoiceParams) => TransactionOperation",
+          "optional": false,
+          "callable": true
+        },
+        "castVote": {
+          "type": "(params: CastVoteParams) => Promise<void>",
+          "optional": false,
+          "callable": true
+        },
+        "checkCompatibility": {
+          "type": "() => Promise<CompatibilityResult>",
+          "optional": false,
+          "callable": true
+        },
+        "claimDefault": {
+          "type": "(params: ClaimDefaultParams) => Promise<void>",
+          "optional": false,
+          "callable": true
+        },
+        "clearCache": {
+          "type": "() => void",
+          "optional": false,
+          "callable": true
+        },
+        "createEventEmitter": {
+          "type": "(options?: { maxHistorySize?: number; }) => ILNEventEmitter",
+          "optional": false,
+          "callable": true
+        },
+        "createProposal": {
+          "type": "(params: CreateProposalParams) => Promise<bigint>",
+          "optional": false,
+          "callable": true
+        },
+        "delegateVotes": {
+          "type": "(params: DelegateVotesParams) => Promise<void>",
+          "optional": false,
+          "callable": true
+        },
+        "estimateBatchFee": {
+          "type": "(operations: TransactionOperation[]) => Promise<bigint>",
+          "optional": false,
+          "callable": true
+        },
+        "executeProposal": {
+          "type": "(params: ExecuteProposalParams) => Promise<void>",
+          "optional": false,
+          "callable": true
+        },
+        "fetchGovernanceProposal": {
+          "type": "(params: GetProposalParams) => Promise<GovernanceProposal>",
+          "optional": false,
+          "callable": true
+        },
+        "flushOfflineQueue": {
+          "type": "() => Promise<void>",
+          "optional": false,
+          "callable": true
+        },
+        "fundInvoice": {
+          "type": "(params: FundInvoiceParams) => Promise<void>",
+          "optional": false,
+          "callable": true
+        },
+        "getCacheStatistics": {
+          "type": "() => CacheStatistics",
+          "optional": false,
+          "callable": true
+        },
+        "getExecutionDelay": {
+          "type": "() => Promise<number>",
+          "optional": false,
+          "callable": true
+        },
+        "getInvoice": {
+          "type": "(invoiceId: bigint, options?: CacheOptions) => Promise<Invoice>",
+          "optional": false,
+          "callable": true
+        },
+        "getLatestLedger": {
+          "type": "() => Promise<number | null>",
+          "optional": false,
+          "callable": true
+        },
+        "getOfflineManager": {
+          "type": "() => OfflineManager | null",
+          "optional": false,
+          "callable": true
+        },
+        "getOfflineState": {
+          "type": "() => OfflineState | null",
+          "optional": false,
+          "callable": true
+        },
+        "getProposal": {
+          "type": "(id: bigint) => Promise<GovernanceProposal>",
+          "optional": false,
+          "callable": true
+        },
+        "getProtocolConfig": {
+          "type": "() => Promise<ProtocolConfig>",
+          "optional": false,
+          "callable": true
+        },
+        "getReputation": {
+          "type": "(address: string) => Promise<number>",
+          "optional": false,
+          "callable": true
+        },
+        "getStats": {
+          "type": "() => Promise<unknown>",
+          "optional": false,
+          "callable": true
+        },
+        "getStorage": {
+          "type": "(key: string) => Promise<string>",
+          "optional": false,
+          "callable": true
+        },
+        "invalidateCache": {
+          "type": "(pattern?: string) => number",
+          "optional": false,
+          "callable": true
+        },
+        "listGovernanceProposals": {
+          "type": "(params?: ListProposalsParams) => Promise<GovernanceProposal[]>",
+          "optional": false,
+          "callable": true
+        },
+        "listProposals": {
+          "type": "(params?: ListProposalsParams) => Promise<GovernanceProposal[]>",
+          "optional": false,
+          "callable": true
+        },
+        "markPaid": {
+          "type": "(params: MarkPaidParams) => Promise<void>",
+          "optional": false,
+          "callable": true
+        },
+        "resetCacheStatistics": {
+          "type": "() => void",
+          "optional": false,
+          "callable": true
+        },
+        "setOnline": {
+          "type": "(online: boolean) => void",
+          "optional": false,
+          "callable": true
+        },
+        "submitInvoice": {
+          "type": "(params: SubmitInvoiceParams) => Promise<bigint>",
+          "optional": false,
+          "callable": true
+        },
+        "subscribeToAddress": {
+          "type": "(address: string, callback: EventCallback) => Unsubscribe",
+          "optional": false,
+          "callable": true
+        },
+        "subscribeToInvoice": {
+          "type": "(id: bigint | string, callback: EventCallback) => Unsubscribe",
+          "optional": false,
+          "callable": true
+        },
+        "undelegateVotes": {
+          "type": "(params: UndelegateVotesParams) => Promise<void>",
+          "optional": false,
+          "callable": true
+        },
+        "vetoProposal": {
+          "type": "(params: VetoProposalParams) => Promise<void>",
+          "optional": false,
+          "callable": true
+        }
+      }
+    },
+    "ILNSdkConfig": {
+      "kind": "interface",
+      "typeParams": [],
+      "members": {
+        "backoff": {
+          "type": "false | BackoffOptions | undefined",
+          "optional": true
+        },
+        "cache": {
+          "type": "CacheConfig | undefined",
+          "optional": true
+        },
+        "contractId": {
+          "type": "string",
+          "optional": false
+        },
+        "networkPassphrase": {
+          "type": "string",
+          "optional": false
+        },
+        "offline": {
+          "type": "OfflineConfig | undefined",
+          "optional": true
+        },
+        "rpcEndpoints": {
+          "type": "string[] | undefined",
+          "optional": true
+        },
+        "rpcFailover": {
+          "type": "RpcFailoverOptions | undefined",
+          "optional": true
+        },
+        "rpcUrl": {
+          "type": "string",
+          "optional": false
+        },
+        "server": {
+          "type": "RpcServerLike | undefined",
+          "optional": true
+        },
+        "signer": {
+          "type": "TransactionSigner | undefined",
+          "optional": true
+        },
+        "timeoutMs": {
+          "type": "number | undefined",
+          "optional": true
+        },
+        "timeouts": {
+          "type": "{ readMs?: number; writeMs?: number; simulationMs?: number; } | undefined",
+          "optional": true
+        },
+        "verifyContractId": {
+          "type": "boolean | undefined",
+          "optional": true
+        }
+      }
+    },
+    "ILN_TESTNET": {
+      "kind": "const",
+      "type": "NetworkConfig"
+    },
+    "ILN_TESTNET_MOBILE": {
+      "kind": "const",
+      "type": "NetworkConfig"
+    },
+    "INVOICE_STATES": {
+      "kind": "const",
+      "type": "{ readonly PENDING: \"Pending\"; readonly FUNDED: \"Funded\"; readonly PAID: \"Paid\"; readonly DEFAULTED: \"Defaulted\"; readonly DISPUTED: \"Disputed\"; }"
+    },
+    "InsufficientBalanceError": {
+      "kind": "class",
+      "typeParams": [],
+      "members": {
+        "cause": {
+          "type": "unknown",
+          "optional": true
+        },
+        "code": {
+          "type": "string",
+          "optional": false
+        },
+        "context": {
+          "type": "Record<string, unknown> | undefined",
+          "optional": true
+        },
+        "docsUrl": {
+          "type": "string | undefined",
+          "optional": true
+        },
+        "message": {
+          "type": "string",
+          "optional": false
+        },
+        "name": {
+          "type": "string",
+          "optional": false
+        },
+        "remediation": {
+          "type": "string",
+          "optional": false
+        },
+        "retryable": {
+          "type": "boolean | undefined",
+          "optional": true
+        },
+        "stack": {
+          "type": "string | undefined",
+          "optional": true
+        }
+      }
+    },
+    "InsuranceClaim": {
+      "kind": "interface",
+      "typeParams": [],
+      "members": {
+        "filedAt": {
+          "type": "number",
+          "optional": false
+        },
+        "id": {
+          "type": "bigint",
+          "optional": false
+        },
+        "invoiceAmount": {
+          "type": "bigint",
+          "optional": false
+        },
+        "invoiceId": {
+          "type": "bigint",
+          "optional": false
+        },
+        "lp": {
+          "type": "string",
+          "optional": false
+        },
+        "payoutAmount": {
+          "type": "bigint | null",
+          "optional": false
+        },
+        "reason": {
+          "type": "string",
+          "optional": false
+        },
+        "rejectionReason": {
+          "type": "string | null",
+          "optional": false
+        },
+        "reviewedAt": {
+          "type": "number | null",
+          "optional": false
+        },
+        "reviewer": {
+          "type": "string | null",
+          "optional": false
+        },
+        "status": {
+          "type": "ClaimStatus",
+          "optional": false
+        }
+      }
+    },
+    "InsuranceClientConfig": {
+      "kind": "interface",
+      "typeParams": [],
+      "members": {
+        "contractId": {
+          "type": "string",
+          "optional": false
+        },
+        "networkPassphrase": {
+          "type": "string",
+          "optional": false
+        },
+        "rpcEndpoints": {
+          "type": "string[] | undefined",
+          "optional": true
+        },
+        "rpcFailover": {
+          "type": "RpcFailoverOptions | undefined",
+          "optional": true
+        },
+        "rpcUrl": {
+          "type": "string",
+          "optional": false
+        },
+        "server": {
+          "type": "RpcServerLike | undefined",
+          "optional": true
+        }
+      }
+    },
+    "InsurancePoolClient": {
+      "kind": "class",
+      "typeParams": [],
+      "members": {
+        "buildClaimTransaction": {
+          "type": "(params: SubmitClaimParams) => Promise<BuiltTransaction>",
+          "optional": false,
+          "callable": true
+        },
+        "buildDepositPremiumTransaction": {
+          "type": "(params: DepositPremiumParams) => Promise<BuiltTransaction>",
+          "optional": false,
+          "callable": true
+        },
+        "buildEnrollTransaction": {
+          "type": "(params: EnrollParams) => Promise<BuiltTransaction>",
+          "optional": false,
+          "callable": true
+        },
+        "buildReviewClaimTransaction": {
+          "type": "(params: ReviewClaimParams) => Promise<BuiltTransaction>",
+          "optional": false,
+          "callable": true
+        },
+        "getClaim": {
+          "type": "(claimId: bigint) => Promise<InsuranceClaim>",
+          "optional": false,
+          "callable": true
+        },
+        "getLPCoverage": {
+          "type": "(lp: string) => Promise<LPCoverage | null>",
+          "optional": false,
+          "callable": true
+        },
+        "getPoolBalance": {
+          "type": "() => Promise<PoolBalance>",
+          "optional": false,
+          "callable": true
+        },
+        "listClaims": {
+          "type": "(statusFilter?: ClaimStatus, page?: number, pageSize?: number) => Promise<InsuranceClaim[]>",
+          "optional": false,
+          "callable": true
+        }
+      }
+    },
+    "InvalidAmountError": {
+      "kind": "class",
+      "typeParams": [],
+      "members": {
+        "cause": {
+          "type": "unknown",
+          "optional": true
+        },
+        "code": {
+          "type": "string",
+          "optional": false
+        },
+        "context": {
+          "type": "Record<string, unknown> | undefined",
+          "optional": true
+        },
+        "docsUrl": {
+          "type": "string | undefined",
+          "optional": true
+        },
+        "message": {
+          "type": "string",
+          "optional": false
+        },
+        "name": {
+          "type": "string",
+          "optional": false
+        },
+        "remediation": {
+          "type": "string",
+          "optional": false
+        },
+        "retryable": {
+          "type": "boolean | undefined",
+          "optional": true
+        },
+        "stack": {
+          "type": "string | undefined",
+          "optional": true
+        }
+      }
+    },
+    "InvalidContractResponseError": {
+      "kind": "class",
+      "typeParams": [],
+      "members": {
+        "cause": {
+          "type": "unknown",
+          "optional": true
+        },
+        "code": {
+          "type": "string",
+          "optional": false
+        },
+        "context": {
+          "type": "Record<string, unknown> | undefined",
+          "optional": true
+        },
+        "docsUrl": {
+          "type": "string | undefined",
+          "optional": true
+        },
+        "message": {
+          "type": "string",
+          "optional": false
+        },
+        "name": {
+          "type": "string",
+          "optional": false
+        },
+        "remediation": {
+          "type": "string",
+          "optional": false
+        },
+        "retryable": {
+          "type": "boolean | undefined",
+          "optional": true
+        },
+        "stack": {
+          "type": "string | undefined",
+          "optional": true
+        }
+      }
+    },
+    "InvalidDiscountRateError": {
+      "kind": "class",
+      "typeParams": [],
+      "members": {
+        "cause": {
+          "type": "unknown",
+          "optional": true
+        },
+        "code": {
+          "type": "string",
+          "optional": false
+        },
+        "context": {
+          "type": "Record<string, unknown> | undefined",
+          "optional": true
+        },
+        "docsUrl": {
+          "type": "string | undefined",
+          "optional": true
+        },
+        "message": {
+          "type": "string",
+          "optional": false
+        },
+        "name": {
+          "type": "string",
+          "optional": false
+        },
+        "remediation": {
+          "type": "string",
+          "optional": false
+        },
+        "retryable": {
+          "type": "boolean | undefined",
+          "optional": true
+        },
+        "stack": {
+          "type": "string | undefined",
+          "optional": true
+        }
+      }
+    },
+    "Invoice": {
+      "kind": "interface",
+      "typeParams": [],
+      "members": {
+        "allowedLps": {
+          "type": "string[] | null",
+          "optional": false
+        },
+        "amount": {
+          "type": "bigint",
+          "optional": false
+        },
+        "amountFunded": {
+          "type": "bigint",
+          "optional": false
+        },
+        "amountPaid": {
+          "type": "bigint",
+          "optional": false
+        },
+        "auctionMinRate": {
+          "type": "number | null",
+          "optional": false
+        },
+        "auctionRateDecayPerHour": {
+          "type": "number | null",
+          "optional": false
+        },
+        "auctionStartRate": {
+          "type": "number | null",
+          "optional": false
+        },
+        "auctionStartedAt": {
+          "type": "number | null",
+          "optional": false
+        },
+        "discountRate": {
+          "type": "number",
+          "optional": false
+        },
+        "dueDate": {
+          "type": "number",
+          "optional": false
+        },
+        "freelancer": {
+          "type": "string",
+          "optional": false
+        },
+        "fundedAt": {
+          "type": "number | null",
+          "optional": false
+        },
+        "funder": {
+          "type": "string | null",
+          "optional": false
+        },
+        "id": {
+          "type": "bigint",
+          "optional": false
+        },
+        "isAuction": {
+          "type": "boolean",
+          "optional": false
+        },
+        "payer": {
+          "type": "string",
+          "optional": false
+        },
+        "referralCode": {
+          "type": "Uint8Array<ArrayBufferLike> | null",
+          "optional": false
+        },
+        "status": {
+          "type": "InvoiceStatus",
+          "optional": false
+        },
+        "submitterReputation": {
+          "type": "number",
+          "optional": false
+        },
+        "token": {
+          "type": "string",
+          "optional": false
+        }
+      }
+    },
+    "InvoiceCreatedEvent": {
+      "kind": "type",
+      "type": "InvoiceCreatedEvent"
+    },
+    "InvoiceDefaultedEvent": {
+      "kind": "interface",
+      "typeParams": [],
+      "members": {
+        "amountRecovered": {
+          "type": "bigint",
+          "optional": false
+        },
+        "contractId": {
+          "type": "string",
+          "optional": false
+        },
+        "funder": {
+          "type": "string | null",
+          "optional": false
+        },
+        "invoiceId": {
+          "type": "bigint",
+          "optional": false
+        },
+        "ledger": {
+          "type": "number",
+          "optional": false
+        },
+        "ledgerClosedAt": {
+          "type": "string",
+          "optional": false
+        },
+        "pagingToken": {
+          "type": "string",
+          "optional": false
+        },
+        "txHash": {
+          "type": "string",
+          "optional": false
+        },
+        "type": {
+          "type": "\"InvoiceDefaulted\"",
+          "optional": false
+        }
+      }
+    },
+    "InvoiceEventData": {
+      "kind": "interface",
+      "typeParams": [],
+      "members": {
+        "amount": {
+          "type": "bigint | undefined",
+          "optional": true
+        },
+        "freelancer": {
+          "type": "string | undefined",
+          "optional": true
+        },
+        "funder": {
+          "type": "string | undefined",
+          "optional": true
+        },
+        "invoiceId": {
+          "type": "bigint",
+          "optional": false
+        },
+        "payer": {
+          "type": "string | undefined",
+          "optional": true
+        },
+        "timestamp": {
+          "type": "number",
+          "optional": false
+        },
+        "txHash": {
+          "type": "string | undefined",
+          "optional": true
+        }
+      }
+    },
+    "InvoiceEventType": {
+      "kind": "type",
+      "type": "InvoiceEventType"
+    },
+    "InvoiceFundedEvent": {
+      "kind": "interface",
+      "typeParams": [],
+      "members": {
+        "amount": {
+          "type": "bigint",
+          "optional": false
+        },
+        "amountFunded": {
+          "type": "bigint",
+          "optional": false
+        },
+        "contractId": {
+          "type": "string",
+          "optional": false
+        },
+        "effectiveYieldBps": {
+          "type": "number",
+          "optional": false
+        },
+        "funder": {
+          "type": "string",
+          "optional": false
+        },
+        "invoiceId": {
+          "type": "bigint",
+          "optional": false
+        },
+        "ledger": {
+          "type": "number",
+          "optional": false
+        },
+        "ledgerClosedAt": {
+          "type": "string",
+          "optional": false
+        },
+        "pagingToken": {
+          "type": "string",
+          "optional": false
+        },
+        "status": {
+          "type": "InvoiceStatus",
+          "optional": false
+        },
+        "txHash": {
+          "type": "string",
+          "optional": false
+        },
+        "type": {
+          "type": "\"InvoiceFunded\"",
+          "optional": false
+        }
+      }
+    },
+    "InvoiceRepaidEvent": {
+      "kind": "type",
+      "type": "InvoiceRepaidEvent"
+    },
+    "InvoiceState": {
+      "kind": "type",
+      "type": "InvoiceStatus"
+    },
+    "InvoiceStatus": {
+      "kind": "enum",
+      "members": {
+        "Defaulted": "Defaulted",
+        "Disputed": "Disputed",
+        "Funded": "Funded",
+        "Paid": "Paid",
+        "Pending": "Pending"
+      }
+    },
+    "InvoiceStatusColor": {
+      "kind": "const",
+      "type": "Record<string, string>"
+    },
+    "KNOWN_OFFICIAL_CONTRACT_IDS": {
+      "kind": "const",
+      "type": "readonly string[]"
+    },
+    "LPCoverage": {
+      "kind": "interface",
+      "typeParams": [],
+      "members": {
+        "activeClaims": {
+          "type": "number",
+          "optional": false
+        },
+        "address": {
+          "type": "string",
+          "optional": false
+        },
+        "claimsApproved": {
+          "type": "number",
+          "optional": false
+        },
+        "claimsRejected": {
+          "type": "number",
+          "optional": false
+        },
+        "coverageAmount": {
+          "type": "bigint",
+          "optional": false
+        },
+        "enrolledAt": {
+          "type": "number",
+          "optional": false
+        },
+        "premiumRateBps": {
+          "type": "number",
+          "optional": false
+        },
+        "totalClaims": {
+          "type": "number",
+          "optional": false
+        },
+        "totalPayoutReceived": {
+          "type": "bigint",
+          "optional": false
+        },
+        "totalPremiumsPaid": {
+          "type": "bigint",
+          "optional": false
+        }
+      }
+    },
+    "LPPortfolio": {
+      "kind": "interface",
+      "typeParams": [],
+      "members": {
+        "activePositions": {
+          "type": "number",
+          "optional": false
+        },
+        "address": {
+          "type": "string",
+          "optional": false
+        },
+        "avgReturn": {
+          "type": "number",
+          "optional": false
+        },
+        "completedPositions": {
+          "type": "number",
+          "optional": false
+        },
+        "defaultedPositions": {
+          "type": "number",
+          "optional": false
+        },
+        "totalInvested": {
+          "type": "bigint",
+          "optional": false
+        },
+        "totalYield": {
+          "type": "bigint",
+          "optional": false
+        }
+      }
+    },
+    "LPStat": {
+      "kind": "interface",
+      "typeParams": [],
+      "members": {
+        "address": {
+          "type": "string",
+          "optional": false
+        },
+        "invoiceCount": {
+          "type": "number",
+          "optional": false
+        },
+        "yield": {
+          "type": "bigint",
+          "optional": false
+        }
+      }
+    },
+    "LPStats": {
+      "kind": "interface",
+      "typeParams": [],
+      "members": {
+        "activePositions": {
+          "type": "bigint",
+          "optional": false
+        },
+        "avgYieldBps": {
+          "type": "number",
+          "optional": false
+        },
+        "totalEarned": {
+          "type": "bigint",
+          "optional": false
+        },
+        "totalFunded": {
+          "type": "bigint",
+          "optional": false
+        },
+        "totalPositions": {
+          "type": "bigint",
+          "optional": false
+        }
+      }
+    },
+    "LPStatsUpdatedEvent": {
+      "kind": "interface",
+      "typeParams": [],
+      "members": {
+        "address": {
+          "type": "string",
+          "optional": false
+        },
+        "contractId": {
+          "type": "string",
+          "optional": false
+        },
+        "ledger": {
+          "type": "number",
+          "optional": false
+        },
+        "ledgerClosedAt": {
+          "type": "string",
+          "optional": false
+        },
+        "pagingToken": {
+          "type": "string",
+          "optional": false
+        },
+        "stats": {
+          "type": "LPStats",
+          "optional": false
+        },
+        "txHash": {
+          "type": "string",
+          "optional": false
+        },
+        "type": {
+          "type": "\"LPStatsUpdated\"",
+          "optional": false
+        }
+      }
+    },
+    "ListProposalsParams": {
+      "kind": "interface",
+      "typeParams": [],
+      "members": {
+        "page": {
+          "type": "number | undefined",
+          "optional": true
+        },
+        "pageSize": {
+          "type": "number | undefined",
+          "optional": true
+        },
+        "status": {
+          "type": "ProposalStatus | undefined",
+          "optional": true
+        }
+      }
+    },
+    "Listener": {
+      "kind": "type",
+      "type": "Listener<T>"
+    },
+    "MIN_CONTRACT_VERSION": {
+      "kind": "const",
+      "type": "\"0.1.0\""
+    },
+    "MarkPaidParams": {
+      "kind": "interface",
+      "typeParams": [],
+      "members": {
+        "invoiceId": {
+          "type": "bigint",
+          "optional": false
+        }
+      }
+    },
+    "MetricDefinition": {
+      "kind": "interface",
+      "typeParams": [],
+      "members": {
+        "compute": {
+          "type": "(context: AnalyticsPluginContext) => Promise<number | bigint | string>",
+          "optional": false,
+          "callable": true
+        },
+        "defaultValue": {
+          "type": "number | bigint | undefined",
+          "optional": true
+        },
+        "description": {
+          "type": "string",
+          "optional": false
+        },
+        "id": {
+          "type": "string",
+          "optional": false
+        },
+        "name": {
+          "type": "string",
+          "optional": false
+        },
+        "type": {
+          "type": "\"number\" | \"percentage\" | \"duration\" | \"currency\" | \"ratio\"",
+          "optional": false
+        }
+      }
+    },
+    "MigrationChange": {
+      "kind": "interface",
+      "typeParams": [],
+      "members": {
+        "description": {
+          "type": "string",
+          "optional": false
+        },
+        "migration": {
+          "type": "string | undefined",
+          "optional": true
+        },
+        "type": {
+          "type": "\"breaking\" | \"deprecated\" | \"added\" | \"removed\"",
+          "optional": false
+        }
+      }
+    },
+    "MigrationGuide": {
+      "kind": "interface",
+      "typeParams": [],
+      "members": {
+        "changes": {
+          "type": "MigrationChange[]",
+          "optional": false
+        },
+        "fromVersion": {
+          "type": "string",
+          "optional": false
+        },
+        "toVersion": {
+          "type": "string",
+          "optional": false
+        }
+      }
+    },
+    "MobileWalletConfig": {
+      "kind": "interface",
+      "typeParams": [],
+      "members": {
+        "callbackScheme": {
+          "type": "string | undefined",
+          "optional": true
+        },
+        "timeoutMs": {
+          "type": "number | undefined",
+          "optional": true
+        },
+        "walletScheme": {
+          "type": "string | undefined",
+          "optional": true
+        }
+      }
+    },
+    "MultiTokenPaymentParams": {
+      "kind": "interface",
+      "typeParams": [],
+      "members": {
+        "invoiceId": {
+          "type": "bigint",
+          "optional": false
+        },
+        "memo": {
+          "type": "string | undefined",
+          "optional": true
+        },
+        "tokens": {
+          "type": "TokenAmount[]",
+          "optional": false
+        }
+      }
+    },
+    "NETWORKS": {
+      "kind": "const",
+      "type": "{ readonly TESTNET: \"Test SDF Network ; September 2015\"; readonly MAINNET: \"Public Global Stellar Network ; September 2015\"; readonly STANDALONE: \"Standalone Network ; September 2022\"; }"
+    },
+    "NetworkConfig": {
+      "kind": "interface",
+      "typeParams": [],
+      "members": {
+        "contractId": {
+          "type": "string",
+          "optional": false
+        },
+        "networkPassphrase": {
+          "type": "string",
+          "optional": false
+        },
+        "rpcUrl": {
+          "type": "string",
+          "optional": false
+        }
+      }
+    },
+    "NetworkError": {
+      "kind": "class",
+      "typeParams": [],
+      "members": {
+        "cause": {
+          "type": "unknown",
+          "optional": true
+        },
+        "code": {
+          "type": "string",
+          "optional": false
+        },
+        "context": {
+          "type": "Record<string, unknown> | undefined",
+          "optional": true
+        },
+        "docsUrl": {
+          "type": "string | undefined",
+          "optional": true
+        },
+        "message": {
+          "type": "string",
+          "optional": false
+        },
+        "name": {
+          "type": "string",
+          "optional": false
+        },
+        "remediation": {
+          "type": "string",
+          "optional": false
+        },
+        "retryable": {
+          "type": "boolean | undefined",
+          "optional": true
+        },
+        "stack": {
+          "type": "string | undefined",
+          "optional": true
+        }
+      }
+    },
+    "NotificationTrigger": {
+      "kind": "enum",
+      "members": {
+        "DueDateWarning": "invoice_due_soon",
+        "InvoiceDefaulted": "invoice_defaulted",
+        "InvoiceFunded": "invoice_funded",
+        "InvoiceSettled": "invoice_paid"
+      }
+    },
+    "NotificationsApiError": {
+      "kind": "class",
+      "typeParams": [],
+      "members": {
+        "cause": {
+          "type": "unknown",
+          "optional": true
+        },
+        "code": {
+          "type": "string",
+          "optional": false
+        },
+        "context": {
+          "type": "Record<string, unknown> | undefined",
+          "optional": true
+        },
+        "docsUrl": {
+          "type": "string | undefined",
+          "optional": true
+        },
+        "message": {
+          "type": "string",
+          "optional": false
+        },
+        "name": {
+          "type": "string",
+          "optional": false
+        },
+        "remediation": {
+          "type": "string",
+          "optional": false
+        },
+        "retryable": {
+          "type": "boolean | undefined",
+          "optional": true
+        },
+        "stack": {
+          "type": "string | undefined",
+          "optional": true
+        }
+      }
+    },
+    "NotificationsClient": {
+      "kind": "class",
+      "typeParams": [],
+      "members": {
+        "listSubscriptions": {
+          "type": "(address: string) => Promise<Subscription[]>",
+          "optional": false,
+          "callable": true
+        },
+        "subscribeEmail": {
+          "type": "(address: string, email: string, triggers: NotificationTrigger[]) => Promise<Subscription>",
+          "optional": false,
+          "callable": true
+        },
+        "subscribeWebhook": {
+          "type": "(address: string, url: string, triggers: NotificationTrigger[]) => Promise<Subscription>",
+          "optional": false,
+          "callable": true
+        },
+        "testWebhook": {
+          "type": "(subscriptionId: number) => Promise<{ success: boolean; statusCode: number; }>",
+          "optional": false,
+          "callable": true
+        },
+        "unsubscribe": {
+          "type": "(subscriptionId: number) => Promise<void>",
+          "optional": false,
+          "callable": true
+        }
+      }
+    },
+    "OfflineConfig": {
+      "kind": "interface",
+      "typeParams": [],
+      "members": {
+        "maxQueueSize": {
+          "type": "number | undefined",
+          "optional": true
+        },
+        "maxRetries": {
+          "type": "number | undefined",
+          "optional": true
+        },
+        "retryDelayMs": {
+          "type": "number | undefined",
+          "optional": true
+        },
+        "storage": {
+          "type": "OfflineStorage | undefined",
+          "optional": true
+        },
+        "storageKey": {
+          "type": "string | undefined",
+          "optional": true
+        }
+      }
+    },
+    "OfflineManager": {
+      "kind": "class",
+      "typeParams": [],
+      "members": {
+        "clearQueue": {
+          "type": "() => void",
+          "optional": false,
+          "callable": true
+        },
+        "destroy": {
+          "type": "() => void",
+          "optional": false,
+          "callable": true
+        },
+        "enqueue": {
+          "type": "(operation: string, params: unknown) => OfflineQueueItem",
+          "optional": false,
+          "callable": true
+        },
+        "exportData": {
+          "type": "() => { queue: ReadonlyArray<OfflineQueueItem>; state: OfflineState; }",
+          "optional": false,
+          "callable": true
+        },
+        "getIsOnline": {
+          "type": "() => boolean",
+          "optional": false,
+          "callable": true
+        },
+        "getQueue": {
+          "type": "() => ReadonlyArray<OfflineQueueItem>",
+          "optional": false,
+          "callable": true
+        },
+        "getState": {
+          "type": "() => OfflineState",
+          "optional": false,
+          "callable": true
+        },
+        "onStateChange": {
+          "type": "(callback: StateChangeCallback) => () => void",
+          "optional": false,
+          "callable": true
+        },
+        "onSubmit": {
+          "type": "(callback: SubmitCallback) => void",
+          "optional": false,
+          "callable": true
+        },
+        "processQueue": {
+          "type": "() => Promise<void>",
+          "optional": false,
+          "callable": true
+        },
+        "removeItem": {
+          "type": "(id: string) => boolean",
+          "optional": false,
+          "callable": true
+        },
+        "retryItem": {
+          "type": "(id: string) => Promise<void>",
+          "optional": false,
+          "callable": true
+        },
+        "setOnline": {
+          "type": "(online: boolean) => void",
+          "optional": false,
+          "callable": true
+        }
+      }
+    },
+    "OfflineQueueFullError": {
+      "kind": "class",
+      "typeParams": [],
+      "members": {
+        "cause": {
+          "type": "unknown",
+          "optional": true
+        },
+        "code": {
+          "type": "string",
+          "optional": false
+        },
+        "context": {
+          "type": "Record<string, unknown> | undefined",
+          "optional": true
+        },
+        "docsUrl": {
+          "type": "string | undefined",
+          "optional": true
+        },
+        "message": {
+          "type": "string",
+          "optional": false
+        },
+        "name": {
+          "type": "string",
+          "optional": false
+        },
+        "remediation": {
+          "type": "string",
+          "optional": false
+        },
+        "retryable": {
+          "type": "boolean | undefined",
+          "optional": true
+        },
+        "stack": {
+          "type": "string | undefined",
+          "optional": true
+        }
+      }
+    },
+    "OfflineQueueItem": {
+      "kind": "interface",
+      "typeParams": [],
+      "members": {
+        "error": {
+          "type": "string | undefined",
+          "optional": true
+        },
+        "id": {
+          "type": "string",
+          "optional": false
+        },
+        "maxRetries": {
+          "type": "number",
+          "optional": false
+        },
+        "operation": {
+          "type": "string",
+          "optional": false
+        },
+        "params": {
+          "type": "unknown",
+          "optional": false
+        },
+        "retries": {
+          "type": "number",
+          "optional": false
+        },
+        "status": {
+          "type": "\"pending\" | \"completed\" | \"failed\" | \"submitting\"",
+          "optional": false
+        },
+        "timestamp": {
+          "type": "number",
+          "optional": false
+        }
+      }
+    },
+    "OfflineQueuedError": {
+      "kind": "class",
+      "typeParams": [],
+      "members": {
+        "cause": {
+          "type": "unknown",
+          "optional": true
+        },
+        "code": {
+          "type": "string",
+          "optional": false
+        },
+        "context": {
+          "type": "Record<string, unknown> | undefined",
+          "optional": true
+        },
+        "docsUrl": {
+          "type": "string | undefined",
+          "optional": true
+        },
+        "item": {
+          "type": "OfflineQueueItem",
+          "optional": false
+        },
+        "message": {
+          "type": "string",
+          "optional": false
+        },
+        "name": {
+          "type": "string",
+          "optional": false
+        },
+        "remediation": {
+          "type": "string",
+          "optional": false
+        },
+        "retryable": {
+          "type": "boolean | undefined",
+          "optional": true
+        },
+        "stack": {
+          "type": "string | undefined",
+          "optional": true
+        }
+      }
+    },
+    "OfflineState": {
+      "kind": "interface",
+      "typeParams": [],
+      "members": {
+        "failedCount": {
+          "type": "number",
+          "optional": false
+        },
+        "isOnline": {
+          "type": "boolean",
+          "optional": false
+        },
+        "pendingCount": {
+          "type": "number",
+          "optional": false
+        },
+        "queueSize": {
+          "type": "number",
+          "optional": false
+        }
+      }
+    },
+    "OfflineStorage": {
+      "kind": "interface",
+      "typeParams": [],
+      "members": {
+        "getItem": {
+          "type": "(key: string) => string | null",
+          "optional": false,
+          "callable": true
+        },
+        "removeItem": {
+          "type": "(key: string) => void",
+          "optional": false,
+          "callable": true
+        },
+        "setItem": {
+          "type": "(key: string, value: string) => void",
+          "optional": false,
+          "callable": true
+        }
+      }
+    },
+    "PartialPaymentParams": {
+      "kind": "interface",
+      "typeParams": [],
+      "members": {
+        "amount": {
+          "type": "bigint",
+          "optional": false
+        },
+        "invoiceId": {
+          "type": "bigint",
+          "optional": false
+        },
+        "memo": {
+          "type": "string | undefined",
+          "optional": true
+        },
+        "tokenId": {
+          "type": "string",
+          "optional": false
+        }
+      }
+    },
+    "PayerReputationTooLowError": {
+      "kind": "class",
+      "typeParams": [],
+      "members": {
+        "cause": {
+          "type": "unknown",
+          "optional": true
+        },
+        "code": {
+          "type": "string",
+          "optional": false
+        },
+        "context": {
+          "type": "Record<string, unknown> | undefined",
+          "optional": true
+        },
+        "docsUrl": {
+          "type": "string | undefined",
+          "optional": true
+        },
+        "message": {
+          "type": "string",
+          "optional": false
+        },
+        "name": {
+          "type": "string",
+          "optional": false
+        },
+        "remediation": {
+          "type": "string",
+          "optional": false
+        },
+        "retryable": {
+          "type": "boolean | undefined",
+          "optional": true
+        },
+        "stack": {
+          "type": "string | undefined",
+          "optional": true
+        }
+      }
+    },
+    "PaymentClient": {
+      "kind": "interface",
+      "typeParams": [],
+      "members": {
+        "fundInvoice": {
+          "type": "(invoiceId: bigint, amount?: bigint) => Promise<{ hash: string; }>",
+          "optional": false,
+          "callable": true
+        },
+        "getInvoice": {
+          "type": "(invoiceId: bigint) => Promise<{ id: bigint; amount: bigint; fundedAmount?: bigint; status: string; tokenId: string; }>",
+          "optional": false,
+          "callable": true
+        }
+      }
+    },
+    "PaymentHistoryOptions": {
+      "kind": "interface",
+      "typeParams": [],
+      "members": {
+        "address": {
+          "type": "string | undefined",
+          "optional": true
+        },
+        "fromDate": {
+          "type": "number | undefined",
+          "optional": true
+        },
+        "invoiceId": {
+          "type": "bigint | undefined",
+          "optional": true
+        },
+        "limit": {
+          "type": "number | undefined",
+          "optional": true
+        },
+        "status": {
+          "type": "PaymentStatus | undefined",
+          "optional": true
+        },
+        "toDate": {
+          "type": "number | undefined",
+          "optional": true
+        },
+        "type": {
+          "type": "\"scheduled\" | \"partial\" | \"full\" | \"multi-token\" | undefined",
+          "optional": true
+        }
+      }
+    },
+    "PaymentProcessor": {
+      "kind": "class",
+      "typeParams": [],
+      "members": {
+        "cancelScheduledPayment": {
+          "type": "(id: string) => ScheduledPayment",
+          "optional": false,
+          "callable": true
+        },
+        "clearHistory": {
+          "type": "() => void",
+          "optional": false,
+          "callable": true
+        },
+        "getPaymentHistory": {
+          "type": "(options?: PaymentHistoryOptions) => PaymentRecord[]",
+          "optional": false,
+          "callable": true
+        },
+        "getPaymentSummary": {
+          "type": "() => { total: number; completed: number; failed: number; pending: number; totalVolume: bigint; }",
+          "optional": false,
+          "callable": true
+        },
+        "getScheduledPayments": {
+          "type": "(status?: PaymentStatus) => ScheduledPayment[]",
+          "optional": false,
+          "callable": true
+        },
+        "payMultiToken": {
+          "type": "(params: MultiTokenPaymentParams) => Promise<PaymentRecord[]>",
+          "optional": false,
+          "callable": true
+        },
+        "payPartial": {
+          "type": "(params: PartialPaymentParams) => Promise<PaymentRecord>",
+          "optional": false,
+          "callable": true
+        },
+        "schedulePayment": {
+          "type": "(params: SchedulePaymentParams) => ScheduledPayment",
+          "optional": false,
+          "callable": true
+        },
+        "startScheduler": {
+          "type": "(intervalMs?: number) => void",
+          "optional": false,
+          "callable": true
+        },
+        "stopScheduler": {
+          "type": "() => void",
+          "optional": false,
+          "callable": true
+        },
+        "verifyPayment": {
+          "type": "(invoiceId: bigint) => Promise<PaymentVerificationResult>",
+          "optional": false,
+          "callable": true
+        }
+      }
+    },
+    "PaymentRecord": {
+      "kind": "interface",
+      "typeParams": [],
+      "members": {
+        "completedAt": {
+          "type": "string | undefined",
+          "optional": true
+        },
+        "createdAt": {
+          "type": "string",
+          "optional": false
+        },
+        "failureReason": {
+          "type": "string | undefined",
+          "optional": true
+        },
+        "id": {
+          "type": "string",
+          "optional": false
+        },
+        "invoiceId": {
+          "type": "bigint",
+          "optional": false
+        },
+        "memo": {
+          "type": "string | undefined",
+          "optional": true
+        },
+        "status": {
+          "type": "PaymentStatus",
+          "optional": false
+        },
+        "tokens": {
+          "type": "TokenAmount[]",
+          "optional": false
+        },
+        "totalAmount": {
+          "type": "bigint",
+          "optional": false
+        },
+        "txHash": {
+          "type": "string | undefined",
+          "optional": true
+        },
+        "type": {
+          "type": "\"scheduled\" | \"partial\" | \"full\" | \"multi-token\"",
+          "optional": false
+        }
+      }
+    },
+    "PaymentStatus": {
+      "kind": "type",
+      "type": "PaymentStatus"
+    },
+    "PaymentVerificationResult": {
+      "kind": "interface",
+      "typeParams": [],
+      "members": {
+        "expectedAmount": {
+          "type": "bigint",
+          "optional": false
+        },
+        "invoiceId": {
+          "type": "bigint",
+          "optional": false
+        },
+        "isFullyPaid": {
+          "type": "boolean",
+          "optional": false
+        },
+        "issues": {
+          "type": "string[]",
+          "optional": false
+        },
+        "paidAmount": {
+          "type": "bigint",
+          "optional": false
+        },
+        "payments": {
+          "type": "PaymentRecord[]",
+          "optional": false
+        },
+        "remainingAmount": {
+          "type": "bigint",
+          "optional": false
+        },
+        "verified": {
+          "type": "boolean",
+          "optional": false
+        },
+        "verifiedAt": {
+          "type": "string",
+          "optional": false
+        }
+      }
+    },
+    "PlatformAdapter": {
+      "kind": "interface",
+      "typeParams": [],
+      "members": {
+        "addURLListener": {
+          "type": "(handler: (url: string) => void) => () => void",
+          "optional": false,
+          "callable": true
+        },
+        "atob": {
+          "type": "(input: string) => string",
+          "optional": false,
+          "callable": true
+        },
+        "btoa": {
+          "type": "(input: string) => string",
+          "optional": false,
+          "callable": true
+        },
+        "fetch": {
+          "type": "{ (input: RequestInfo | URL, init?: RequestInit): Promise<Response>; (input: string | URL | Request, init?: RequestInit): Promise<Response>; }",
+          "optional": false,
+          "callable": true
+        },
+        "getEnv": {
+          "type": "(key: string) => string | undefined",
+          "optional": false,
+          "callable": true
+        },
+        "getInitialURL": {
+          "type": "() => Promise<string | null>",
+          "optional": false,
+          "callable": true
+        },
+        "getStorage": {
+          "type": "() => Storage | null",
+          "optional": false,
+          "callable": true
+        },
+        "openURL": {
+          "type": "(url: string) => Promise<void>",
+          "optional": false,
+          "callable": true
+        },
+        "platform": {
+          "type": "PlatformType",
+          "optional": false
+        }
+      }
+    },
+    "PlatformType": {
+      "kind": "type",
+      "type": "PlatformType"
+    },
+    "PluginContext": {
+      "kind": "interface",
+      "typeParams": [],
+      "members": {
+        "config": {
+          "type": "Record<string, unknown>",
+          "optional": false
+        },
+        "emitter": {
+          "type": "ILNEventEmitter",
+          "optional": false
+        },
+        "logger": {
+          "type": "(msg: string, data?: unknown) => void",
+          "optional": false,
+          "callable": true
+        }
+      }
+    },
+    "PluginError": {
+      "kind": "class",
+      "typeParams": [],
+      "members": {
+        "cause": {
+          "type": "unknown",
+          "optional": true
+        },
+        "code": {
+          "type": "string",
+          "optional": false
+        },
+        "context": {
+          "type": "Record<string, unknown> | undefined",
+          "optional": true
+        },
+        "docsUrl": {
+          "type": "string | undefined",
+          "optional": true
+        },
+        "message": {
+          "type": "string",
+          "optional": false
+        },
+        "name": {
+          "type": "string",
+          "optional": false
+        },
+        "remediation": {
+          "type": "string",
+          "optional": false
+        },
+        "retryable": {
+          "type": "boolean | undefined",
+          "optional": true
+        },
+        "stack": {
+          "type": "string | undefined",
+          "optional": true
+        }
+      }
+    },
+    "PluginRegistry": {
+      "kind": "class",
+      "typeParams": [],
+      "members": {
+        "has": {
+          "type": "(name: string) => boolean",
+          "optional": false,
+          "callable": true
+        },
+        "list": {
+          "type": "() => string[]",
+          "optional": false,
+          "callable": true
+        },
+        "register": {
+          "type": "(plugin: ILNPlugin, config?: Record<string, unknown>) => Promise<void>",
+          "optional": false,
+          "callable": true
+        },
+        "runAfterOperation": {
+          "type": "(name: string, result: unknown) => Promise<void>",
+          "optional": false,
+          "callable": true
+        },
+        "runBeforeOperation": {
+          "type": "(name: string, params: unknown) => Promise<void>",
+          "optional": false,
+          "callable": true
+        },
+        "runOnError": {
+          "type": "(name: string, error: unknown) => Promise<void>",
+          "optional": false,
+          "callable": true
+        },
+        "unregister": {
+          "type": "(name: string) => Promise<void>",
+          "optional": false,
+          "callable": true
+        }
+      }
+    },
+    "PluginValidationResult": {
+      "kind": "interface",
+      "typeParams": [],
+      "members": {
+        "errors": {
+          "type": "string[]",
+          "optional": false
+        },
+        "valid": {
+          "type": "boolean",
+          "optional": false
+        },
+        "warnings": {
+          "type": "string[]",
+          "optional": false
+        }
+      }
+    },
+    "PoolBalance": {
+      "kind": "interface",
+      "typeParams": [],
+      "members": {
+        "activeClaims": {
+          "type": "number",
+          "optional": false
+        },
+        "approvedClaims": {
+          "type": "number",
+          "optional": false
+        },
+        "enrolledLps": {
+          "type": "number",
+          "optional": false
+        },
+        "pendingClaims": {
+          "type": "number",
+          "optional": false
+        },
+        "rejectedClaims": {
+          "type": "number",
+          "optional": false
+        },
+        "reserveBalance": {
+          "type": "bigint",
+          "optional": false
+        },
+        "totalPayouts": {
+          "type": "bigint",
+          "optional": false
+        },
+        "totalPremiums": {
+          "type": "bigint",
+          "optional": false
+        }
+      }
+    },
+    "PortfolioAllocation": {
+      "kind": "interface",
+      "typeParams": [],
+      "members": {
+        "allocationByToken": {
+          "type": "Map<string, { deployed: bigint; count: number; }>",
+          "optional": false
+        },
+        "concentrationIndex": {
+          "type": "number",
+          "optional": false
+        },
+        "totalAvailable": {
+          "type": "bigint",
+          "optional": false
+        },
+        "totalDeployed": {
+          "type": "bigint",
+          "optional": false
+        },
+        "utilizationRate": {
+          "type": "number",
+          "optional": false
+        }
+      }
+    },
+    "Proposal": {
+      "kind": "interface",
+      "typeParams": [],
+      "members": {
+        "deadline": {
+          "type": "number",
+          "optional": false
+        },
+        "executed": {
+          "type": "boolean",
+          "optional": false
+        },
+        "id": {
+          "type": "number",
+          "optional": false
+        },
+        "newValue": {
+          "type": "number",
+          "optional": false
+        },
+        "parameter": {
+          "type": "string",
+          "optional": false
+        },
+        "proposer": {
+          "type": "string",
+          "optional": false
+        },
+        "votesAgainst": {
+          "type": "bigint",
+          "optional": false
+        },
+        "votesFor": {
+          "type": "bigint",
+          "optional": false
+        }
+      }
+    },
+    "ProposalAction": {
+      "kind": "type",
+      "type": "ProposalAction"
+    },
+    "ProposalActionKind": {
+      "kind": "enum",
+      "members": {
+        "AddToken": "AddToken",
+        "RemoveToken": "RemoveToken",
+        "UpdateFeeRate": "UpdateFeeRate",
+        "UpdateMaxDiscountRate": "UpdateMaxDiscountRate"
+      }
+    },
+    "ProposalStatus": {
+      "kind": "enum",
+      "members": {
+        "Active": "Active",
+        "Executed": "Executed",
+        "Passed": "Passed",
+        "Rejected": "Rejected",
+        "Vetoed": "Vetoed"
+      }
+    },
+    "ProtocolConfig": {
+      "kind": "interface",
+      "typeParams": [],
+      "members": {
+        "decayRateBps": {
+          "type": "number",
+          "optional": false
+        },
+        "gracePeriodSeconds": {
+          "type": "number | undefined",
+          "optional": true
+        },
+        "maxDiscountRate": {
+          "type": "number",
+          "optional": false
+        },
+        "maxInvoiceDuration": {
+          "type": "number | undefined",
+          "optional": true
+        },
+        "minInvoiceAmount": {
+          "type": "bigint",
+          "optional": false
+        },
+        "minInvoiceDuration": {
+          "type": "number | undefined",
+          "optional": true
+        },
+        "minPayerReputation": {
+          "type": "number",
+          "optional": false
+        },
+        "protocolFeeBps": {
+          "type": "number",
+          "optional": false
+        }
+      }
+    },
+    "ProtocolStats": {
+      "kind": "type",
+      "type": "ContractStats"
+    },
+    "Readable": {
+      "kind": "type",
+      "type": "Readable"
+    },
+    "ReputationScore": {
+      "kind": "interface",
+      "typeParams": [],
+      "members": {
+        "address": {
+          "type": "string",
+          "optional": false
+        },
+        "invoicesDefaulted": {
+          "type": "bigint",
+          "optional": false
+        },
+        "invoicesPaid": {
+          "type": "bigint",
+          "optional": false
+        },
+        "invoicesSubmitted": {
+          "type": "bigint",
+          "optional": false
+        },
+        "lastActivityLedger": {
+          "type": "bigint",
+          "optional": false
+        },
+        "score": {
+          "type": "number",
+          "optional": false
+        }
+      }
+    },
+    "ReputationUpdatedEvent": {
+      "kind": "interface",
+      "typeParams": [],
+      "members": {
+        "contractId": {
+          "type": "string",
+          "optional": false
+        },
+        "ledger": {
+          "type": "number",
+          "optional": false
+        },
+        "ledgerClosedAt": {
+          "type": "string",
+          "optional": false
+        },
+        "pagingToken": {
+          "type": "string",
+          "optional": false
+        },
+        "reputation": {
+          "type": "ReputationScore",
+          "optional": false
+        },
+        "txHash": {
+          "type": "string",
+          "optional": false
+        },
+        "type": {
+          "type": "\"ReputationUpdated\"",
+          "optional": false
+        }
+      }
+    },
+    "RequestTimeouts": {
+      "kind": "interface",
+      "typeParams": [],
+      "members": {
+        "readMs": {
+          "type": "number",
+          "optional": false
+        },
+        "simulationMs": {
+          "type": "number",
+          "optional": false
+        },
+        "writeMs": {
+          "type": "number",
+          "optional": false
+        }
+      }
+    },
+    "RetryOptions": {
+      "kind": "interface",
+      "typeParams": [],
+      "members": {
+        "backoffFactor": {
+          "type": "number",
+          "optional": false
+        },
+        "initialDelayMs": {
+          "type": "number",
+          "optional": false
+        },
+        "jitter": {
+          "type": "boolean",
+          "optional": false
+        },
+        "maxAttempts": {
+          "type": "number",
+          "optional": false
+        },
+        "maxDelayMs": {
+          "type": "number",
+          "optional": false
+        },
+        "retryIf": {
+          "type": "((err: unknown) => boolean) | undefined",
+          "optional": true
+        }
+      }
+    },
+    "ReviewClaimParams": {
+      "kind": "interface",
+      "typeParams": [],
+      "members": {
+        "approve": {
+          "type": "boolean",
+          "optional": false
+        },
+        "claimId": {
+          "type": "bigint",
+          "optional": false
+        },
+        "reason": {
+          "type": "string | undefined",
+          "optional": true
+        },
+        "reviewer": {
+          "type": "string",
+          "optional": false
+        }
+      }
+    },
+    "RiskFactors": {
+      "kind": "interface",
+      "typeParams": [],
+      "members": {
+        "amountScore": {
+          "type": "number",
+          "optional": false
+        },
+        "discountScore": {
+          "type": "number",
+          "optional": false
+        },
+        "durationScore": {
+          "type": "number",
+          "optional": false
+        },
+        "overallScore": {
+          "type": "number",
+          "optional": false
+        }
+      }
+    },
+    "RpcEndpointPool": {
+      "kind": "class",
+      "typeParams": [],
+      "members": {
+        "getAccount": {
+          "type": "(address: string) => Promise<unknown>",
+          "optional": false,
+          "callable": true
+        },
+        "getHealth": {
+          "type": "() => EndpointHealth[]",
+          "optional": false,
+          "callable": true
+        },
+        "getLatestLedger": {
+          "type": "() => Promise<unknown>",
+          "optional": false,
+          "callable": true
+        },
+        "getRecommendedUrl": {
+          "type": "() => string",
+          "optional": false,
+          "callable": true
+        },
+        "pollTransaction": {
+          "type": "(hash: string, options?: { attempts?: number; }) => Promise<unknown>",
+          "optional": false,
+          "callable": true
+        },
+        "prepareTransaction": {
+          "type": "(transaction: unknown) => Promise<{ toXDR(): string; }>",
+          "optional": false,
+          "callable": true
+        },
+        "sendTransaction": {
+          "type": "(transaction: unknown) => Promise<unknown>",
+          "optional": false,
+          "callable": true
+        },
+        "simulateTransaction": {
+          "type": "(transaction: unknown) => Promise<unknown>",
+          "optional": false,
+          "callable": true
+        }
+      }
+    },
+    "RpcFailoverOptions": {
+      "kind": "interface",
+      "typeParams": [],
+      "members": {
+        "cooldownMs": {
+          "type": "number | undefined",
+          "optional": true
+        },
+        "failureThreshold": {
+          "type": "number | undefined",
+          "optional": true
+        },
+        "initialLatencyMs": {
+          "type": "number | undefined",
+          "optional": true
+        },
+        "latencyAlpha": {
+          "type": "number | undefined",
+          "optional": true
+        },
+        "maxCooldownMs": {
+          "type": "number | undefined",
+          "optional": true
+        },
+        "serverFactory": {
+          "type": "((url: string) => RpcServerLike) | undefined",
+          "optional": true
+        }
+      }
+    },
+    "RpcServerLike": {
+      "kind": "interface",
+      "typeParams": [],
+      "members": {
+        "getAccount": {
+          "type": "(address: string) => Promise<unknown>",
+          "optional": false,
+          "callable": true
+        },
+        "getLatestLedger": {
+          "type": "(() => Promise<unknown>) | undefined",
+          "optional": true
+        },
+        "pollTransaction": {
+          "type": "(hash: string, options?: { attempts?: number; }) => Promise<unknown>",
+          "optional": false,
+          "callable": true
+        },
+        "prepareTransaction": {
+          "type": "(transaction: unknown) => Promise<{ toXDR(): string; }>",
+          "optional": false,
+          "callable": true
+        },
+        "sendTransaction": {
+          "type": "(transaction: unknown) => Promise<unknown>",
+          "optional": false,
+          "callable": true
+        },
+        "simulateTransaction": {
+          "type": "(transaction: unknown) => Promise<unknown>",
+          "optional": false,
+          "callable": true
+        }
+      }
+    },
+    "SDK_VERSION": {
+      "kind": "const",
+      "type": "\"0.1.0\""
+    },
+    "STELLAR_URI_SCHEME": {
+      "kind": "const",
+      "type": "\"web+stellar:\""
+    },
+    "SchedulePaymentParams": {
+      "kind": "interface",
+      "typeParams": [],
+      "members": {
+        "amount": {
+          "type": "bigint",
+          "optional": false
+        },
+        "executeAt": {
+          "type": "number | Date",
+          "optional": false
+        },
+        "invoiceId": {
+          "type": "bigint",
+          "optional": false
+        },
+        "memo": {
+          "type": "string | undefined",
+          "optional": true
+        },
+        "tokenId": {
+          "type": "string",
+          "optional": false
+        }
+      }
+    },
+    "ScheduledPayment": {
+      "kind": "interface",
+      "typeParams": [],
+      "members": {
+        "amount": {
+          "type": "bigint",
+          "optional": false
+        },
+        "createdAt": {
+          "type": "string",
+          "optional": false
+        },
+        "executeAt": {
+          "type": "number",
+          "optional": false
+        },
+        "executedAt": {
+          "type": "string | undefined",
+          "optional": true
+        },
+        "failureReason": {
+          "type": "string | undefined",
+          "optional": true
+        },
+        "id": {
+          "type": "string",
+          "optional": false
+        },
+        "invoiceId": {
+          "type": "bigint",
+          "optional": false
+        },
+        "memo": {
+          "type": "string | undefined",
+          "optional": true
+        },
+        "scheduledAt": {
+          "type": "string",
+          "optional": false
+        },
+        "status": {
+          "type": "PaymentStatus",
+          "optional": false
+        },
+        "tokenId": {
+          "type": "string",
+          "optional": false
+        },
+        "txHash": {
+          "type": "string | undefined",
+          "optional": true
+        },
+        "updatedAt": {
+          "type": "string",
+          "optional": false
+        }
+      }
+    },
+    "SchemaField": {
+      "kind": "interface",
+      "typeParams": [
+        "T"
+      ],
+      "members": {
+        "required": {
+          "type": "boolean | undefined",
+          "optional": true
+        },
+        "validate": {
+          "type": "ValidatorFunction<T>",
+          "optional": false,
+          "callable": true
+        }
+      }
+    },
+    "SignTransactionOptions": {
+      "kind": "interface",
+      "typeParams": [],
+      "members": {
+        "address": {
+          "type": "string | undefined",
+          "optional": true
+        },
+        "networkPassphrase": {
+          "type": "string",
+          "optional": false
+        }
+      }
+    },
+    "SimulationError": {
+      "kind": "class",
+      "typeParams": [],
+      "members": {
+        "cause": {
+          "type": "unknown",
+          "optional": true
+        },
+        "code": {
+          "type": "string",
+          "optional": false
+        },
+        "context": {
+          "type": "Record<string, unknown> | undefined",
+          "optional": true
+        },
+        "docsUrl": {
+          "type": "string | undefined",
+          "optional": true
+        },
+        "message": {
+          "type": "string",
+          "optional": false
+        },
+        "name": {
+          "type": "string",
+          "optional": false
+        },
+        "remediation": {
+          "type": "string",
+          "optional": false
+        },
+        "retryable": {
+          "type": "boolean | undefined",
+          "optional": true
+        },
+        "stack": {
+          "type": "string | undefined",
+          "optional": true
+        }
+      }
+    },
+    "SimulationPreparedXdrMismatchError": {
+      "kind": "class",
+      "typeParams": [],
+      "members": {
+        "cause": {
+          "type": "unknown",
+          "optional": true
+        },
+        "code": {
+          "type": "string",
+          "optional": false
+        },
+        "context": {
+          "type": "Record<string, unknown> | undefined",
+          "optional": true
+        },
+        "docsUrl": {
+          "type": "string | undefined",
+          "optional": true
+        },
+        "message": {
+          "type": "string",
+          "optional": false
+        },
+        "name": {
+          "type": "string",
+          "optional": false
+        },
+        "remediation": {
+          "type": "string",
+          "optional": false
+        },
+        "retryable": {
+          "type": "boolean | undefined",
+          "optional": true
+        },
+        "stack": {
+          "type": "string | undefined",
+          "optional": true
+        }
+      }
+    },
+    "StateChangeCallback": {
+      "kind": "type",
+      "type": "StateChangeCallback"
+    },
+    "StateDebugEntry": {
+      "kind": "interface",
+      "typeParams": [
+        "T"
+      ],
+      "members": {
+        "next": {
+          "type": "T",
+          "optional": false
+        },
+        "prev": {
+          "type": "T",
+          "optional": false
+        },
+        "timestamp": {
+          "type": "string",
+          "optional": false
+        }
+      }
+    },
+    "StateStore": {
+      "kind": "interface",
+      "typeParams": [
+        "T"
+      ],
+      "members": {
+        "clearDebugHistory": {
+          "type": "() => void",
+          "optional": false,
+          "callable": true
+        },
+        "debugHistory": {
+          "type": "() => Array<StateDebugEntry<T>>",
+          "optional": false,
+          "callable": true
+        },
+        "destroy": {
+          "type": "() => void",
+          "optional": false,
+          "callable": true
+        },
+        "getState": {
+          "type": "() => T",
+          "optional": false,
+          "callable": true
+        },
+        "patch": {
+          "type": "(partial: Partial<T>) => void",
+          "optional": false,
+          "callable": true
+        },
+        "setState": {
+          "type": "(next: T | ((prev: T) => T)) => void",
+          "optional": false,
+          "callable": true
+        },
+        "subscribe": {
+          "type": "(listener: Listener<T>) => Unsubscribe",
+          "optional": false,
+          "callable": true
+        }
+      }
+    },
+    "StateStoreOptions": {
+      "kind": "interface",
+      "typeParams": [
+        "T"
+      ],
+      "members": {
+        "debugHistorySize": {
+          "type": "number | undefined",
+          "optional": true
+        },
+        "key": {
+          "type": "string | undefined",
+          "optional": true
+        },
+        "persist": {
+          "type": "boolean | undefined",
+          "optional": true
+        },
+        "sync": {
+          "type": "boolean | undefined",
+          "optional": true
+        }
+      }
+    },
+    "StellarAddressValidationOptions": {
+      "kind": "interface",
+      "typeParams": [],
+      "members": {
+        "allowPublic": {
+          "type": "boolean | undefined",
+          "optional": true
+        },
+        "allowTestnet": {
+          "type": "boolean | undefined",
+          "optional": true
+        }
+      }
+    },
+    "StellarURIParams": {
+      "kind": "interface",
+      "typeParams": [],
+      "members": {
+        "amount": {
+          "type": "string | undefined",
+          "optional": true
+        },
+        "assetCode": {
+          "type": "string | undefined",
+          "optional": true
+        },
+        "assetIssuer": {
+          "type": "string | undefined",
+          "optional": true
+        },
+        "callback": {
+          "type": "string | undefined",
+          "optional": true
+        },
+        "destination": {
+          "type": "string | undefined",
+          "optional": true
+        },
+        "memo": {
+          "type": "string | undefined",
+          "optional": true
+        },
+        "memoType": {
+          "type": "string | undefined",
+          "optional": true
+        },
+        "msg": {
+          "type": "string | undefined",
+          "optional": true
+        },
+        "networkPassphrase": {
+          "type": "string | undefined",
+          "optional": true
+        },
+        "operation": {
+          "type": "\"pay\" | \"tx\" | \"sign\"",
+          "optional": false
+        },
+        "originDomain": {
+          "type": "string | undefined",
+          "optional": true
+        },
+        "signature": {
+          "type": "string | undefined",
+          "optional": true
+        },
+        "xdr": {
+          "type": "string | undefined",
+          "optional": true
+        }
+      }
+    },
+    "SubmitCallback": {
+      "kind": "type",
+      "type": "SubmitCallback"
+    },
+    "SubmitClaimParams": {
+      "kind": "interface",
+      "typeParams": [],
+      "members": {
+        "invoiceId": {
+          "type": "bigint",
+          "optional": false
+        },
+        "lp": {
+          "type": "string",
+          "optional": false
+        },
+        "reason": {
+          "type": "string",
+          "optional": false
+        }
+      }
+    },
+    "SubmitInvoiceParams": {
+      "kind": "interface",
+      "typeParams": [],
+      "members": {
+        "amount": {
+          "type": "bigint",
+          "optional": false
+        },
+        "discountRate": {
+          "type": "number",
+          "optional": false
+        },
+        "dueDate": {
+          "type": "number",
+          "optional": false
+        },
+        "freelancer": {
+          "type": "string",
+          "optional": false
+        },
+        "payer": {
+          "type": "string",
+          "optional": false
+        }
+      }
+    },
+    "Subscription": {
+      "kind": "interface",
+      "typeParams": [],
+      "members": {
+        "channel": {
+          "type": "SubscriptionChannel",
+          "optional": false
+        },
+        "created_at": {
+          "type": "number",
+          "optional": false
+        },
+        "destination": {
+          "type": "string",
+          "optional": false
+        },
+        "id": {
+          "type": "number",
+          "optional": false
+        },
+        "stellar_address": {
+          "type": "string",
+          "optional": false
+        },
+        "triggers": {
+          "type": "NotificationTrigger[]",
+          "optional": false
+        }
+      }
+    },
+    "SubscriptionChannel": {
+      "kind": "type",
+      "type": "SubscriptionChannel"
+    },
+    "TOKENS": {
+      "kind": "const",
+      "type": "{ readonly USDC: { readonly symbol: \"USDC\"; readonly name: \"USD Coin\"; readonly decimals: 7; }; readonly EURC: { readonly symbol: \"EURC\"; readonly name: \"Euro Coin\"; readonly decimals: 7; }; }"
+    },
+    "TimeoutError": {
+      "kind": "class",
+      "typeParams": [],
+      "members": {
+        "message": {
+          "type": "string",
+          "optional": false
+        },
+        "name": {
+          "type": "string",
+          "optional": false
+        },
+        "operation": {
+          "type": "string",
+          "optional": false
+        },
+        "stack": {
+          "type": "string | undefined",
+          "optional": true
+        },
+        "timeoutMs": {
+          "type": "number",
+          "optional": false
+        }
+      }
+    },
+    "Token": {
+      "kind": "interface",
+      "typeParams": [],
+      "members": {
+        "contractId": {
+          "type": "string",
+          "optional": false
+        },
+        "decimals": {
+          "type": "number",
+          "optional": false
+        },
+        "issuer": {
+          "type": "string | null",
+          "optional": false
+        },
+        "listed": {
+          "type": "boolean",
+          "optional": false
+        },
+        "name": {
+          "type": "string",
+          "optional": false
+        },
+        "symbol": {
+          "type": "string",
+          "optional": false
+        }
+      }
+    },
+    "TokenAmount": {
+      "kind": "interface",
+      "typeParams": [],
+      "members": {
+        "amount": {
+          "type": "bigint",
+          "optional": false
+        },
+        "symbol": {
+          "type": "string | undefined",
+          "optional": true
+        },
+        "tokenId": {
+          "type": "string",
+          "optional": false
+        }
+      }
+    },
+    "TokenBalance": {
+      "kind": "interface",
+      "typeParams": [],
+      "members": {
+        "balance": {
+          "type": "bigint",
+          "optional": false
+        },
+        "contractId": {
+          "type": "string",
+          "optional": false
+        },
+        "token": {
+          "type": "string",
+          "optional": false
+        }
+      }
+    },
+    "TokenDelistedEvent": {
+      "kind": "type",
+      "type": "TokenDelistedEvent"
+    },
+    "TokenListedEvent": {
+      "kind": "type",
+      "type": "TokenListedEvent"
+    },
+    "TokenMismatchError": {
+      "kind": "class",
+      "typeParams": [],
+      "members": {
+        "cause": {
+          "type": "unknown",
+          "optional": true
+        },
+        "code": {
+          "type": "string",
+          "optional": false
+        },
+        "context": {
+          "type": "Record<string, unknown> | undefined",
+          "optional": true
+        },
+        "docsUrl": {
+          "type": "string | undefined",
+          "optional": true
+        },
+        "message": {
+          "type": "string",
+          "optional": false
+        },
+        "name": {
+          "type": "string",
+          "optional": false
+        },
+        "remediation": {
+          "type": "string",
+          "optional": false
+        },
+        "retryable": {
+          "type": "boolean | undefined",
+          "optional": true
+        },
+        "stack": {
+          "type": "string | undefined",
+          "optional": true
+        }
+      }
+    },
+    "TransactionBuildError": {
+      "kind": "class",
+      "typeParams": [],
+      "members": {
+        "cause": {
+          "type": "unknown",
+          "optional": true
+        },
+        "code": {
+          "type": "string",
+          "optional": false
+        },
+        "context": {
+          "type": "Record<string, unknown> | undefined",
+          "optional": true
+        },
+        "docsUrl": {
+          "type": "string | undefined",
+          "optional": true
+        },
+        "message": {
+          "type": "string",
+          "optional": false
+        },
+        "name": {
+          "type": "string",
+          "optional": false
+        },
+        "remediation": {
+          "type": "string",
+          "optional": false
+        },
+        "retryable": {
+          "type": "boolean | undefined",
+          "optional": true
+        },
+        "stack": {
+          "type": "string | undefined",
+          "optional": true
+        }
+      }
+    },
+    "TransactionFailedError": {
+      "kind": "class",
+      "typeParams": [],
+      "members": {
+        "cause": {
+          "type": "unknown",
+          "optional": true
+        },
+        "code": {
+          "type": "string",
+          "optional": false
+        },
+        "context": {
+          "type": "Record<string, unknown> | undefined",
+          "optional": true
+        },
+        "docsUrl": {
+          "type": "string | undefined",
+          "optional": true
+        },
+        "message": {
+          "type": "string",
+          "optional": false
+        },
+        "name": {
+          "type": "string",
+          "optional": false
+        },
+        "remediation": {
+          "type": "string",
+          "optional": false
+        },
+        "retryable": {
+          "type": "boolean | undefined",
+          "optional": true
+        },
+        "stack": {
+          "type": "string | undefined",
+          "optional": true
+        }
+      }
+    },
+    "TransactionSigner": {
+      "kind": "interface",
+      "typeParams": [],
+      "members": {
+        "getPublicKey": {
+          "type": "() => Promise<string>",
+          "optional": false,
+          "callable": true
+        },
+        "signTransaction": {
+          "type": "(transactionXdr: string, options: SignTransactionOptions) => Promise<string>",
+          "optional": false,
+          "callable": true
+        }
+      }
+    },
+    "UndelegateVotesParams": {
+      "kind": "interface",
+      "typeParams": [],
+      "members": {
+        "delegator": {
+          "type": "string",
+          "optional": false
+        }
+      }
+    },
+    "Unsubscribe": {
+      "kind": "type",
+      "type": "Unsubscribe"
+    },
+    "UsageEvent": {
+      "kind": "interface",
+      "typeParams": [],
+      "members": {
+        "errorCode": {
+          "type": "string | undefined",
+          "optional": true
+        },
+        "method": {
+          "type": "string",
+          "optional": false
+        },
+        "network": {
+          "type": "string",
+          "optional": false
+        },
+        "success": {
+          "type": "boolean",
+          "optional": false
+        },
+        "version": {
+          "type": "string",
+          "optional": false
+        }
+      }
+    },
+    "ValidationError": {
+      "kind": "class",
+      "typeParams": [],
+      "members": {
+        "cause": {
+          "type": "unknown",
+          "optional": true
+        },
+        "code": {
+          "type": "string",
+          "optional": false
+        },
+        "context": {
+          "type": "Record<string, unknown> | undefined",
+          "optional": true
+        },
+        "docsUrl": {
+          "type": "string | undefined",
+          "optional": true
+        },
+        "message": {
+          "type": "string",
+          "optional": false
+        },
+        "name": {
+          "type": "string",
+          "optional": false
+        },
+        "remediation": {
+          "type": "string",
+          "optional": false
+        },
+        "retryable": {
+          "type": "boolean | undefined",
+          "optional": true
+        },
+        "stack": {
+          "type": "string | undefined",
+          "optional": true
+        }
+      }
+    },
+    "ValidationIssue": {
+      "kind": "interface",
+      "typeParams": [],
+      "members": {
+        "code": {
+          "type": "string | undefined",
+          "optional": true
+        },
+        "message": {
+          "type": "string",
+          "optional": false
+        },
+        "path": {
+          "type": "string",
+          "optional": false
+        }
+      }
+    },
+    "ValidationMiddleware": {
+      "kind": "type",
+      "type": "ValidationMiddleware<T>"
+    },
+    "ValidationResult": {
+      "kind": "interface",
+      "typeParams": [],
+      "members": {
+        "error": {
+          "type": "string | undefined",
+          "optional": true
+        },
+        "valid": {
+          "type": "boolean",
+          "optional": false
+        }
+      }
+    },
+    "ValidationSchema": {
+      "kind": "type",
+      "type": "ValidationSchema"
+    },
+    "ValidatorFunction": {
+      "kind": "type",
+      "type": "ValidatorFunction<T>"
+    },
+    "Validators": {
+      "kind": "class",
+      "typeParams": [],
+      "members": {}
+    },
+    "VersionInfo": {
+      "kind": "interface",
+      "typeParams": [],
+      "members": {
+        "major": {
+          "type": "number",
+          "optional": false
+        },
+        "minor": {
+          "type": "number",
+          "optional": false
+        },
+        "patch": {
+          "type": "number",
+          "optional": false
+        },
+        "raw": {
+          "type": "string",
+          "optional": false
+        }
+      }
+    },
+    "VetoProposalParams": {
+      "kind": "interface",
+      "typeParams": [],
+      "members": {
+        "admin": {
+          "type": "string",
+          "optional": false
+        },
+        "proposalId": {
+          "type": "bigint",
+          "optional": false
+        },
+        "reasonHash": {
+          "type": "Uint8Array<ArrayBufferLike> | Buffer<ArrayBufferLike>",
+          "optional": false
+        }
+      }
+    },
+    "VotingResult": {
+      "kind": "interface",
+      "typeParams": [],
+      "members": {
+        "majorityFor": {
+          "type": "boolean",
+          "optional": false
+        },
+        "passed": {
+          "type": "boolean",
+          "optional": false
+        },
+        "proposalId": {
+          "type": "bigint",
+          "optional": false
+        },
+        "quorumMet": {
+          "type": "boolean",
+          "optional": false
+        },
+        "quorumThreshold": {
+          "type": "bigint",
+          "optional": false
+        },
+        "totalVotes": {
+          "type": "bigint",
+          "optional": false
+        },
+        "votesAgainst": {
+          "type": "bigint",
+          "optional": false
+        },
+        "votesFor": {
+          "type": "bigint",
+          "optional": false
+        }
+      }
+    },
+    "WalletEventData": {
+      "kind": "interface",
+      "typeParams": [],
+      "members": {
+        "address": {
+          "type": "string",
+          "optional": false
+        },
+        "network": {
+          "type": "string | undefined",
+          "optional": true
+        },
+        "timestamp": {
+          "type": "number",
+          "optional": false
+        }
+      }
+    },
+    "WalletEventType": {
+      "kind": "type",
+      "type": "WalletEventType"
+    },
+    "WalletNotConnectedError": {
+      "kind": "class",
+      "typeParams": [],
+      "members": {
+        "cause": {
+          "type": "unknown",
+          "optional": true
+        },
+        "code": {
+          "type": "string",
+          "optional": false
+        },
+        "context": {
+          "type": "Record<string, unknown> | undefined",
+          "optional": true
+        },
+        "docsUrl": {
+          "type": "string | undefined",
+          "optional": true
+        },
+        "message": {
+          "type": "string",
+          "optional": false
+        },
+        "name": {
+          "type": "string",
+          "optional": false
+        },
+        "remediation": {
+          "type": "string",
+          "optional": false
+        },
+        "retryable": {
+          "type": "boolean | undefined",
+          "optional": true
+        },
+        "stack": {
+          "type": "string | undefined",
+          "optional": true
+        }
+      }
+    },
+    "WidgetDefinition": {
+      "kind": "interface",
+      "typeParams": [],
+      "members": {
+        "description": {
+          "type": "string",
+          "optional": false
+        },
+        "id": {
+          "type": "string",
+          "optional": false
+        },
+        "name": {
+          "type": "string",
+          "optional": false
+        },
+        "refreshIntervalMs": {
+          "type": "number | undefined",
+          "optional": true
+        },
+        "render": {
+          "type": "(context: AnalyticsPluginContext) => Promise<WidgetRenderResult>",
+          "optional": false,
+          "callable": true
+        },
+        "size": {
+          "type": "WidgetSize",
+          "optional": false
+        },
+        "type": {
+          "type": "WidgetType",
+          "optional": false
+        }
+      }
+    },
+    "WidgetRenderResult": {
+      "kind": "interface",
+      "typeParams": [],
+      "members": {
+        "data": {
+          "type": "unknown",
+          "optional": false
+        },
+        "labels": {
+          "type": "string[] | undefined",
+          "optional": true
+        },
+        "metadata": {
+          "type": "Record<string, unknown> | undefined",
+          "optional": true
+        },
+        "series": {
+          "type": "{ name: string; values: number[]; }[] | undefined",
+          "optional": true
+        },
+        "type": {
+          "type": "WidgetType",
+          "optional": false
+        }
+      }
+    },
+    "WidgetSize": {
+      "kind": "type",
+      "type": "WidgetSize"
+    },
+    "WidgetType": {
+      "kind": "type",
+      "type": "WidgetType"
+    },
+    "YieldProjection": {
+      "kind": "interface",
+      "typeParams": [],
+      "members": {
+        "annualizedYield": {
+          "type": "bigint",
+          "optional": false
+        },
+        "daysUntilDue": {
+          "type": "number",
+          "optional": false
+        },
+        "discountRate": {
+          "type": "number",
+          "optional": false
+        },
+        "effectiveApr": {
+          "type": "number",
+          "optional": false
+        },
+        "expectedReturn": {
+          "type": "bigint",
+          "optional": false
+        },
+        "invoiceAmount": {
+          "type": "bigint",
+          "optional": false
+        }
+      }
+    },
+    "addAmounts": {
+      "kind": "function",
+      "signatures": [
+        {
+          "typeParams": [],
+          "params": [
+            {
+              "name": "a",
+              "type": "bigint",
+              "optional": false,
+              "rest": false
+            },
+            {
+              "name": "b",
+              "type": "bigint",
+              "optional": false,
+              "rest": false
+            },
+            {
+              "name": "token",
+              "type": "AmountToken",
+              "optional": false,
+              "rest": false
+            }
+          ],
+          "returnType": "bigint"
+        }
+      ]
+    },
+    "applyBasisPoints": {
+      "kind": "function",
+      "signatures": [
+        {
+          "typeParams": [],
+          "params": [
+            {
+              "name": "amount",
+              "type": "bigint",
+              "optional": false,
+              "rest": false
+            },
+            {
+              "name": "bps",
+              "type": "number",
+              "optional": false,
+              "rest": false
+            },
+            {
+              "name": "token",
+              "type": "AmountToken",
+              "optional": false,
+              "rest": false
+            }
+          ],
+          "returnType": "bigint"
+        }
+      ]
+    },
+    "buildCallbackUrl": {
+      "kind": "function",
+      "signatures": [
+        {
+          "typeParams": [],
+          "params": [
+            {
+              "name": "scheme",
+              "type": "string",
+              "optional": false,
+              "rest": false
+            }
+          ],
+          "returnType": "string"
+        }
+      ]
+    },
+    "buildPayDeepLink": {
+      "kind": "function",
+      "signatures": [
+        {
+          "typeParams": [],
+          "params": [
+            {
+              "name": "destination",
+              "type": "string",
+              "optional": false,
+              "rest": false
+            },
+            {
+              "name": "amount",
+              "type": "string",
+              "optional": false,
+              "rest": false
+            },
+            {
+              "name": "options",
+              "type": "{ assetCode?: string; assetIssuer?: string; memo?: string; memoType?: string; callback?: string; msg?: string; networkPassphrase?: string; } | undefined",
+              "optional": true,
+              "rest": false
+            }
+          ],
+          "returnType": "string"
+        }
+      ]
+    },
+    "buildSigningDeepLink": {
+      "kind": "function",
+      "signatures": [
+        {
+          "typeParams": [],
+          "params": [
+            {
+              "name": "transactionXdr",
+              "type": "string",
+              "optional": false,
+              "rest": false
+            },
+            {
+              "name": "networkPassphrase",
+              "type": "string",
+              "optional": false,
+              "rest": false
+            },
+            {
+              "name": "callbackUrl",
+              "type": "string | undefined",
+              "optional": true,
+              "rest": false
+            }
+          ],
+          "returnType": "string"
+        }
+      ]
+    },
+    "buildStellarURI": {
+      "kind": "function",
+      "signatures": [
+        {
+          "typeParams": [],
+          "params": [
+            {
+              "name": "params",
+              "type": "StellarURIParams",
+              "optional": false,
+              "rest": false
+            }
+          ],
+          "returnType": "string"
+        }
+      ]
+    },
+    "calculateHistoricalPerformance": {
+      "kind": "function",
+      "signatures": [
+        {
+          "typeParams": [],
+          "params": [
+            {
+              "name": "events",
+              "type": "{ type: string; amount: bigint; discountRate?: number; createdAt: number; settledAt?: number; }[]",
+              "optional": false,
+              "rest": false
+            }
+          ],
+          "returnType": "HistoricalPerformance"
+        }
+      ]
+    },
+    "calculatePortfolioAllocation": {
+      "kind": "function",
+      "signatures": [
+        {
+          "typeParams": [],
+          "params": [
+            {
+              "name": "invoices",
+              "type": "{ amount: bigint; status: string; token?: string; }[]",
+              "optional": false,
+              "rest": false
+            }
+          ],
+          "returnType": "PortfolioAllocation"
+        }
+      ]
+    },
+    "calculateRiskScore": {
+      "kind": "function",
+      "signatures": [
+        {
+          "typeParams": [],
+          "params": [
+            {
+              "name": "amount",
+              "type": "bigint",
+              "optional": false,
+              "rest": false
+            },
+            {
+              "name": "daysUntilDue",
+              "type": "number",
+              "optional": false,
+              "rest": false
+            },
+            {
+              "name": "discountRateBps",
+              "type": "number",
+              "optional": false,
+              "rest": false
+            }
+          ],
+          "returnType": "RiskFactors"
+        }
+      ]
+    },
+    "calculateYieldProjection": {
+      "kind": "function",
+      "signatures": [
+        {
+          "typeParams": [],
+          "params": [
+            {
+              "name": "invoiceAmount",
+              "type": "bigint",
+              "optional": false,
+              "rest": false
+            },
+            {
+              "name": "discountRateBps",
+              "type": "number",
+              "optional": false,
+              "rest": false
+            },
+            {
+              "name": "daysUntilDue",
+              "type": "number",
+              "optional": false,
+              "rest": false
+            }
+          ],
+          "returnType": "YieldProjection"
+        }
+      ]
+    },
+    "checkCompatibility": {
+      "kind": "function",
+      "signatures": [
+        {
+          "typeParams": [],
+          "params": [
+            {
+              "name": "invoke",
+              "type": "(method: string) => Promise<any>",
+              "optional": false,
+              "rest": false
+            }
+          ],
+          "returnType": "Promise<CompatibilityResult>"
+        }
+      ]
+    },
+    "clampToTokenDecimals": {
+      "kind": "function",
+      "signatures": [
+        {
+          "typeParams": [],
+          "params": [
+            {
+              "name": "display",
+              "type": "string",
+              "optional": false,
+              "rest": false
+            },
+            {
+              "name": "token",
+              "type": "AmountToken",
+              "optional": false,
+              "rest": false
+            }
+          ],
+          "returnType": "string"
+        }
+      ]
+    },
+    "compareMetrics": {
+      "kind": "function",
+      "signatures": [
+        {
+          "typeParams": [],
+          "params": [
+            {
+              "name": "name",
+              "type": "string",
+              "optional": false,
+              "rest": false
+            },
+            {
+              "name": "valueA",
+              "type": "number | bigint",
+              "optional": false,
+              "rest": false
+            },
+            {
+              "name": "valueB",
+              "type": "number | bigint",
+              "optional": false,
+              "rest": false
+            }
+          ],
+          "returnType": "ComparisonResult"
+        }
+      ]
+    },
+    "compareVersions": {
+      "kind": "function",
+      "signatures": [
+        {
+          "typeParams": [],
+          "params": [
+            {
+              "name": "a",
+              "type": "string",
+              "optional": false,
+              "rest": false
+            },
+            {
+              "name": "b",
+              "type": "string",
+              "optional": false,
+              "rest": false
+            }
+          ],
+          "returnType": "number"
+        }
+      ]
+    },
+    "computeDelay": {
+      "kind": "function",
+      "signatures": [
+        {
+          "typeParams": [],
+          "params": [
+            {
+              "name": "attempt",
+              "type": "number",
+              "optional": false,
+              "rest": false
+            },
+            {
+              "name": "options",
+              "type": "Required<Omit<BackoffOptions, \"isRetryable\" | \"onRetry\">>",
+              "optional": false,
+              "rest": false
+            }
+          ],
+          "returnType": "number"
+        }
+      ]
+    },
+    "createConnectionStore": {
+      "kind": "function",
+      "signatures": [
+        {
+          "typeParams": [],
+          "params": [
+            {
+              "name": "initial",
+              "type": "Partial<ILNConnectionState> | undefined",
+              "optional": true,
+              "rest": false
+            },
+            {
+              "name": "options",
+              "type": "StateStoreOptions<ILNConnectionState> | undefined",
+              "optional": true,
+              "rest": false
+            }
+          ],
+          "returnType": "StateStore<ILNConnectionState>"
+        }
+      ]
+    },
+    "createDeepLinkSigner": {
+      "kind": "function",
+      "signatures": [
+        {
+          "typeParams": [],
+          "params": [
+            {
+              "name": "publicKey",
+              "type": "string",
+              "optional": false,
+              "rest": false
+            },
+            {
+              "name": "config",
+              "type": "MobileWalletConfig | undefined",
+              "optional": true,
+              "rest": false
+            }
+          ],
+          "returnType": "TransactionSigner"
+        }
+      ]
+    },
+    "createFreighterSigner": {
+      "kind": "function",
+      "signatures": [
+        {
+          "typeParams": [],
+          "params": [
+            {
+              "name": "address",
+              "type": "string | undefined",
+              "optional": true,
+              "rest": false
+            }
+          ],
+          "returnType": "TransactionSigner"
+        }
+      ]
+    },
+    "createInvoiceListStore": {
+      "kind": "function",
+      "signatures": [
+        {
+          "typeParams": [],
+          "params": [
+            {
+              "name": "initial",
+              "type": "Partial<ILNInvoiceListState> | undefined",
+              "optional": true,
+              "rest": false
+            },
+            {
+              "name": "options",
+              "type": "StateStoreOptions<ILNInvoiceListState> | undefined",
+              "optional": true,
+              "rest": false
+            }
+          ],
+          "returnType": "StateStore<ILNInvoiceListState>"
+        }
+      ]
+    },
+    "createKeypairSigner": {
+      "kind": "function",
+      "signatures": [
+        {
+          "typeParams": [],
+          "params": [
+            {
+              "name": "secretKey",
+              "type": "string",
+              "optional": false,
+              "rest": false
+            }
+          ],
+          "returnType": "TransactionSigner"
+        }
+      ]
+    },
+    "createMobileKeypairSigner": {
+      "kind": "function",
+      "signatures": [
+        {
+          "typeParams": [],
+          "params": [
+            {
+              "name": "secretKey",
+              "type": "string",
+              "optional": false,
+              "rest": false
+            }
+          ],
+          "returnType": "TransactionSigner"
+        }
+      ]
+    },
+    "createPaymentProcessor": {
+      "kind": "function",
+      "signatures": [
+        {
+          "typeParams": [],
+          "params": [
+            {
+              "name": "client",
+              "type": "PaymentClient",
+              "optional": false,
+              "rest": false
+            }
+          ],
+          "returnType": "PaymentProcessor"
+        }
+      ]
+    },
+    "createStateStore": {
+      "kind": "function",
+      "signatures": [
+        {
+          "typeParams": [
+            "T"
+          ],
+          "params": [
+            {
+              "name": "initialState",
+              "type": "T",
+              "optional": false,
+              "rest": false
+            },
+            {
+              "name": "options",
+              "type": "StateStoreOptions<T>",
+              "optional": false,
+              "rest": false
+            }
+          ],
+          "returnType": "StateStore<T>"
+        }
+      ]
+    },
+    "decode": {
+      "kind": "function",
+      "signatures": [
+        {
+          "typeParams": [],
+          "params": [
+            {
+              "name": "encoded",
+              "type": "string",
+              "optional": false,
+              "rest": false
+            }
+          ],
+          "returnType": "stellarXdr.ScVal"
+        }
+      ]
+    },
+    "derived": {
+      "kind": "function",
+      "signatures": [
+        {
+          "typeParams": [
+            "T",
+            "U"
+          ],
+          "params": [
+            {
+              "name": "source",
+              "type": "StateStore<T>",
+              "optional": false,
+              "rest": false
+            },
+            {
+              "name": "selector",
+              "type": "(state: T) => U",
+              "optional": false,
+              "rest": false
+            }
+          ],
+          "returnType": "Omit<StateStore<U>, \"setState\" | \"patch\">"
+        }
+      ]
+    },
+    "detectPlatform": {
+      "kind": "function",
+      "signatures": [
+        {
+          "typeParams": [],
+          "params": [],
+          "returnType": "PlatformType"
+        }
+      ]
+    },
+    "detectSdkVersion": {
+      "kind": "function",
+      "signatures": [
+        {
+          "typeParams": [],
+          "params": [],
+          "returnType": "VersionInfo"
+        }
+      ]
+    },
+    "encode": {
+      "kind": "function",
+      "signatures": [
+        {
+          "typeParams": [],
+          "params": [
+            {
+              "name": "scVal",
+              "type": "stellarXdr.ScVal",
+              "optional": false,
+              "rest": false
+            }
+          ],
+          "returnType": "string"
+        }
+      ]
+    },
+    "extractSignedXDRFromCallback": {
+      "kind": "function",
+      "signatures": [
+        {
+          "typeParams": [],
+          "params": [
+            {
+              "name": "url",
+              "type": "string",
+              "optional": false,
+              "rest": false
+            }
+          ],
+          "returnType": "string | null"
+        }
+      ]
+    },
+    "extractTransactionHashFromCallback": {
+      "kind": "function",
+      "signatures": [
+        {
+          "typeParams": [],
+          "params": [
+            {
+              "name": "url",
+              "type": "string",
+              "optional": false,
+              "rest": false
+            }
+          ],
+          "returnType": "string | null"
+        }
+      ]
+    },
+    "formatAmount": {
+      "kind": "function",
+      "signatures": [
+        {
+          "typeParams": [],
+          "params": [
+            {
+              "name": "amount",
+              "type": "bigint",
+              "optional": false,
+              "rest": false
+            },
+            {
+              "name": "token",
+              "type": "AmountToken",
+              "optional": false,
+              "rest": false
+            }
+          ],
+          "returnType": "string"
+        }
+      ]
+    },
+    "formatAmountOptions": {
+      "kind": "function",
+      "signatures": [
+        {
+          "typeParams": [],
+          "params": [
+            {
+              "name": "amount",
+              "type": "bigint",
+              "optional": false,
+              "rest": false
+            },
+            {
+              "name": "token",
+              "type": "AmountToken",
+              "optional": false,
+              "rest": false
+            },
+            {
+              "name": "opts",
+              "type": "FormatOptions",
+              "optional": false,
+              "rest": false
+            }
+          ],
+          "returnType": "string"
+        }
+      ]
+    },
+    "formatAmountTrimmed": {
+      "kind": "function",
+      "signatures": [
+        {
+          "typeParams": [],
+          "params": [
+            {
+              "name": "amount",
+              "type": "bigint",
+              "optional": false,
+              "rest": false
+            },
+            {
+              "name": "token",
+              "type": "AmountToken",
+              "optional": false,
+              "rest": false
+            }
+          ],
+          "returnType": "string"
+        }
+      ]
+    },
+    "formatAmountWithSymbol": {
+      "kind": "function",
+      "signatures": [
+        {
+          "typeParams": [],
+          "params": [
+            {
+              "name": "amount",
+              "type": "bigint",
+              "optional": false,
+              "rest": false
+            },
+            {
+              "name": "token",
+              "type": "AmountToken & { symbol: string; }",
+              "optional": false,
+              "rest": false
+            }
+          ],
+          "returnType": "string"
+        }
+      ]
+    },
+    "getAllDeprecationWarnings": {
+      "kind": "function",
+      "signatures": [
+        {
+          "typeParams": [],
+          "params": [],
+          "returnType": "DeprecationWarning[]"
+        }
+      ]
+    },
+    "getDeprecationWarning": {
+      "kind": "function",
+      "signatures": [
+        {
+          "typeParams": [],
+          "params": [
+            {
+              "name": "method",
+              "type": "string",
+              "optional": false,
+              "rest": false
+            }
+          ],
+          "returnType": "DeprecationWarning | undefined"
+        }
+      ]
+    },
+    "getMigrationGuide": {
+      "kind": "function",
+      "signatures": [
+        {
+          "typeParams": [],
+          "params": [
+            {
+              "name": "fromVersion",
+              "type": "string",
+              "optional": false,
+              "rest": false
+            },
+            {
+              "name": "toVersion",
+              "type": "string",
+              "optional": false,
+              "rest": false
+            }
+          ],
+          "returnType": "MigrationGuide"
+        }
+      ]
+    },
+    "getPlatformAdapter": {
+      "kind": "function",
+      "signatures": [
+        {
+          "typeParams": [],
+          "params": [],
+          "returnType": "PlatformAdapter"
+        }
+      ]
+    },
+    "getSupportedMobileWallets": {
+      "kind": "function",
+      "signatures": [
+        {
+          "typeParams": [],
+          "params": [],
+          "returnType": "{ name: string; scheme: string; universalLink: string; }[]"
+        }
+      ]
+    },
+    "hasExcessPrecision": {
+      "kind": "function",
+      "signatures": [
+        {
+          "typeParams": [],
+          "params": [
+            {
+              "name": "display",
+              "type": "string",
+              "optional": false,
+              "rest": false
+            },
+            {
+              "name": "token",
+              "type": "AmountToken",
+              "optional": false,
+              "rest": false
+            }
+          ],
+          "returnType": "boolean"
+        }
+      ]
+    },
+    "isDefaulted": {
+      "kind": "function",
+      "signatures": [
+        {
+          "typeParams": [],
+          "params": [
+            {
+              "name": "status",
+              "type": "string",
+              "optional": false,
+              "rest": false
+            }
+          ],
+          "returnType": "boolean"
+        }
+      ]
+    },
+    "isDisputed": {
+      "kind": "function",
+      "signatures": [
+        {
+          "typeParams": [],
+          "params": [
+            {
+              "name": "status",
+              "type": "string",
+              "optional": false,
+              "rest": false
+            }
+          ],
+          "returnType": "boolean"
+        }
+      ]
+    },
+    "isFunded": {
+      "kind": "function",
+      "signatures": [
+        {
+          "typeParams": [],
+          "params": [
+            {
+              "name": "status",
+              "type": "string",
+              "optional": false,
+              "rest": false
+            }
+          ],
+          "returnType": "boolean"
+        }
+      ]
+    },
+    "isPaid": {
+      "kind": "function",
+      "signatures": [
+        {
+          "typeParams": [],
+          "params": [
+            {
+              "name": "status",
+              "type": "string",
+              "optional": false,
+              "rest": false
+            }
+          ],
+          "returnType": "boolean"
+        }
+      ]
+    },
+    "isPending": {
+      "kind": "function",
+      "signatures": [
+        {
+          "typeParams": [],
+          "params": [
+            {
+              "name": "status",
+              "type": "string",
+              "optional": false,
+              "rest": false
+            }
+          ],
+          "returnType": "boolean"
+        }
+      ]
+    },
+    "isRetryableError": {
+      "kind": "function",
+      "signatures": [
+        {
+          "typeParams": [],
+          "params": [
+            {
+              "name": "err",
+              "type": "unknown",
+              "optional": false,
+              "rest": false
+            }
+          ],
+          "returnType": "boolean"
+        }
+      ]
+    },
+    "isTerminal": {
+      "kind": "function",
+      "signatures": [
+        {
+          "typeParams": [],
+          "params": [
+            {
+              "name": "status",
+              "type": "string",
+              "optional": false,
+              "rest": false
+            }
+          ],
+          "returnType": "boolean"
+        }
+      ]
+    },
+    "isTransientError": {
+      "kind": "function",
+      "signatures": [
+        {
+          "typeParams": [],
+          "params": [
+            {
+              "name": "error",
+              "type": "unknown",
+              "optional": false,
+              "rest": false
+            }
+          ],
+          "returnType": "boolean"
+        }
+      ]
+    },
+    "isVersionCompatible": {
+      "kind": "function",
+      "signatures": [
+        {
+          "typeParams": [],
+          "params": [
+            {
+              "name": "version",
+              "type": "string",
+              "optional": false,
+              "rest": false
+            },
+            {
+              "name": "minVersion",
+              "type": "string",
+              "optional": false,
+              "rest": false
+            },
+            {
+              "name": "maxVersion",
+              "type": "string | undefined",
+              "optional": true,
+              "rest": false
+            }
+          ],
+          "returnType": "boolean"
+        }
+      ]
+    },
+    "lookupFederationAddress": {
+      "kind": "function",
+      "signatures": [
+        {
+          "typeParams": [],
+          "params": [
+            {
+              "name": "gAddress",
+              "type": "string",
+              "optional": false,
+              "rest": false
+            }
+          ],
+          "returnType": "Promise<string | null>"
+        }
+      ]
+    },
+    "normalizeError": {
+      "kind": "function",
+      "signatures": [
+        {
+          "typeParams": [],
+          "params": [
+            {
+              "name": "err",
+              "type": "unknown",
+              "optional": false,
+              "rest": false
+            },
+            {
+              "name": "fallbackCode",
+              "type": "string",
+              "optional": false,
+              "rest": false
+            },
+            {
+              "name": "fallbackMessage",
+              "type": "string",
+              "optional": false,
+              "rest": false
+            }
+          ],
+          "returnType": "ILNError"
+        }
+      ]
+    },
+    "parseAmount": {
+      "kind": "function",
+      "signatures": [
+        {
+          "typeParams": [],
+          "params": [
+            {
+              "name": "input",
+              "type": "string",
+              "optional": false,
+              "rest": false
+            },
+            {
+              "name": "token",
+              "type": "AmountToken",
+              "optional": false,
+              "rest": false
+            }
+          ],
+          "returnType": "bigint"
+        }
+      ]
+    },
+    "parseContractError": {
+      "kind": "function",
+      "signatures": [
+        {
+          "typeParams": [],
+          "params": [
+            {
+              "name": "xdrError",
+              "type": "unknown",
+              "optional": false,
+              "rest": false
+            },
+            {
+              "name": "signature",
+              "type": "string | undefined",
+              "optional": true,
+              "rest": false
+            }
+          ],
+          "returnType": "ILNError"
+        }
+      ]
+    },
+    "parseGovernanceProposal": {
+      "kind": "function",
+      "signatures": [
+        {
+          "typeParams": [],
+          "params": [
+            {
+              "name": "value",
+              "type": "unknown",
+              "optional": false,
+              "rest": false
+            }
+          ],
+          "returnType": "GovernanceProposal"
+        }
+      ]
+    },
+    "parseGovernanceProposalListSimulation": {
+      "kind": "function",
+      "signatures": [
+        {
+          "typeParams": [],
+          "params": [
+            {
+              "name": "simulation",
+              "type": "unknown",
+              "optional": false,
+              "rest": false
+            },
+            {
+              "name": "method",
+              "type": "string",
+              "optional": false,
+              "rest": false
+            }
+          ],
+          "returnType": "GovernanceProposal[]"
+        }
+      ]
+    },
+    "parseGovernanceProposalSimulation": {
+      "kind": "function",
+      "signatures": [
+        {
+          "typeParams": [],
+          "params": [
+            {
+              "name": "simulation",
+              "type": "unknown",
+              "optional": false,
+              "rest": false
+            },
+            {
+              "name": "method",
+              "type": "string",
+              "optional": false,
+              "rest": false
+            }
+          ],
+          "returnType": "GovernanceProposal"
+        }
+      ]
+    },
+    "parseStellarURI": {
+      "kind": "function",
+      "signatures": [
+        {
+          "typeParams": [],
+          "params": [
+            {
+              "name": "uri",
+              "type": "string",
+              "optional": false,
+              "rest": false
+            }
+          ],
+          "returnType": "DeepLinkResult | null"
+        }
+      ]
+    },
+    "parseVersion": {
+      "kind": "function",
+      "signatures": [
+        {
+          "typeParams": [],
+          "params": [
+            {
+              "name": "version",
+              "type": "string",
+              "optional": false,
+              "rest": false
+            }
+          ],
+          "returnType": "VersionInfo"
+        }
+      ]
+    },
+    "resolveFederationAddress": {
+      "kind": "function",
+      "signatures": [
+        {
+          "typeParams": [],
+          "params": [
+            {
+              "name": "fedAddress",
+              "type": "string",
+              "optional": false,
+              "rest": false
+            }
+          ],
+          "returnType": "Promise<string>"
+        }
+      ]
+    },
+    "resolveRequestTimeouts": {
+      "kind": "function",
+      "signatures": [
+        {
+          "typeParams": [],
+          "params": [
+            {
+              "name": "config",
+              "type": "{ timeoutMs?: number; timeouts?: Partial<RequestTimeouts>; }",
+              "optional": false,
+              "rest": false
+            }
+          ],
+          "returnType": "RequestTimeouts"
+        }
+      ]
+    },
+    "resolveWalletDeepLink": {
+      "kind": "function",
+      "signatures": [
+        {
+          "typeParams": [],
+          "params": [
+            {
+              "name": "walletNameOrScheme",
+              "type": "string",
+              "optional": false,
+              "rest": false
+            }
+          ],
+          "returnType": "string"
+        }
+      ]
+    },
+    "scaledMultiply": {
+      "kind": "function",
+      "signatures": [
+        {
+          "typeParams": [],
+          "params": [
+            {
+              "name": "amount",
+              "type": "bigint",
+              "optional": false,
+              "rest": false
+            },
+            {
+              "name": "numerator",
+              "type": "bigint",
+              "optional": false,
+              "rest": false
+            },
+            {
+              "name": "denominator",
+              "type": "bigint",
+              "optional": false,
+              "rest": false
+            },
+            {
+              "name": "token",
+              "type": "AmountToken",
+              "optional": false,
+              "rest": false
+            }
+          ],
+          "returnType": "bigint"
+        }
+      ]
+    },
+    "subtractAmounts": {
+      "kind": "function",
+      "signatures": [
+        {
+          "typeParams": [],
+          "params": [
+            {
+              "name": "a",
+              "type": "bigint",
+              "optional": false,
+              "rest": false
+            },
+            {
+              "name": "b",
+              "type": "bigint",
+              "optional": false,
+              "rest": false
+            },
+            {
+              "name": "token",
+              "type": "AmountToken",
+              "optional": false,
+              "rest": false
+            }
+          ],
+          "returnType": "bigint"
+        }
+      ]
+    },
+    "toILNError": {
+      "kind": "const",
+      "type": "(err: unknown, fallbackCode?: string, fallbackMessage?: string) => ILNError"
+    },
+    "toReadable": {
+      "kind": "function",
+      "signatures": [
+        {
+          "typeParams": [],
+          "params": [
+            {
+              "name": "scVal",
+              "type": "stellarXdr.ScVal",
+              "optional": false,
+              "rest": false
+            }
+          ],
+          "returnType": "Readable"
+        }
+      ]
+    },
+    "validateAmount": {
+      "kind": "function",
+      "signatures": [
+        {
+          "typeParams": [],
+          "params": [
+            {
+              "name": "input",
+              "type": "string",
+              "optional": false,
+              "rest": false
+            },
+            {
+              "name": "token",
+              "type": "AmountToken",
+              "optional": false,
+              "rest": false
+            }
+          ],
+          "returnType": "ValidationResult"
+        }
+      ]
+    },
+    "verifyContractId": {
+      "kind": "function",
+      "signatures": [
+        {
+          "typeParams": [],
+          "params": [
+            {
+              "name": "contractId",
+              "type": "string",
+              "optional": false,
+              "rest": false
+            }
+          ],
+          "returnType": "ContractIdVerificationResult"
+        }
+      ]
+    },
+    "waitForDeepLinkCallback": {
+      "kind": "function",
+      "signatures": [
+        {
+          "typeParams": [],
+          "params": [
+            {
+              "name": "timeoutMs",
+              "type": "number",
+              "optional": false,
+              "rest": false
+            }
+          ],
+          "returnType": "Promise<string>"
+        }
+      ]
+    },
+    "withBackoff": {
+      "kind": "function",
+      "signatures": [
+        {
+          "typeParams": [
+            "T"
+          ],
+          "params": [
+            {
+              "name": "fn",
+              "type": "() => Promise<T>",
+              "optional": false,
+              "rest": false
+            },
+            {
+              "name": "options",
+              "type": "BackoffOptions",
+              "optional": false,
+              "rest": false
+            }
+          ],
+          "returnType": "Promise<BackoffResult<T>>"
+        }
+      ]
+    },
+    "withDeprecationWarning": {
+      "kind": "function",
+      "signatures": [
+        {
+          "typeParams": [
+            "T"
+          ],
+          "params": [
+            {
+              "name": "method",
+              "type": "string",
+              "optional": false,
+              "rest": false
+            },
+            {
+              "name": "fn",
+              "type": "() => T",
+              "optional": false,
+              "rest": false
+            },
+            {
+              "name": "logger",
+              "type": "((message: string) => void) | undefined",
+              "optional": true,
+              "rest": false
+            }
+          ],
+          "returnType": "T"
+        }
+      ]
+    },
+    "withRetry": {
+      "kind": "function",
+      "signatures": [
+        {
+          "typeParams": [
+            "T"
+          ],
+          "params": [
+            {
+              "name": "fn",
+              "type": "() => Promise<T>",
+              "optional": false,
+              "rest": false
+            },
+            {
+              "name": "options",
+              "type": "Partial<RetryOptions> | undefined",
+              "optional": true,
+              "rest": false
+            }
+          ],
+          "returnType": "Promise<T>"
+        }
+      ]
+    },
+    "withTimeout": {
+      "kind": "function",
+      "signatures": [
+        {
+          "typeParams": [
+            "T"
+          ],
+          "params": [
+            {
+              "name": "operation",
+              "type": "string",
+              "optional": false,
+              "rest": false
+            },
+            {
+              "name": "timeoutMs",
+              "type": "number",
+              "optional": false,
+              "rest": false
+            },
+            {
+              "name": "promise",
+              "type": "Promise<T>",
+              "optional": false,
+              "rest": false
+            }
+          ],
+          "returnType": "Promise<T>"
+        }
+      ]
+    },
+    "xdr": {
+      "kind": "const",
+      "type": "{ encode: (scVal: stellarXdr.ScVal) => string; decode: (encoded: string) => stellarXdr.ScVal; toReadable: (scVal: stellarXdr.ScVal) => Readable; }"
+    }
+  }
+}

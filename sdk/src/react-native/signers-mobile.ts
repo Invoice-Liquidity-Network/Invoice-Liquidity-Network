@@ -1,4 +1,5 @@
 import { Keypair, Networks, TransactionBuilder } from '@stellar/stellar-sdk';
+import { WalletNotConnectedError } from '../errors';
 import type { NetworkConfig, SignTransactionOptions, TransactionSigner } from '../types';
 import { buildSigningDeepLink, waitForDeepLinkCallback, buildCallbackUrl } from './deep-links';
 import { getPlatformAdapter } from './platform';
@@ -94,7 +95,7 @@ export function createDeepLinkSigner(
       const signedXdr = extractSignedXDRFromCallback(callbackUrlResult);
 
       if (!signedXdr) {
-        throw new Error('No signed transaction returned from wallet');
+        throw new WalletNotConnectedError('No signed transaction returned from wallet');
       }
 
       return signedXdr;

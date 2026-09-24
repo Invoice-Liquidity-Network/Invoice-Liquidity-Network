@@ -257,6 +257,133 @@ export class SimulationPreparedXdrMismatchError extends ILNError {
 }
 
 /**
+ * Thrown when an amount, token decimals, basis point value, or similar
+ * numeric input is malformed or out of the supported range.
+ */
+export class InvalidAmountError extends ILNError {
+  constructor(
+    message = 'Invalid amount.',
+    context?: Record<string, unknown>,
+    remediation = 'Check the amount and token decimals configuration. Amounts must be non-negative decimal values within the token precision.',
+  ) {
+    super(message, 'INVALID_AMOUNT', remediation, {
+      docsUrl: withDocs('INVALID_AMOUNT'),
+      context,
+      retryable: false,
+    });
+    Object.setPrototypeOf(this, new.target.prototype);
+  }
+}
+
+/**
+ * Thrown when a contract or RPC response cannot be parsed into the expected
+ * SDK shape (wrong field types, missing fields, or unknown enum values).
+ */
+export class InvalidContractResponseError extends ILNError {
+  constructor(
+    message = 'Contract returned an unexpected response.',
+    context?: Record<string, unknown>,
+    remediation = 'The contract response could not be parsed into the expected shape. Verify the deployed contract version matches the SDK, and inspect `context` for the offending field/value.',
+  ) {
+    super(message, 'INVALID_CONTRACT_RESPONSE', remediation, {
+      docsUrl: withDocs('INVALID_CONTRACT_RESPONSE'),
+      context,
+      retryable: false,
+    });
+    Object.setPrototypeOf(this, new.target.prototype);
+  }
+}
+
+/**
+ * Thrown when a transaction cannot be assembled (wrong operation count,
+ * missing invokeHostFunction operation, or unsupported topic/action).
+ */
+export class TransactionBuildError extends ILNError {
+  constructor(
+    message = 'Failed to build transaction.',
+    context?: Record<string, unknown>,
+    remediation = 'The transaction could not be assembled from the provided operations. Review the operation list and contract ABI used.',
+  ) {
+    super(message, 'TRANSACTION_BUILD_ERROR', remediation, {
+      docsUrl: withDocs('TRANSACTION_BUILD_ERROR'),
+      context,
+      retryable: false,
+    });
+    Object.setPrototypeOf(this, new.target.prototype);
+  }
+}
+
+/**
+ * Thrown when a notifications API (email/webhook) request fails.
+ */
+export class NotificationsApiError extends ILNError {
+  constructor(
+    message = 'Notifications API request failed.',
+    context?: Record<string, unknown>,
+    remediation = 'The notifications service rejected the request. Verify the notification endpoints, payload, and service availability.',
+  ) {
+    super(message, 'NOTIFICATIONS_API_ERROR', remediation, {
+      docsUrl: withDocs('NOTIFICATIONS_API_ERROR'),
+      context,
+      retryable: true,
+    });
+    Object.setPrototypeOf(this, new.target.prototype);
+  }
+}
+
+/**
+ * Thrown when a plugin registry operation (register/unregister/load/metric) fails.
+ */
+export class PluginError extends ILNError {
+  constructor(
+    message = 'Plugin error.',
+    context?: Record<string, unknown>,
+    remediation = 'The plugin registry rejected the operation. Check the plugin id/name, registration state, and metric/widget availability.',
+  ) {
+    super(message, 'PLUGIN_ERROR', remediation, {
+      docsUrl: withDocs('PLUGIN_ERROR'),
+      context,
+      retryable: false,
+    });
+    Object.setPrototypeOf(this, new.target.prototype);
+  }
+}
+
+/**
+ * Thrown when the offline queue has reached its maximum capacity.
+ */
+export class OfflineQueueFullError extends ILNError {
+  constructor(
+    message = 'Offline queue is full.',
+    context?: Record<string, unknown>,
+    remediation = 'The offline queue has reached its capacity. Process pending queued operations or increase `maxQueueSize` on the offline manager.',
+  ) {
+    super(message, 'OFFLINE_QUEUE_FULL', remediation, {
+      docsUrl: withDocs('OFFLINE_QUEUE_FULL'),
+      context,
+      retryable: false,
+    });
+    Object.setPrototypeOf(this, new.target.prototype);
+  }
+}
+
+/**
+ * Thrown when a Stellar Federation address cannot be resolved.
+ *
+ * @deprecated Use the generic `resolveFederationAddress` error handling via `normalizeError`; the class remains exported for compatibility.
+ */
+export class FederationResolutionError extends ILNError {
+  constructor(message = 'Failed to resolve Federation address.', context?: Record<string, unknown>) {
+    super(message, 'FEDERATION_RESOLUTION_FAILED', 'Verify the Federation address format and that the address is registered with the hosting domain.', {
+      docsUrl: withDocs('FEDERATION_RESOLUTION_FAILED'),
+      context,
+      retryable: false,
+    });
+    Object.setPrototypeOf(this, new.target.prototype);
+  }
+}
+
+/**
  * Parse a raw contract error into a typed ILNError with detailed debugging context.
  *
  * @param xdrError - The raw error value from the contract.

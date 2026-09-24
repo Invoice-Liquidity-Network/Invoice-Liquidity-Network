@@ -35,6 +35,9 @@ jobs:
       - name: Setup pnpm with store cache
         uses: ./.github/actions/setup-pnpm
 
+      - name: Build SDK (required by CLI docs generation)
+        run: pnpm --filter "@iln/sdk..." build
+
       - name: Generate CLI docs
         id: generate
         run: pnpm --filter @invoice-liquidity/cli docs:generate

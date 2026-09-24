@@ -1,4 +1,7 @@
 import { Keypair } from '@stellar/stellar-sdk';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 import { Writable } from 'node:stream';
 
 import { describe, expect, it, vi, afterEach } from 'vitest';
@@ -830,6 +833,156 @@ describe('man command', () => {
     });
     expect(stdout.toString()).toContain('unknown command');
   });
+
+  it('watch prints the current status and exits once an invoice reaches a terminal state', async () => {
+    const stdout = createMemoryStream();
+    const invoice: Invoice = createInvoice({ id: 9n, status: 'Paid' });
+    const client = {
+      getInvoice: vi.fn().mockResolvedValue(invoice),
+    };
+
+    const exitCode = await runCli(['--quiet', 'watch', '--id', '9'], {
+      createClient: () => client as any,
+      loadConfig: () => TEST_CONFIG,
+      stderr: createMemoryStream(),
+      stdout,
+    });
+
+    expect(exitCode).toBe(0);
+    expect(client.getInvoice).toHaveBeenCalledWith(9n);
+    expect(stdout.toString()).toContain('Invoice 9');
+    expect(stdout.toString()).toContain('Paid');
+  });
+
+  it('exports invoices to CSV on stdout', async () => {
+    const stdout = createMemoryStream();
+    const client = {
+      listInvoicesByAddress: vi
+        .fn()
+        .mockResolvedValue([
+          createListedInvoice({ id: 1n, role: 'freelancer', status: 'Pending' }),
+        ]),
+    };
+
+    const exitCode = await runCli(['export', '--address', validAddress(), '--output', '-'], {
+      createClient: () => client as any,
+      loadConfig: () => TEST_CONFIG,
+      stderr: createMemoryStream(),
+      stdout,
+    });
+
+    expect(exitCode).toBe(0);
+    expect(client.listInvoicesByAddress).toHaveBeenCalledWith(expect.any(String));
+    expect(stdout.toString()).toContain(
+      'id,freelancer,payer,amount,discountRate,dueDate,status,funder,fundedAt'
+    );
+    expect(stdout.toString()).toContain('1,');
+  });
+
+  it('exports all invoices when no address filter is given', async () => {
+    const stdout = createMemoryStream();
+    const client = {
+      getInvoiceCount: vi.fn().mockResolvedValue(2n),
+      getInvoice: vi.fn().mockImplementation(async (id: bigint) => createInvoice({ id })),
+    };
+
+    const exitCode = await runCli(['export', '--output', '-'], {
+      createClient: () => client as any,
+      loadConfig: () => TEST_CONFIG,
+      stderr: createMemoryStream(),
+      stdout,
+    });
+
+    expect(exitCode).toBe(0);
+    expect(client.getInvoiceCount).toHaveBeenCalledTimes(1);
+    expect(client.getInvoice).toHaveBeenCalledTimes(2);
+  });
+
+  it('prints protocol-wide analytics from iln stats', async () => {
+    const stdout = createMemoryStream();
+    vi.spyOn(sdk, 'AnalyticsSDK').mockImplementation(function MockAnalyticsSDK() {
+      return {
+        getProtocolStats: vi.fn().mockResolvedValue({
+          totalInvoices: 10n,
+          totalFunded: 6n,
+          totalPaid: 4n,
+          totalVolume: 500_000_000n,
+        }),
+      } as any;
+    } as any);
+
+    const exitCode = await runCli(['stats'], {
+      createClient: () => ({} as any),
+      loadConfig: () => TEST_CONFIG,
+      stderr: createMemoryStream(),
+      stdout,
+    });
+
+    expect(exitCode).toBe(0);
+    expect(stdout.toString()).toContain('Invoices');
+    expect(stdout.toString()).toContain('10');
+    expect(stdout.toString()).toContain('Volume');
+  });
+
+  it('prints the reputation score for an address', async () => {
+    const stdout = createMemoryStream();
+    const address = validAddress();
+    const client = {
+      getReputation: vi.fn().mockResolvedValue(87),
+    };
+
+    const exitCode = await runCli(['reputation', 'get', address], {
+      createClient: () => client as any,
+      loadConfig: () => TEST_CONFIG,
+      stderr: createMemoryStream(),
+      stdout,
+    });
+
+    expect(exitCode).toBe(0);
+    expect(client.getReputation).toHaveBeenCalledWith(address);
+    expect(stdout.toString()).toContain('87');
+  });
+
+  it('switches the active network and persists it to .ilnrc.json', async () => {
+    const stdout = createMemoryStream();
+    const cwd = fs.mkdtempSync(path.join(os.tmpdir(), 'iln-cli-network-'));
+    fs.writeFileSync(
+      path.join(cwd, '.ilnrc.json'),
+      JSON.stringify({ version: 2, network: 'testnet', contractIds: {}, aliases: {} }, null, 2)
+    );
+    const previousCwd = process.cwd();
+    process.chdir(cwd);
+
+    try {
+      const exitCode = await runCli(['network', 'switch', 'mainnet'], {
+        createClient: () => ({} as any),
+        loadConfig: () => TEST_CONFIG,
+        stderr: createMemoryStream(),
+        stdout,
+      });
+
+      expect(exitCode).toBe(0);
+      expect(stdout.toString()).toContain('mainnet');
+      const written = JSON.parse(fs.readFileSync(path.join(cwd, '.ilnrc.json'), 'utf8'));
+      expect(written.network).toBe('mainnet');
+    } finally {
+      process.chdir(previousCwd);
+      fs.rmSync(cwd, { recursive: true, force: true });
+    }
+  });
+
+  it('rejects an unsupported network in network switch', async () => {
+    const stderr = createMemoryStream();
+    const exitCode = await runCli(['network', 'switch', 'devnet'], {
+      createClient: () => ({} as any),
+      loadConfig: () => TEST_CONFIG,
+      stderr,
+      stdout: createMemoryStream(),
+    });
+
+    expect(exitCode).toBe(1);
+    expect(stderr.toString()).toContain('Unsupported network');
+  });
 });
 
 function createMemoryStream(): Writable & { toString(): string } {
@@ -847,6 +1000,26 @@ function createMemoryStream(): Writable & { toString(): string } {
       },
     }
   );
+}
+
+function createInvoice(
+  overrides: Partial<Invoice> & Pick<Invoice, 'id'> & { status?: string }
+): Invoice {
+  const { id, ...rest } = overrides;
+  return {
+    amount: 1_000_000_000n,
+    amountFunded: 0n,
+    discountRate: 300,
+    dueDate: 1_767_225_599,
+    freelancer: validAddress(),
+    fundedAt: null,
+    funder: null,
+    id,
+    payer: validAddress('B'),
+    status: 'Pending',
+    token: 'CTOKEN',
+    ...rest,
+  };
 }
 
 function createListedInvoice(

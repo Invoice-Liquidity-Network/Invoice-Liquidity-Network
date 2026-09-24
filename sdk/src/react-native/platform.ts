@@ -1,3 +1,5 @@
+import { NetworkError, WalletNotConnectedError } from '../errors';
+
 export type PlatformType = 'react-native' | 'browser' | 'node' | 'unknown';
 
 export interface PlatformAdapter {
@@ -61,7 +63,7 @@ function rnOpenURL(url: string): Promise<void> {
     const Linking = require('react-native').Linking;
     return Linking.openURL(url);
   } catch {
-    return Promise.reject(new Error('Linking.openURL is not available'));
+    return Promise.reject(new WalletNotConnectedError('Linking.openURL is not available'));
   }
 }
 
@@ -92,7 +94,7 @@ function globalFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Resp
   if (typeof globalThis !== 'undefined' && typeof globalThis.fetch === 'function') {
     return globalThis.fetch(input, init);
   }
-  return Promise.reject(new Error('fetch is not available'));
+  return Promise.reject(new NetworkError('fetch is not available'));
 }
 
 export function getPlatformAdapter(): PlatformAdapter {
@@ -116,7 +118,7 @@ export function getPlatformAdapter(): PlatformAdapter {
     getEnv: getEnvValue,
     getStorage: resolveStorage,
     openURL: async (_url: string) => {
-      throw new Error('openURL is not available on this platform');
+      throw new WalletNotConnectedError('openURL is not available on this platform');
     },
     getInitialURL: async () => null,
     addURLListener: () => () => {},

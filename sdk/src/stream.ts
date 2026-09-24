@@ -34,6 +34,8 @@ type OnError = (err: Error) => void | undefined;
  * stream.close();
  * ```
  */
+import { NetworkError } from './errors';
+
 export class SSEStream {
   private url: string;
   private onEvent: OnEvent;
@@ -73,7 +75,10 @@ export class SSEStream {
       })
       .then(async (res) => {
         if (!res.ok || !res.body) {
-          throw new Error(`SSE stream failed: HTTP ${res.status}`);
+          throw new NetworkError(`SSE stream failed: HTTP ${res.status}`, undefined, {
+            status: res.status,
+            url: this.url,
+          });
         }
 
         const reader = res.body.getReader();
