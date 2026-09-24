@@ -1,4 +1,12 @@
-import { existsSync, mkdirSync, readdirSync, statSync, unlinkSync, readFileSync, copyFileSync } from 'fs';
+import {
+  existsSync,
+  mkdirSync,
+  readdirSync,
+  statSync,
+  unlinkSync,
+  readFileSync,
+  copyFileSync,
+} from 'fs';
 import { join } from 'path';
 import Database from 'better-sqlite3';
 import { CONFIG } from './config';

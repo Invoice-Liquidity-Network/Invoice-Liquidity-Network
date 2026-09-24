@@ -539,7 +539,11 @@ describe('circuit breaker', () => {
     // Trip the circuit
     emailSend.mockRejectedValue(new Error('down'));
     for (let i = 0; i < 5; i++) {
-      try { await sendEmail(sub, makePayload()); } catch { /* expected */ }
+      try {
+        await sendEmail(sub, makePayload());
+      } catch {
+        /* expected */
+      }
     }
     expect(getCircuitBreakerState('recover@example.com')).toBe('open');
 
@@ -556,7 +560,11 @@ describe('circuit breaker', () => {
 
   it('records webhook circuit breaker on exhausted retries', async () => {
     fetchMock.mockResolvedValue({ ok: false, status: 500 });
-    const sub = makeSubscription({ id: 3, channel: 'webhook', destination: 'https://fail.example.com/hook' });
+    const sub = makeSubscription({
+      id: 3,
+      channel: 'webhook',
+      destination: 'https://fail.example.com/hook',
+    });
 
     await sendWebhook(sub, makePayload());
     await vi.runAllTimersAsync();
@@ -571,7 +579,11 @@ describe('circuit breaker', () => {
 
     // Trip the circuit for bad@example.com
     for (let i = 0; i < 5; i++) {
-      try { await sendEmail(bad, makePayload()); } catch { /* expected */ }
+      try {
+        await sendEmail(bad, makePayload());
+      } catch {
+        /* expected */
+      }
     }
 
     // good@example.com is unaffected

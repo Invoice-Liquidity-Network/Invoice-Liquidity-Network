@@ -181,27 +181,24 @@ export class ILNSdk {
     }
 
     // Wrap the promise factory for retry with backoff
-    const { result } = await withBackoff(
-      () => this.executeRpcCall(promise, operationName),
-      {
-        ...this.backoffOptions,
-        isRetryable: (error) => {
-          // Don't retry if it's a known ILN error (non-transient)
-          if (error instanceof ILNError) return false;
-          // Don't retry timeout errors — they should surface immediately
-          if (error instanceof TimeoutError) return false;
-          // Delegate to default transient error check
-          return isTransientError(error);
-        },
-        onRetry: (attempt, error, delayMs) => {
-          if (this.logger.enabled) {
-            this.logger(`Retrying ${operationName} (attempt ${attempt}) after ${delayMs}ms`, {
-              error: error instanceof Error ? error.message : String(error),
-            });
-          }
-        },
-      }
-    );
+    const { result } = await withBackoff(() => this.executeRpcCall(promise, operationName), {
+      ...this.backoffOptions,
+      isRetryable: (error) => {
+        // Don't retry if it's a known ILN error (non-transient)
+        if (error instanceof ILNError) return false;
+        // Don't retry timeout errors — they should surface immediately
+        if (error instanceof TimeoutError) return false;
+        // Delegate to default transient error check
+        return isTransientError(error);
+      },
+      onRetry: (attempt, error, delayMs) => {
+        if (this.logger.enabled) {
+          this.logger(`Retrying ${operationName} (attempt ${attempt}) after ${delayMs}ms`, {
+            error: error instanceof Error ? error.message : String(error),
+          });
+        }
+      },
+    });
 
     return result;
   }
@@ -1554,8 +1551,14 @@ export class ILNSdk {
       }
       // If XDR parsing itself fails, that's a clear sign of tampering
       throw new SimulationPreparedXdrMismatchError(
-        `Failed to parse prepared transaction XDR: ${error instanceof Error ? error.message : String(error)}`,
-        { operationName, originalXdrLength: originalXdr.length, preparedXdrLength: preparedXdr.length }
+        `Failed to parse prepared transaction XDR: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+        {
+          operationName,
+          originalXdrLength: originalXdr.length,
+          preparedXdrLength: preparedXdr.length,
+        }
       );
     }
   }

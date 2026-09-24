@@ -129,7 +129,9 @@ const GOVERNANCE_CONTRACT_ERROR_MESSAGES: Record<number, string> = {
 };
 
 export function explainGovernanceContractError(code: number): string {
-  return GOVERNANCE_CONTRACT_ERROR_MESSAGES[code] ?? `Governance contract returned error code ${code}.`;
+  return (
+    GOVERNANCE_CONTRACT_ERROR_MESSAGES[code] ?? `Governance contract returned error code ${code}.`
+  );
 }
 
 export function formatUnknownError(error: unknown): string {

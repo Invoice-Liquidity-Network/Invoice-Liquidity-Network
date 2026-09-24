@@ -103,7 +103,8 @@ describe('withBackoff', () => {
   });
 
   it('retries on transient errors and eventually succeeds', async () => {
-    const fn = vi.fn()
+    const fn = vi
+      .fn()
       .mockRejectedValueOnce(new Error('fetch failed'))
       .mockRejectedValueOnce(new Error('ECONNREFUSED'))
       .mockResolvedValue('success');
@@ -136,9 +137,9 @@ describe('withBackoff', () => {
   it('does not retry non-transient errors', async () => {
     const fn = vi.fn().mockRejectedValue(new Error('validation failed'));
 
-    await expect(
-      withBackoff(fn, { maxRetries: 3, baseDelayMs: 100 })
-    ).rejects.toThrow('validation failed');
+    await expect(withBackoff(fn, { maxRetries: 3, baseDelayMs: 100 })).rejects.toThrow(
+      'validation failed'
+    );
 
     expect(fn).toHaveBeenCalledTimes(1);
   });
@@ -163,9 +164,7 @@ describe('withBackoff', () => {
   });
 
   it('calls onRetry callback before each retry', async () => {
-    const fn = vi.fn()
-      .mockRejectedValueOnce(new Error('fetch failed'))
-      .mockResolvedValue('ok');
+    const fn = vi.fn().mockRejectedValueOnce(new Error('fetch failed')).mockResolvedValue('ok');
 
     const onRetry = vi.fn();
 
@@ -188,9 +187,9 @@ describe('withBackoff', () => {
   it('disables retries when maxRetries is 0', async () => {
     const fn = vi.fn().mockRejectedValue(new Error('fetch failed'));
 
-    await expect(
-      withBackoff(fn, { maxRetries: 0, baseDelayMs: 100 })
-    ).rejects.toThrow('fetch failed');
+    await expect(withBackoff(fn, { maxRetries: 0, baseDelayMs: 100 })).rejects.toThrow(
+      'fetch failed'
+    );
 
     expect(fn).toHaveBeenCalledTimes(1);
   });
