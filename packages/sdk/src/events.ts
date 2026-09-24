@@ -98,6 +98,42 @@ export interface InvoiceDisputedEvent {
   timestamp: bigint;
 }
 
+export interface DisputeEvidenceSubmittedEvent {
+  type: 'DisputeEvidenceSubmitted';
+  /** Unique invoice identifier. */
+  invoiceId: bigint;
+  /** Stellar address of party submitting evidence. */
+  submitter: string;
+  /** IPFS CID of the attached evidence. */
+  evidenceCid: string;
+  /** Ledger close timestamp of the event. */
+  timestamp: bigint;
+}
+
+export interface DisputeResolvedEvent {
+  type: 'DisputeResolved';
+  /** Unique invoice identifier. */
+  invoiceId: bigint;
+  /** Stellar address of the arbitrator who resolved the dispute. */
+  resolver: string;
+  /** Resolution decision. */
+  decision: 'favor_payer' | 'favor_freelancer';
+  /** Resolution notes or arbitration memo. */
+  notes?: string;
+  /** Ledger close timestamp of the event. */
+  timestamp: bigint;
+}
+
+export interface DisputeAutoResolvedEvent {
+  type: 'DisputeAutoResolved';
+  /** Unique invoice identifier. */
+  invoiceId: bigint;
+  /** Auto-resolution decision (defaults to favor_freelancer). */
+  decision: 'favor_freelancer';
+  /** Ledger close timestamp of the event. */
+  timestamp: bigint;
+}
+
 /**
  * Parsed ReputationUpdated event (XDR projection).
  * See InvoiceSubmittedEvent comment for why this differs from @iln/shared.
@@ -158,6 +194,9 @@ export type ContractEvent =
   | InvoiceCancelledEvent
   | InvoiceExpiredEvent
   | InvoiceDisputedEvent
+  | DisputeEvidenceSubmittedEvent
+  | DisputeResolvedEvent
+  | DisputeAutoResolvedEvent
   | ReputationUpdatedEvent
   | ContractPausedEvent
   | TokenAddedEvent
@@ -239,6 +278,9 @@ const EVENT_NAME_MAP: Record<string, string> = {
   invoice_cancelled: 'InvoiceCancelled',
   invoice_expired: 'InvoiceExpired',
   invoice_disputed: 'InvoiceDisputed',
+  dispute_evidence_submitted: 'DisputeEvidenceSubmitted',
+  dispute_resolved: 'DisputeResolved',
+  dispute_auto_resolved: 'DisputeAutoResolved',
   reputation_updated: 'ReputationUpdated',
   contract_paused: 'ContractPaused',
   token_added: 'TokenAdded',
@@ -383,6 +425,70 @@ export function parseInvoiceDisputedEvent(raw: RawEvent): InvoiceDisputedEvent |
 }
 
 /**
+ * Parses a `DisputeEvidenceSubmitted` event from raw Soroban event data.
+ */
+export function parseDisputeEvidenceSubmittedEvent(raw: RawEvent): DisputeEvidenceSubmittedEvent | null {
+  if (raw.topics.length < 2) return null;
+  const name = symbolToString(raw.topics[0]);
+  if (name !== 'dispute_evidence_submitted') return null;
+
+  const invoiceId = toBigint(nativeValue(raw.topics[1]));
+  if (invoiceId === null) return null;
+
+  return {
+    type: 'DisputeEvidenceSubmitted',
+    invoiceId,
+    submitter: toString(nativeValue(raw.topics[2])) ?? '',
+    evidenceCid: extractStringMap(raw.value, 'evidence_cid') ?? extractStringMap(raw.value, 'evidenceCid') ?? '',
+    timestamp: extractBigintMap(raw.value, 'timestamp') ?? 0n,
+  };
+}
+
+/**
+ * Parses a `DisputeResolved` event from raw Soroban event data.
+ */
+export function parseDisputeResolvedEvent(raw: RawEvent): DisputeResolvedEvent | null {
+  if (raw.topics.length < 2) return null;
+  const name = symbolToString(raw.topics[0]);
+  if (name !== 'dispute_resolved') return null;
+
+  const invoiceId = toBigint(nativeValue(raw.topics[1]));
+  if (invoiceId === null) return null;
+
+  const rawDecision = extractStringMap(raw.value, 'decision') ?? '';
+  const decision: 'favor_payer' | 'favor_freelancer' =
+    rawDecision === 'favor_payer' ? 'favor_payer' : 'favor_freelancer';
+
+  return {
+    type: 'DisputeResolved',
+    invoiceId,
+    resolver: toString(nativeValue(raw.topics[2])) ?? '',
+    decision,
+    notes: extractStringMap(raw.value, 'notes') ?? undefined,
+    timestamp: extractBigintMap(raw.value, 'timestamp') ?? 0n,
+  };
+}
+
+/**
+ * Parses a `DisputeAutoResolved` event from raw Soroban event data.
+ */
+export function parseDisputeAutoResolvedEvent(raw: RawEvent): DisputeAutoResolvedEvent | null {
+  if (raw.topics.length < 2) return null;
+  const name = symbolToString(raw.topics[0]);
+  if (name !== 'dispute_auto_resolved') return null;
+
+  const invoiceId = toBigint(nativeValue(raw.topics[1]));
+  if (invoiceId === null) return null;
+
+  return {
+    type: 'DisputeAutoResolved',
+    invoiceId,
+    decision: 'favor_freelancer',
+    timestamp: extractBigintMap(raw.value, 'timestamp') ?? 0n,
+  };
+}
+
+/**
  * Parses a `ReputationUpdated` event from raw Soroban event data.
  *
  * @param raw - The decoded raw event (topics + value).
@@ -466,6 +572,9 @@ const PARSERS: Record<string, ParserFn> = {
   invoice_cancelled: parseInvoiceCancelledEvent as ParserFn,
   invoice_expired: parseInvoiceExpiredEvent as ParserFn,
   invoice_disputed: parseInvoiceDisputedEvent as ParserFn,
+  dispute_evidence_submitted: parseDisputeEvidenceSubmittedEvent as ParserFn,
+  dispute_resolved: parseDisputeResolvedEvent as ParserFn,
+  dispute_auto_resolved: parseDisputeAutoResolvedEvent as ParserFn,
   reputation_updated: parseReputationUpdatedEvent as ParserFn,
   contract_paused: parseContractPausedEvent as ParserFn,
   token_added: parseTokenAddedEvent as ParserFn,

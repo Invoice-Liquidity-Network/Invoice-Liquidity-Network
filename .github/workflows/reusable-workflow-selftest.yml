@@ -1,0 +1,134 @@
+# =============================================================================
+# Reusable Workflow Self-Tests
+#
+# Exercises each core reusable workflow in isolation so regressions are caught
+# before consuming workflows are affected.
+#
+# Triggers: weekly schedule (Monday 04:00 UTC) and manual dispatch.
+# Each job calls one reusable workflow with minimal inputs and then validates
+# the outputs it advertised.
+#
+# Contract summary (see individual reusable workflow headers for full detail):
+#
+#   reusable-cache-pnpm.yml
+#   ├── Inputs:  node-version, pnpm-version, lockfile-path, cache-key-prefix,
+#   │            install-dependencies, install-args
+#   ├── Outputs: cache-hit (string "true"/"false")
+#   └── Side effects: populates the GitHub Actions store with the pnpm store
+#
+#   reusable-stellar-setup.yml
+#   ├── Inputs:  identity-name, network, fund-identity, horizon-url, rpc-url,
+#   │            network-passphrase, stellar-cli-features
+#   ├── Outputs: identity-name, public-key, network
+#   └── Side effects: installs Stellar CLI, creates & funds a testnet identity
+#
+#   reusable-testnet-health.yml
+#   ├── Inputs:  horizon-url, max-attempts, retry-delay-seconds
+#   ├── Outputs: healthy (string "true"/"false")
+#   └── Side effects: none (HTTP probes only)
+# =============================================================================
+
+name: Reusable Workflow Self-Test
+
+on:
+  schedule:
+    - cron: '0 4 * * 1' # Weekly: Monday at 04:00 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # 1. pnpm store cache
+  # ---------------------------------------------------------------------------
+  test-cache-pnpm:
+    name: Self-test — pnpm cache
+    uses: ./.github/workflows/reusable-cache-pnpm.yml
+    with:
+      install-dependencies: true
+
+  verify-cache-pnpm:
+    name: Verify — pnpm cache
+    needs: test-cache-pnpm
+    runs-on: ubuntu-latest
+    steps:
+      - name: Validate cache-hit output exists
+        run: |
+          if [ -z "${{ needs.test-cache-pnpm.outputs.cache-hit }}" ]; then
+            echo "::error::cache-hit output was empty"
+            exit 1
+          fi
+          echo "cache-hit = ${{ needs.test-cache-pnpm.outputs.cache-hit }}"
+
+  # ---------------------------------------------------------------------------
+  # 2. Stellar CLI + testnet identity
+  # ---------------------------------------------------------------------------
+  test-stellar-setup:
+    name: Self-test — Stellar setup
+    uses: ./.github/workflows/reusable-stellar-setup.yml
+    with:
+      identity-name: ci-selftest
+      fund-identity: true
+
+  verify-stellar-setup:
+    name: Verify — Stellar setup
+    needs: test-stellar-setup
+    runs-on: ubuntu-latest
+    steps:
+      - name: Validate identity-name output
+        run: |
+          NAME="${{ needs.test-stellar-setup.outputs.identity-name }}"
+          if [ "$NAME" != "ci-selftest" ]; then
+            echo "::error::Expected identity-name 'ci-selftest', got '$NAME'"
+            exit 1
+          fi
+
+      - name: Validate public-key output
+        run: |
+          KEY="${{ needs.test-stellar-setup.outputs.public-key }}"
+          if [ -z "$KEY" ]; then
+            echo "::error::public-key output was empty"
+            exit 1
+          fi
+          if [[ ! "$KEY" =~ ^G[A-Z0-9]{55}$ ]]; then
+            echo "::error::public-key '$KEY' does not look like a Stellar G-address"
+            exit 1
+          fi
+          echo "public-key = $KEY"
+
+      - name: Validate network output
+        run: |
+          NET="${{ needs.test-stellar-setup.outputs.network }}"
+          if [ "$NET" != "testnet" ]; then
+            echo "::error::Expected network 'testnet', got '$NET'"
+            exit 1
+          fi
+
+  # ---------------------------------------------------------------------------
+  # 3. Horizon testnet health
+  # ---------------------------------------------------------------------------
+  test-net-health:
+    name: Self-test — testnet health
+    uses: ./.github/workflows/reusable-testnet-health.yml
+    with:
+      horizon-url: https://horizon-testnet.stellar.org
+      max-attempts: 2
+
+  verify-net-health:
+    name: Verify — testnet health
+    needs: test-net-health
+    runs-on: ubuntu-latest
+    steps:
+      - name: Validate healthy output
+        run: |
+          HEALTHY="${{ needs.test-net-health.outputs.healthy }}"
+          if [ -z "$HEALTHY" ]; then
+            echo "::error::healthy output was empty"
+            exit 1
+          fi
+          if [ "$HEALTHY" != "true" ]; then
+            echo "::warning::Horizon testnet health returned '$HEALTHY' (may be transient)"
+          else
+            echo "Horizon testnet is healthy ✓"
+          fi

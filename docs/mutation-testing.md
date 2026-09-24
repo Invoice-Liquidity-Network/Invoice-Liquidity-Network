@@ -5,7 +5,7 @@
 Mutation testing verifies that the test suite actually detects real bugs by
 introducing small code changes ("mutations") and confirming the tests fail.
 
-This project currently uses mutation testing in two contexts:
+This project currently uses mutation testing in two contexts. On 2026-08-27, the repository-owned TypeScript packages were reviewed separately from the frontend repository: `sdk/`, `indexer/`, `notifications/`, and `oracle-service/`. The existing CI workflow only executes `packages/sdk/src/errors.ts`; it does not establish coverage for those top-level packages. The scoped review therefore records the existing SDK errors run as the baseline and treats transaction-building/signing and oracle verification as priority follow-up targets.
 
 | Context | Tool | Target | Status |
 |---|---|---|---|
@@ -39,7 +39,18 @@ This project currently uses mutation testing in two contexts:
 - No external dependencies (pure TypeScript logic)
 - Fast mutation run (< 30 seconds on CI)
 
-### Adding New Stryker Targets
+### Repository-owned package review baseline (2026-08-27)
+
+| Package | Existing mutation configuration/result | Review outcome |
+|---|---|---|
+| `sdk/` | Stryker is configured only for `packages/sdk/src/errors.ts`; no top-level `sdk/` target is wired | Signing and transaction-building tests must be targeted separately; do not infer coverage from the frontend repo |
+| `indexer/` | No package mutation target configured | Rate limiting and GraphQL admission controls are covered by adversarial tests, but mutation testing remains a follow-up target |
+| `notifications/` | No package mutation target configured | No mutation result was available in the current workflow |
+| `oracle-service/` | No package mutation target configured | Verification branches have unit coverage; no mutation score is claimed |
+
+Priority remediation from this review: enforce exact IP parsing for the indexer whitelist and reject GraphQL requests above documented depth/complexity limits. These controls are now tested; future mutation runs should include their boundary predicates and the SDK signer pipeline.
+
+## Adding New Stryker Targets
 
 To add mutation testing for another SDK module:
 

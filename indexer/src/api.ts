@@ -1,5 +1,7 @@
 import express, { Request, Response, Router, RequestHandler } from 'express';
 import swaggerUi from 'swagger-ui-express';
+import crypto from 'crypto';
+import { traceMiddleware, withSpan } from '@iln/opentelemetry';
 import {
   getDb,
   getFreelancerStats,
@@ -24,6 +26,7 @@ import {
 } from './archive';
 import { getDashboardMetrics, recordRequest, recordError } from './dashboard';
 import { BackupManager } from './backup';
+import { observeHttpRequest, registry as metricsRegistry } from './metrics';
 import {
   SYNC_EXPORT_LIMIT,
   countInvoicesForExport,
@@ -52,12 +55,24 @@ export function createApp(): express.Application {
   // Trust the first hop's X-Forwarded-For (e.g. Railway's proxy) so
   // per-IP rate limiting sees real client IPs rather than the proxy's.
   app.set('trust proxy', 1);
+  // Distributed tracing — W3C traceparent propagation across indexer/oracle/notifications
+  app.use(traceMiddleware('indexer'));
   app.use(createApiRateLimiter());
   app.use(express.json());
 
+  // Prometheus metrics endpoint — also exposed as /v1/metrics for consistency
+  app.get('/metrics', async (_req: Request, res: Response) => {
+    res.setHeader('Content-Type', metricsRegistry.contentType);
+    res.end(await metricsRegistry.metrics());
+  });
+  app.get('/v1/metrics', async (_req: Request, res: Response) => {
+    res.setHeader('Content-Type', metricsRegistry.contentType);
+    res.end(await metricsRegistry.metrics());
+  });
+
   // ── GraphQL (queries, mutations, subscriptions via SSE + GraphiQL) ──────────
   const yoga = createGraphQLHandler();
-  app.use(yoga.graphqlEndpoint, yoga);
+  app.use('/graphql', yoga);
 
   // ── Swagger / OpenAPI docs ─────────────────────────────────────────────────
   app.use(
@@ -107,6 +122,9 @@ export function createApp(): express.Application {
       if (res.statusCode >= 400) {
         recordError(`${res.statusCode}`, `${req.method} ${req.path} returned ${res.statusCode}`);
       }
+      // SLO & cost instrumentation — latency SLI and per-request cost attribution
+      const route = (req.route?.path as string) ?? req.path;
+      observeHttpRequest(req.method, route, res.statusCode, duration / 1000);
     });
     next();
   };
@@ -150,7 +168,11 @@ export function createApp(): express.Application {
     const pa = typeof payer === 'string' ? payer : '';
     const fu = typeof funder === 'string' ? funder : '';
     const limit = typeof rawLimit === 'string' ? Math.min(parseInt(rawLimit, 10) || 100, 100) : 100;
-    const cacheKey = `invoices:${s}:${fl}:${pa}:${fu}:limit=${limit}:cursor=${cursor ?? ''}`;
+    
+    // Hash query parameters to prevent cache key collisions and poisoning
+    const params = { s, fl, pa, fu, limit, cursor: cursor ?? '' };
+    const hash = crypto.createHash('sha256').update(JSON.stringify(params)).digest('hex');
+    const cacheKey = `invoices:${hash}`;
 
     const cached = await cacheGet(cacheKey);
     if (cached) {

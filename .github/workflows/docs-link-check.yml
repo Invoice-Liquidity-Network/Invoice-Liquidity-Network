@@ -9,6 +9,7 @@ on:
     paths:
       - 'docs/**'
       - 'packages/docs/content/**'
+      - '*.md'
       - '.github/markdown-link-check.json'
       - '.github/workflows/docs-link-check.yml'
   push:
@@ -17,6 +18,7 @@ on:
     paths:
       - 'docs/**'
       - 'packages/docs/content/**'
+      - '*.md'
       - '.github/markdown-link-check.json'
   schedule:
     # Catch external link rot (moved or removed third-party pages) even on
@@ -55,3 +57,10 @@ jobs:
           config-file: '.github/markdown-link-check.json'
           folder-path: 'packages/docs/content'
           file-extension: '.mdx'
+
+      - name: Check links in root markdown files
+        uses: gaurav-nelson/github-action-markdown-link-check@5c5dfc0ac2e225883c0e5f03a85311ec2830d368 # v1
+        with:
+          use-quiet-mode: 'yes'
+          config-file: '.github/markdown-link-check.json'
+          file-path: 'README.md,CONTRIBUTING.md,SECURITY.md,DEPLOYMENT_GUIDE.md,CHANGELOG.md'

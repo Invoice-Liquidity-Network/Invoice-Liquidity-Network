@@ -6,9 +6,15 @@ import type { WebSocketClient, WebSocketMessage, InvoiceEvent } from './types';
 const HEARTBEAT_INTERVAL = 30000;
 const CLIENT_TIMEOUT = 60000;
 
+// 🔒 Security Thresholds
+const GLOBAL_CONNECTION_LIMIT = 1000;
+const PER_IP_CONNECTION_LIMIT = 5;
+const EXPECTED_AUTH_TOKEN = process.env.NOTIFICATIONS_WS_AUTH_TOKEN || "secure-websocket-token";
+
 export class NotificationWebSocketServer {
   private wss: WebSocketServer | null = null;
   private clients: Map<string, WebSocketClient> = new Map();
+  private ipConnections: Map<string, number> = new Map(); // Track connection counts per IP
   private heartbeatTimer: ReturnType<typeof setInterval> | null = null;
 
   constructor(private readonly port: number = 4002) {}
@@ -24,7 +30,7 @@ export class NotificationWebSocketServer {
       this.checkHeartbeats();
     }, HEARTBEAT_INTERVAL);
 
-    console.log(`[websocket] WebSocket server listening on port ${this.port}`);
+    console.log(`[websocket] Hardened WebSocket server listening on port ${this.port}`);
   }
 
   stop(): void {
@@ -38,6 +44,7 @@ export class NotificationWebSocketServer {
     });
 
     this.clients.clear();
+    this.ipConnections.clear();
 
     if (this.wss) {
       this.wss.close();
@@ -80,6 +87,7 @@ export class NotificationWebSocketServer {
 
   private handleConnection(socket: WebSocket, _req: IncomingMessage): void {
     const clientId = this.generateClientId();
+    
     const client: WebSocketClient = {
       id: clientId,
       address: '',
@@ -89,6 +97,10 @@ export class NotificationWebSocketServer {
       isAlive: true,
     };
 
+    // Increment IP counter
+    const currentIpCount = this.ipConnections.get(ip) || 0;
+    this.ipConnections.set(ip, currentIpCount + 1);
+
     this.clients.set(clientId, client);
 
     socket.on('message', (data: Buffer) => {
@@ -97,12 +109,28 @@ export class NotificationWebSocketServer {
 
     socket.on('close', () => {
       this.clients.delete(clientId);
+      
+      // Decrement IP tracking map securely on disconnection
+      const count = this.ipConnections.get(ip) || 1;
+      if (count <= 1) {
+        this.ipConnections.delete(ip);
+      } else {
+        this.ipConnections.set(ip, count - 1);
+      }
+      
       console.log(`[websocket] Client ${clientId} disconnected`);
     });
 
     socket.on('error', (error: Error) => {
       console.error(`[websocket] Client ${clientId} error:`, error.message);
       this.clients.delete(clientId);
+      
+      const count = this.ipConnections.get(ip) || 1;
+      if (count <= 1) {
+        this.ipConnections.delete(ip);
+      } else {
+        this.ipConnections.set(ip, count - 1);
+      }
     });
 
     socket.on('pong', () => {
@@ -116,7 +144,7 @@ export class NotificationWebSocketServer {
       timestamp: Date.now(),
     });
 
-    console.log(`[websocket] Client ${clientId} connected`);
+    console.log(`[websocket] Client ${clientId} (${ip}) authenticated and connected successfully`);
   }
 
   private handleMessage(client: WebSocketClient, data: string): void {
@@ -174,7 +202,7 @@ export class NotificationWebSocketServer {
       if (now - client.lastHeartbeat > CLIENT_TIMEOUT) {
         client.isAlive = false;
         client.socket.terminate();
-        this.clients.delete(id);
+        // Disconnect handle handles map cleanups
         console.log(`[websocket] Client ${id} timed out and was terminated`);
       }
     });

@@ -13,12 +13,25 @@ export type {
   ContractStats,
   LPStats,
 
+  // Dispute types
+  DisputeReasonCategory,
+  DisputeEvidence,
+  DisputeStatus,
+  DisputeResolutionDecision,
+  DisputeRecord,
+  DisputeAnalytics,
+
   // Canonical event types
   ContractEvent,
   InvoiceSubmittedEvent,
   InvoiceFundedEvent,
-  InvoicePaidEvent,
+  InvoicePaidEvent
+  ,
   InvoiceDefaultedEvent,
+  InvoiceDisputedEvent,
+  DisputeEvidenceSubmittedEvent,
+  DisputeResolvedEvent,
+  DisputeAutoResolvedEvent,
   GovernanceProposalCreatedEvent,
   VoteCastEvent,
   GovernanceProposalExecutedEvent,

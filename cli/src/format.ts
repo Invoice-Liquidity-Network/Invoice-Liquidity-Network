@@ -244,6 +244,44 @@ export function formatHistoryJson(invoices: ListedInvoice[]): string {
   );
 }
 
+export function formatReputation(address: string, score: number): string {
+  return `${row('Address', address)}\n${row('Reputation', pc.cyan(String(score)))}`;
+}
+
+export function formatReputationJson(address: string, score: number): string {
+  return JSON.stringify({ address, score }, null, 2);
+}
+
+export interface ProtocolStatsSummary {
+  totalInvoices: bigint;
+  totalFunded: bigint;
+  totalPaid: bigint;
+  totalVolume: bigint;
+}
+
+export function formatProtocolStats(stats: ProtocolStatsSummary): string {
+  const lines = [
+    row('Invoices', stats.totalInvoices.toString()),
+    row('Funded', stats.totalFunded.toString()),
+    row('Paid', stats.totalPaid.toString()),
+    row('Volume', formatAmount(stats.totalVolume)),
+  ];
+  return lines.join('\n');
+}
+
+export function formatProtocolStatsJson(stats: ProtocolStatsSummary): string {
+  return JSON.stringify(
+    {
+      totalInvoices: stats.totalInvoices.toString(),
+      totalFunded: stats.totalFunded.toString(),
+      totalPaid: stats.totalPaid.toString(),
+      totalVolume: stats.totalVolume.toString(),
+    },
+    null,
+    2
+  );
+}
+
 function row(label: string, value: string): string {
   return `${pc.bold(label.padEnd(11))} ${value}`;
 }

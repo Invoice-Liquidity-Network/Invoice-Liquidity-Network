@@ -1,40 +1,14 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 
 import { buildOracleCacheKey, createOracleCache } from './cache';
-import type { OracleVerificationRequest, OracleVerificationResponse } from './types';
+import { TEST_PAYER, makeResponse } from './testFixtures';
+import type { OracleVerificationRequest } from './types';
 
 const request: OracleVerificationRequest = {
-  payer: 'GBTESTPAYERTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTT',
+  payer: TEST_PAYER,
   amount: '10000000',
   invoiceId: '42',
 };
-
-function makeResponse(
-  overrides: Partial<OracleVerificationResponse> = {}
-): OracleVerificationResponse {
-  return {
-    requestId: 'req-1',
-    payer: request.payer,
-    invoiceId: String(request.invoiceId),
-    amount: String(request.amount),
-    trustScore: 88,
-    confidence: 0.92,
-    confidenceLevel: 'high',
-    isVerified: true,
-    generatedAt: new Date().toISOString(),
-    dataAgeMs: 0,
-    cacheHit: false,
-    reputationScore: 91,
-    historicalSuccessRate: 0.95,
-    historicalDefaultRate: 0.05,
-    averageHistoricalAmount: '10000000',
-    amountDeviation: 0,
-    settlementVarianceDays: 1.2,
-    fraudSignals: [],
-    evidence: ['ok'],
-    ...overrides,
-  };
-}
 
 describe('oracle cache', () => {
   it('builds stable cache keys for repeated requests', () => {

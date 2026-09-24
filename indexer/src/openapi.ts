@@ -90,6 +90,7 @@ export const openApiSpec: OpenAPIV3.Document = {
     { name: 'Participants', description: 'LP and freelancer statistics' },
     { name: 'Archive', description: 'Archived data management' },
     { name: 'Backup', description: 'Database backup management' },
+    { name: 'Export', description: 'Async data exports' },
   ],
   paths: {
     // ── System ──────────────────────────────────────────────────────────────
@@ -657,6 +658,138 @@ export const openApiSpec: OpenAPIV3.Document = {
               },
             },
           },
+          ...errorResponses,
+        },
+      },
+    },
+
+    // ── Export ───────────────────────────────────────────────────────────────
+    '/export/invoices': {
+      get: {
+        tags: ['Export'],
+        summary: 'Export invoices synchronously',
+        description: 'Returns up to the sync limit of invoices in CSV or JSON format.',
+        operationId: 'exportInvoices',
+        parameters: [
+          { name: 'format', in: 'query', schema: { type: 'string', enum: ['csv', 'json'], default: 'json' } },
+          { name: 'status', in: 'query', schema: InvoiceStatus },
+          { name: 'freelancer', in: 'query', schema: StellarAddress },
+          { name: 'payer', in: 'query', schema: StellarAddress },
+          { name: 'funder', in: 'query', schema: StellarAddress },
+          { name: 'from', in: 'query', schema: { type: 'string', format: 'date-time' } },
+          { name: 'to', in: 'query', schema: { type: 'string', format: 'date-time' } },
+        ],
+        responses: {
+          '200': {
+            description: 'Exported invoices',
+            content: {
+              'application/json': { schema: { type: 'array', items: Invoice } },
+              'text/csv': { schema: { type: 'string' } }
+            },
+          },
+          '413': { description: 'Result set too large, use async export' },
+          ...errorResponses,
+        },
+      },
+    },
+    '/export/events': {
+      get: {
+        tags: ['Export'],
+        summary: 'Export events synchronously',
+        description: 'Returns up to the sync limit of events in CSV or JSON format.',
+        operationId: 'exportEvents',
+        parameters: [
+          { name: 'format', in: 'query', schema: { type: 'string', enum: ['csv', 'json'], default: 'json' } },
+          { name: 'invoiceId', in: 'query', schema: { type: 'integer' } },
+          { name: 'from', in: 'query', schema: { type: 'string', format: 'date-time' } },
+          { name: 'to', in: 'query', schema: { type: 'string', format: 'date-time' } },
+        ],
+        responses: {
+          '200': {
+            description: 'Exported events',
+            content: {
+              'application/json': { schema: { type: 'array', items: { type: 'object' } } },
+              'text/csv': { schema: { type: 'string' } }
+            },
+          },
+          '413': { description: 'Result set too large, use async export' },
+          ...errorResponses,
+        },
+      },
+    },
+    '/export/jobs': {
+      post: {
+        tags: ['Export'],
+        summary: 'Create async export job',
+        description: 'Starts an asynchronous export job for large datasets.',
+        operationId: 'createExportJob',
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                properties: {
+                  type: { type: 'string', enum: ['invoices', 'events'] },
+                  format: { type: 'string', enum: ['csv', 'json'] },
+                  from: { type: 'string', format: 'date-time' },
+                  to: { type: 'string', format: 'date-time' },
+                  status: InvoiceStatus,
+                  freelancer: StellarAddress,
+                  payer: StellarAddress,
+                  funder: StellarAddress,
+                  invoiceId: { type: 'integer' }
+                },
+                required: ['type', 'format']
+              },
+            },
+          },
+        },
+        responses: {
+          '202': {
+            description: 'Job created',
+            content: { 'application/json': { schema: { type: 'object' } } },
+          },
+          ...errorResponses,
+        },
+      },
+    },
+    '/export/jobs/{jobId}': {
+      get: {
+        tags: ['Export'],
+        summary: 'Poll job status',
+        description: 'Returns the status of an async export job.',
+        operationId: 'getExportJob',
+        parameters: [
+          { name: 'jobId', in: 'path', required: true, schema: { type: 'string' } },
+        ],
+        responses: {
+          '200': {
+            description: 'Job status',
+            content: { 'application/json': { schema: { type: 'object' } } },
+          },
+          ...errorResponses,
+        },
+      },
+    },
+    '/export/download/{jobId}': {
+      get: {
+        tags: ['Export'],
+        summary: 'Download export',
+        description: 'Downloads the completed export file.',
+        operationId: 'downloadExport',
+        parameters: [
+          { name: 'jobId', in: 'path', required: true, schema: { type: 'string' } },
+        ],
+        responses: {
+          '200': {
+            description: 'Export file',
+            content: {
+              'application/json': { schema: { type: 'array', items: { type: 'object' } } },
+              'text/csv': { schema: { type: 'string' } }
+            },
+          },
+          '202': { description: 'Export not ready yet' },
           ...errorResponses,
         },
       },

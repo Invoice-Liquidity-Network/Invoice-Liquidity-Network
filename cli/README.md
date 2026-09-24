@@ -117,6 +117,51 @@ iln list --address G...
 
 This lists invoices where the address is the freelancer, payer, or recorded funder.
 
+### Watch
+
+```bash
+iln watch --id 1
+iln watch --id 1 --interval 5000
+```
+
+Polls an invoice and prints each status change until it reaches a terminal
+state (`Paid`, `Defaulted`, or `Disputed`), or until you press Ctrl-C.
+
+### Export
+
+```bash
+iln export --output invoices.csv
+iln export --address G... --output -
+```
+
+Exports invoices to CSV. Omit `--address` to export every invoice; use
+`--output -` to write to stdout instead of a file.
+
+### Stats
+
+```bash
+iln stats
+```
+
+Shows protocol-wide analytics (total invoices, funded, paid, and volume)
+from the analytics API.
+
+### Reputation
+
+```bash
+iln reputation get G...
+iln reputation get   # uses the configured signer's address
+```
+
+### Network
+
+```bash
+iln network switch mainnet
+iln network switch testnet
+```
+
+Switches the active network in the local `.ilnrc.json` config file.
+
 ### Development - Testnet Account Seeder
 
 ```bash
