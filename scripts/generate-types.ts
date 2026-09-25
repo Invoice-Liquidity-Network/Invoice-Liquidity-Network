@@ -21,7 +21,11 @@ import { createHash } from 'crypto';
 // ---------------------------------------------------------------------------
 
 const SDK_VERSION = '0.1.0';
-const GENERATED_AT = new Date().toISOString();
+
+// NOTE (issue #1078): no wall-clock timestamp is embedded in the generated
+// header. Regenerating from the same spec must produce a byte-identical file,
+// otherwise `pnpm generate:types` always diffs and reproducible-build
+// verification can never pass.
 
 /**
  * Compute a hash of the spec file for version tracking.
@@ -251,7 +255,6 @@ const sections: string[] = [
   `// Source: ${path.relative(process.cwd(), specPath)}`,
   `// Spec hash: ${specHash}`,
   `// SDK version: ${SDK_VERSION}`,
-  `// Generated at: ${GENERATED_AT}`,
   ``,
 ];
 

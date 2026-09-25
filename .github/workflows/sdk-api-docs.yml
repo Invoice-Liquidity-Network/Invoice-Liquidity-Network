@@ -33,6 +33,11 @@ jobs:
       - name: Setup pnpm with store cache
         uses: ./.github/actions/setup-pnpm
 
+      - name: Pin SOURCE_DATE_EPOCH to the commit timestamp
+        # Reproducible output (issue #1078): generated docs must not depend on
+        # the wall clock, so the footer date is derived from the commit time.
+        run: echo "SOURCE_DATE_EPOCH=$(git log -1 --pretty=%ct)" >> "$GITHUB_ENV"
+
       - name: Generate SDK API docs
         id: generate
         run: pnpm --filter @iln/sdk-next docs:generate

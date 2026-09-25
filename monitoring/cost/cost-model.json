@@ -1,0 +1,194 @@
+{
+  "$comment": "Canonical cost model for the Invoice Liquidity Network (ILN). All values are pre‑mainnet baselines captured on 2026‑09‑25 and must be reviewed and updated when provider pricing changes. The exporter script (scripts/cost-exporter.mjs) reads this file and emits Prometheus metrics that the Grafana dashboard queries.",
+  "version": 1,
+  "currency": "USD",
+  "currencyAsOf": "2026-09-25",
+  "dimensions": ["compute", "storage", "network"],
+  "costAllocationTags": [
+    { "key": "iln:service", "required": true, "description": "ILN service identifier (indexer, oracle-service, notifications, workers, frontend, docs, ci)" },
+    { "key": "iln:environment", "required": true, "description": "Deployment environment (production, staging, development, ci)" },
+    { "key": "iln:cost-center", "required": false, "description": "Team or project cost‑center code" }
+  ],
+  "providers": {
+    "railway": {
+      "description": "Used by the indexer service (single‑replica Railway deployment).",
+      "appliesTo": ["indexer"],
+      "tags": ["iln:service", "iln:environment"]
+    },
+    "vercel": {
+      "description": "Used by the frontend deployment.",
+      "appliesTo": ["frontend"]
+    },
+    "cloudflare": {
+      "description": "Used by the analytics‑collector Cloudflare Worker.",
+      "appliesTo": ["workers"]
+    },
+    "github-actions": {
+      "description": "Used by CI/CD runners; costs are allocated per runner‑minute and per scheduled workflow.",
+      "appliesTo": ["ci"]
+    },
+    "saas": {
+      "description": "Third‑party SaaS (Resend for email, Twilio for SMS).",
+      "appliesTo": ["notifications"]
+    }
+  },
+  "services": {
+    "indexer": {
+      "provider": "railway",
+      "tags": { "iln:service": "indexer", "iln:environment": "production" },
+      "dimensions": {
+        "compute": {
+          "quantity": 365,
+          "unit": "vCPU-hours per month",
+          "unitPriceUsd": 0.067,
+          "monthlyUsd": 24.455,
+          "basis": "0.5 vCPU × 730 h/mo, Railway usage‑based pricing (approximate)"
+        },
+        "storage": {
+          "quantity": 5,
+          "unit": "GB per month",
+          "unitPriceUsd": 0.10,
+          "monthlyUsd": 0.5,
+          "basis": "SQLite database ~5 GB, Railway volume pricing (approximate)"
+        },
+        "network": {
+          "quantity": 50,
+          "unit": "GB egress per month",
+          "unitPriceUsd": 0.05,
+          "monthlyUsd": 2.5,
+          "basis": "Railway egress (approximate); indexer serves ~22 RPS baseline"
+        }
+      }
+    },
+    "oracle-service": {
+      "provider": "self-hosted",
+      "tags": { "iln:service": "oracle-service", "iln:environment": "production" },
+      "dimensions": {
+        "compute": {
+          "quantity": 1440,
+          "unit": "instance‑hours per month (1 vCPU instance)",
+          "unitPriceUsd": 0.05,
+          "monthlyUsd": 72,
+          "basis": "1 vCPU 24×7 at on‑demand cloud rate; exact cost depends on provider",
+          "note": "provider‑specific; replace with actual VM pricing"
+        },
+        "storage": {
+          "quantity": 20,
+          "unit": "GB per month",
+          "unitPriceUsd": 0.10,
+          "monthlyUsd": 2,
+          "basis": "Oracle data/cache (~20 GB)",
+          "note": "provider‑specific"
+        },
+        "network": {
+          "quantity": 100,
+          "unit": "GB egress per month",
+          "unitPriceUsd": 0.08,
+          "monthlyUsd": 8,
+          "basis": "RPC + attestation traffic (approximate)"
+        }
+      }
+    },
+    "notifications": {
+      "provider": "saas",
+      "tags": { "iln:service": "notifications", "iln:environment": "production" },
+      "dimensions": {
+        "compute": {
+          "quantity": 1,
+          "unit": "monthly subscription",
+          "unitPriceUsd": 20,
+          "monthlyUsd": 20,
+          "basis": "Resend email API flat monthly tier (approximate)"
+        },
+        "network": {
+          "quantity": "see notes",
+          "unit": "dispatches per month",
+          "unitPriceUsd": {
+            "email": 0.0006,
+            "webhook": 0.0001,
+            "sms": 0.02,
+            "websocket": 0.00005
+          },
+          "monthlyUsd": {
+            "email": 12,
+            "webhook": 3,
+            "sms": 420,
+            "websocket": 1
+          },
+          "basis": "Provider‑dependent per‑dispatch pricing from docs/ci-duration-cost-audit.md",
+          "note": "quantities are dispatcher‑counts × per‑dispatch unitPrice"
+        }
+      }
+    },
+    "workers": {
+      "provider": "cloudflare",
+      "tags": { "iln:service": "workers", "iln:environment": "production" },
+      "dimensions": {
+        "compute": {
+          "quantity": 1,
+          "unit": "M requests per month",
+          "unitPriceUsd": 0.3,
+          "monthlyUsd": 0.3,
+          "basis": "Cloudflare Workers Paid tier $0.30 per M requests (approximate)"
+        },
+        "network": {
+          "quantity": 1,
+          "unit": "M requests per month",
+          "unitPriceUsd": 0.02,
+          "monthlyUsd": 0.02,
+          "basis": "Cloudflare data‑transfer included in Paid tier"
+        }
+      }
+    },
+    "frontend": {
+      "provider": "vercel",
+      "tags": { "iln:service": "frontend", "iln:environment": "production" },
+      "dimensions": {
+        "compute": {
+          "quantity": 1,
+          "unit": "GB‑hour per month",
+          "unitPriceUsd": 0.095,
+          "monthlyUsd": 0.095,
+          "basis": "Vercel Hobby tier estimate (approximate)"
+        }
+      }
+    },
+    "ci": {
+      "provider": "github-actions",
+      "tags": { "iln:service": "ci", "iln:environment": "production" },
+      "dimensions": {
+        "compute": {
+          "quantity": 60,
+          "unit": "runner‑minutes per PR",
+          "unitPriceUsd": 0.008,
+          "monthlyUsd": 0.48,
+          "basis": "GitHub‑hosted ubuntu‑latest runner ($0.008/min); typical PR concurrency 5‑10"
+        },
+        "network": {
+          "quantity": 1,
+          "unit": "GB data transferred per month",
+          "unitPriceUsd": 0.09,
+          "monthlyUsd": 0.09,
+          "basis": "GitHub‑Actions outbound bandwidth (first 10 GB free, then $0.09/GB)"
+        }
+      }
+    }
+  },
+  "capacity": {
+    "loadTest": {
+      "measuredPeakRps": 22,
+      "validatedCeilingRps": 185,
+      "tenXTargetRps": 220,
+      "indexerBaselineRps": 257,
+      "combinedBaselineRps": 506.6,
+      "source": "load-test-notifications-10x-summary.json (repo root), docs/load-test-harness.md (lines 64‑71, 95‑104)",
+      "basis": "Measured peak and validated ceiling from staged 10× load test"
+    },
+    "ci": {
+      "runnerMinutesPerPrRange": "40–60",
+      "scheduledMonthlyHours": "~160",
+      "source": "docs/ci-duration-cost-audit.md (lines 11‑44, 159‑165)",
+      "basis": "Inventory of 32 workflows and their typical runtimes"
+    }
+  }
+}
