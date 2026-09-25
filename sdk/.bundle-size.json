@@ -1,7 +1,13 @@
 {
   "budgets": [
-    { "path": "dist/index.mjs", "limit": "110 KB" },
-    { "path": "dist/index.cjs", "limit": "120 KB" }
+    {
+      "path": "dist/index.mjs",
+      "limit": "116 KB"
+    },
+    {
+      "path": "dist/index.cjs",
+      "limit": "126 KB"
+    }
   ],
-  "notes": "Budgets measure minified runtime bundles. Type declarations are excluded because they do not affect runtime bundle size."
+  "notes": "Budgets measure minified runtime bundles. Type declarations are excluded because they do not affect runtime bundle size. Raised by 6 KB when the RPC retry/backoff and circuit-breaker wrapper (rpc-resilience.ts, circuit-breaker.ts) landed: index.mjs 107.2 KB \u2192 113.1 KB, index.cjs 114.9 KB \u2192 121.1 KB, leaving the same ~3 KB headroom as before."
 }

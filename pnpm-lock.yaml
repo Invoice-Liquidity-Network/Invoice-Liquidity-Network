@@ -345,6 +345,12 @@ importers:
       '@graphql-tools/schema':
         specifier: ^10.0.0
         version: 10.0.38(graphql@16.14.2)
+      '@iln/opentelemetry':
+        specifier: workspace:*
+        version: link:../packages/opentelemetry
+      '@opentelemetry/api':
+        specifier: ^1.4.0
+        version: 1.9.1
       '@stellar/stellar-sdk':
         specifier: ^15.0.1
         version: 15.1.0
@@ -427,6 +433,9 @@ importers:
       eslint-config-prettier:
         specifier: ^9.0.0
         version: 9.1.2(eslint@8.57.1)
+      fast-check:
+        specifier: ^3.23.0
+        version: 3.23.2
       husky:
         specifier: ^8.0.0
         version: 8.0.3
@@ -448,6 +457,12 @@ importers:
 
   notifications:
     dependencies:
+      '@iln/opentelemetry':
+        specifier: workspace:*
+        version: link:../packages/opentelemetry
+      '@opentelemetry/api':
+        specifier: ^1.4.0
+        version: 1.9.1
       '@stellar/stellar-sdk':
         specifier: ^15.0.1
         version: 15.1.0
@@ -533,6 +548,12 @@ importers:
 
   oracle-service:
     dependencies:
+      '@iln/opentelemetry':
+        specifier: workspace:*
+        version: link:../packages/opentelemetry
+      '@opentelemetry/api':
+        specifier: ^1.4.0
+        version: 1.9.1
       '@stellar/stellar-sdk':
         specifier: ^15.0.1
         version: 15.1.0
@@ -733,6 +754,9 @@ importers:
       '@opentelemetry/api':
         specifier: ^1.4.0
         version: 1.9.1
+      '@types/node':
+        specifier: ^20.0.0
+        version: 20.19.43
       typescript:
         specifier: ^5.0.0
         version: 5.9.3
@@ -18125,7 +18149,7 @@ snapshots:
 
   '@types/set-cookie-parser@2.4.10':
     dependencies:
-      '@types/node': 24.13.3
+      '@types/node': 20.19.43
 
   '@types/sockjs@0.3.36':
     dependencies:
@@ -18464,7 +18488,7 @@ snapshots:
       obug: 2.1.4
       std-env: 4.2.0
       tinyrainbow: 3.1.0
-      vitest: 4.1.10(@opentelemetry/api@1.9.1)(@types/node@20.19.43)(@vitest/coverage-v8@4.1.10)(jsdom@29.1.1(@noble/hashes@1.8.0))(msw@2.15.0(@types/node@20.19.43)(typescript@5.9.3))(vite@8.0.16(@types/node@20.19.43)(esbuild@0.27.7)(jiti@2.7.0)(terser@5.49.0)(tsx@4.23.1)(yaml@2.9.0))
+      vitest: 4.1.10(@opentelemetry/api@1.9.1)(@types/node@20.19.43)(@vitest/coverage-v8@4.1.10)(jsdom@29.1.1(@noble/hashes@1.8.0))(msw@2.15.0(@types/node@20.19.43)(typescript@5.9.3))(vite@8.0.16(@types/node@20.19.43)(esbuild@0.28.1)(jiti@2.7.0)(terser@5.49.0)(tsx@4.23.1)(yaml@2.9.0))
 
   '@vitest/coverage-v8@4.1.11(vitest@4.1.10)':
     dependencies:

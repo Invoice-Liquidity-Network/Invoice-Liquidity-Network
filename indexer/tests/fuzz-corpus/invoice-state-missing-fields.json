@@ -1,0 +1,29 @@
+{
+  "name": "invoice-state-missing-fields",
+  "found": "2026-09-25",
+  "property": "single-outcome",
+  "finding": "an RPC invoice state without required fields threw RangeError from the named-parameter binding after the event row was already written, so the event was deduplicated forever with no invoice behind it",
+  "event": {
+    "id": "0000001234-1-3",
+    "ledger": 1000,
+    "ledgerClosedAt": "2024-01-01T00:00:00Z",
+    "topic": [
+      {
+        "$xdr": "AAAADwAAAAlzdWJtaXR0ZWQAAAA="
+      }
+    ],
+    "value": {
+      "$xdr": "AAAABQAAAAAAAAAH"
+    }
+  },
+  "invoice": {
+    "kind": "malformed",
+    "value": {
+      "id": "x"
+    }
+  },
+  "expect": {
+    "outcome": "malformed",
+    "reason": "invalid_invoice_state"
+  }
+}

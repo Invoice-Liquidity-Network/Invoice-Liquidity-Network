@@ -21,6 +21,7 @@
 #   rule_files:
 #     - /etc/prometheus/rules/slo-alerts.yml
 #     - /etc/prometheus/rules/oracle-service-alerts.yml  # now houses fraud-specific, not generic SLO
+#     - /etc/prometheus/rules/availability-alerts.yml   # liveness, cursor lag, degraded mode
 #
 # Retired: static thresholds like `syncLag > 60s` and `failure rate >5% over 15m`
 # have been removed. See monitoring.md for migration notes.

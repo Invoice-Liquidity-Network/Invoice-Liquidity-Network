@@ -97,3 +97,6 @@ issue.md
 pr.md
 fix.md
 TODO.md
+
+# Chaos harness reports (pnpm chaos:run)
+.chaos/

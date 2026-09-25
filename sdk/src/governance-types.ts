@@ -172,4 +172,15 @@ export interface GovernanceClientConfig {
   rpcUrl: string;
   networkPassphrase: string;
   server?: RpcServerLike;
+  /** Retry policy for RPC calls; `false` disables retries. Defaults to mainnet backoff. */
+  backoff?: import('./backoff').BackoffOptions | false;
+  /** Circuit breaker options or a shared `RpcCircuitBreaker`; `false` disables it. */
+  circuitBreaker?:
+    | import('./circuit-breaker').RpcCircuitBreakerOptions
+    | import('./circuit-breaker').RpcCircuitBreaker
+    | false;
+  /** Fallback per-attempt RPC timeout in milliseconds. */
+  timeoutMs?: number;
+  /** Per-operation RPC timeouts (read, write, simulation). */
+  timeouts?: Partial<import('./timeouts').RequestTimeouts>;
 }

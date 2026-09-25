@@ -83,6 +83,17 @@ function runMigrations(db: Database.Database): void {
       updated_at   INTEGER NOT NULL
     );
 
+    CREATE TABLE IF NOT EXISTS dead_letter_events (
+      id          INTEGER PRIMARY KEY AUTOINCREMENT,
+      event_id    TEXT,
+      reason      TEXT    NOT NULL,
+      detail      TEXT,
+      payload     TEXT    NOT NULL,
+      ledger      INTEGER,
+      created_at  INTEGER NOT NULL,
+      replayed_at INTEGER
+    );
+
     CREATE INDEX IF NOT EXISTS idx_invoices_status     ON invoices(status);
     CREATE INDEX IF NOT EXISTS idx_invoices_freelancer ON invoices(freelancer);
     CREATE INDEX IF NOT EXISTS idx_invoices_payer      ON invoices(payer);
@@ -93,6 +104,7 @@ function runMigrations(db: Database.Database): void {
     CREATE INDEX IF NOT EXISTS idx_events_invoice_id   ON events(invoice_id);
     CREATE INDEX IF NOT EXISTS idx_events_ledger       ON events(ledger);
     CREATE INDEX IF NOT EXISTS idx_events_created_at   ON events(created_at);
+    CREATE INDEX IF NOT EXISTS idx_dead_letter_reason  ON dead_letter_events(reason);
   `);
 }
 

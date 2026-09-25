@@ -61,15 +61,15 @@ groups:
       # /health keeps returning 200.
       - alert: OracleNoVerifications
         expr: |
-          rate(oracle_verification_requests_total[15m]) == 0
-          and on(instance) up{job="oracle-service"} == 1
-        for: 15m
+          rate(oracle_verification_requests_total[30m]) == 0
+          and on(instance) up{job=~"iln-oracle|oracle-service"} == 1
+        for: 30m
         labels:
           severity: warning
           team: ops
           component: oracle-service
         annotations:
-          summary: No oracle verifications on {{ $labels.instance }} for 15 minutes.
+          summary: No oracle verifications on {{ $labels.instance }} for 30 minutes.
           description: >-
             The service is up but has verified nothing. Either upstream traffic
             has stopped or requests are failing before they reach the verifier.
@@ -95,41 +95,13 @@ groups:
             a broken indexer feed, rejected-low-trust at a reputation lookup
             failure.
 
-      # ── Stale upstream data ───────────────────────────────────────────────
-      - alert: OracleStaleResponsesRising
-        expr: rate(oracle_stale_responses_total[10m]) > 0
-        for: 10m
-        labels:
-          severity: warning
-          team: ops
-          component: oracle-service
-        annotations:
-          summary: Oracle is serving stale verdicts on {{ $labels.instance }}.
-          description: >-
-            Source data is older than ORACLE_MAX_ORACLE_AGE_MS. Usually the
-            indexer has fallen behind or the reputation contract is unreachable.
-
   - name: oracle-service-availability
     interval: 30s
     rules:
-      - alert: OracleVerificationLatencyHigh
-        expr: |
-          histogram_quantile(0.95,
-            sum by (le, instance) (rate(oracle_verification_duration_seconds_bucket[5m]))
-          ) > 2
-        for: 10m
-        labels:
-          severity: warning
-          team: ops
-          component: oracle-service
-        annotations:
-          summary: >-
-            Oracle p95 verification latency on {{ $labels.instance }} is
-            {{ $value | humanizeDuration }}.
-          description: >-
-            Callers time out well before the oracle does. Check the indexer and
-            the Soroban RPC endpoint.
-
+      # OracleVerificationLatencyHigh and OracleStaleResponsesRising were
+      # removed by the alert-rule audit (docs/alert-rule-audit.md): both
+      # duplicated the SLO burn-rate rules in slo-alerts.yml at looser or
+      # single-sample thresholds.
       # ── Cache effectiveness ───────────────────────────────────────────────
       # A collapsed hit rate means every verification is hitting the indexer and
       # RPC, which is how latency alerts start.
@@ -140,7 +112,7 @@ groups:
               sum by (instance) (rate(oracle_cache_hits_total[15m]))
             + sum by (instance) (rate(oracle_cache_misses_total[15m])), 0.0001)
           < 0.2
-        for: 15m
+        for: 30m
         labels:
           severity: warning
           team: ops

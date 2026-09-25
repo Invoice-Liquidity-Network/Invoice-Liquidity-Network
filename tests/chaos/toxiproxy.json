@@ -1,0 +1,20 @@
+[
+  {
+    "name": "rpc-indexer",
+    "listen": "0.0.0.0:18000",
+    "upstream": "stellar-node:8000",
+    "enabled": true
+  },
+  {
+    "name": "indexer-upstream",
+    "listen": "0.0.0.0:18001",
+    "upstream": "indexer:3001",
+    "enabled": true
+  },
+  {
+    "name": "rpc-notifications",
+    "listen": "0.0.0.0:18002",
+    "upstream": "stellar-node:8000",
+    "enabled": true
+  }
+]

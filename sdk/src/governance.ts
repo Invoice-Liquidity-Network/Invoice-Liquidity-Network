@@ -27,6 +27,7 @@ import {
   toOptionalProposalStatusScVal,
   type BuiltTransaction,
 } from './governance-utils';
+import { createResilientRpcServer } from './rpc-resilience';
 import type { RpcServerLike } from './types';
 
 /**
@@ -54,7 +55,12 @@ export class GovernanceClient {
   constructor(config: GovernanceClientConfig) {
     this.contractId = config.contractId;
     this.networkPassphrase = config.networkPassphrase;
-    this.server = config.server ?? new rpc.Server(config.rpcUrl);
+    this.server = createResilientRpcServer(config.server ?? new rpc.Server(config.rpcUrl), {
+      backoff: config.backoff,
+      circuitBreaker: config.circuitBreaker,
+      timeoutMs: config.timeoutMs,
+      timeouts: config.timeouts,
+    });
   }
 
   /**

@@ -59,7 +59,7 @@
   },
   "governance-guide": "Governance Guide",
   "reputation": "Reputation System",
-  "trust-liquidity-model": "Trust & Liquidity Model"
+  "trust-liquidity-model": "Trust & Liquidity Model",
   "-- Operations --": {
     "type": "separator",
     "title": "Operations"
@@ -68,6 +68,7 @@
   "mainnet-deployment-dry-run": "Mainnet Deployment Dry Run",
   "emergency-pause-rehearsal": "Emergency Pause Rehearsal",
   "monitoring": "Monitoring",
+  "alert-rule-audit": "Alert Rule Audit",
   "community-announcement": "Community Announcement",
   "deployment": "Deployment",
   "release-process": "Release Process",
@@ -87,7 +88,8 @@
   "load-test-harness": "Load Test Harness",
   "test-runtime-budgets": "Test Runtime Budgets",
   "sdk-integration-fixture-audit": "SDK Integration Fixture Audit",
-  "cli-function-level-audit": "CLI Function-Level Audit"
+  "cli-function-level-audit": "CLI Function-Level Audit",
+  "chaos-engineering": "Chaos Engineering",
   "-- Contributing --": {
     "type": "separator",
     "title": "Contributing"
