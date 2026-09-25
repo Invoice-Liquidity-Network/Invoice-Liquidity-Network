@@ -1,0 +1,27 @@
+#!/usr/bin/env sh
+. "$(dirname -- "$0")/_/husky.sh"
+
+echo "🔒 Running gitleaks secret scan..."
+
+# Run gitleaks against staged files only for fast feedback.
+# If gitleaks is not installed, skip with a warning (CI still enforces).
+if command -v gitleaks >/dev/null 2>&1; then
+  # Detect staged files (added, copied, modified, renamed)
+  STAGED_FILES=$(git diff --cached --name-only --diff-filter=ACMR)
+  if [ -n "$STAGED_FILES" ]; then
+    echo "$STAGED_FILES" | xargs gitleaks protect --staged --config gitleaks.toml --verbose
+    if [ $? -ne 0 ]; then
+      echo ""
+      echo "❌ gitleaks detected a potential secret in staged files."
+      echo "   If this is a false positive, add it to .secrets.baseline:"
+      echo "     pnpm gitleaks:baseline"
+      echo "   Then review and commit the baseline update."
+      exit 1
+    fi
+  fi
+  echo "✅ No secrets detected in staged files."
+else
+  echo "⚠️  gitleaks not installed — skipping pre-commit secret scan."
+  echo "   Install: brew install gitleaks"
+  echo "   CI still enforces secret scanning on every push."
+fi

@@ -35,7 +35,7 @@ jobs:
 
       - name: Generate SDK API docs
         id: generate
-        run: pnpm --filter @iln/sdk docs:generate
+        run: pnpm --filter @iln/sdk-next docs:generate
 
       - name: Commit and push generated docs
         if: success() && github.event_name != 'pull_request'
@@ -55,11 +55,11 @@ jobs:
               issue_number: context.issue.number,
               owner: context.repo.owner,
               repo: context.repo.repo,
-              body: '🚨 **SDK API docs generation failed!**\n\nRun `pnpm --filter @iln/sdk docs:generate` locally to see which public symbols are missing JSDoc descriptions.'
+              body: '🚨 **SDK API docs generation failed!**\n\nRun `pnpm --filter @iln/sdk-next docs:generate` locally to see which public symbols are missing JSDoc descriptions.'
             })
 
       - name: Write failure to job summary
         if: failure() && github.event_name != 'pull_request'
         run: |
           echo "## SDK Docs Generation Failed" >> $GITHUB_STEP_SUMMARY
-          echo "Undocumented symbols detected. Run \`pnpm --filter @iln/sdk docs:generate\` locally." >> $GITHUB_STEP_SUMMARY
+          echo "Undocumented symbols detected. Run \`pnpm --filter @iln/sdk-next docs:generate\` locally." >> $GITHUB_STEP_SUMMARY

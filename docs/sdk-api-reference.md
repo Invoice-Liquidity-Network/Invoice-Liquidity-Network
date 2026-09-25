@@ -18,8 +18,13 @@ For a full step-by-step walkthrough, see the [SDK Quick Start Guide](sdk-quickst
 ### Installation
 
 ```bash
-npm install @iln/sdk @stellar/stellar-sdk
+npm install @iln/sdk
 ```
+
+`@stellar/stellar-sdk` and `@stellar/freighter-api` ship as direct dependencies —
+no separate install needed. `react` (`^19`) and `react-native` (`>=0.72`) are
+**optional** peer dependencies, only required if you import the React or React
+Native entrypoints. Node.js `>= 20`.
 
 ### Minimal Setup
 
@@ -59,8 +64,10 @@ new ILNSdk(config: ILNSdkConfig)
 | `networkPassphrase` | `string` | Yes | Network passphrase (e.g. `Test SDF Network ; September 2015`) |
 | `signer` | `TransactionSigner` | No | Signer for state-changing operations |
 | `server` | `RpcServerLike` | No | Custom RPC server (for testing) |
-| `timeoutMs` | `number` | No | Global timeout (default 30000) |
-| `timeouts` | `object` | No | Per-operation timeouts (`readMs`, `writeMs`, `simulationMs`) |
+| `timeoutMs` | `number` | No | Fallback timeout for all requests (ms). When unset, per-op defaults apply: `readMs` 10000, `writeMs` 30000, `simulationMs` 15000 |
+| `timeouts` | `object` | No | Per-operation timeout overrides (`readMs`, `writeMs`, `simulationMs`) |
+| `cache` | `CacheConfig` | No | Read-operation cache (`{ ttl, storage, enabled }`) |
+| `offline` | `OfflineConfig` | No | Enable the offline write queue; `{}` for defaults |
 
 #### Invoice Operations
 
@@ -123,10 +130,11 @@ const invoice = await sdk.getInvoice(invoiceId);
 
 **`getReputation(address)`**
 
-Gets the on-chain reputation score for an address.
+Gets the on-chain reputation score for an address. Returns a `number` (the SDK
+coerces the contract's `u32`/`i128` return to a JS number).
 
 ```typescript
-const score: bigint = await sdk.getReputation("GABC...");
+const score: number = await sdk.getReputation("GABC...");
 ```
 
 **`getProtocolConfig()`**
@@ -135,7 +143,17 @@ Returns the current protocol configuration.
 
 ```typescript
 const config = await sdk.getProtocolConfig();
-// { minInvoiceAmount, maxDiscountRate, protocolFeeBps, ... }
+// ProtocolConfig:
+// {
+//   minInvoiceAmount: bigint,
+//   maxDiscountRate: number,      // bps
+//   protocolFeeBps: number,
+//   minPayerReputation: number,
+//   decayRateBps: number,         // reputation decay rate, bps
+//   maxInvoiceDuration?: number,  // seconds
+//   minInvoiceDuration?: number,  // seconds
+//   gracePeriodSeconds?: number,
+// }
 ```
 
 **`getStats()`**
@@ -205,6 +223,28 @@ sdk.subscribeToAddress("GABC...", (event) => {
 });
 ```
 
+#### Governance Operations
+
+The client also exposes the on-chain governance surface. All write methods
+require a signer whose key matches the acting role.
+
+| Method | Kind | Purpose |
+|---|---|---|
+| `getProposal(id)` / `fetchGovernanceProposal({ proposalId })` | read | Fetch a single proposal |
+| `listProposals(params?)` / `listGovernanceProposals(params?)` | read | Page through proposals (optional `status` filter) |
+| `getExecutionDelay()` | read | Timelock delay, in seconds |
+| `createProposal(params)` | write | Submit a new proposal; returns its `bigint` ID |
+| `castVote(params)` | write | Vote for / against / abstain |
+| `delegateVotes(params)` / `undelegateVotes(params)` | write | Manage vote delegation |
+| `executeProposal(params)` | write | Execute a passed proposal after its timelock |
+| `vetoProposal(params)` | write | Veto (guardian role) |
+
+Other client helpers: `getStorage(key)`, `getLatestLedger()`,
+`estimateBatchFee(operations)`, `createEventEmitter(options?)`, and the
+`buildSubmitInvoiceOperation` / `buildFundInvoiceOperation` /
+`buildMarkPaidOperation` / `buildClaimDefaultOperation` builders used to assemble
+custom batches.
+
 ### Validation: `Validators`
 
 The SDK includes a built-in validation layer. All inputs are validated before network submission.
@@ -267,22 +307,38 @@ const signer = createFreighterSigner();
 
 **`AnalyticsSDK`**
 
-Client for protocol analytics and statistics.
+Client for protocol analytics and statistics. It talks to the analytics/indexer
+HTTP API directly, so it is constructed with a **base URL**, not an `ILNSdk`
+instance.
 
 ```typescript
-const analytics = new AnalyticsSDK(sdk);
+new AnalyticsSDK(baseUrl?: string, defaultTtl?: number)
+// baseUrl defaults to "https://api.iln.network"; defaultTtl (cache) to 300000 ms
+```
+
+```typescript
+const analytics = new AnalyticsSDK("https://api.iln.network");
 const stats = await analytics.getProtocolStats();
 ```
 
-**Utility functions:**
-
-| Function | Description |
+| Method | Returns |
 |---|---|
-| `calculateYieldProjection(amount, rate, duration)` | Project LP yield |
-| `calculateRiskScore(invoice)` | Risk assessment |
-| `calculatePortfolioAllocation(invoices)` | Portfolio breakdown |
-| `calculateHistoricalPerformance(events)` | Historical returns |
-| `compareMetrics(current, previous)` | Metric comparison |
+| `getProtocolStats()` | `ProtocolStats` |
+| `getLPStats(address)` | `LPStats` — `{ deployed, yield, invoiceCount, defaultRate }` |
+| `getFreelancerStats(address)` | `FreelancerStats` |
+| `getInvoiceHistory(address, role?)` | `AnalyticsInvoice[]` |
+| `getTopLPs(limit?, period?)` | `LPStat[]` (`period`: `"all" \| "week" \| "month"`) |
+| `clearCache()` | `void` |
+
+**Utility functions** (standalone named exports from `@iln/sdk`, not methods on `AnalyticsSDK`):
+
+| Function | Signature | Description |
+|---|---|---|
+| `calculateYieldProjection` | `(invoiceAmount: bigint, discountRateBps: number, daysUntilDue: number) => YieldProjection` | Project LP yield; result has `annualizedYield`, `expectedReturn`, `effectiveApr` |
+| `calculateRiskScore` | `(invoice) => RiskScore` | Risk assessment |
+| `calculatePortfolioAllocation` | `(invoices) => PortfolioAllocation` | Portfolio breakdown |
+| `calculateHistoricalPerformance` | `(events) => HistoricalPerformance` | Historical returns |
+| `compareMetrics` | `(current, previous) => MetricComparison` | Metric comparison |
 
 ### Error Types
 
@@ -299,20 +355,44 @@ const stats = await analytics.getProtocolStats();
 | `SimulationError` | `SIMULATION_FAILED` | Transaction simulation failed |
 | `GenericContractError` | `CONTRACT_ERROR` | Unclassified contract error |
 
+All of the above extend `ILNError` (which carries `code`, `remediation`, and
+`docsUrl`). `TimeoutError` (from `@iln/sdk`, `name === "TimeoutError"`) is thrown
+separately when an operation exceeds its configured timeout; it does **not**
+extend `ILNError`.
+
 ### Network Constants
 
 ```typescript
-ILN_TESTNET // { contractId, rpcUrl, networkPassphrase } for testnet
-ILN_MAINNET // { contractId, rpcUrl, networkPassphrase } for mainnet
+ILN_TESTNET // NetworkConfig { contractId, rpcUrl, networkPassphrase } — pre-filled for the ILN testnet deployment
+
+NETWORKS    // { TESTNET, MAINNET, STANDALONE } — network passphrase strings only
+```
+
+The SDK ships a ready-made config for **testnet only**. There is no `ILN_MAINNET`
+export: mainnet `contractId` and `rpcUrl` are deployment-specific, so build the
+config yourself and pin the contract ID against a trusted reference (see
+[Trust Model](sdk-trust-model.md)):
+
+```typescript
+import { NETWORKS } from "@iln/sdk";
+
+const ILN_MAINNET = {
+  contractId: process.env.ILN_MAINNET_CONTRACT_ID!,
+  rpcUrl: process.env.ILN_MAINNET_RPC_URL!,
+  networkPassphrase: NETWORKS.MAINNET,
+};
 ```
 
 ### Compatibility
 
 ```typescript
-checkCompatibility(contractVersion: string): CompatibilityResult
+await sdk.checkCompatibility(): Promise<CompatibilityResult>
 ```
 
-Returns whether the SDK version is compatible with a given contract version.
+Reads version information from the deployed contract and returns whether this SDK
+build is compatible with it. Takes no arguments — the contract version is fetched
+over RPC. `SDK_VERSION` and `MIN_CONTRACT_VERSION` are also exported for manual
+checks.
 
 ---
 
@@ -365,8 +445,11 @@ const num = Number(amount); // Safe for amounts under 2^53
 
 ### Switching Between Testnet and Mainnet
 
+`ILN_TESTNET` is provided ready to use. For mainnet, assemble the config from
+your deployment's contract ID / RPC URL plus `NETWORKS.MAINNET`:
+
 ```typescript
-import { ILNSdk, ILN_TESTNET, ILN_MAINNET } from "@iln/sdk";
+import { ILNSdk, ILN_TESTNET, NETWORKS, createKeypairSigner } from "@iln/sdk";
 
 // Testnet (development)
 const sdk = new ILNSdk({
@@ -376,7 +459,9 @@ const sdk = new ILNSdk({
 
 // Mainnet (production)
 const prodSdk = new ILNSdk({
-  ...ILN_MAINNET,
+  contractId: process.env.ILN_MAINNET_CONTRACT_ID!,
+  rpcUrl: process.env.ILN_MAINNET_RPC_URL!,
+  networkPassphrase: NETWORKS.MAINNET,
   signer: createKeypairSigner(prodSecret),
 });
 ```
@@ -419,10 +504,14 @@ console.log(`Batch result:`, result);
 ### Enabling Debug Logging
 
 ```bash
-ILN_SDK_DEBUG=true node app.js
+ILN_DEBUG=1 node app.js
+# or, finer-grained:
+ILN_LOG_LEVEL=DEBUG ILN_LOG_FORMAT=json node app.js
 ```
 
-Logs transaction XDRs, simulation results, and polling status to stderr.
+`ILN_DEBUG=1` (or `ILN_LOG_LEVEL=DEBUG`) raises the logger to DEBUG, which emits
+transaction XDRs, simulation requests/responses, and polling status.
+`ILN_LOG_FORMAT=json` switches the output to structured JSON lines.
 
 ### Caching
 
@@ -443,17 +532,30 @@ const sdk = new ILNSdk({
 
 The `OfflineManager` queues operations when the network is unavailable:
 
-```typescript
-import { createOfflineManager } from "@iln/sdk";
+The simplest form is to pass `offline` in the `ILNSdk` constructor — write
+methods then queue automatically while offline and flush on reconnect:
 
-const offline = createOfflineManager(sdk, {
-  maxQueueSize: 100,
-  retryIntervalMs: 5000,
-  maxRetries: 10,
+```typescript
+const sdk = new ILNSdk({
+  ...ILN_TESTNET,
+  signer: createKeypairSigner(secret),
+  offline: {
+    maxQueueSize: 100,   // default 100
+    retryDelayMs: 5000,  // default 5000
+    maxRetries: 3,       // default 3
+    // storageKey: "iln_offline_queue" (default), storage?: custom adapter
+  },
 });
 
-await offline.submitInvoice(params); // Queues if offline, submits when reconnected
+await sdk.submitInvoice(params); // queues if offline, submits when reconnected
+sdk.setOnline(false);            // force-enqueue (e.g. in tests)
+await sdk.flushOfflineQueue();   // manually drain
+const state = sdk.getOfflineState(); // { isOnline, queueSize, pendingCount, failedCount }
 ```
+
+You can also construct the manager directly with `new OfflineManager(config?)`
+and wire its `onSubmit` / `onStateChange` callbacks yourself. There is no
+`createOfflineManager` factory export.
 
 ---
 
@@ -556,18 +658,18 @@ const unsubscribe = sdk.subscribeToAddress("GABC...", (event) => {
 ### Using the Analytics SDK
 
 ```typescript
-import { ILNSdk, ILN_TESTNET, AnalyticsSDK } from "@iln/sdk";
+import { AnalyticsSDK, calculateYieldProjection } from "@iln/sdk";
 
-const sdk = new ILNSdk({ ...ILN_TESTNET });
-const analytics = new AnalyticsSDK(sdk);
+const analytics = new AnalyticsSDK("https://api.iln.network");
 
 async function showAnalytics(address: string) {
   const stats = await analytics.getLPStats(address);
-  console.log("Total yield:", stats.totalYield.toString());
+  console.log("Yield:", stats.yield.toString());
   console.log("Invoices funded:", stats.invoiceCount);
 
-  const projection = analytics.calculateYieldProjection(10_000_000n, 300, 30);
-  console.log("30-day yield:", projection.projectedYield.toString());
+  const projection = calculateYieldProjection(10_000_000n, 300, 30);
+  console.log("Annualized yield:", projection.annualizedYield.toString());
+  console.log("Effective APR:", projection.effectiveApr.toFixed(2));
 }
 
 showAnalytics("GLP...");
@@ -583,7 +685,7 @@ BigInt handles the full range of token values (up to 2^64-1) without precision l
 
 **Q: Do I need a signer for read operations?**
 
-No. Only `submitInvoice`, `fundInvoice`, `markPaid`, and `claimDefault` require a signer. `getInvoice`, `getReputation`, `getProtocolConfig`, and `getStats` work without one.
+No. The state-changing operations — `submitInvoice`, `fundInvoice`, `markPaid`, `claimDefault`, the `batch*` variants, and the governance write methods (`createProposal`, `castVote`, `executeProposal`, …) — require a signer. Read methods such as `getInvoice`, `getReputation`, `getProtocolConfig`, `getStats`, `getProposal`, and `checkCompatibility` work without one.
 
 **Q: Can I use the same keypair for freelancer, payer, and LP?**
 
@@ -606,7 +708,14 @@ The SDK throws a `TransactionFailedError`. Check `err.message` for the on-chain 
 
 **Q: Can I cancel a submitted invoice?**
 
-Invoices cannot be cancelled once submitted. The contract state machine progresses forward through Pending → Funded → Paid, or Defaulted after the due date.
+The contract allows the submitter to cancel an invoice **while it is still
+`Pending`** (moving it to the terminal `Cancelled` state); once funded it can no
+longer be cancelled. `@iln/sdk` does not currently expose a `cancelInvoice`
+helper, so this path is only reachable by building the contract invocation
+directly. See the full state machine (`Pending`, `PartiallyFunded`, `Funded`,
+`Paid`, `Defaulted`, `Disputed`, `Appealed`, `Cancelled`, `Expired`) in
+[`contracts/invoice-contract.md`](contracts/invoice-contract.md) and the
+[Glossary](glossary.md#invoice-status).
 
 **Q: How long do invoices stay pending?**
 
@@ -616,9 +725,11 @@ An invoice remains pending until it is funded, or until the due date passes. Aft
 
 The SDK relies on Node.js APIs (`crypto`, `Buffer`) and browser APIs (`fetch`, `WebSocket`). React Native may need polyfills for `crypto`. Consider using `react-native-get-random-values` and `buffer` packages.
 
-**Q: How do I run the SDK in an older Node.js version?**
+**Q: What Node.js version does the SDK need?**
 
-The SDK requires Node.js >= 18 for native `fetch` and BigInt support. Use `--experimental-fetch` flag in Node 17 or upgrade.
+`@iln/sdk` declares `engines.node >= 20` (matching the monorepo root). Node 20+
+provides native `fetch`, `WebSocket`, and BigInt with no flags. Older runtimes
+are unsupported.
 
 ---
 
@@ -633,19 +744,22 @@ The SDK requires Node.js >= 18 for native `fetch` and BigInt support. Use `--exp
 | `NetworkError` | RPC node unreachable | Check `rpcUrl` connectivity; verify the network is up |
 | `TransactionFailedError` | Contract rejected the transaction | Check error message for rejected reason; verify contract state |
 | `WalletNotConnectedError` | No signer in config | Pass `signer` to `ILNSdk` constructor |
-| `SimulationError` | Simulation failed | Enable debug logging (`ILN_SDK_DEBUG=true`) to inspect simulation details |
+| `SimulationError` | Simulation failed | Enable debug logging (`ILN_DEBUG=1`) to inspect simulation details |
 | `TimeoutError` | Request exceeded timeout | Increase `timeouts` in config or retry during off-peak hours |
 
 ### Debug Mode
 
 ```bash
-ILN_SDK_DEBUG=true node my-script.js
+ILN_DEBUG=1 node my-script.js
 ```
 
 When enabled, the SDK logs:
 - Transaction XDR before signing
 - Simulation request and response
 - Polling status and retries
+
+Related environment variables: `ILN_LOG_LEVEL` (`DEBUG` | `INFO` | `WARN` |
+`ERROR`) and `ILN_LOG_FORMAT` (`json` for structured output).
 
 ### Getting Help
 
@@ -657,11 +771,20 @@ When enabled, the SDK logs:
 
 ## Generating Updated Docs
 
-To regenerate the auto-generated API reference from source:
+This page is **hand-maintained** and describes the stable `@iln/sdk` package
+(`sdk/`). Keep it in step with `sdk/src/` whenever the public surface changes.
 
-```bash
-cd sdk
-pnpm docs:generate
-```
+Two separate TypeDoc generators also exist and are unrelated to this file:
 
-Output goes to `docs/sdk-api/`. Run after any SDK source changes to keep docs in sync.
+| Command | Source package | Output | Committed? |
+|---|---|---|---|
+| `pnpm --filter @iln/sdk docs:generate` | `sdk/` (`@iln/sdk`) | `docs/sdk-api/` | No — local scratch output |
+| `pnpm --filter @iln/sdk-next docs:generate` | `packages/sdk/` (`@iln/sdk-next`) | `packages/docs/content/sdk-reference/generated/` | Yes — regenerated by the `SDK API Docs` workflow (`.github/workflows/sdk-api-docs.yml`) on changes to `packages/sdk/src/**` |
+
+## Related API references
+
+| Surface | Doc | Generator / source of truth |
+|---|---|---|
+| CLI (`@invoice-liquidity/cli`) | [`packages/docs/content/cli-reference.mdx`](../packages/docs/content/cli-reference.mdx) | Auto-generated by `cli/scripts/generate-docs.ts`; regenerated by `.github/workflows/cli-docs.yml` on changes to `cli/src/**` or `cli/scripts/**`. Do not edit by hand. |
+| Indexer REST/GraphQL API | [`indexer/api-reference.md`](indexer/api-reference.md) | Hand-maintained against `indexer/src/api.ts`; OpenAPI spec served by the running service (`indexer/src/openapi.ts`). |
+| Notification service API | [`notifications.md`](notifications.md) | Hand-maintained against `notifications/src/api.ts`, `preferences-api.ts`, and `config.ts`. |

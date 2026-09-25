@@ -12,6 +12,9 @@ on:
       - 'packages/sdk/src/errors.test.ts'
       - 'packages/sdk/stryker.config.mjs'
       - 'packages/sdk/package.json'
+      - 'indexer/src/**'
+      - 'indexer/tests/**'
+      - 'oracle-service/src/**'
 
 # Mutation testing is intentionally non-blocking for PRs:
 # - It can take 5-30 minutes per target module
@@ -79,3 +82,87 @@ jobs:
               repo: context.repo.repo,
               body: `### 🧬 Mutation Testing Summary\n\n${scoreMsg}\n\n*Scheduled full runs happen weekly on Sunday at 06:00 UTC.*`
             })
+
+  # ── Issue #1085: Indexer event-processing mutation testing ──────────────
+  indexer-mutation:
+    name: 🧬 Indexer critical-path mutation score
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup pnpm with store cache
+        uses: ./.github/actions/setup-pnpm
+
+      - name: Install indexer dependencies
+        working-directory: ./indexer
+        run: pnpm install --no-frozen-lockfile 2>/dev/null || pnpm install
+
+      - name: Install Stryker
+        working-directory: ./indexer
+        run: pnpm add -D @stryker-mutator/core @stryker-mutator/vitest-runner 2>/dev/null || true
+
+      - name: Run Stryker on indexer event-processing
+        working-directory: ./indexer
+        run: |
+          npx stryker run \
+            --mutate 'src/processor.ts' \
+            --testRunner vitest \
+            --testRunnerNodeArgs '--import tsx' \
+            --coverageAnalysis perTest \
+            --reporters ['html','clear-text'] \
+            --htmlReporter.fileName 'reports/mutation/index.html' \
+            --timeoutMS 30000
+        continue-on-error: true
+        timeout-minutes: 15
+
+      - name: Upload indexer mutation report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mutation-report-indexer
+          path: indexer/reports/mutation/
+          retention-days: 30
+          if-no-files-found: warn
+
+  # ── Issue #1085: Oracle-service aggregation mutation testing ────────────
+  oracle-mutation:
+    name: 🧬 Oracle-service composition mutation score
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup pnpm with store cache
+        uses: ./.github/actions/setup-pnpm
+
+      - name: Install oracle-service dependencies
+        working-directory: ./oracle-service
+        run: pnpm install --no-frozen-lockfile 2>/dev/null || pnpm install
+
+      - name: Install Stryker
+        working-directory: ./oracle-service
+        run: pnpm add -D @stryker-mutator/core @stryker-mutator/vitest-runner 2>/dev/null || true
+
+      - name: Run Stryker on oracle composition logic
+        working-directory: ./oracle-service
+        run: |
+          npx stryker run \
+            --mutate 'src/composition.ts,src/verifier.ts' \
+            --testRunner vitest \
+            --testRunnerNodeArgs '--import tsx' \
+            --coverageAnalysis perTest \
+            --reporters ['html','clear-text'] \
+            --htmlReporter.fileName 'reports/mutation/index.html' \
+            --timeoutMS 30000
+        continue-on-error: true
+        timeout-minutes: 15
+
+      - name: Upload oracle mutation report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mutation-report-oracle
+          path: oracle-service/reports/mutation/
+          retention-days: 30
+          if-no-files-found: warn

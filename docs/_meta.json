@@ -33,6 +33,7 @@
   "contracts": "Contract Reference",
   "architecture": "Architecture",
   "contract-abi-compatibility": "Contract ABI Compatibility",
+  "oracle-service": "Oracle Service",
   "-- Indexer --": {
     "type": "separator",
     "title": "Indexer"
@@ -58,11 +59,16 @@
   },
   "governance-guide": "Governance Guide",
   "reputation": "Reputation System",
+  "trust-liquidity-model": "Trust & Liquidity Model"
   "-- Operations --": {
     "type": "separator",
     "title": "Operations"
   },
   "mainnet-launch-checklist": "Mainnet Launch Checklist",
+  "mainnet-deployment-dry-run": "Mainnet Deployment Dry Run",
+  "emergency-pause-rehearsal": "Emergency Pause Rehearsal",
+  "monitoring": "Monitoring",
+  "community-announcement": "Community Announcement",
   "deployment": "Deployment",
   "release-process": "Release Process",
   "release-runbook": "Release Runbook",
@@ -81,6 +87,7 @@
   "load-test-harness": "Load Test Harness",
   "test-runtime-budgets": "Test Runtime Budgets",
   "sdk-integration-fixture-audit": "SDK Integration Fixture Audit",
+  "cli-function-level-audit": "CLI Function-Level Audit"
   "-- Contributing --": {
     "type": "separator",
     "title": "Contributing"
@@ -89,6 +96,7 @@
   "cross-repo-sync": "Cross-Repo Sync",
   "cross-repo-dependencies": "Cross-Repo Dependencies",
   "branch-protection": "Branch Protection",
+  "hardening-batch-coordination": "Hardening Batch Coordination",
   "project-board": "Project Board",
   "-- Reference --": {
     "type": "separator",
@@ -102,6 +110,7 @@
   "security": "Security",
   "security-guide": "Security Guide",
   "vulnerability-disclosure": "Vulnerability Disclosure",
+  "scf-technical-narrative": "SCF Technical Narrative",
   "secrets-baseline-audit": "Secrets Baseline Audit",
   "privacy": "Privacy & Data Retention",
   "next.config": "Next Config",

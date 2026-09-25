@@ -30,6 +30,21 @@ export const CONFIG = {
     .split(',')
     .map((ip) => ip.trim())
     .filter(Boolean),
+  /**
+   * Optional bearer token required on GraphQL WebSocket subscription
+   * connections. When unset, subscriptions are publicly accessible.
+   * Clients send it via the `Authorization: Bearer <token>` header during
+   * the graphql-transport-ws `connection_init` handshake.
+   */
+  subscriptionAuthToken: process.env.SUBSCRIPTION_AUTH_TOKEN,
+  /** Max concurrent GraphQL WebSocket connections allowed (default: 100). */
+  subscriptionMaxConnections: Number(
+    process.env.SUBSCRIPTION_MAX_CONNECTIONS ?? '100'
+  ),
+  /** Max GraphQL WebSocket connections allowed per client IP (default: 10). */
+  subscriptionMaxConnectionsPerIp: Number(
+    process.env.SUBSCRIPTION_MAX_CONNECTIONS_PER_IP ?? '10'
+  ),
   /** Archival schedule interval in ms (default: 24 hours). */
   archiveIntervalMs: Number(process.env.ARCHIVE_INTERVAL_MS ?? '86400000'),
   /** Retention period in days (default: 90 days). */
