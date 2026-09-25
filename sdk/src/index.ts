@@ -12,6 +12,8 @@ export * from './signers';
 export * from './types';
 export * from './timeouts';
 export * from './backoff';
+export * from './circuit-breaker';
+export * from './rpc-resilience';
 export { ContractError } from './generated/types';
 export * from './notifications';
 export * from './analytics';

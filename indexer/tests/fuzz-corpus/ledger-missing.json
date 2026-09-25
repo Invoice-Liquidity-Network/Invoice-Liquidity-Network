@@ -1,0 +1,28 @@
+{
+  "name": "ledger-missing",
+  "found": "2026-09-25",
+  "property": "no-crash",
+  "finding": "a missing ledger reached the NOT NULL column and threw",
+  "event": {
+    "id": "0000001234-1-1",
+    "ledger": {
+      "$absent": true
+    },
+    "ledgerClosedAt": "2024-01-01T00:00:00Z",
+    "topic": [
+      {
+        "$xdr": "AAAADwAAAAlzdWJtaXR0ZWQAAAA="
+      }
+    ],
+    "value": {
+      "$xdr": "AAAABQAAAAAAAAAH"
+    }
+  },
+  "invoice": {
+    "kind": "null"
+  },
+  "expect": {
+    "outcome": "malformed",
+    "reason": "ledger_invalid"
+  }
+}

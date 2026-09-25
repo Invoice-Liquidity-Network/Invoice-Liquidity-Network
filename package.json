@@ -47,7 +47,15 @@
     "validate:meta-nav": "node scripts/check-meta-nav.mjs",
     "check:shared-types": "node scripts/check-no-duplicate-types.mjs",
     "drift:check": "node scripts/check-monorepo-map-drift.mjs",
-    "test:drift": "node --test scripts/__tests__/check-monorepo-map-drift.test.mjs"
+    "test:drift": "node --test scripts/__tests__/check-monorepo-map-drift.test.mjs",
+    "alert:audit": "node scripts/alert-audit.mjs",
+    "alert:audit:check": "node scripts/alert-audit.mjs --check",
+    "test:alert-audit": "node --test scripts/__tests__/alert-audit.test.mjs",
+    "test:chaos": "vitest run tests/chaos/harness.test.ts",
+    "test:chaos:live": "vitest run tests/chaos/suite.test.ts",
+    "chaos:up": "docker compose -f docker-compose.yml -f tests/chaos/docker-compose.chaos.yml up -d stellar-node redis toxiproxy indexer oracle-service notifications",
+    "chaos:down": "docker compose -f docker-compose.yml -f tests/chaos/docker-compose.chaos.yml down --remove-orphans",
+    "chaos:run": "tsx tests/chaos/run.ts"
   },
   "devDependencies": {
     "@changesets/cli": "^2.31.0",

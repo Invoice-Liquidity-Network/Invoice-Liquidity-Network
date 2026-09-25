@@ -1,0 +1,114 @@
+{
+  "$schema": "./incidents.schema.json",
+  "description": "Incident ledger used by scripts/alert-audit.mjs. One entry per real incident or game-day, sourced from docs/postmortems/, docs/game-days/ and the Upptime history in history/. Add an entry after every postmortem; the audit is only as good as this list.",
+  "incidents": [
+    {
+      "id": "2026-08-30-oracle-cache-malfunction",
+      "date": "2026-08-30",
+      "severity": "P1",
+      "kind": "game-day",
+      "source": "docs/postmortems/2026-08-30-cross-repo-game-day-oracle-malfunction.md",
+      "summary": "oracle-service cached malformed verification payloads after an upstream schema change; the frontend rendered VERIFICATION FAILED badges while every service reported healthy.",
+      "components": ["oracle-service"],
+      "detectedBy": ["upptime", "FrontendBadgeErrorSpike", "OracleServiceLatencyHigh"],
+      "detectionMinutes": 3.25,
+      "expectedAlertClasses": ["oracle-verdict-integrity"],
+      "coverageGap": {
+        "status": "accepted",
+        "reason": "The service answered 200 with a well-formed-but-wrong payload; no metric distinguishes a schema-invalid verdict from a valid one. Tracked as a follow-up: emit oracle_verification_outcome_total{outcome=\"rejected-invalid-payload\"} from the cache reader added in the hotfix, then add a rule on it."
+      }
+    },
+    {
+      "id": "2026-08-30-indexer-unavailable",
+      "date": "2026-08-30",
+      "severity": "P2",
+      "kind": "availability",
+      "source": "history/summary.json (iln-indexer-service dailyMinutesDown)",
+      "summary": "Upptime recorded indexer.iln.finance/health down for 2 minutes.",
+      "components": ["indexer"],
+      "detectedBy": ["upptime"],
+      "detectionMinutes": 5,
+      "expectedAlertClasses": ["service-down"]
+    },
+    {
+      "id": "2026-08-30-notifications-unavailable",
+      "date": "2026-08-30",
+      "severity": "P2",
+      "kind": "availability",
+      "source": "history/summary.json (iln-notifications-service dailyMinutesDown)",
+      "summary": "Upptime recorded the notifications health endpoint down for 2 minutes.",
+      "components": ["notifications"],
+      "detectedBy": ["upptime"],
+      "detectionMinutes": 5,
+      "expectedAlertClasses": ["service-down"]
+    },
+    {
+      "id": "2026-08-26-oracle-unavailable",
+      "date": "2026-08-26",
+      "severity": "P1",
+      "kind": "availability",
+      "source": "history/summary.json (iln-oracle-service dailyMinutesDown 2026-08-26..2026-08-30)",
+      "summary": "Upptime recorded oracle.iln.finance/v1/health down continuously for five days (0.00% monthly uptime). No Prometheus alert fired: every oracle rule is a ratio over request counters, which stay at zero when nothing reaches the service.",
+      "components": ["oracle-service"],
+      "detectedBy": ["upptime"],
+      "detectionMinutes": 5,
+      "expectedAlertClasses": ["service-down"]
+    }
+  ],
+  "alertClasses": {
+    "service-down": {
+      "description": "A scrape target stopped answering. Ratio-based SLO rules cannot fire here because their denominators are zero.",
+      "rules": ["ServiceDown"]
+    },
+    "oracle-verdict-integrity": {
+      "description": "The oracle answers successfully with verdicts that are wrong or unparseable.",
+      "rules": []
+    },
+    "indexer-lag": {
+      "description": "The indexer cursor stops advancing (docs/monitoring.md, Signal 2).",
+      "rules": ["IndexerCursorStale", "IndexerCursorStaleCritical"]
+    },
+    "notifications-degraded": {
+      "description": "Notifications are being delivered through fallback providers.",
+      "rules": ["NotificationsFallbackActive"]
+    }
+  },
+  "ruleDecisions": {
+    "OracleVerificationLatencyHigh": {
+      "decision": "removed",
+      "reason": "Static p95 > 2s duplicate of OracleLatencyFastBurn (SLO threshold 1s). Fired for the 2026-08-30 game-day as OracleServiceLatencyHigh only in the incident narrative; the burn-rate rule covers the same signal with the SLO's own threshold, so one paging rule per symptom."
+    },
+    "OracleStaleResponsesRising": {
+      "decision": "removed",
+      "reason": "rate(oracle_stale_responses_total[10m]) > 0 pages on a single stale verdict in ten minutes. Never corresponded to an incident; OracleFreshnessFastBurn/SlowBurn alert on the stale ratio against the 99.5% SLO instead."
+    },
+    "OracleNoVerifications": {
+      "decision": "retuned",
+      "reason": "Kept as the only rule that catches a silently idle oracle, but 15 minutes of no traffic is normal outside business hours on testnet. Window widened to 30m so it fires on an outage, not a quiet evening."
+    },
+    "OracleCacheHitRateLow": {
+      "decision": "retuned",
+      "reason": "Documented to be noisy right after deploys and Redis restarts. for: raised from 15m to 30m."
+    },
+    "ServiceDown": {
+      "decision": "added",
+      "reason": "Three of the four recorded incidents were plain unavailability that no existing rule could fire on."
+    },
+    "IndexerCursorStale": {
+      "decision": "added",
+      "reason": "docs/monitoring.md Signal 2 specifies syncLag > 60s warning and > 300s critical, but no Prometheus rule implemented it; iln_cursor_updated_at is already exported."
+    },
+    "IndexerCursorStaleCritical": {
+      "decision": "added",
+      "reason": "Critical tier of the same signal."
+    },
+    "NotificationsFallbackActive": {
+      "decision": "added",
+      "reason": "Fallback deliveries are the degraded-mode signal called out in NotificationDeliveryFastBurn's own annotation but had no rule."
+    },
+    "IndexerDatabaseErrors": {
+      "decision": "added",
+      "reason": "Signal 2 lists db: error as critical; iln_db_errors_total existed with no rule."
+    }
+  }
+}

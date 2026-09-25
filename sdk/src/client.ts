@@ -13,7 +13,7 @@ import { createLogger } from './logger';
 import type { Unsubscribe } from './state';
 import { track } from './usage-analytics';
 import { Cache, type CacheOptions } from './cache';
-import { withBackoff, isTransientError, type BackoffOptions } from './backoff';
+import { createResilientRpcServer, getRpcResilience } from './rpc-resilience';
 import { Validators } from './validators';
 import {
   encodeProposalAction,
@@ -82,12 +82,7 @@ import {
   type OfflineQueueItem,
   type OfflineState,
 } from './offline';
-import {
-  resolveRequestTimeouts,
-  type RequestTimeouts,
-  TimeoutError,
-  withTimeout,
-} from './timeouts';
+import { resolveRequestTimeouts, type RequestTimeouts, TimeoutError } from './timeouts';
 import { verifyContractId } from './registry';
 
 const READ_ACCOUNT = 'GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF';
@@ -146,7 +141,6 @@ export class ILNSdk {
   private readonly cache: Cache<unknown>;
   private readonly cacheEnabled: boolean;
   private offlineManager: OfflineManager | null = null;
-  private readonly backoffOptions: BackoffOptions | false;
 
   /**
    * Create a new ILN SDK client.
@@ -155,10 +149,17 @@ export class ILNSdk {
   constructor(config: ILNSdkConfig) {
     this.contractId = config.contractId;
     this.networkPassphrase = config.networkPassphrase;
-    this.server = config.server ?? new rpc.Server(config.rpcUrl);
+    this.requestTimeouts = resolveRequestTimeouts(config);
+    // Every RPC call goes through the resilient wrapper: per-attempt timeout,
+    // retry with jitter and the circuit breaker (rpc-resilience.ts).
+    this.server = createResilientRpcServer(config.server ?? new rpc.Server(config.rpcUrl), {
+      backoff: config.backoff,
+      circuitBreaker: config.circuitBreaker,
+      timeouts: this.requestTimeouts,
+      logger: (message, context) => this.logger.warn(message, context),
+    });
     this.rpcUrl = config.rpcUrl;
     this.signer = config.signer;
-    this.requestTimeouts = resolveRequestTimeouts(config);
     this.analyticsNetwork = config.networkPassphrase.includes('Test SDF Network')
       ? 'testnet'
       : 'mainnet';
@@ -166,8 +167,6 @@ export class ILNSdk {
     const cacheConfig = config.cache ?? { ttl: 60000, storage: 'memory', enabled: true };
     this.cache = new Cache(cacheConfig);
     this.cacheEnabled = cacheConfig.enabled ?? true;
-
-    this.backoffOptions = config.backoff ?? {};
 
     if (config.offline !== undefined) {
       this.offlineManager = new OfflineManager(config.offline);
@@ -183,36 +182,30 @@ export class ILNSdk {
     }
   }
 
+  /**
+   * Normalises RPC failures into ILN errors. Retries, timeouts and the circuit
+   * breaker live in the resilient server wrapper, which re-invokes the RPC
+   * method for every attempt instead of re-awaiting a single settled promise.
+   */
   private async wrapRpcCall<T>(promise: Promise<T>, operationName: string): Promise<T> {
-    // If backoff is disabled, use the original simple try/catch
-    if (this.backoffOptions === false) {
-      return this.executeRpcCall(promise, operationName);
+    return this.executeRpcCall(promise, operationName);
+  }
+
+  /**
+   * Invokes an RPC method through the resilience wrapper with a labelled,
+   * per-operation timeout (`simulateTransaction:get_invoice`, `writeMs`).
+   */
+  private rpc<T>(
+    method: string,
+    args: unknown[],
+    operation: string,
+    timeoutMs: number
+  ): Promise<T> {
+    const resilience = getRpcResilience(this.server);
+    if (!resilience) {
+      throw new Error('RPC server is not wrapped with resilience policies.');
     }
-
-    // Wrap the promise factory for retry with backoff
-    const { result } = await withBackoff(
-      () => this.executeRpcCall(promise, operationName),
-      {
-        ...this.backoffOptions,
-        isRetryable: (error) => {
-          // Don't retry if it's a known ILN error (non-transient)
-          if (error instanceof ILNError) return false;
-          // Don't retry timeout errors — they should surface immediately
-          if (error instanceof TimeoutError) return false;
-          // Delegate to default transient error check
-          return isTransientError(error);
-        },
-        onRetry: (attempt, error, delayMs) => {
-          if (this.logger.enabled) {
-            this.logger(`Retrying ${operationName} (attempt ${attempt}) after ${delayMs}ms`, {
-              error: error instanceof Error ? error.message : String(error),
-            });
-          }
-        },
-      }
-    );
-
-    return result;
+    return resilience.invoke<T>(method, args, { operation, timeoutMs });
   }
 
   private async executeRpcCall<T>(promise: Promise<T>, operationName: string): Promise<T> {
@@ -1183,7 +1176,7 @@ export class ILNSdk {
     }
 
     const ledger = await this.wrapRpcCall(
-      withTimeout('getLatestLedger', this.requestTimeouts.readMs, server.getLatestLedger()),
+      this.rpc('getLatestLedger', [], 'getLatestLedger', this.requestTimeouts.readMs),
       'getLatestLedger'
     );
 
@@ -1446,10 +1439,9 @@ export class ILNSdk {
     method: string,
     args: xdr.ScVal[]
   ): Promise<BuiltTransaction> {
-    const sourceAccount = (await withTimeout(
-      `getAccount:${method}`,
-      this.requestTimeouts.writeMs,
-      this.server.getAccount(sourceAddress)
+    const sourceAccount = (await this.wrapRpcCall(
+      this.rpc('getAccount', [sourceAddress], `getAccount:${method}`, this.requestTimeouts.writeMs),
+      `getAccount:${method}`
     )) as Account;
 
     return new TransactionBuilder(sourceAccount, {
@@ -1482,10 +1474,11 @@ export class ILNSdk {
   ): Promise<PreparedTransactionLike> {
     const originalXdr = transaction.toXDR();
     const prepared = await this.wrapRpcCall(
-      withTimeout(
+      this.rpc<PreparedTransactionLike>(
         'prepareTransaction',
-        this.requestTimeouts.writeMs,
-        this.server.prepareTransaction(transaction)
+        [transaction],
+        'prepareTransaction',
+        this.requestTimeouts.writeMs
       ),
       'prepareTransaction'
     );
@@ -1566,9 +1559,15 @@ export class ILNSdk {
       }
       // If XDR parsing itself fails, that's a clear sign of tampering
       throw new SimulationPreparedXdrMismatchError(
-        `Failed to parse prepared transaction XDR: ${error instanceof Error ? error.message : String(error)}`,
+        `Failed to parse prepared transaction XDR: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
         'Verify your RPC endpoint integrity and consider using a different node.',
-        { operationName, originalXdrLength: originalXdr.length, preparedXdrLength: preparedXdr.length }
+        {
+          operationName,
+          originalXdrLength: originalXdr.length,
+          preparedXdrLength: preparedXdr.length,
+        }
       );
     }
   }
@@ -1591,10 +1590,11 @@ export class ILNSdk {
     });
     const signedTransaction = TransactionBuilder.fromXDR(signedXdr, this.networkPassphrase);
     const response = (await this.wrapRpcCall(
-      withTimeout(
+      this.rpc(
         'sendTransaction',
-        this.requestTimeouts.writeMs,
-        this.server.sendTransaction(signedTransaction)
+        [signedTransaction],
+        'sendTransaction',
+        this.requestTimeouts.writeMs
       ),
       'sendTransaction'
     )) as {
@@ -1624,12 +1624,11 @@ export class ILNSdk {
     }
 
     const finalStatus = (await this.wrapRpcCall(
-      withTimeout(
+      this.rpc(
         'pollTransaction',
-        this.requestTimeouts.writeMs,
-        this.server.pollTransaction(response.hash, {
-          attempts: POLL_ATTEMPTS,
-        })
+        [response.hash, { attempts: POLL_ATTEMPTS }],
+        'pollTransaction',
+        this.requestTimeouts.writeMs
       ),
       'pollTransaction'
     )) as {
@@ -1692,10 +1691,11 @@ export class ILNSdk {
 
   private simulateReadTransaction(method: string, transaction: BuiltTransaction): Promise<unknown> {
     return this.wrapRpcCall(
-      withTimeout(
+      this.rpc(
+        'simulateTransaction',
+        [transaction],
         `simulateTransaction:${method}`,
-        this.requestTimeouts.readMs,
-        this.server.simulateTransaction(transaction)
+        this.requestTimeouts.readMs
       ),
       `simulateReadTransaction:${method}`
     );
@@ -1706,10 +1706,11 @@ export class ILNSdk {
     transaction: BuiltTransaction
   ): Promise<unknown> {
     return this.wrapRpcCall(
-      withTimeout(
+      this.rpc(
+        'simulateTransaction',
+        [transaction],
         `simulateTransaction:${method}`,
-        this.requestTimeouts.simulationMs,
-        this.server.simulateTransaction(transaction)
+        this.requestTimeouts.simulationMs
       ),
       `simulateWriteTransaction:${method}`
     );

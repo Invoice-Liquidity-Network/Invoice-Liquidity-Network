@@ -1,0 +1,98 @@
+# Availability and liveness rules added by the alert-rule audit
+# (docs/alert-rule-audit.md). Three of the four incidents in the ledger were
+# plain unavailability that none of the ratio-based SLO rules could fire on:
+# when a service is down its request counters stop moving, the clamp_min
+# denominators keep every ratio at zero, and the burn-rate rules stay quiet.
+#
+# Load alongside the other rule files (see prometheus.yml).
+groups:
+  - name: availability
+    interval: 30s
+    rules:
+      # ── Scrape target down ────────────────────────────────────────────────
+      # Would have fired for indexer (2026-08-30, 2m), notifications
+      # (2026-08-30, 2m) and oracle-service (2026-08-26..30) per the Upptime
+      # history in history/summary.json.
+      - alert: ServiceDown
+        # prometheus.yml names the jobs iln-*, the standalone scrape-oracle-service.yml names it oracle-service.
+        expr: up{job=~"iln-.*|oracle-service"} == 0
+        for: 2m
+        labels:
+          severity: critical
+          team: ops
+          component: '{{ $labels.job }}'
+        annotations:
+          summary: '{{ $labels.job }} ({{ $labels.instance }}) has not answered a scrape for 2 minutes.'
+          description: >-
+            The Prometheus scrape of this target is failing. Ratio-based SLO
+            alerts cannot detect this state. Check the process, its port and
+            the network path from Prometheus first; then docs/monitoring.md
+            section 8 for the per-service triage runbook.
+
+  - name: indexer-ingestion
+    interval: 30s
+    rules:
+      # ── Cursor lag (docs/monitoring.md, Signal 2) ─────────────────────────
+      # iln_cursor_updated_at is a Unix timestamp in milliseconds set every
+      # time the poller advances the cursor.
+      - alert: IndexerCursorStale
+        expr: |
+          (time() - iln_cursor_updated_at / 1000) > 60
+          and on(instance) up{job="iln-indexer"} == 1
+        for: 5m
+        labels:
+          severity: warning
+          team: ops
+          component: indexer
+        annotations:
+          summary: 'Indexer cursor has not advanced for {{ $value | humanizeDuration }}.'
+          description: >-
+            The indexer is up but falling behind the ledger. Inspect the poller
+            logs for RPC rate limiting (429) or timeouts, and SQLite lock
+            status. Warning threshold per Signal 2: syncLag > 60s.
+
+      - alert: IndexerCursorStaleCritical
+        expr: |
+          (time() - iln_cursor_updated_at / 1000) > 300
+          and on(instance) up{job="iln-indexer"} == 1
+        for: 5m
+        labels:
+          severity: critical
+          team: ops
+          component: indexer
+        annotations:
+          summary: 'Indexer cursor stalled for {{ $value | humanizeDuration }}.'
+          description: >-
+            Critical threshold per Signal 2: syncLag > 300s. Every downstream
+            consumer (oracle verdicts, notifications) is now serving stale
+            state. Restart the poller or replay from the last cursor checkpoint.
+
+      - alert: IndexerDatabaseErrors
+        expr: increase(iln_db_errors_total[10m]) > 0
+        for: 0m
+        labels:
+          severity: warning
+          team: ops
+          component: indexer
+        annotations:
+          summary: 'Indexer reported {{ $value }} database error(s) in 10 minutes.'
+          description: >-
+            Signal 2 treats db: error as critical on the health endpoint; this
+            rule surfaces the counter behind it. Check disk space and SQLITE_BUSY.
+
+  - name: notifications-degraded-mode
+    interval: 30s
+    rules:
+      - alert: NotificationsFallbackActive
+        expr: sum(rate(iln_notifications_fallback_deliveries_total[15m])) > 0
+        for: 15m
+        labels:
+          severity: warning
+          team: ops
+          component: notifications
+        annotations:
+          summary: 'Notifications have been routed through fallback providers for 15 minutes.'
+          description: >-
+            Degraded mode is active: a primary provider is failing health
+            checks. Deliveries still succeed, so the delivery SLO stays green.
+            Check /health/providers and the provider dashboards.

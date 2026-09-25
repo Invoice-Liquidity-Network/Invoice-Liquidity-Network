@@ -1,9 +1,11 @@
-import { type rpc, scValToNative } from '@stellar/stellar-sdk';
-import { hasEvent, insertEvent, upsertInvoice } from './db';
+import type { rpc } from '@stellar/stellar-sdk';
+import { getDb, hasEvent, insertEvent, upsertInvoice } from './db';
+import { deadLetterEvent } from './deadLetter';
+import { decodeEvent, isValidInvoiceState } from './decode';
 import { eventsProcessedTotal, invoicesUpsertedTotal } from './metrics';
 import { invalidateInvoiceCache } from './cache';
 import { fetchInvoice } from './rpc';
-import type { ILNEvent, ILNEventType } from './types';
+import type { ILNEvent } from './types';
 import {
   pubsub,
   INVOICE_UPDATED,
@@ -12,65 +14,71 @@ import {
   LEGACY_INVOICE_UPDATED,
 } from './graphql/pubsub';
 
-const KNOWN_EVENT_TYPES = new Set<ILNEventType>(['submitted', 'funded', 'paid', 'defaulted']);
-
 /**
  * Process a single Soroban contract event:
- * 1. Deduplicate by event_id.
- * 2. Decode the topic symbol and invoice_id from the event body.
- * 3. Persist the event record.
- * 4. Fetch the latest invoice state from the RPC and upsert into SQLite.
+ * 1. Decode and validate the raw payload (see decode.ts). Malformed events go
+ *    to the dead-letter table; unknown topics are ignored.
+ * 2. Deduplicate by event_id.
+ * 3. Fetch the latest invoice state from the RPC.
+ * 4. Persist the event record and the invoice state in one transaction, so a
+ *    replay can never find an event marked as processed without its state.
  *
  * Fetching via RPC (rather than parsing all fields from events) ensures we
  * always have accurate state even if events are processed out-of-order or after
- * a re-org.
+ * a re-org. A null state (invoice not found, RPC unavailable) still records the
+ * event, as before; a malformed state is dead-lettered and the event is left
+ * unprocessed so a later poll can retry it.
+ *
+ * Invariants (enforced by tests/processor.fuzz.test.ts): never throws for any
+ * event shape while the database is healthy; idempotent for valid events; a
+ * row in `events` always carries the decoded invoice id; malformed input
+ * produces exactly one dead-letter row and nothing else.
  */
 export async function processEvent(event: rpc.Api.EventResponse): Promise<void> {
+  const decoded = decodeEvent(event);
+  if (decoded.kind === 'malformed') {
+    deadLetterEvent(event, decoded.reason, decoded.detail);
+    return;
+  }
+  if (decoded.kind === 'ignored') {
+    return;
+  }
+  const ilnEvent: ILNEvent = decoded.event;
+
   // ── Deduplication ─────────────────────────────────────────────────────────
-  if (hasEvent(event.id)) {
+  if (hasEvent(ilnEvent.event_id)) {
     return;
   }
 
-  // ── Decode event type from topic[0] ───────────────────────────────────────
-  if (!event.topic || event.topic.length === 0) return;
-
-  const eventType = scValToNative(event.topic[0]) as string;
-  if (!KNOWN_EVENT_TYPES.has(eventType as ILNEventType)) {
-    return;
-  }
-
-  // ── Decode invoice_id from value ──────────────────────────────────────────
-  const invoiceId = Number(scValToNative(event.value) as bigint);
-
-  // ── Persist event record (INSERT OR IGNORE handles any race condition) ────
-  const ilnEvent: ILNEvent = {
-    event_id: event.id,
-    event_type: eventType as ILNEventType,
-    invoice_id: invoiceId,
-    ledger: event.ledger,
-    ledger_closed_at: event.ledgerClosedAt,
-    created_at: Date.now(),
-  };
-  insertEvent(ilnEvent);
-
-  // Track processed events
-  try {
-    eventsProcessedTotal.inc();
-  } catch {
-    /* metrics failure is non-fatal */
-  }
-
-  // ── Fetch latest invoice state and upsert ─────────────────────────────────
+  // ── Fetch latest invoice state ────────────────────────────────────────────
   // We always fetch the current state from the RPC regardless of event type.
   // This handles:
   //   • `submitted`  → inserts the full invoice with status=Pending
   //   • `funded`     → updates status=Funded + funder + funded_at
   //   • `paid`       → updates status=Paid
   //   • `defaulted`  → updates status=Defaulted
-  const invoice = await fetchInvoice(invoiceId);
+  const invoice = await fetchInvoice(ilnEvent.invoice_id);
+  if (invoice !== null && invoice !== undefined && !isValidInvoiceState(invoice)) {
+    deadLetterEvent(event, 'invalid_invoice_state');
+    return;
+  }
+
+  // ── Persist event + state atomically ─────────────────────────────────────
+  getDb().transaction(() => {
+    insertEvent(ilnEvent);
+    if (invoice) {
+      upsertInvoice(invoice);
+    }
+  })();
+
+  try {
+    eventsProcessedTotal.inc();
+  } catch {
+    /* metrics failure is non-fatal */
+  }
+
   if (invoice) {
-    upsertInvoice(invoice);
-    await invalidateInvoiceCache(invoiceId);
+    await invalidateInvoiceCache(ilnEvent.invoice_id);
     try {
       invoicesUpsertedTotal.inc();
     } catch {
@@ -81,7 +89,7 @@ export async function processEvent(event: rpc.Api.EventResponse): Promise<void> 
     // the raw invoice on its own namespaced channels (see ./graphql/pubsub).
     pubsub.publish(INVOICE_UPDATED, { invoiceUpdated: invoice, triggeringEvent: ilnEvent });
     pubsub.publish(EVENT_STREAM, { eventStream: ilnEvent });
-    if (eventType === 'submitted') {
+    if (ilnEvent.event_type === 'submitted') {
       pubsub.publish(LEGACY_INVOICE_CREATED, invoice);
     } else {
       pubsub.publish(LEGACY_INVOICE_UPDATED, invoice);

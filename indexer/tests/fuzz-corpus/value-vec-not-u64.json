@@ -1,0 +1,27 @@
+{
+  "name": "value-vec-not-u64",
+  "found": "2026-09-25",
+  "property": "integrity",
+  "finding": "a vector value decoded to an array, Number([1n,2n]) became NaN and the events row was written with invoice_id NaN",
+  "event": {
+    "id": "0000001234-0-4",
+    "ledger": 1000,
+    "ledgerClosedAt": "2024-01-01T00:00:00Z",
+    "topic": [
+      {
+        "$xdr": "AAAADwAAAAlzdWJtaXR0ZWQAAAA="
+      }
+    ],
+    "value": {
+      "$xdr": "AAAAEAAAAAEAAAACAAAABQAAAAAAAAABAAAABQAAAAAAAAAC"
+    }
+  },
+  "invoice": {
+    "kind": "valid",
+    "status": "Pending"
+  },
+  "expect": {
+    "outcome": "malformed",
+    "reason": "invoice_id_invalid"
+  }
+}
