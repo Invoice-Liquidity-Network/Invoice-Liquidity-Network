@@ -37,6 +37,71 @@ function createAbortSignal(timeoutMs: number): AbortSignal {
 interface RateLimitStore {
   windowStart: number;
   count: number;
+  consecutive429s: number;
+  lastSeen: number;
+}
+
+// ── Abuse-pattern detection ──────────────────────────────────────────────────
+// Tracks per-IP patterns that indicate automated abuse: rapid-fire requests,
+// credential-stuffing signatures (many distinct payer addresses in short
+// windows), and sustained high-volume traffic.
+interface AbuseTracker {
+  /** Distinct payer addresses seen from this IP in the current window. */
+  distinctPayers: Set<string>;
+  /** Rolling count of 429 responses served to this IP. */
+  consecutive429s: number;
+  /** Timestamp of the last request from this IP. */
+  lastSeen: number;
+}
+
+const abuseTrackers = new Map<string, AbuseTracker>();
+
+/** IPs that have been flagged by abuse detection. Blocked for BLOCK_DURATION_MS. */
+const blockedIps = new Map<string, number>();
+const BLOCK_DURATION_MS = 5 * 60 * 1000; // 5 minutes
+const MAX_DISTINCT_PAYERS_PER_WINDOW = 50;
+const SUSPICIOUS_VELOCITY_MS = 100; // <100ms between requests is suspicious
+
+function trackAbuse(clientIp: string, payer?: string): { blocked: boolean; reason?: string } {
+  const now = Date.now();
+
+  // Check if IP is currently blocked.
+  const blockedUntil = blockedIps.get(clientIp);
+  if (blockedUntil && now < blockedUntil) {
+    return { blocked: true, reason: 'IP temporarily blocked due to abuse pattern' };
+  }
+  if (blockedUntil && now >= blockedUntil) {
+    blockedIps.delete(clientIp);
+  }
+
+  let tracker = abuseTrackers.get(clientIp);
+  if (!tracker) {
+    tracker = { distinctPayers: new Set(), consecutive429s: 0, lastSeen: now };
+    abuseTrackers.set(clientIp, tracker);
+  }
+
+  // Track payer diversity (credential-stuffing indicator).
+  if (payer) {
+    tracker.distinctPayers.add(payer);
+    if (tracker.distinctPayers.size > MAX_DISTINCT_PAYERS_PER_WINDOW) {
+      blockedIps.set(clientIp, now + BLOCK_DURATION_MS);
+      return { blocked: true, reason: 'Excessive distinct payer addresses probed' };
+    }
+  }
+
+  // Detect rapid-fire requests (scripted abuse).
+  if (now - tracker.lastSeen < SUSPICIOUS_VELOCITY_MS) {
+    tracker.consecutive429s += 1;
+    if (tracker.consecutive429s > 5) {
+      blockedIps.set(clientIp, now + BLOCK_DURATION_MS);
+      return { blocked: true, reason: 'Sustained rapid-fire requests detected' };
+    }
+  } else {
+    tracker.consecutive429s = Math.max(0, tracker.consecutive429s - 1);
+  }
+
+  tracker.lastSeen = now;
+  return { blocked: false };
 }
 
 function createRateLimitMiddleware(
@@ -48,6 +113,19 @@ function createRateLimitMiddleware(
   return (req: Request, res: Response, next: NextFunction): void => {
     const clientIp = (req.ip || req.socket.remoteAddress || 'unknown').toString();
     const now = Date.now();
+
+    // Abuse-pattern check (runs before rate limiting to catch blocked IPs early).
+    const payer = typeof req.body?.payer === 'string' ? req.body.payer : undefined;
+    const abuseCheck = trackAbuse(clientIp, payer);
+    if (abuseCheck.blocked) {
+      res.status(429).json({
+        error: 'Request blocked',
+        reason: abuseCheck.reason,
+        retryAfter: Math.ceil(BLOCK_DURATION_MS / 1000),
+      });
+      return;
+    }
+
     const storedEntry = store.get(clientIp);
 
     if (!storedEntry || now - storedEntry.windowStart > windowMs) {

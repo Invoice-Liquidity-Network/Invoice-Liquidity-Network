@@ -50,3 +50,24 @@ pnpm gitleaks:baseline
 
 Then review every new entry before committing to ensure it is a genuine false
 positive.
+
+## Pre-commit enforcement (Issue #1081)
+
+As of 2026-09, a local pre-commit hook (`gitleaks protect --staged`) runs
+before every commit, blocking secrets from entering the staging area. This
+closes the gap between CI-time detection (post-push) and local development
+(pre-push).
+
+### Setup
+
+The hook is installed automatically via `husky install` (the `prepare`
+script in `package.json`). After `pnpm install`, the hook is active.
+
+Developers who need to bypass the hook for a legitimate reason (e.g.
+regenerating the baseline) can use:
+
+```bash
+git commit --no-verify -m "chore: update secrets baseline"
+```
+
+But this should be rare and reviewed in PR.

@@ -10,13 +10,15 @@ This project currently uses mutation testing in two contexts. On 2026-08-27, the
 | Context | Tool | Target | Status |
 |---|---|---|---|
 | TypeScript SDK | [Stryker](https://stryker-mutator.io/) | `packages/sdk/src/errors.ts` | ✅ Implemented & CI-wired |
+| Indexer event-processing | [Stryker](https://stryker-mutator.io/) | `indexer/src/processor.ts` | ✅ Implemented & CI-wired (#1085) |
+| Oracle composition | [Stryker](https://stryker-mutator.io/) | `oracle-service/src/composition.ts`, `oracle-service/src/verifier.ts` | ✅ Implemented & CI-wired (#1085) |
 | Rust Smart Contract | [cargo-mutants](https://mutants.rs/) | `contracts/invoice_liquidity/src/lib.rs` | ⏳ Proposal (see below) |
 
-**Target mutation score: ≥ 80%** for the SDK errors module.
+**Target mutation score: ≥ 80%** for the SDK errors module, indexer event-processing, and oracle composition logic.
 
 ---
 
-## Stryker (TypeScript SDK) — Implemented
+## Stryker (TypeScript) — Implemented
 
 ### Configuration
 
@@ -24,9 +26,9 @@ This project currently uses mutation testing in two contexts. On 2026-08-27, the
 - Runner: `pnpm test:mutation` (from `packages/sdk/`)
 - CI: `.github/workflows/mutation-testing.yml`
   - **Scheduled**: runs weekly (Sunday 06:00 UTC)
-  - **PR-triggered**: runs on changes to `errors.ts`, `errors.test.ts`, or Stryker config
+  - **PR-triggered**: runs on changes to errors.ts, processor.ts, composition.ts, verifier.ts, or Stryker config
   - **Non-blocking**: results are advisory; the job uses `continue-on-error: true`
-  - **Artifact**: HTML mutation report is uploaded as a workflow artifact (`mutation-report-sdk-errors`) with 30-day retention
+  - **Artifacts**: HTML mutation reports uploaded with 30-day retention
 
 ### Current Target
 
@@ -49,6 +51,45 @@ This project currently uses mutation testing in two contexts. On 2026-08-27, the
 | `oracle-service/` | No package mutation target configured | Verification branches have unit coverage; no mutation score is claimed |
 
 Priority remediation from this review: enforce exact IP parsing for the indexer whitelist and reject GraphQL requests above documented depth/complexity limits. These controls are now tested; future mutation runs should include their boundary predicates and the SDK signer pipeline.
+
+---
+
+## Indexer Event-Processing Mutation Testing — Implemented (#1085)
+
+**Target:** `indexer/src/processor.ts` — the event-processing pipeline that
+transforms raw ledger events into invoice state transitions. This is one of the
+two most correctness-critical code paths in the repository.
+
+**CI job:** `indexer-mutation` in `.github/workflows/mutation-testing.yml`
+**PR trigger:** changes to `indexer/src/**` or `indexer/tests/**`
+**Report:** `mutation-report-indexer` artifact (30-day retention)
+
+### Why processor.ts
+
+A mutation to a state-transition condition (e.g. changing `===` to `!==` in
+a status check) would silently corrupt invoice records. The existing unit
+tests cover the happy path, but mutation testing verifies that boundary
+conditions and error paths are also caught.
+
+---
+
+## Oracle-Service Composition Mutation Testing — Implemented (#1085)
+
+**Target:** `oracle-service/src/composition.ts` and `oracle-service/src/verifier.ts` —
+the signal-composition and verification logic that determines whether an
+invoice is trustworthy enough to fund. This is the second most
+correctness-critical code path.
+
+**CI job:** `oracle-mutation` in `.github/workflows/mutation-testing.yml`
+**PR trigger:** changes to `oracle-service/src/**`
+**Report:** `mutation-report-oracle` artifact (30-day retention)
+
+### Why composition.ts + verifier.ts
+
+A mutation to the fraud-signal threshold or the composition weight would
+silently change which invoices are approved/rejected, directly affecting
+protocol solvency. These modules already have 90+ test cases; mutation
+testing confirms no regression path is untested.
 
 ## Adding New Stryker Targets
 
