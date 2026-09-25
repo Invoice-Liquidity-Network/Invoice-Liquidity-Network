@@ -1,5 +1,5 @@
 # ==============================================================================
-# SDK Release — Issue #232 / #878
+# SDK Release — Issue #232 / #878 / #1077
 #
 # Publishes the @iln/sdk-next package (packages/sdk) to npm on every `v*` version
 # tag, with build provenance (--provenance) for supply-chain transparency, and
@@ -9,6 +9,18 @@
 # NOTE (issue #878): the package was renamed from @iln/sdk to @iln/sdk-next
 # during the packages consolidation; the publish step targets whatever name
 # packages/sdk/package.json declares, so this workflow publishes @iln/sdk-next.
+#
+# NOTE (issue #1077): the release pipeline is split into three gated jobs so a
+# release can never ship unattested:
+#   1. build-pack    — builds, tests, packs the tarball and computes its digest;
+#   2. provenance    — generates SLSA Level 3 provenance via
+#                      slsa-framework/slsa-github-generator;
+#   3. publish       — `needs: [build-pack, provenance]`, verifies the attestation
+#                      covers the exact tarballs being shipped, then publishes to
+#                      npm and attaches the attestation + checksums to the
+#                      GitHub Release.
+# If provenance generation fails, `publish` is skipped entirely (issue #1077:
+# "fails the release ... rather than shipping unattested").
 #
 # On pull requests targeting `main` the workflow performs a dry run only
 # (install + build + pack), so packaging problems are caught before a tag is cut
@@ -29,7 +41,7 @@ on:
       - '.github/workflows/sdk-release.yml'
   workflow_dispatch:
 
-# Least-privilege default; the publish job elevates to contents + id-token.
+# Least-privilege default; individual jobs elevate as needed.
 permissions:
   contents: read
 
@@ -81,16 +93,17 @@ jobs:
         run: tar -tzf "$RUNNER_TEMP"/*.tgz
 
   # ----------------------------------------------------------------------------
-  # Publish on `v*` tags: build, test, generate SBOM, publish to npm with
-  # provenance, then create a GitHub Release with the changelog and SBOM asset.
+  # Build + pack on `v*` tags: build, test, generate the SBOM, pack the release
+  # tarball and compute the subject digests consumed by the SLSA generator.
+  # The artifacts are uploaded for the publish job so it ships the exact files
+  # that were attested.
   # ----------------------------------------------------------------------------
-  publish:
-    name: Publish to npm
+  build-pack:
+    name: Build, test and pack
     if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
-    permissions:
-      contents: write # create the GitHub Release
-      id-token: write # required for npm provenance attestation
+    outputs:
+      hashes: ${{ steps.subjects.outputs.hashes }}
     steps:
       - uses: actions/checkout@v4
 
@@ -121,6 +134,129 @@ jobs:
           output: '${{ runner.temp }}/sbom.json'
           format: 'json'
 
+      - name: Pack release tarball and checksums
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/artifacts"
+          pnpm pack --pack-destination "$RUNNER_TEMP/artifacts"
+          # sha256 of every release artifact, recorded next to the attestation.
+          (cd "$RUNNER_TEMP/artifacts" && sha256sum ./*.tgz > checksums.txt)
+          cp "$RUNNER_TEMP/sbom.json" "$RUNNER_TEMP/artifacts/sbom.json"
+
+      - name: Generate attestation subjects
+        id: subjects
+        shell: bash
+        run: |
+          set -euo pipefail
+          # sha256sum output (relative names) base64-encoded, as required by
+          # slsa-framework/slsa-github-generator's generic workflow.
+          echo "hashes=$(cd "$RUNNER_TEMP/artifacts" && sha256sum ./*.tgz | sed 's| \./| |' | base64 -w0)" >> "$GITHUB_OUTPUT"
+
+      - name: Upload release artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: sdk-release-artifacts
+          path: ${{ runner.temp }}/artifacts/
+          if-no-files-found: error
+          retention-days: 14
+
+  # ----------------------------------------------------------------------------
+  # SLSA Level 3 provenance for the packed SDK artifacts (issue #1077).
+  # `provenance-name` is a workflow output of the generator, so the publish job
+  # can download the signed attestation by name and verify it before shipping.
+  # ----------------------------------------------------------------------------
+  provenance:
+    name: SLSA provenance generation
+    needs: build-pack
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    permissions:
+      actions: read # detect the GitHub Actions environment
+      id-token: write # sign the provenance
+      contents: write # release uploads
+    uses: slsa-framework/slsa-github-generator/.github/workflows/generator_generic_slsa3.yml@v2.1.0
+    with:
+      base64-subjects: "${{ needs.build-pack.outputs.hashes }}"
+      provenance-name: sdk-release.intoto.jsonl
+
+  # ----------------------------------------------------------------------------
+  # Publish on `v*` tags: verify the attestation, publish to npm with
+  # provenance, then create a GitHub Release with the changelog, SBOM, checksums
+  # and the SLSA attestation attached alongside the release artifact.
+  # ----------------------------------------------------------------------------
+  publish:
+    name: Publish to npm
+    needs: [build-pack, provenance]
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # create the GitHub Release
+      id-token: write # required for npm provenance attestation
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@a15d269cd4658e1107c09f1fabf4cbd7bd1f308a # v4.4.0
+        with:
+          version: '9.0.0'
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+          registry-url: 'https://registry.npmjs.org'
+
+      - name: Install dependencies
+        working-directory: .
+        run: pnpm install --frozen-lockfile
+
+      - name: Build SDK
+        run: pnpm build
+
+      # Tests already ran in the build-pack job; that job gates this one.
+
+      - name: Download release artifacts (attested tarball, SBOM, checksums)
+        uses: actions/download-artifact@v4
+        with:
+          name: sdk-release-artifacts
+          path: ${{ runner.temp }}/artifacts
+
+      - name: Download SLSA provenance attestation
+        uses: actions/download-artifact@v4
+        with:
+          name: sdk-release.intoto.jsonl
+          path: ${{ runner.temp }}/provenance
+
+      - name: Verify provenance covers the release artifacts
+        shell: bash
+        run: |
+          set -euo pipefail
+          prov="$RUNNER_TEMP/provenance/sdk-release.intoto.jsonl"
+          if [ ! -s "$prov" ]; then
+            echo "::error::SLSA provenance attestation missing — refusing to ship an unattested release (issue #1077)."
+            exit 1
+          fi
+
+          # The attestation is a DSSE-wrapped in-toto statement; the subject
+          # digests must cover every tarball we are about to publish.
+          if jq -e '.dsseEnvelope.payload' "$prov" >/dev/null 2>&1; then
+            subjects="$(jq -r '.dsseEnvelope.payload' "$prov" | base64 -d | jq -r '.subject[].digest.sha256')"
+          else
+            subjects="$(jq -r '.subject[].digest.sha256' "$prov")"
+          fi
+
+          status=0
+          for tgz in "$RUNNER_TEMP"/artifacts/*.tgz; do
+            digest="$(sha256sum "$tgz" | awk '{print $1}')"
+            if printf '%s\n' "$subjects" | grep -qx "$digest"; then
+              echo "attested: $(basename "$tgz") sha256:$digest"
+            else
+              echo "::error::$(basename "$tgz") (sha256:$digest) is not covered by the SLSA attestation."
+              status=1
+            fi
+          done
+          exit $status
+
       - name: Publish to npm with provenance
         run: pnpm publish --provenance --access public --no-git-checks
         env:
@@ -148,7 +284,7 @@ jobs:
             echo "__EOF__"
           } >> "$GITHUB_OUTPUT"
 
-      - name: Create GitHub Release with SBOM asset
+      - name: Create GitHub Release with SBOM, checksums and provenance
         uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2.6.2
         with:
           tag_name: ${{ github.ref_name }}
@@ -156,6 +292,9 @@ jobs:
           body: ${{ steps.changelog.outputs.notes }}
           draft: false
           prerelease: ${{ contains(github.ref_name, '-') }}
-          files: '${{ runner.temp }}/sbom.json'
+          files: |
+            ${{ runner.temp }}/artifacts/sbom.json
+            ${{ runner.temp }}/artifacts/checksums.txt
+            ${{ runner.temp }}/provenance/sdk-release.intoto.jsonl
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
