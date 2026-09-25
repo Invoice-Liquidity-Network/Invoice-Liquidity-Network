@@ -563,3 +563,497 @@ The following static-threshold alerts have been **deleted** and replaced by MWMB
 - Any `rate(...) > fixed threshold` without a burn-rate window — replaced by the 5m+1h / 30m+6h pattern.
 
 If you need to roll back to static thresholds temporarily (e.g. Prometheus without recording-rule support), restore the prior `oracle-service-alerts.yml` revision, but be aware this reintroduces alert fatigue on brief blips and slow detection of sustained burns (the reason MWMBR is the production-grade standard).
+
+---
+
+## 10. Automated Secrets Rotation and Credential Management
+
+### Overview
+
+All service credentials across oracle-service, notifications, and indexer follow an automated zero-downtime rotation procedure to minimize the operational risk of long-lived secrets in a mainnet financial protocol.
+
+### Credential Inventory and Rotation Cadence
+
+| Service | Credential Type | Storage Location | Rotation Cadence | Overlap Window |
+|---------|----------------|------------------|------------------|----------------|
+| **Oracle Service** | Upstream API Keys (Trust verification providers) | `ORACLE_API_KEY_PRIMARY`, `ORACLE_API_KEY_SECONDARY` | 90 days | 7 days |
+| **Notifications** | SMTP credentials | `SMTP_PASSWORD_PRIMARY`, `SMTP_PASSWORD_SECONDARY` | 90 days | 7 days |
+| **Notifications** | Twilio API credentials | `TWILIO_AUTH_TOKEN_PRIMARY`, `TWILIO_AUTH_TOKEN_SECONDARY` | 90 days | 7 days |
+| **Notifications** | Webhook signing secret | `WEBHOOK_SIGNING_SECRET_PRIMARY`, `WEBHOOK_SIGNING_SECRET_SECONDARY` | 90 days | 7 days |
+| **Indexer** | Stellar RPC authentication | `RPC_AUTH_TOKEN_PRIMARY`, `RPC_AUTH_TOKEN_SECONDARY` | 90 days | 7 days |
+| **All Services** | Database credentials | `DB_PASSWORD_PRIMARY`, `DB_PASSWORD_SECONDARY` | 90 days | 7 days |
+
+### Dual-Credential Overlap Architecture
+
+Each service maintains two active credentials simultaneously during rotation to ensure zero downtime:
+
+1. **Primary credential**: Currently active, handles 100% of traffic
+2. **Secondary credential**: Pre-provisioned replacement, ready for failover
+3. **Rotation process**:
+   - Generate new secondary credential
+   - Deploy to service configuration
+   - Validate secondary credential works
+   - Promote secondary to primary
+   - Revoke old primary after overlap window
+   - Generate new secondary for next rotation
+
+### Automated Rotation Implementation
+
+#### Scripts Location
+- `scripts/rotate-secrets.ts` - Main rotation orchestration
+- `scripts/validate-credentials.ts` - Credential validation
+- `.github/workflows/scheduled-secrets-rotation.yml` - Automated schedule
+
+#### Rotation Workflow
+
+```typescript
+// scripts/rotate-secrets.ts (conceptual structure)
+async function rotateCredential(service: string, credentialType: string) {
+  // Step 1: Generate new credential
+  const newCredential = await generateSecureCredential();
+  
+  // Step 2: Store as secondary
+  await storeSecretSecurely(`${service}_${credentialType}_SECONDARY`, newCredential);
+  
+  // Step 3: Wait for deployment propagation (5 minutes)
+  await waitForPropagation();
+  
+  // Step 4: Validate secondary credential
+  const isValid = await validateCredential(service, credentialType, newCredential);
+  if (!isValid) {
+    throw new Error(`Secondary credential validation failed for ${service}:${credentialType}`);
+  }
+  
+  // Step 5: Promote secondary to primary
+  await promoteSecondaryToPrimary(service, credentialType);
+  
+  // Step 6: Schedule old primary revocation (7 days)
+  await scheduleRevocation(service, credentialType, 7 * 24 * 60 * 60 * 1000);
+  
+  // Step 7: Generate new secondary for next rotation
+  const nextSecondary = await generateSecureCredential();
+  await storeSecretSecurely(`${service}_${credentialType}_SECONDARY`, nextSecondary);
+}
+```
+
+#### GitHub Actions Scheduled Rotation
+
+```yaml
+# .github/workflows/scheduled-secrets-rotation.yml
+name: Scheduled Secrets Rotation
+
+on:
+  schedule:
+    - cron: '0 2 * * 0'  # Weekly on Sunday at 2 AM UTC
+  workflow_dispatch:      # Manual trigger option
+
+jobs:
+  rotate-credentials:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+        
+      - name: Check credential ages
+        id: check
+        run: pnpm tsx scripts/check-credential-ages.ts
+        env:
+          VAULT_TOKEN: ${{ secrets.VAULT_TOKEN }}
+          
+      - name: Rotate expired credentials
+        if: steps.check.outputs.needs_rotation == 'true'
+        run: pnpm tsx scripts/rotate-secrets.ts
+        env:
+          VAULT_TOKEN: ${{ secrets.VAULT_TOKEN }}
+          NOTIFY_WEBHOOK: ${{ secrets.ROTATION_NOTIFICATION_WEBHOOK }}
+          
+      - name: Validate new credentials
+        run: pnpm tsx scripts/validate-credentials.ts
+        env:
+          VAULT_TOKEN: ${{ secrets.VAULT_TOKEN }}
+          
+      - name: Send rotation summary
+        if: always()
+        run: pnpm tsx scripts/send-rotation-summary.ts
+        env:
+          SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK }}
+```
+
+### Alerting for Credential Age
+
+Prometheus alert rules monitor credential age and trigger warnings before expiration:
+
+```yaml
+# monitoring/prometheus/credential-alerts.yml
+groups:
+  - name: credential_rotation
+    interval: 1h
+    rules:
+      - alert: CredentialApproachingExpiry
+        expr: (time() - credential_last_rotated_timestamp_seconds) > (75 * 24 * 60 * 60)
+        for: 1h
+        labels:
+          severity: warning
+        annotations:
+          summary: "Credential {{ $labels.service }}/{{ $labels.credential_type }} approaching 90-day rotation deadline"
+          description: "Credential was last rotated {{ $value | humanizeDuration }} ago. Rotation due in {{ 90 * 24 * 60 * 60 - $value | humanizeDuration }}."
+          runbook: "https://github.com/Invoice-Liquidity-Network/Invoice-Liquidity-Network/blob/main/docs/monitoring.md#automated-secrets-rotation"
+          
+      - alert: CredentialRotationOverdue
+        expr: (time() - credential_last_rotated_timestamp_seconds) > (90 * 24 * 60 * 60)
+        for: 15m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Credential {{ $labels.service }}/{{ $labels.credential_type }} rotation is overdue"
+          description: "Credential was last rotated {{ $value | humanizeDuration }} ago. Immediate rotation required."
+          runbook: "https://github.com/Invoice-Liquidity-Network/Invoice-Liquidity-Network/blob/main/docs/monitoring.md#manual-rotation-procedure"
+```
+
+### Manual Rotation Procedure
+
+When automated rotation fails or emergency rotation is required:
+
+1. **Generate new credential manually** using service provider console
+2. **Update secondary credential** in secrets vault
+3. **Deploy configuration** to affected services
+4. **Validate** the secondary credential with test requests
+5. **Promote** secondary to primary
+6. **Revoke** old primary immediately (emergency) or after overlap window (planned)
+7. **Document** the rotation in incident log
+
+### Service-Specific Rotation Notes
+
+#### Oracle Service
+- Upstream API keys must be rotated with provider coordination
+- Test verification endpoint with secondary key before promotion
+- Monitor `oracle_verification_requests_total` metric for errors
+
+#### Notifications Service
+- SMTP passwords require email provider portal access
+- Twilio tokens can be rotated via API
+- Test email/SMS delivery with secondary credentials before promotion
+- Webhook signing secrets require subscriber notification
+
+#### Indexer
+- RPC authentication tokens (if using authenticated endpoints)
+- Test Horizon/RPC connectivity with secondary token
+- Monitor `iln_last_processed_ledger` for ingestion interruption
+
+### Credential Storage Best Practices
+
+- **Never** commit credentials to version control
+- **Always** use environment variables or secure vault (HashiCorp Vault, AWS Secrets Manager, etc.)
+- **Encrypt** credentials at rest
+- **Log** rotation events for audit trail
+- **Restrict** access to rotation scripts and vault tokens
+
+### Operational Checklist
+
+- [ ] All credentials inventoried and documented
+- [ ] Dual-credential architecture implemented per service
+- [ ] Automated rotation scripts tested in staging
+- [ ] Scheduled rotation workflow enabled
+- [ ] Prometheus alerts configured and tested
+- [ ] Manual rotation runbook reviewed and accessible
+- [ ] Rotation audit log established
+- [ ] Team trained on emergency rotation procedure
+
+
+---
+
+## 11. Log Correlation ID Propagation Standard
+
+### Overview
+
+End-to-end request tracing across indexer, oracle-service, and notifications services depends on consistent correlation ID propagation through every inter-service call path. This section defines the standard, auditing requirements, and enforcement mechanisms.
+
+### Correlation ID Standard
+
+#### Header Name
+- **Primary**: `X-Correlation-ID`
+- **Fallback**: `X-Request-ID` (for compatibility with existing middleware)
+- **W3C Trace Context**: `traceparent` (see Section 7 for distributed tracing)
+
+#### Format
+- UUIDv4 format: `xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx`
+- Generated at entry point if not present in request
+- Propagated verbatim through all downstream calls
+- Included in all log entries via structured logging
+
+#### Generation and Propagation Rules
+
+1. **Entry Point** (External client → Service):
+   - If `X-Correlation-ID` header is present and valid UUID, use it
+   - Otherwise, generate new UUIDv4
+   - Store in AsyncLocalStorage/request context
+   - Include in response headers
+
+2. **Inter-Service Calls** (Service → Service):
+   - Always inject `X-Correlation-ID` header with current correlation ID
+   - Forward existing `traceparent` if present
+   - Log the outbound call with correlation ID
+
+3. **Logging**:
+   - All log entries must include `correlationId` field
+   - Format: `{"level":"info", "correlationId":"uuid", "message":"...", "service":"indexer"}`
+   - Use structured logging libraries (pino, winston with JSON formatter)
+
+### Audited Inter-Service Call Paths
+
+The following call paths have been audited and confirmed to propagate correlation IDs:
+
+| Source Service | Target Service | Call Path | Correlation ID Status | Notes |
+|----------------|----------------|-----------|----------------------|-------|
+| Indexer | Oracle | History fetch for trust verification | ✅ Propagated | `fetchJson` in `createHistoryProvider` |
+| Oracle | Indexer | Payer history lookup | ✅ Propagated | `GET /v1/history/:payer` |
+| Notifications | External Webhook | Webhook delivery | ✅ Propagated | `sendWebhook` includes `X-Correlation-ID` |
+| SDK Client | Indexer | Invoice queries | ✅ Propagated | SDK sets header on fetch |
+| SDK Client | Oracle | Trust verification | ✅ Propagated | SDK sets header on fetch |
+| Frontend | Indexer | Dashboard queries | ✅ Propagated | Axios interceptor adds header |
+| Frontend | Notifications | Subscription management | ✅ Propagated | Axios interceptor adds header |
+
+### Missing or Unaudited Paths
+
+The following paths require implementation or audit verification:
+
+| Source | Target | Path | Status | Priority |
+|--------|--------|------|--------|----------|
+| Indexer | Database | Query logging | ⚠️ Partial | P1 - Add correlationId to Prisma middleware |
+| Notifications | SMTP/Twilio | External provider calls | ⚠️ Missing | P2 - Log provider request with ID |
+| Oracle | Upstream Trust API | External verification | ⚠️ Missing | P1 - Add to HTTP client wrapper |
+
+### Implementation Guide
+
+#### Middleware for Express/Fastify Services
+
+```typescript
+// packages/shared/src/correlation-middleware.ts
+import { AsyncLocalStorage } from 'async_hooks';
+import { v4 as uuidv4 } from 'uuid';
+
+export const correlationContext = new AsyncLocalStorage<{correlationId: string}>();
+
+export function correlationMiddleware(serviceName: string) {
+  return (req: Request, res: Response, next: NextFunction) => {
+    const correlationId = req.headers['x-correlation-id'] as string || 
+                         req.headers['x-request-id'] as string ||
+                         uuidv4();
+    
+    // Store in context
+    correlationContext.run({ correlationId }, () => {
+      // Add to response headers
+      res.setHeader('X-Correlation-ID', correlationId);
+      
+      // Enhance logger for this request
+      req.log = req.log.child({ correlationId, service: serviceName });
+      
+      next();
+    });
+  };
+}
+
+export function getCurrentCorrelationId(): string | undefined {
+  return correlationContext.getStore()?.correlationId;
+}
+```
+
+#### Propagation in HTTP Client
+
+```typescript
+// packages/shared/src/http-client.ts
+import { getCurrentCorrelationId } from './correlation-middleware';
+
+export async function fetchWithCorrelation(url: string, init?: RequestInit) {
+  const correlationId = getCurrentCorrelationId();
+  
+  const headers = new Headers(init?.headers);
+  if (correlationId) {
+    headers.set('X-Correlation-ID', correlationId);
+  }
+  
+  return fetch(url, {
+    ...init,
+    headers
+  });
+}
+```
+
+#### Structured Logging with Correlation ID
+
+```typescript
+// packages/shared/src/logger.ts
+import pino from 'pino';
+import { getCurrentCorrelationId } from './correlation-middleware';
+
+export const logger = pino({
+  mixin() {
+    return {
+      correlationId: getCurrentCorrelationId()
+    };
+  },
+  formatters: {
+    level(label) {
+      return { level: label };
+    }
+  }
+});
+```
+
+### CI Enforcement
+
+#### Integration Test
+
+```typescript
+// tests/correlation/correlation-propagation.test.ts
+describe('Correlation ID Propagation', () => {
+  it('propagates correlation ID through indexer → oracle call path', async () => {
+    const testCorrelationId = uuidv4();
+    
+    // Step 1: Call indexer with correlation ID
+    const indexerResponse = await fetch('http://localhost:3001/v1/invoice/42', {
+      headers: { 'X-Correlation-ID': testCorrelationId }
+    });
+    
+    // Step 2: Verify indexer returns same ID
+    expect(indexerResponse.headers.get('X-Correlation-ID')).toBe(testCorrelationId);
+    
+    // Step 3: Trigger oracle call (via invoice payer verification)
+    const oracleResponse = await fetch('http://localhost:3010/v1/verify', {
+      method: 'POST',
+      headers: { 'X-Correlation-ID': testCorrelationId },
+      body: JSON.stringify({ payer: 'GTEST...' })
+    });
+    
+    // Step 4: Verify oracle receives and returns same ID
+    expect(oracleResponse.headers.get('X-Correlation-ID')).toBe(testCorrelationId);
+    
+    // Step 5: Check logs contain correlation ID
+    const indexerLogs = await getServiceLogs('indexer', testCorrelationId);
+    const oracleLogs = await getServiceLogs('oracle', testCorrelationId);
+    
+    expect(indexerLogs.length).toBeGreaterThan(0);
+    expect(oracleLogs.length).toBeGreaterThan(0);
+    expect(indexerLogs.every(log => log.correlationId === testCorrelationId)).toBe(true);
+    expect(oracleLogs.every(log => log.correlationId === testCorrelationId)).toBe(true);
+  });
+  
+  it('generates correlation ID when not provided', async () => {
+    const response = await fetch('http://localhost:3001/v1/invoices');
+    const correlationId = response.headers.get('X-Correlation-ID');
+    
+    expect(correlationId).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i);
+  });
+});
+```
+
+#### Lint Rule
+
+```javascript
+// .eslintrc.js - Custom rule to enforce correlation ID
+module.exports = {
+  rules: {
+    'iln/require-correlation-id-propagation': 'error'
+  }
+};
+
+// eslint-plugin-iln/rules/require-correlation-id-propagation.js
+module.exports = {
+  meta: {
+    type: 'problem',
+    docs: {
+      description: 'Enforce correlation ID propagation in inter-service fetch calls'
+    }
+  },
+  create(context) {
+    return {
+      CallExpression(node) {
+        if (node.callee.name === 'fetch' || node.callee.property?.name === 'fetch') {
+          const args = node.arguments;
+          // Check if headers include X-Correlation-ID or using fetchWithCorrelation wrapper
+          // Emit error if neither condition is met
+        }
+      }
+    };
+  }
+};
+```
+
+#### GitHub Actions CI Check
+
+``yaml
+# .github/workflows/correlation-id-check.yml
+name: Correlation ID Propagation Check
+
+on:
+  pull_request:
+    paths:
+      - 'indexer/**/*.ts'
+      - 'oracle-service/**/*.ts'
+      - 'notifications/**/*.ts'
+      - 'packages/**/*.ts'
+
+jobs:
+  correlation-check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+        
+      - name: Run correlation ID propagation tests
+        run: pnpm vitest run tests/correlation/
+        
+      - name: Lint for correlation ID violations
+        run: pnpm eslint --rule 'iln/require-correlation-id-propagation: error' indexer/ oracle-service/ notifications/
+```
+
+### Operational Use During Incidents
+
+When investigating an incident:
+
+1. **Find correlation ID** from error log, alert, or user report
+2. **Query centralized logs** (Loki, CloudWatch, etc.) for that correlation ID
+3. **Reconstruct request path** across all services in chronological order
+4. **Identify failure point** where error was logged or response deviated
+
+Example log query:
+
+```bash
+# Loki query
+{service=~"indexer|oracle|notifications"} | json | correlationId="a1b2c3d4-e5f6-4789-a0b1-c2d3e4f5a6b7"
+
+# CloudWatch Insights query
+fields @timestamp, service, level, message, correlationId
+| filter correlationId = "a1b2c3d4-e5f6-4789-a0b1-c2d3e4f5a6b7"
+| sort @timestamp asc
+```
+
+### Compliance Checklist
+
+- [ ] All inter-service HTTP clients use correlation propagation wrapper
+- [ ] All services implement correlation middleware at entry point
+- [ ] All log statements include correlationId field
+- [ ] Integration tests verify end-to-end propagation
+- [ ] ESLint rule enforces correlation in new code
+- [ ] CI fails PR if propagation test fails
+- [ ] Documentation updated in docs/monitoring.md
+- [ ] Team trained on querying logs by correlation ID
+
