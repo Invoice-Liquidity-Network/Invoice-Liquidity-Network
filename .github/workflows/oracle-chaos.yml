@@ -50,6 +50,13 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      # oracle-service/src/index.ts imports @iln/opentelemetry, whose package.json
+      # entry points at a gitignored dist/. A fresh checkout therefore has no
+      # resolvable entry, and the suite dies during import — reporting "0 tests"
+      # rather than the assertions it never reached.
+      - name: Build @iln/opentelemetry
+        run: pnpm --filter @iln/opentelemetry build
+
       - name: Run chaos test
         id: chaos
         shell: bash
