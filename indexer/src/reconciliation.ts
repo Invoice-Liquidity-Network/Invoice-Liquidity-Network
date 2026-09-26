@@ -31,10 +31,10 @@ export async function runReconciliation() {
 export function startReconciliationScheduler(intervalMs = 3600000) {
   // Run once immediately, then on interval
   setTimeout(() => {
-    runReconciliation().catch(e => console.error('[reconciliation] Job failed:', e));
+    runReconciliation().catch((e) => console.error('[reconciliation] Job failed:', e));
   }, 10000);
 
   setInterval(() => {
-    runReconciliation().catch(e => console.error('[reconciliation] Job failed:', e));
+    runReconciliation().catch((e) => console.error('[reconciliation] Job failed:', e));
   }, intervalMs);
 }
