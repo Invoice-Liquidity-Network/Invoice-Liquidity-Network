@@ -305,7 +305,10 @@ export function withFailover<TArgs extends unknown[], TOut>(
     let order: FailoverSource<TArgs, TOut>[];
     if (!secondary) {
       order = [primary];
-    } else if (tracker.state(primary.id, nowMs) === 'healthy' || !tracker.isCoolingDown(primary.id, nowMs)) {
+    } else if (
+      tracker.state(primary.id, nowMs) === 'healthy' ||
+      !tracker.isCoolingDown(primary.id, nowMs)
+    ) {
       // Healthy, or demoted but cooled down — either way the primary goes first
       // (the second call being the cooldown-expiry probe).
       order = [primary, secondary];

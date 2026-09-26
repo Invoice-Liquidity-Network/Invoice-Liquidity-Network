@@ -166,15 +166,18 @@ describe('session budget cutoff and resumption cursor', () => {
     expect(decoded2?.id).toBe(6);
     expect(decoded2?.rowsBefore).toBe(6);
 
-    const page3 = await request(
-      app
-    ).get(`/v1/export/invoices?cursor=${page2.headers['x-export-resumption-cursor']}`);
+    const page3 = await request(app).get(
+      `/v1/export/invoices?cursor=${page2.headers['x-export-resumption-cursor']}`
+    );
     expect(page3.status).toBe(413);
     expect(page3.body.error).toContain('budget exhausted');
   });
 
   it('cuts off after a complete row when the byte budget is exceeded (valid JSON, full rows only)', async () => {
-    const oneRowBytes = Buffer.byteLength(JSON.stringify(queryInvoicesForExport({})[0], null, 2), 'utf8');
+    const oneRowBytes = Buffer.byteLength(
+      JSON.stringify(queryInvoicesForExport({})[0], null, 2),
+      'utf8'
+    );
     setEnv({ EXPORT_SESSION_MAX_BYTES: String(oneRowBytes * 2 + 200) });
 
     const res = await request(app).get('/v1/export/invoices?format=json');
@@ -275,10 +278,7 @@ describe('job store eviction', () => {
 
   it('caps the job map, keeping the newest entries when over EXPORT_JOB_MAX', async () => {
     setEnv({ EXPORT_JOB_MAX: '3' });
-    const jobs = [
-      createExportJob('invoices', 'json', {}),
-      createExportJob('invoices', 'json', {}),
-    ];
+    const jobs = [createExportJob('invoices', 'json', {}), createExportJob('invoices', 'json', {})];
     await processExportJob(jobs[0].jobId);
     await processExportJob(jobs[1].jobId);
 

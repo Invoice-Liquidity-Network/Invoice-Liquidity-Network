@@ -17,7 +17,11 @@ import {
   type MigrationBudgetFile,
 } from '../src/migrationHarness/budgets';
 import { dryRunMigration } from '../src/migrationHarness/dryRun';
-import { MIGRATIONS, TEST_FIXTURE_MIGRATIONS, registryMigrations } from '../src/migrationHarness/migrations';
+import {
+  MIGRATIONS,
+  TEST_FIXTURE_MIGRATIONS,
+  registryMigrations,
+} from '../src/migrationHarness/migrations';
 import { createSnapshotDb } from '../src/migrationHarness/snapshot';
 import { schemaFingerprint, verifyRollback } from '../src/migrationHarness/rollback';
 import type { HarnessMigration } from '../src/migrationHarness/types';

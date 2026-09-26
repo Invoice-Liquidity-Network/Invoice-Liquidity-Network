@@ -100,8 +100,7 @@ export function loadDeltaBoundsConfig(
     bound.quorumSize = readNumber(env, `${prefix}_QUORUM`) ?? bound.quorumSize;
   }
 
-  config.maxHeldUpdates =
-    readNumber(env, 'ORACLE_DELTA_MAX_HELD_UPDATES') ?? config.maxHeldUpdates;
+  config.maxHeldUpdates = readNumber(env, 'ORACLE_DELTA_MAX_HELD_UPDATES') ?? config.maxHeldUpdates;
   config.quorumAgreementTolerance =
     readNumber(env, 'ORACLE_DELTA_QUORUM_TOLERANCE') ?? config.quorumAgreementTolerance;
 

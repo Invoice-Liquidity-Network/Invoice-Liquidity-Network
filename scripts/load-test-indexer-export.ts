@@ -60,9 +60,8 @@ function parseArgs(argv: string[]): Partial<ExportLoadConfig> {
     concurrency: num('concurrency'),
     p95ThresholdMs: num('p95'),
     errorRateThresholdPct: num('error-rate'),
-    rssCeilingBytes: out['rss-ceiling-mb'] !== undefined
-      ? Number(out['rss-ceiling-mb']) * 1024 * 1024
-      : undefined,
+    rssCeilingBytes:
+      out['rss-ceiling-mb'] !== undefined ? Number(out['rss-ceiling-mb']) * 1024 * 1024 : undefined,
   };
 }
 
@@ -353,7 +352,9 @@ function printSummary(cfg: ExportLoadConfig, elapsedSec: number): string[] {
     if (!byScenario.has(r.scenario)) byScenario.set(r.scenario, []);
     byScenario.get(r.scenario)!.push(r);
   }
-  for (const [name, rs] of Array.from(byScenario.entries()).sort((a, b) => a[0].localeCompare(b[0]))) {
+  for (const [name, rs] of Array.from(byScenario.entries()).sort((a, b) =>
+    a[0].localeCompare(b[0])
+  )) {
     const p = calculatePercentiles(rs.map((r) => r.latencyMs));
     const errs = rs.filter((r) => !r.success).length;
     console.log(
@@ -370,7 +371,11 @@ function printSummary(cfg: ExportLoadConfig, elapsedSec: number): string[] {
     console.log(
       `${colors.bright}${colors.cyan}=== SERVER MEMORY ===${colors.reset} ` +
         `peak RSS ${(counters.serverRssBytesMax / 1024 / 1024).toFixed(1)} MB ` +
-        `(${counters.serverRssSamples} samples, ceiling ${(cfg.rssCeilingBytes / 1024 / 1024).toFixed(0)} MB)`
+        `(${counters.serverRssSamples} samples, ceiling ${(
+          cfg.rssCeilingBytes /
+          1024 /
+          1024
+        ).toFixed(0)} MB)`
     );
   } else {
     console.log(
@@ -381,20 +386,28 @@ function printSummary(cfg: ExportLoadConfig, elapsedSec: number): string[] {
 
   const violations: string[] = [];
   if (errorRate > cfg.errorRateThresholdPct) {
-    violations.push(`Error rate ${fmtPct(errorRate)} exceeds threshold ${cfg.errorRateThresholdPct}%`);
+    violations.push(
+      `Error rate ${fmtPct(errorRate)} exceeds threshold ${cfg.errorRateThresholdPct}%`
+    );
   }
   if (percentiles.p95 > cfg.p95ThresholdMs) {
     violations.push(`p95 latency ${percentiles.p95}ms exceeds threshold ${cfg.p95ThresholdMs}ms`);
   }
   if (counters.protocolViolations > 0) {
-    violations.push(`${counters.protocolViolations} truncated export response(s) missing X-Export-Resumption-Cursor`);
+    violations.push(
+      `${counters.protocolViolations} truncated export response(s) missing X-Export-Resumption-Cursor`
+    );
   }
   if (counters.jobsFailed > 0) {
     violations.push(`${counters.jobsFailed} async export job(s) failed unexpectedly`);
   }
   if (counters.serverRssSamples > 0 && counters.serverRssBytesMax > cfg.rssCeilingBytes) {
     violations.push(
-      `Server RSS ${(counters.serverRssBytesMax / 1024 / 1024).toFixed(1)}MB exceeds ceiling ${(cfg.rssCeilingBytes / 1024 / 1024).toFixed(0)}MB`
+      `Server RSS ${(counters.serverRssBytesMax / 1024 / 1024).toFixed(1)}MB exceeds ceiling ${(
+        cfg.rssCeilingBytes /
+        1024 /
+        1024
+      ).toFixed(0)}MB`
     );
   }
 
@@ -403,7 +416,9 @@ function printSummary(cfg: ExportLoadConfig, elapsedSec: number): string[] {
     for (const v of violations) console.log(`${colors.red}[ALERT] ${v}${colors.reset}`);
     console.log();
   } else {
-    console.log(`${colors.bright}${colors.green}All export-capacity thresholds satisfied.${colors.reset}\n`);
+    console.log(
+      `${colors.bright}${colors.green}All export-capacity thresholds satisfied.${colors.reset}\n`
+    );
   }
   return violations;
 }
@@ -423,7 +438,14 @@ async function main(): Promise<void> {
     requestTimeoutMs: 30_000,
   };
 
-  const health = await timedFetch('precheck', 'GET', `${cfg.url}/v1/health`, '/v1/health', {}, 5000);
+  const health = await timedFetch(
+    'precheck',
+    'GET',
+    `${cfg.url}/v1/health`,
+    '/v1/health',
+    {},
+    5000
+  );
   if (!health.res?.ok) {
     console.error(
       `${colors.red}Indexer not reachable at ${cfg.url} (start it with RATE_LIMIT_MAX raised, see header comment).${colors.reset}`
@@ -432,7 +454,9 @@ async function main(): Promise<void> {
   }
   records.pop(); // keep precheck out of scenario stats
 
-  console.log(`${colors.bright}Export load test${colors.reset} → ${cfg.url} | ${cfg.durationSeconds}s @ ${cfg.concurrency} VUs`);
+  console.log(
+    `${colors.bright}Export load test${colors.reset} → ${cfg.url} | ${cfg.durationSeconds}s @ ${cfg.concurrency} VUs`
+  );
 
   let stopped = false;
   const stopSampler = () => stopped;
@@ -466,6 +490,10 @@ async function main(): Promise<void> {
 }
 
 main().catch((err) => {
-  console.error(`${colors.red}Export load test crashed: ${err instanceof Error ? err.stack ?? err.message : String(err)}${colors.reset}`);
+  console.error(
+    `${colors.red}Export load test crashed: ${
+      err instanceof Error ? err.stack ?? err.message : String(err)
+    }${colors.reset}`
+  );
   process.exit(1);
 });

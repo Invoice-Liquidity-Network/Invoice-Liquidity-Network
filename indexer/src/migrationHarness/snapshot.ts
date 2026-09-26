@@ -73,7 +73,10 @@ export function seedSnapshot(db: Database.Database, scale: SnapshotScale): void 
  * Create a snapshot database at `path` (":memory:" for unit tests) using the
  * real `createDb` schema, seeded to `scale`.
  */
-export function createSnapshotDb(path: string, scale: SnapshotScale = PROJECTED_MAINNET_SCALE): Database.Database {
+export function createSnapshotDb(
+  path: string,
+  scale: SnapshotScale = PROJECTED_MAINNET_SCALE
+): Database.Database {
   const db = createDb(path);
   seedSnapshot(db, scale);
   return db;

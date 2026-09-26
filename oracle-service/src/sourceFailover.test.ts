@@ -216,7 +216,9 @@ describe('withFailover routing', () => {
   }): PrimarySecondary<[], string> {
     return {
       primary: { id: 'primary', invoke: behaviour.primary },
-      ...(behaviour.secondary ? { secondary: { id: 'secondary', invoke: behaviour.secondary } } : {}),
+      ...(behaviour.secondary
+        ? { secondary: { id: 'secondary', invoke: behaviour.secondary } }
+        : {}),
     };
   }
 

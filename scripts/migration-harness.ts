@@ -86,11 +86,8 @@ function snapshotScale(flags: Record<string, string>): SnapshotScale {
 // ── Report table ─────────────────────────────────────────────────────────────
 
 function printTable(headers: string[], rows: string[][]): void {
-  const widths = headers.map((h, i) =>
-    Math.max(h.length, ...rows.map((r) => (r[i] ?? '').length))
-  );
-  const line = (cells: string[]) =>
-    cells.map((c, i) => (c ?? '').padEnd(widths[i])).join('  ');
+  const widths = headers.map((h, i) => Math.max(h.length, ...rows.map((r) => (r[i] ?? '').length)));
+  const line = (cells: string[]) => cells.map((c, i) => (c ?? '').padEnd(widths[i])).join('  ');
   console.log(line(headers));
   console.log('-'.repeat(widths.reduce((a, b) => a + b + 2, 0)));
   for (const row of rows) console.log(line(row));
@@ -172,12 +169,7 @@ function commandRollbackVerify(args: ParsedArgs): void {
   for (const migration of migrations) {
     const result = verifyRollback(migration, { scale });
     if (!result.ok) allOk = false;
-    rows.push([
-      migration.id,
-      result.ok
-        ? 'PASS'
-        : `FAIL: ${result.failure ?? 'schema mismatch'}`,
-    ]);
+    rows.push([migration.id, result.ok ? 'PASS' : `FAIL: ${result.failure ?? 'schema mismatch'}`]);
   }
   printTable(['Migration', 'Rollback verification'], rows);
   console.log(
@@ -244,7 +236,9 @@ async function main(): Promise<void> {
       await commandCheck(args);
       break;
     default:
-      console.error('Unknown or missing command. Use: dry-run | rollback-verify | check <migration-id>');
+      console.error(
+        'Unknown or missing command. Use: dry-run | rollback-verify | check <migration-id>'
+      );
       process.exitCode = 1;
   }
 }

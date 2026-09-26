@@ -23,9 +23,7 @@ export const MIGRATIONS: HarnessMigration[] = [
     id: '002_add_events_ledger_covering_index',
     description: 'Add a (ledger, invoice_id) covering index on events for export ordering',
     up: (db: Database.Database) => {
-      db.exec(
-        `CREATE INDEX idx_events_ledger_invoice ON events(ledger, invoice_id)`
-      );
+      db.exec(`CREATE INDEX idx_events_ledger_invoice ON events(ledger, invoice_id)`);
     },
     down: (db: Database.Database) => {
       db.exec(`DROP INDEX idx_events_ledger_invoice`);
@@ -54,8 +52,8 @@ export const TEST_FIXTURE_MIGRATIONS: HarnessMigration[] = [
   },
 ];
 
-export function registryMigrations(options: { includeFixtures?: boolean } = {}): HarnessMigration[] {
-  return options.includeFixtures
-    ? [...MIGRATIONS, ...TEST_FIXTURE_MIGRATIONS]
-    : [...MIGRATIONS];
+export function registryMigrations(
+  options: { includeFixtures?: boolean } = {}
+): HarnessMigration[] {
+  return options.includeFixtures ? [...MIGRATIONS, ...TEST_FIXTURE_MIGRATIONS] : [...MIGRATIONS];
 }

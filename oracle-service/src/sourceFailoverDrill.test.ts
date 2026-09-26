@@ -65,7 +65,10 @@ vi.mock('@stellar/stellar-sdk', async () => {
         }
         async getAccount(source: string) {
           getAccountCalls.push(`${this.url}|${source}`);
-          if (rpcFailMode === 'all' || (rpcFailMode === 'primary' && this.url.includes('primary'))) {
+          if (
+            rpcFailMode === 'all' ||
+            (rpcFailMode === 'primary' && this.url.includes('primary'))
+          ) {
             throw new Error('soroban rpc unavailable');
           }
           return { accountId: () => 'GSOURCE', sequenceNumber: () => '1' };
@@ -184,17 +187,15 @@ describe('drill: app wiring with fallback sources', () => {
       });
 
       const metrics = await request(app).get('/metrics');
-      expect(metrics.text).toContain(
-        'oracle_source_health_state{source="indexer-primary"} 2'
-      );
-      expect(metrics.text).toContain(
-        'oracle_failover_events_total{source="indexer-primary"} 1'
-      );
+      expect(metrics.text).toContain('oracle_source_health_state{source="indexer-primary"} 2');
+      expect(metrics.text).toContain('oracle_failover_events_total{source="indexer-primary"} 1');
 
       // While the primary cools down, subsequent verifications skip it
       // entirely — the outage adds no latency to the request path.
       urls.length = 0;
-      await request(app).post('/v1/verify').send({ ...VALID_BODY, invoiceId: 43 });
+      await request(app)
+        .post('/v1/verify')
+        .send({ ...VALID_BODY, invoiceId: 43 });
       expect(urls.every((u) => u.includes('fallback'))).toBe(true);
     } finally {
       await close();

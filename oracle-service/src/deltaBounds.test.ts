@@ -119,11 +119,7 @@ describe('DeltaBoundsGuard', () => {
     const decision = guard.assess(
       composite,
       90,
-      confirmations(
-        ['history', 95, true],
-        ['reputation', 88, true],
-        ['external', 50, true]
-      ),
+      confirmations(['history', 95, true], ['reputation', 88, true], ['external', 50, true]),
       NOW
     );
 
@@ -146,10 +142,7 @@ describe('DeltaBoundsGuard', () => {
     const decision = guard.assess(
       composite,
       90,
-      confirmations(
-        ['history', 92, false],
-        ['reputation', 89, false]
-      ),
+      confirmations(['history', 92, false], ['reputation', 89, false]),
       NOW
     );
     expect(decision.decision).toBe('hold');
@@ -258,12 +251,10 @@ describe('DeltaBoundsGuard', () => {
 describe('delta bounds in the verifier', () => {
   const request = { payer: TEST_PAYER, amount: '10000000', invoiceId: '42' };
 
-  function makeVerifier(
-    sources: {
-      history: () => IndexerInvoiceHistoryEntry[];
-      reputation: () => ReputationSnapshot;
-    }
-  ) {
+  function makeVerifier(sources: {
+    history: () => IndexerInvoiceHistoryEntry[];
+    reputation: () => ReputationSnapshot;
+  }) {
     return new OracleVerifier({
       now: () => NOW,
       maxOracleAgeMs: 0,
