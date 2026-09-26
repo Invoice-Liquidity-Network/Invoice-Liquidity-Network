@@ -9,6 +9,7 @@ import {
   renderDisputeEmail,
   renderDueWarningEmail,
 } from './templates';
+import { getDeadLetterEntries, replayDeadLetter as replayDlqEntry } from './delivery';
 
 // ─── NOTE ─────────────────────────────────────────────────────────────────────
 // This file contains an injectable NotificationService used by
@@ -103,6 +104,21 @@ export class NotificationService {
   isDueDateWarningDue(dueDateUnixSeconds: number): boolean {
     const warningAt = dueDateUnixSeconds * 1000 - 48 * 60 * 60 * 1000;
     return this.clock() >= warningAt;
+  }
+
+  inspectDeadLetter(): ReturnType<typeof getDeadLetterEntries> {
+    return getDeadLetterEntries();
+  }
+
+  replayDeadLetter(entryId: string): Promise<void> {
+    return new Promise((resolve, reject) => {
+      try {
+        replayDlqEntry(entryId);
+        resolve();
+      } catch (error: unknown) {
+        reject(error);
+      }
+    });
   }
 
   private async deliverEmail(sub: Subscription, event: InvoiceEvent): Promise<DeliveryResult> {

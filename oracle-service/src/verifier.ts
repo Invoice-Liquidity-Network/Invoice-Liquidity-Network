@@ -428,6 +428,24 @@ export interface OracleReputationProvider {
 export interface OracleVerifierOptions extends OracleVerifierDependencies {
   cache?: OracleCacheReaderWriter;
   cacheTtlSeconds?: number;
+  /**
+   * Optional stage metrics (issue #1054). When present, computeVerification
+   * records per-stage latency histograms and SLO-violation counters.
+   */
+  metrics?: OracleMetrics;
+}
+
+/**
+ * Thrown when every oracle source is unavailable and no cached response
+ * exists to degrade to (issue #1057). The HTTP layer maps this to 503 with
+ * `degraded: true` rather than a generic 500.
+ */
+export class OracleUnavailableError extends Error {
+  readonly degraded = true;
+  constructor(message = 'Oracle providers unavailable and no cached response') {
+    super(message);
+    this.name = 'OracleUnavailableError';
+  }
 }
 
 export class OracleVerifier {
@@ -504,6 +522,32 @@ export class OracleVerifier {
     }
   }
 
+  private observeStage(
+    stage: 'fetch' | 'aggregate' | 'publish',
+    durationMs: number
+  ): void {
+    if (!this.metrics) {
+      return;
+    }
+    const seconds = durationMs / 1000;
+    if (stage === 'fetch') {
+      this.metrics.fetchDuration.observe(seconds);
+      if (durationMs > FETCH_SLO_MS) {
+        this.metrics.fetchSloViolationsTotal.inc();
+      }
+    } else if (stage === 'aggregate') {
+      this.metrics.aggregateDuration.observe(seconds);
+      if (durationMs > AGGREGATE_SLO_MS) {
+        this.metrics.aggregateSloViolationsTotal.inc();
+      }
+    } else {
+      this.metrics.publishDuration.observe(seconds);
+      if (durationMs > PUBLISH_SLO_MS) {
+        this.metrics.publishSloViolationsTotal.inc();
+      }
+    }
+  }
+
   private async computeVerification(
     request: OracleVerificationRequest,
     cacheKey: string
@@ -528,15 +572,47 @@ export class OracleVerifier {
         : Promise.resolve(undefined),
       this.kybProvider ? this.kybProvider.verifyPayer(request.payer) : Promise.resolve(undefined),
     ]);
+    this.observeStage('fetch', this.now() - fetchStart);
 
+    let historyFailed = false;
+    let reputationFailed = false;
     if (historyResult.status === 'fulfilled') {
       history = historyResult.value;
     } else {
       indexerAvailable = false;
+      historyFailed = true;
     }
 
     if (reputationResult.status === 'fulfilled') {
       reputation = reputationResult.value;
+    } else {
+      reputationFailed = true;
+    }
+
+    // Degraded-mode contract (issue #1057): when EVERY source is down, serve
+    // the last-known-good cached response — marked stale/degraded and never
+    // verified — rather than inventing a fresh-looking answer. With no cache
+    // to degrade to, fail loudly so callers halt price-dependent operations.
+    if (historyFailed && reputationFailed) {
+      const stale = await this.cache?.getStale(cacheKey);
+      if (stale) {
+        const ageMs = Math.max(0, nowMs - stale.generatedAtMs);
+        this.metrics?.degradedResponsesTotal.inc();
+        this.metrics?.lastKnownGoodAgeSeconds.set(ageMs / 1000);
+        return {
+          ...stale.response,
+          cacheHit: false,
+          stale: true,
+          degraded: true,
+          isVerified: false,
+          dataAgeMs: ageMs,
+          evidence: [
+            ...stale.response.evidence,
+            'Oracle sources unavailable; serving last-known-good cached response (stale)',
+          ],
+        };
+      }
+      throw new OracleUnavailableError();
     }
 
     // A provider that threw yields `unknown`, never `unverified`: an outage
@@ -563,6 +639,7 @@ export class OracleVerifier {
       external,
       kybResult: kybVerification,
     });
+    this.observeStage('aggregate', this.now() - aggregateStart);
 
     const response: OracleVerificationResponse = {
       ...assessment.response,

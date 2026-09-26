@@ -93,16 +93,24 @@ export interface LoadTestReport {
   }>;
 }
 
+export interface OracleStalenessThresholds {
+  maxStaleAgeMs: number;
+  verificationLatencySloMs: number;
+  minThroughputRps: number;
+}
+
 export interface LoadTestConfig {
-  service: 'indexer' | 'notifications' | 'both';
+  service: 'indexer' | 'notifications' | 'oracle' | 'both';
   duration: number;
   concurrency: number;
   indexerUrl: string;
   notificationsUrl: string;
+  oracleUrl?: string;
   p95Threshold: number;
   errorThreshold: number;
   avgThreshold: number;
   rpsThreshold: number;
+  oracleStalenessThresholds?: OracleStalenessThresholds;
 }
 
 // ── 10× Peak Notification Volume — Validated Ceiling Constants ────────────────
@@ -159,7 +167,13 @@ export const colors = {
   dim: '\x1b[2m',
 };
 
-// ── Helpers ──────────────────────────────────────────────────────────────────
+// ── Helpers ──────────────────────────────────────────────────────────
+
+const ORACLE_STALENESS_THRESHOLDS_DEFAULT: OracleStalenessThresholds = {
+  maxStaleAgeMs: 5 * 60 * 1000,
+  verificationLatencySloMs: 3000,
+  minThroughputRps: 0.5,
+};
 
 export function getRandomStellarAddress(): string {
   const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
@@ -438,6 +452,7 @@ export async function runLoadTest(config: LoadTestConfig): Promise<LoadTestRepor
   const testEndTime = testStartTime + config.duration * 1000;
 
   const runWorker = async (workerId: number) => {
+    void workerId;
     while (Date.now() < testEndTime) {
       const pool: TestRequest[] = [];
       if (config.service === 'indexer' || config.service === 'both') {
@@ -445,6 +460,9 @@ export async function runLoadTest(config: LoadTestConfig): Promise<LoadTestRepor
       }
       if (config.service === 'notifications' || config.service === 'both') {
         pool.push(...getNotificationRequests(config.notificationsUrl));
+      }
+      if (config.service === 'oracle' || config.service === 'both') {
+        pool.push(...oracleServiceScenario(config.oracleUrl ?? DEFAULT_ORACLE_URL));
       }
 
       if (pool.length === 0) {
@@ -570,6 +588,56 @@ export async function runLoadTest(config: LoadTestConfig): Promise<LoadTestRepor
     );
   }
 
+  // Build preliminary report for oracle checks
+  const preliminaryReport: LoadTestReport = {
+    metadata: {
+      timestamp: new Date().toISOString(),
+      service: config.service,
+      durationSeconds: testActualDurationSec,
+      concurrency: config.concurrency,
+      totalRequests,
+      successCount,
+      failedCount,
+      successRate,
+      errorRate,
+      rps,
+    },
+    thresholds: {
+      avgLatencyMs: config.avgThreshold,
+      p95LatencyMs: config.p95Threshold,
+      errorRatePercent: config.errorThreshold,
+      minRps: config.rpsThreshold,
+      passed: alerts.length === 0,
+      violations: alerts,
+    },
+    latencies: globalPercentiles,
+    endpoints: endpointStats,
+    errors: Array.from(errorDetails.entries()).map(([error, count]) => ({ error, count })),
+    rawRequests: results.map((r) => ({
+      name: r.name,
+      method: r.method,
+      latency: r.latency,
+      status: r.status,
+      success: r.success,
+      error: r.error,
+    })),
+  };
+
+  // Oracle-specific staleness threshold checks
+  if (config.service === 'oracle' || config.service === 'both') {
+    const oracleThresholds =
+      config.oracleStalenessThresholds ??
+      ORACLE_STALENESS_THRESHOLDS_DEFAULT;
+    const oracleViolations = checkOracleStalenessThresholds(
+      preliminaryReport,
+      oracleThresholds
+    );
+    for (const v of oracleViolations) {
+      alerts.push(v);
+      thresholdsPassed.rps = false;
+    }
+  }
+
   return {
     metadata: {
       timestamp: new Date().toISOString(),
@@ -679,10 +747,25 @@ export function printReport(report: LoadTestReport): void {
       `${colors.bright}${colors.green}✅ All performance thresholds satisfied successfully!${colors.reset}\n`
     );
   }
+
+  if (metadata.service === 'oracle' || metadata.service === 'both') {
+    const oracleEndpoints = endpoints.filter(
+      (e) => e.name.includes('Oracle Verify') || e.name.includes('Oracle Verify Alt')
+    );
+    if (oracleEndpoints.length > 0) {
+      console.log(`${colors.bright}${colors.cyan}=== ORACLE METRICS ===${colors.reset}`);
+      const totalVerify = oracleEndpoints.reduce((s, e) => s + e.total, 0);
+      const avgLatency = oracleEndpoints.reduce((s, e) => s + e.avg * e.total, 0) / totalVerify;
+      console.log(`Total Verify Requests: ${totalVerify}`);
+      console.log(`Avg Verify Latency:    ${avgLatency.toFixed(2)} ms`);
+      console.log();
+    }
+  }
 }
 
 export function writeMarkdownReport(report: LoadTestReport, reportPath: string): void {
   const { metadata, thresholds, latencies, endpoints, errors } = report;
+  const isOracleService = metadata.service === 'oracle';
 
   const statusBox =
     thresholds.violations.length > 0
