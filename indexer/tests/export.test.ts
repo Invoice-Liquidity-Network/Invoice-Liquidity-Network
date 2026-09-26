@@ -312,22 +312,26 @@ describe('POST /v1/export/jobs', () => {
 describe('GET /v1/export/jobs/:jobId', () => {
   it('enforces ASYNC_EXPORT_LIMIT and fails the job when the dataset is too large', async () => {
     const { processExportJob: process, createExportJob: create, ASYNC_EXPORT_LIMIT } = await import('../src/export');
-    
-    // We mock countInvoicesForExport to return a huge number to simulate an oversized result
-    const exportModule = await import('../src/export');
-    const originalCount = exportModule.countInvoicesForExport;
-    (exportModule as any).countInvoicesForExport = () => ASYNC_EXPORT_LIMIT + 1;
+    const { getDb } = await import('../src/db');
 
-    try {
-      const job = create('invoices', 'json', {});
-      await process(job.jobId);
+    // Seed just past the async limit so the count-first guard fires for real.
+    const db = getDb();
+    const now = Date.now();
+    const insert = db.prepare(
+      `INSERT INTO invoices
+         (id, freelancer, payer, amount, due_date, discount_rate, status, funder, funded_at, created_at, updated_at)
+       VALUES (?, 'GFREELANCER', 'GPAYER', '100', 1, 0, 'Pending', NULL, NULL, ?, ?)`
+    );
+    db.transaction(() => {
+      for (let id = 1000; id < 1000 + ASYNC_EXPORT_LIMIT + 1; id++) insert.run(id, now, now);
+    })();
 
-      const res = await request(app).get(`/v1/export/jobs/${job.jobId}`);
-      expect(res.body.status).toBe('failed');
-      expect(res.body.error).toContain('Result set too large');
-    } finally {
-      (exportModule as any).countInvoicesForExport = originalCount;
-    }
+    const job = create('invoices', 'json', {});
+    await process(job.jobId);
+
+    const res = await request(app).get(`/v1/export/jobs/${job.jobId}`);
+    expect(res.body.status).toBe('failed');
+    expect(res.body.error).toContain('Result set too large');
   });
 
   it('returns the job status after creation', async () => {

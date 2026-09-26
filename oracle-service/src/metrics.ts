@@ -21,6 +21,16 @@ export interface OracleMetrics {
   sloErrorBudgetBurn: client.Gauge<string>;
   /** Latency SLO violations */
   latencySloViolationsTotal: client.Counter<string>;
+  /** Composite-score updates rejected for exceeding the single-bound delta. */
+  deltaBoundViolationsTotal: client.Counter<string>;
+  /** Held delta-bound updates currently awaiting human review. */
+  deltaHoldsActive: client.Gauge<string>;
+  /** Over-bound updates published on the strength of a source quorum. */
+  deltaQuorumConfirmationsTotal: client.Counter<string>;
+  /** Health state per verification source (0 healthy, 1 degraded, 2 unavailable). */
+  sourceHealthState: client.Gauge<string>;
+  /** Source health transitions away from healthy — the failover trigger. */
+  failoverEventsTotal: client.Counter<string>;
   /** Record one verdict against the outcome, fraud and ratio metrics. */
   recordVerificationOutcome(result: VerificationOutcomeSample): void;
 }
@@ -125,6 +135,40 @@ export function createOracleMetrics(): OracleMetrics {
     registers: [registry],
   });
 
+  const deltaBoundViolationsTotal = new client.Counter({
+    name: 'oracle_delta_bound_violations_total',
+    help: 'Updates held for review after exceeding the max single-update delta bound',
+    labelNames: ['feed'] as const,
+    registers: [registry],
+  });
+
+  const deltaHoldsActive = new client.Gauge({
+    name: 'oracle_delta_holds_active',
+    help: 'Delta-bound updates currently held pending human review',
+    registers: [registry],
+  });
+
+  const deltaQuorumConfirmationsTotal = new client.Counter({
+    name: 'oracle_delta_quorum_confirmations_total',
+    help: 'Over-bound updates published because an independent source quorum confirmed them',
+    labelNames: ['feed'] as const,
+    registers: [registry],
+  });
+
+  const sourceHealthState = new client.Gauge({
+    name: 'oracle_source_health_state',
+    help: 'Verification source health: 0 healthy, 1 degraded, 2 unavailable',
+    labelNames: ['source'] as const,
+    registers: [registry],
+  });
+
+  const failoverEventsTotal = new client.Counter({
+    name: 'oracle_failover_events_total',
+    help: 'Source health transitions out of the healthy state',
+    labelNames: ['source'] as const,
+    registers: [registry],
+  });
+
   // Bounded ring of recent verdicts backing the ratio gauge.
   const recentFlags: boolean[] = [];
 
@@ -183,6 +227,11 @@ export function createOracleMetrics(): OracleMetrics {
     costUsdTotal,
     sloErrorBudgetBurn,
     latencySloViolationsTotal,
+    deltaBoundViolationsTotal,
+    deltaHoldsActive,
+    deltaQuorumConfirmationsTotal,
+    sourceHealthState,
+    failoverEventsTotal,
     recordVerificationOutcome: wrappedRecordVerificationOutcome,
   };
 }

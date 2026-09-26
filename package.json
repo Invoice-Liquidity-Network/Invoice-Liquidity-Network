@@ -12,6 +12,8 @@
     "test:load": "ts-node --esm scripts/load-test.ts",
     "test:load:indexer": "ts-node --esm scripts/load-test-indexer.ts",
     "test:load:notifications": "ts-node --esm scripts/load-test-notifications.ts",
+    "test:load:export": "tsx scripts/load-test-indexer-export.ts",
+    "migration-harness": "tsx scripts/migration-harness.ts",
     "build": "turbo run build",
     "changeset:version": "changeset version",
     "licence:check": "node scripts/check-licenses.js",

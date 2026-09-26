@@ -221,9 +221,95 @@ migration chain.
 
 ---
 
+## Zero-Downtime Migration Safety Harness (issue #1041)
+
+Schema changes on a live SQLite database take **exclusive write locks**; a migration
+that holds that lock longer than the acceptable downtime window degrades the API even
+though WAL mode keeps readers running. The migration harness makes that cost visible
+*before* a migration ships.
+
+### What it does
+
+| Check | Mechanism |
+|---|---|
+| Production-scale dry-run | Seeds a throwaway DB shaped like production (default 500k invoices / 1.5M events; CI scale 100k/300k), applies the migration, and measures total runtime plus a **lock-duration proxy**: the worst read latency observed by a concurrent reader on a second connection while the migration transaction runs. |
+| Budget gate | Compares measurements against `migration-budget.json` at the repo root (global defaults, per-migration `defaultPerMigration`, and `overrides[id]`). Over budget ⇒ **FAIL**, unless the migration declares a non-empty `onlineStrategy` (expand-contract, create-index-concurrently, …) acknowledging the downtime. |
+| Rollback verification | Exercises `up → down → up` and compares `PRAGMA table_info` / `index_list` fingerprints — a `down()` that "succeeds" but leaves a different schema is caught. |
+
+### Commands
+
+```bash
+# measure + budget-gate every registered migration (projected mainnet scale)
+pnpm migration-harness dry-run
+
+# CI-friendly snapshot (100k invoices / 300k events)
+pnpm migration-harness dry-run --ci-scale
+
+# custom seed sizes
+pnpm migration-harness dry-run --invoices 250000 --events 750000
+
+# prove every down() actually restores the schema
+pnpm migration-harness rollback-verify
+
+# full gate + rollback for one migration
+pnpm migration-harness check 001_add_invoice_expiry_column
+```
+
+Exit code is non-zero on any budget violation without an online strategy, or any
+rollback mismatch. `CI=true` workflows run the harness automatically via
+`.github/workflows/indexer-migration-harness.yml`.
+
+Migrations under test live in the registry at
+`indexer/src/migrationHarness/migrations.ts` — mirror new schema changes there
+(plus a budget-exceeding fixture is kept behind `--fixtures` for harness self-tests).
+
+### Budget file
+
+`migration-budget.json` (repo root):
+
+```json
+{
+  "maxLockMs": 5000,
+  "maxRunMs": 120000,
+  "defaultPerMigration": { "maxLockMs": 5000, "maxRunMs": 120000 },
+  "overrides": {
+    "002_add_events_ledger_covering_index": { "maxRunMs": 180000 }
+  }
+}
+```
+
+---
+
+## Migration Review Checklist
+
+A reviewer should be able to say "yes" to every line before a schema migration merges:
+
+- [ ] **Lock budget** — `pnpm migration-harness dry-run --ci-scale` passes: measured
+      run time and lock-duration proxy are inside `migration-budget.json`, or the
+      overage is explicitly accepted via a declared `onlineStrategy`.
+- [ ] **Production-scale dry-run** — run against the projected mainnet shape
+      (default scale of the harness) for migrations touching large tables
+      (`invoices`, `events`), not just the CI scale.
+- [ ] **Online strategy** — if the migration can exceed the lock budget on production
+      data, the harness entry declares *how* it is applied with zero downtime
+      (expand-contract, dual-write, `CREATE INDEX` on a separate connection, etc.)
+      and the deploy runbook references it.
+- [ ] **Rollback verified** — `pnpm migration-harness rollback-verify` passes: the
+      `down()` restores the exact prior schema (column sets and indexes are
+      fingerprint-compared) and re-applying `up()` afterwards still works.
+- [ ] **`db.ts` mirror updated** — new deployments from `indexer/src/db.ts` produce
+      the post-migration schema without replaying the chain.
+- [ ] **Registered in the harness** — the migration exists in
+      `indexer/src/migrationHarness/migrations.ts` so CI keeps measuring it.
+
+---
+
 ## References
 
 - `scripts/migrate.ts` — the migration runner
+- `scripts/migration-harness.ts` — zero-downtime safety harness CLI
+- `indexer/src/migrationHarness/` — harness modules (snapshot, dry-run, budgets, rollback)
+- `migration-budget.json` — runtime/lock budgets
 - `scripts/migrations/` — migration files directory
 - `migration-status.json` — local tracking of applied migrations
 - `indexer/src/db.ts` — initial database schema definition
