@@ -8,6 +8,11 @@ import {
   getSubscriptionsByAddress,
   hasSentNotification,
   logSentNotification,
+  enqueueDispatchAttempt,
+  getPendingDispatchAttempts,
+  markDispatchAttemptDelivered,
+  recordDispatchAttemptFailure,
+  dispatchDestinationOf,
 } from './db';
 import { fetchInvoice } from './rpc';
 import { deliverNotification } from './delivery';
@@ -66,6 +71,58 @@ export async function processEvent(event: rpc.Api.EventResponse): Promise<void> 
 export async function processScheduledNotifications(): Promise<void> {
   await notifyDueSoon();
   await notifyOverdue();
+}
+
+/**
+ * Resume the durable dispatch queue (issue #1059).
+ *
+ * Every notification is written to `dispatch_attempts` before its first
+ * provider call, so anything still `pending` after a crash — or after a
+ * transient failure — is unfinished work rather than a lost notification. This
+ * runs at the end of every poll, which makes the poller the retry driver: no
+ * in-process timer has to survive the restart.
+ *
+ * A row is only re-sent if it was never confirmed delivered:
+ * - `getPendingDispatchAttempts()` returns `pending` rows only, so an
+ *   already-delivered notification cannot be picked up again;
+ * - `sent_notifications` is checked first, covering the window where the
+ *   provider call succeeded but the process died before the attempt row was
+ *   closed out — that row is completed instead of re-sent;
+ * - `markDispatchAttemptDelivered()` returns false if another flush already
+ *   closed the row, and the caller then skips the "sent" bookkeeping.
+ *
+ * One failing delivery is logged and left pending; it never aborts the rest of
+ * the flush.
+ */
+export async function flushPendingNotifications(): Promise<void> {
+  const pending = getPendingDispatchAttempts();
+  for (const attempt of pending) {
+    const { invoice, trigger, recipientAddress } = attempt.payload;
+    const channel = attempt.subscription.channel;
+    const destination = dispatchDestinationOf(attempt.subscription);
+
+    if (hasSentNotification(invoice.id, trigger, recipientAddress, channel, destination)) {
+      markDispatchAttemptDelivered(attempt.id);
+      continue;
+    }
+
+    try {
+      await deliverNotification(attempt.subscription, attempt.payload);
+      if (markDispatchAttemptDelivered(attempt.id)) {
+        logSentNotification(
+          invoice.id,
+          trigger,
+          recipientAddress,
+          channel,
+          destination,
+          attempt.event_id ?? undefined
+        );
+      }
+    } catch (error: any) {
+      recordDispatchAttemptFailure(attempt.id, error?.message ?? String(error));
+      console.error(`[processor] Failed to deliver pending notification ${attempt.id}:`, error);
+    }
+  }
 }
 
 async function notifyDueSoon(): Promise<void> {
@@ -242,7 +299,7 @@ async function dispatchNotifications(
         trigger,
         target.recipient,
         subscription.channel,
-        subscription.destination
+        dispatchDestinationOf(subscription)
       );
       if (alreadySent) {
         continue;
@@ -258,6 +315,18 @@ async function dispatchNotifications(
         ...formatPayload(trigger, invoice, target.recipient, target.actor),
       };
 
+      // Issue #1059: the intent to deliver is written durably *before* the first
+      // provider call. If this process dies mid-dispatch, or the provider fails,
+      // the row stays `pending` and the poller's flush retries it, so delivery is
+      // at-least-once rather than best-effort. The enqueue is `INSERT OR IGNORE`
+      // on a UNIQUE dedup key, so a duplicated event or a replayed poll can
+      // neither queue nor send a second copy of the same notification.
+      const attempt = enqueueDispatchAttempt(subscription, payload);
+      if (attempt.alreadyDelivered) {
+        // Some earlier run already confirmed this exact notification.
+        continue;
+      }
+
       try {
         // Check provider health and route via fallback if degraded, with
         // priority-aware capacity handling. Critical alerts are never shed.
@@ -267,13 +336,16 @@ async function dispatchNotifications(
           if (fbResult.success) {
             const usedChannel = (fbResult.fallbackChannel as any) ?? subscription.channel;
             // Find the actual destination used for the fallback channel
-            let usedDestination = subscription.destination;
+            let usedDestination = dispatchDestinationOf(subscription);
             if (fbResult.fallbackChannel) {
               const fallbackSubs = getSubscriptionsByAddress(target.recipient).filter(
                 (s) => s.channel === fbResult.fallbackChannel && s.triggers.includes(trigger)
               );
-              if (fallbackSubs.length > 0) usedDestination = fallbackSubs[0].destination;
+              if (fallbackSubs.length > 0) usedDestination = dispatchDestinationOf(fallbackSubs[0]);
             }
+            // The recipient was reached, just not on the primary channel: close
+            // the primary attempt so the flush does not send it a second time.
+            markDispatchAttemptDelivered(attempt.id);
             logSentNotification(
               invoice.id,
               trigger,
@@ -283,39 +355,49 @@ async function dispatchNotifications(
               eventId
             );
           } else if (!fbResult.capacityAllowed) {
+            recordDispatchAttemptFailure(
+              attempt.id,
+              fbResult.error ?? `fallback capacity exhausted for ${trigger}`
+            );
             console.warn(
               `[processor] Fallback capacity exhausted for ${trigger} to ${target.recipient} (priority ${fbResult.priority}) — shedding low-priority notification`
             );
           } else {
+            recordDispatchAttemptFailure(attempt.id, fbResult.error ?? 'fallback delivery failed');
             console.error(
-              `[processor] Failed to deliver notification for invoice ${invoice.id} to ${subscription.destination} via fallback:`,
+              `[processor] Failed to deliver notification for invoice ${
+                invoice.id
+              } to ${dispatchDestinationOf(subscription)} via fallback:`,
               fbResult.error
             );
           }
         } else {
           await deliverNotification(subscription, payload);
+          markDispatchAttemptDelivered(attempt.id);
           logSentNotification(
             invoice.id,
             trigger,
             target.recipient,
             subscription.channel,
-            subscription.destination,
+            dispatchDestinationOf(subscription),
             eventId
           );
         }
       } catch (error) {
+        const primaryError = error instanceof Error ? error.message : String(error);
         // Direct delivery failure — try fallback as second chance for critical
         try {
           const fbResult = await deliverWithFallback(subscription, payload);
           if (fbResult.success) {
             const usedChannel = (fbResult.fallbackChannel as any) ?? subscription.channel;
-            let usedDestination = subscription.destination;
+            let usedDestination = dispatchDestinationOf(subscription);
             if (fbResult.fallbackChannel) {
               const fallbackSubs = getSubscriptionsByAddress(target.recipient).filter(
                 (s) => s.channel === fbResult.fallbackChannel && s.triggers.includes(trigger)
               );
-              if (fallbackSubs.length > 0) usedDestination = fallbackSubs[0].destination;
+              if (fallbackSubs.length > 0) usedDestination = dispatchDestinationOf(fallbackSubs[0]);
             }
+            markDispatchAttemptDelivered(attempt.id);
             logSentNotification(
               invoice.id,
               trigger,
@@ -325,14 +407,31 @@ async function dispatchNotifications(
               eventId
             );
           } else {
+            // Row stays pending: the poller flush owns the retry from here.
+            // The provider that refused the send is the actionable cause, so it
+            // is kept even when the fallback reports its own reason.
+            recordDispatchAttemptFailure(
+              attempt.id,
+              fbResult.error ? `${primaryError} (fallback: ${fbResult.error})` : primaryError
+            );
             console.error(
-              `[processor] Failed to deliver notification for invoice ${invoice.id} to ${subscription.destination}:`,
+              `[processor] Failed to deliver notification for invoice ${
+                invoice.id
+              } to ${dispatchDestinationOf(subscription)}:`,
               error
             );
           }
         } catch (fallbackError) {
+          recordDispatchAttemptFailure(
+            attempt.id,
+            `${primaryError} (fallback: ${
+              fallbackError instanceof Error ? fallbackError.message : String(fallbackError)
+            })`
+          );
           console.error(
-            `[processor] Failed to deliver notification for invoice ${invoice.id} to ${subscription.destination}:`,
+            `[processor] Failed to deliver notification for invoice ${
+              invoice.id
+            } to ${dispatchDestinationOf(subscription)}:`,
             fallbackError
           );
         }

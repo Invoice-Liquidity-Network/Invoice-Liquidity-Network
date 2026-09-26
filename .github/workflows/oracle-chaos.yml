@@ -1,0 +1,123 @@
+name: Oracle Service Chaos Tests
+
+# Upstream-outage chaos suite for oracle-service (#1058).
+#
+# Gated two ways on purpose:
+#   - `pull_request` when anything under oracle-service/** changes, so a
+#     resilience regression cannot be merged;
+#   - nightly on the default branch, because the suite also asserts the service
+#     behaves when an *upstream* breaks, and upstreams can break without this
+#     repository changing at all.
+#
+# A scheduled run that nobody is woken by is a report, not a guard, so failures
+# are pushed onto the same alerting path the synthetic canary uses for a real
+# incident (`ALERT_WEBHOOK_URL`, Slack-shaped payload) plus a check annotation
+# that deep-links the runbook scenario for oracle malfunction.
+
+on:
+  schedule:
+    - cron: '0 0 * * *'
+  pull_request:
+    paths:
+      - 'oracle-service/**'
+      - '.github/workflows/oracle-chaos.yml'
+  workflow_dispatch:
+    inputs:
+      reason:
+        description: 'Why this run was triggered manually'
+        required: false
+        default: 'post-incident verification'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: oracle-chaos-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  chaos-test:
+    name: Upstream outage chaos (oracle-service)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup pnpm with store cache
+        uses: ./.github/actions/setup-pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # oracle-service/src/index.ts imports @iln/opentelemetry, whose package.json
+      # entry points at a gitignored dist/. A fresh checkout therefore has no
+      # resolvable entry, and the suite dies during import — reporting "0 tests"
+      # rather than the assertions it never reached.
+      - name: Build @iln/opentelemetry
+        run: pnpm --filter @iln/opentelemetry build
+
+      - name: Run chaos test
+        id: chaos
+        shell: bash
+        run: |
+          set -o pipefail
+          pnpm --filter @iln/oracle-service run test:chaos 2>&1 | tee oracle-chaos.log
+          exit "${PIPESTATUS[0]}"
+
+      - name: Upload chaos log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: oracle-chaos-log-${{ github.run_id }}
+          path: oracle-chaos.log
+          retention-days: 14
+
+      # `if: failure()` rather than a grepped log: the assertion failures are the
+      # signal, and re-deriving them here would let a suite that crashes on import
+      # pass unnoticed.
+      - name: Alert on failure
+        if: failure()
+        shell: bash
+        env:
+          # Fork PRs cannot read repository secrets, so an empty webhook is the
+          # normal case rather than a misconfiguration.
+          ALERT_WEBHOOK_URL: ${{ secrets.CANARY_ALERT_WEBHOOK_URL || '' }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          REF_NAME: ${{ github.ref_name }}
+          TRIGGER: ${{ github.event_name }}
+          SEVERITY: ${{ github.event_name == 'schedule' && 'P1' || 'P3' }}
+        run: |
+          echo "::error title=Oracle upstream-outage chaos test failed::oracle-service no longer survives a simulated indexer/RPC outage (trigger: ${TRIGGER}, branch: ${REF_NAME}). Run: ${RUN_URL}"
+
+          echo "::group::Runbook"
+          echo "• Oracle malfunction (Scenario C) → https://github.com/Invoice-Liquidity-Network/Invoice-Liquidity-Network/blob/HEAD/docs/incident-response.md#scenario-c-oracle-service-compromise-or-malfunction"
+          echo "• Degradation contract → https://github.com/Invoice-Liquidity-Network/Invoice-Liquidity-Network/blob/HEAD/docs/oracle-service.md#graceful-degradation-on-indexer-downtime"
+          echo "• Metric definitions → https://github.com/Invoice-Liquidity-Network/Invoice-Liquidity-Network/blob/HEAD/docs/oracle-service.md#monitoring"
+          echo "• What this suite pins → https://github.com/Invoice-Liquidity-Network/Invoice-Liquidity-Network/blob/HEAD/docs/oracle-service.md#upstream-outage-chaos-testing"
+          echo "::endgroup::"
+
+          if [ -z "$ALERT_WEBHOOK_URL" ]; then
+            echo "No ALERT_WEBHOOK_URL secret available for this run — annotation only."
+            exit 0
+          fi
+
+          # Same Slack payload shape as scripts/synthetic-canary.ts postAlert(), so
+          # a chaos failure lands in the channel that already pages for incidents
+          # rather than a parallel one.
+          curl -sS --max-time 10 -X POST \
+            -H 'Content-Type: application/json' \
+            -d "$(jq -n \
+              --arg ref "$REF_NAME" \
+              --arg trigger "$TRIGGER" \
+              --arg severity "$SEVERITY" \
+              --arg url "$RUN_URL" \
+              '{
+                text: "🚨 ILN Chaos Alert [\($severity)]: oracle-service upstream-outage chaos test failed on \($ref) (\($trigger))",
+                blocks: [
+                  { type: "section", text: { type: "mrkdwn", text: "*Oracle chaos test failed.* The service no longer degrades safely when the indexer or RPC feed goes down — verdicts may be served from stale or absent data." } },
+                  { type: "section", text: { type: "mrkdwn", text: "*Run:* <\($url)|View logs>\n*Branch:* \($ref)\n*Trigger:* \($trigger)" } },
+                  { type: "context", elements: [{ type: "mrkdwn", text: "Severity: \($severity) | \(now | todate)" }] }
+                ]
+              }')" \
+            "$ALERT_WEBHOOK_URL" || echo "Alert webhook call failed (non-fatal)"

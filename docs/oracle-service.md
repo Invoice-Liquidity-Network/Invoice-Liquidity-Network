@@ -118,6 +118,80 @@ so a clean verdict cannot outlive the behaviour it was computed from. Redis uses
 Callers can also pass `forceRefresh: true` to bypass the cache for a single
 request.
 
+## Verdict attestation
+
+Every `POST /v1/verify` response can carry an `attestation`, so a consumer can
+attribute a verdict to this oracle without trusting the transport it arrived on:
+
+```typescript
+{
+  attestation: {
+    keyId: string;      // which key signed it
+    nonce: string;      // UUID, unique per publication
+    issuedAt: number;   // seconds since the epoch
+    payload: string;    // the verdict body, JSON, exactly as returned
+    signature: string;  // HMAC-SHA256 over "keyId:nonce:issuedAt:payload"
+  }
+}
+```
+
+`payload` is the verdict serialised by the oracle itself, minus the `attestation`
+field. Verify those bytes: re-marshalling the response object in another language
+will not reproduce them, and the signature will not match.
+
+Keys come from `ORACLE_SIGNING_KEY` (required in production — the service refuses
+to boot without it, because an unattributable verdict is the exact risk the
+caller is paying the oracle to remove). `ORACLE_SIGNING_KEY_ID` labels the active
+key. During a rotation both keys are honoured for
+`ORACLE_SIGNING_KEY_ROTATION_WINDOW_MS`, and
+`GET /v1/signing/config` publishes the rotation state — `currentKeyId`,
+`previousKeyId`, `rotationWindowOpen`, `rotationExpiresAt` — so verifiers can be
+configured from the document rather than told out of band. The endpoint returns
+503 while signing is unconfigured.
+
+Replay is rejected: `verifySignedUpdate()` keeps every nonce it has accepted for
+at least as long as the update stays fresh, and refuses an update whose `issuedAt`
+has aged out even if the nonce has been forgotten. A verdict served from cache is
+re-attested per request, so a consumer's replay cache counts publications, not
+verdicts.
+
+## Audit trail
+
+Every published verdict is appended to a hash-chained, HMAC-signed trail before
+the response leaves the process. An append failure fails the request: a verdict
+that is served but not recorded is the forensic gap the trail exists to close.
+
+| Route | Purpose |
+| --- | --- |
+| `GET /v1/audit/entries` | Paged read: `from`, `to`, `payer`, `invoiceId`, `limit` (max 1000), `offset`. `total` counts the rows matching the filters, not the whole trail. |
+| `GET /v1/audit/integrity` | Re-derives the chain and every entry's HMAC; 200 when valid, 500 plus the first offending sequence number when not. |
+
+Both are read-only operator surfaces and should sit behind the same boundary as
+`/metrics`. A store fault answers 500 rather than hanging.
+
+Integrity reports which class of edit was found, not just that something is
+wrong: `brokenAt` (content or hash changed), `badSignatureAt` (content rewritten
+and re-hashed), `gapAt` (a row deleted), `columnMismatchAt` (an indexed column
+rewritten so a payer disappears from a range query while the payload chain still
+verifies), `anchorInvalid` (history truncated above a purge that cannot be
+proved).
+
+Tampering is modelled honestly: the threat is write access to the database, not
+to the process. Someone who can rewrite rows can also recompute the chain with
+the key the service holds, so the chain proves accidental corruption and
+deletion, and the HMAC key's secrecy is what makes deliberate forgery by a
+database-only attacker detectable. `AuditTrail.verifyWithKey()` exists for
+out-of-band verification of a copy of the database with a key the running
+service does not have.
+
+Retention is a privacy obligation, not a cleanup convenience: `docs/privacy.md`
+§4 caps these logs at one year. The window is enforced at boot and then hourly,
+and a purge writes a signed anchor for what it removed so the surviving chain can
+still be verified from the middle. The driver is SQLite
+(`ORACLE_AUDIT_DB_PATH`), matching the indexer and notifications services; the
+in-memory driver is refused outright in production, since a trail that loses its
+contents on restart cannot honour the retention window it advertises.
+
 ## Monitoring
 
 `/metrics` and `/v1/metrics` expose Prometheus text exposition.
@@ -132,6 +206,13 @@ request.
 | `oracle_fraud_signal_total` | counter | Individual heuristics as they fire |
 | `oracle_fraud_flag_ratio` | gauge | Share of the last 200 verdicts carrying a fraud signal |
 | `oracle_external_verification_total` | counter | Provider lookups by status |
+| `oracle_audit_integrity_failures_total` | counter | Integrity checks that found a broken chain |
+
+`oracle_audit_integrity_failures_total` only moves when something calls
+`GET /v1/audit/integrity`, so there is deliberately no alert rule watching it: a
+rule over a counter nobody increments looks protective and stays silent. Run the
+check as a scheduled job, or scrape it after an incident, rather than assuming it
+is continuous.
 
 `oracle_fraud_flag_ratio` exists because the alert that matters — a sudden spike
 in fraud-flagged submissions — is a question about the *share* of verdicts, not
@@ -175,15 +256,19 @@ service answering `/health` with 200 while verifying nothing.
 cd oracle-service
 pnpm install --ignore-workspace
 pnpm test              # unit tests
+pnpm test:chaos        # upstream-outage suite only
 pnpm test:coverage     # enforces the 95% gate
 ```
 
 The 95% threshold lives in `oracle-service/vitest.config.ts`, so local runs
-enforce the same bar as CI (`.github/workflows/coverage.yml`). `testFixtures.ts`
-is excluded from coverage — it is scaffolding, and counting it would inflate the
-figure the gate exists to protect.
+enforce the same bar as CI (`.github/workflows/coverage.yml`,
+`oracle-service-coverage` job). `testFixtures.ts` and `chaosUpstream.ts` are
+excluded from coverage — they are scaffolding, and counting them would inflate
+the figure the gate exists to protect.
 
-oracle-service is not a pnpm workspace member, hence `--ignore-workspace`.
+`--ignore-workspace` installs this package on its own. It is also a workspace
+member (`pnpm-workspace.yaml`), so a root `pnpm install` covers it too; earlier
+revisions of this document claimed otherwise.
 # Oracle & Verification Infrastructure
 
 ## Overview
@@ -277,6 +362,14 @@ Client (SDK/Smart Contract)
   settlementVarianceDays: number;   // Settlement time variance
   fraudSignals: string[];           // Detected risk indicators
   evidence: string[];               // Human-readable assessment rationale
+  composition: OracleSignalComposition; // Outcome policy, sub-scores, rationale
+  attestation?: {                   // Present when ORACLE_SIGNING_KEY is set
+    keyId: string;
+    nonce: string;
+    issuedAt: number;
+    payload: string;                // This body as JSON, minus `attestation`
+    signature: string;              // HMAC-SHA256
+  };
 }
 ```
 
@@ -330,7 +423,16 @@ If the indexer service (`indexer/` on port 3001) is unavailable or slow:
 - `confidence` drops (no history volume to bolster confidence)
 - `trustScore` still follows the weighted formula, but relies entirely on on-chain reputation (38% weight) plus default penalties
 
-**Example**: A payer with high on-chain reputation (90/100) but no queryable history will still verify if reputation alone meets the threshold, but with lower confidence and a note in evidence.
+**Example**: an outage does not quietly become a clean bill of health. Reputation
+carries 38% of the trust score, so reputation alone cannot clear the threshold of
+70 — with a cold cache the payer is rejected as `rejected-low-trust` with the
+unavailability recorded in `evidence`. With a warm cache the last clean verdict
+keeps serving until it ages out, and then the same rejection applies.
+
+That distinction is load-bearing: "this payer has no invoices" and "we could not
+read the feed" are different facts, and the history provider re-throws transport
+failures rather than collapsing them into `[]`. Transport-level proof lives in
+`src/upstream-outage.test.ts`, exercised against a real socket.
 
 **Implementation**: `Promise.allSettled()` ensures a failed indexer fetch doesn't block reputation retrieval or vice versa.
 
@@ -379,6 +481,15 @@ The oracle exposes Prometheus metrics on `/metrics`:
 | `ORACLE_ENABLE_RATE_LIMIT` | true | Enable/disable rate limiting |
 | `ORACLE_NETWORK_PASSPHRASE` | (Testnet) | Stellar network for reputation contract |
 | `ORACLE_RPC_SOURCE` | (random keypair) | Source account for reputation RPC call |
+| `ORACLE_SIGNING_KEY` | (unset) | HMAC key for verdict attestations; required in production |
+| `ORACLE_SIGNING_KEY_ID` | `v1` | Label published for the active key |
+| `ORACLE_SIGNING_KEY_PREV` | (unset) | Outgoing key, honoured during rotation |
+| `ORACLE_SIGNING_KEY_PREV_ID` | `v1` | Label of the outgoing key; required with `_PREV` |
+| `ORACLE_SIGNING_KEY_ROTATION_WINDOW_MS` | 300000 | How long both keys are accepted |
+| `ORACLE_SIGNING_KEY_MAX_AGE_MS` | 300000 | Age after which an attestation is stale |
+| `ORACLE_AUDIT_KEY` | (dev key) | HMAC key for the audit chain; must be set in production |
+| `ORACLE_AUDIT_DRIVER` | `sqlite` when a path is set, else `memory` | Audit persistence driver |
+| `ORACLE_AUDIT_DB_PATH` | (unset) | SQLite file for the audit trail; required in production |
 
 ## Integration with Trust & Liquidity Model
 
@@ -463,7 +574,40 @@ As invoices are settled (paid or defaulted) and indexed by `indexer/`, subsequen
 ### Operational Testing
 
 - Load tests: Verify concurrency handling, cache hit rates, and rate limiting behavior
-- Downtime simulation: Confirm graceful degradation when indexer is unavailable
+- Downtime simulation: `src/upstream-outage.test.ts` plus
+  `.github/workflows/oracle-chaos.yml`, described below
+
+### Upstream outage (chaos) testing
+
+The resilience claims above are about transport failures, and a mocked provider
+cannot prove them: returning `[]` from a stub says nothing about a socket that
+refused, a 503 body, a half-open connection or a 200 full of HTML. So the suite
+runs the oracle against a real `node:http` listener that is driven into each of
+those states, with the request timeout cut to 250 ms so every case is bounded by
+the oracle's own deadline rather than by whatever the upstream eventually does.
+
+What it pins down:
+
+- The healthy path really reaches the indexer over HTTP, at the path and with the
+  query the indexer actually serves.
+- An outage is reported as `external.status: 'unknown'` / an indexer-unavailable
+  evidence line, never as a passing verdict.
+- A last clean verdict keeps serving through the outage and stops once it ages
+  out; a cold cache rejects instead of guessing.
+- Recovery is immediate when the feed comes back, and a retry stampede against a
+  dead upstream produces no unhandled rejections.
+- An outage never resets the clock on data that was already stale.
+- A dead Soroban RPC endpoint degrades reputation to zero without being
+  misattributed to the indexer.
+- The outage is observable: the outcome metric the rejection alert watches moves,
+  and `/v1/health` still reports `ok` because a degraded upstream is a data
+  problem, not a dead service.
+
+CI runs the suite on every PR that touches `oracle-service/`, and nightly on the
+default branch, posting the failure to the alert webhook with a link to the
+runbook (`.github/workflows/oracle-chaos.yml`). A nightly run is the point: the
+suite would otherwise only ever exercise failures the code handled the day
+someone wrote the test.
 
 ## Known Limitations & Future Improvements
 
@@ -472,6 +616,21 @@ As invoices are settled (paid or defaulted) and indexed by `indexer/`, subsequen
 3. **In-memory rate limiting**: Does not persist across process restarts; should be Redis-backed in multi-instance deployments
 4. **No API key authentication**: Rate limiting is per-IP only; authenticated API keys could enable per-user limits
 5. **Fraud signal heuristics are static**: Thresholds (3 similar invoices, 24-hour window, etc.) are hardcoded; future versions could make these configurable or learned
+6. **A plain-HTTP Soroban endpoint fails silently**: stellar-sdk refuses insecure
+   RPC URLs unless `allowHttp` is set, and `fetchOnChainReputation()` collapses
+   every failure — including that one — into a zeroed snapshot. Pointing
+   `ORACLE_REPUTATION_RPC_URL` at `http://localhost:8000` therefore looks like a
+   payer with no reputation, not a misconfiguration. The chaos suite asserts the
+   degraded behaviour and documents why it cannot assert *why* the endpoint
+   refused; surfacing configuration failures distinctly is open work.
+7. **Integrity checking is on-demand**: nothing walks the audit chain on a
+   schedule, so `oracle_audit_integrity_failures_total` stays at zero until
+   someone calls `GET /v1/audit/integrity`. Continuous detection needs a poller
+   or a sweep inside the existing hourly retention job.
+8. **No API authentication on the admin surface**: `/v1/audit/entries` returns
+   payer addresses and invoice outcomes, and `/v1/signing/config` publishes
+   rotation state. Both are read-only and carry no secrets, but they must not sit
+   on the public listener — rate limiting per IP is not access control.
 
 ## References
 
@@ -488,6 +647,10 @@ As invoices are settled (paid or defaulted) and indexed by `indexer/`, subsequen
 - **Code entry points**:
   - `oracle-service/src/index.ts` — HTTP API and app creation
   - `oracle-service/src/verifier.ts` — Trust score computation and fraud detection
+  - `oracle-service/src/composition.ts` — Heuristic/external verdict policy
+  - `oracle-service/src/signer.ts` — Verdict attestation and key rotation
+  - `oracle-service/src/audit-trail.ts` — Hash-chained trail, HMACs, retention
+  - `oracle-service/src/audit-store.ts` — SQLite and in-memory persistence
   - `oracle-service/src/cache.ts` — Cache abstraction (memory or Redis)
   - `oracle-service/src/metrics.ts` — Prometheus metrics
 

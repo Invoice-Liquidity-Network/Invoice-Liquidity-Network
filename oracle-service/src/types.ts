@@ -1,3 +1,6 @@
+import type { AuditRowStore } from './audit-store';
+import type { OracleSigningKeyStore, SignedPriceUpdate } from './signer';
+
 export type InvoiceStatus = 'Pending' | 'Funded' | 'Paid' | 'Defaulted';
 
 export interface IndexerInvoiceHistoryEntry {
@@ -157,7 +160,25 @@ export interface OracleVerificationResponse {
    */
   composition: OracleSignalComposition;
   kybResult?: KYBVerificationResult;
+  /**
+   * HMAC attestation of *this publication*, attached by the HTTP layer when a
+   * signing key is configured (#1053).
+   *
+   * A fresh nonce and `issuedAt` are minted per response rather than reused
+   * from the cached verdict, so a consumer's replay cache sees one event per
+   * publication while the underlying verdict may legitimately repeat.
+   */
+  attestation?: OracleVerdictAttestation | null;
 }
+
+/**
+ * The signature envelope carried by a published verdict.
+ *
+ * `payload` is the canonical JSON of the verdict with this field removed; a
+ * consumer verifies `keyId:nonce:issuedAt:payload` against `signature` using
+ * the advertised key id.
+ */
+export type OracleVerdictAttestation = SignedPriceUpdate;
 
 export interface OracleAssessmentInput {
   request: OracleVerificationRequest;
@@ -195,6 +216,13 @@ export interface OracleServiceHealth {
   indexerBaseUrl: string;
   reputationConfigured: boolean;
   lastVerificationAt?: string | null;
+  /**
+   * Whether published verdicts are being signed (#1053) and whether the audit
+   * trail is durable (#1055). Both are surfaced rather than assumed, because a
+   * deployment that quietly loses either still returns 200s.
+   */
+  signing: 'enabled' | 'disabled';
+  audit: 'sqlite' | 'memory';
 }
 
 export interface OracleServiceMetricsSnapshot {
@@ -247,4 +275,16 @@ export interface OracleServiceOptions {
   rateLimitWindowMs?: number;
   rateLimitMaxRequests?: number;
   enableRateLimit?: boolean;
+  /**
+   * Store backing the append-only audit trail. When omitted the driver is
+   * resolved from `ORACLE_AUDIT_DB_PATH` / `ORACLE_AUDIT_DRIVER`.
+   */
+  auditStore?: AuditRowStore;
+  /** How long audit entries are retained. Defaults to one year. */
+  auditRetentionMs?: number;
+  /**
+   * Key store used to sign published verdicts. `null` explicitly disables
+   * signing (non-production only); omitting it resolves from the environment.
+   */
+  signingKeyStore?: OracleSigningKeyStore | null;
 }

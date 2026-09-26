@@ -15,6 +15,11 @@ export interface OracleMetrics {
   fraudFlagRatio: client.Gauge<string>;
   /** External provider lookups by resulting status. */
   externalVerificationTotal: client.Counter<string>;
+  /**
+   * Audit-trail integrity walks that came back inconsistent (#1055). Any
+   * non-zero value means history was edited or truncated and is an incident.
+   */
+  auditIntegrityFailureTotal: client.Counter<string>;
   /** Attributed cost in USD */
   costUsdTotal: client.Counter<string>;
   /** SLO error-budget burn rate */
@@ -112,6 +117,12 @@ export function createOracleMetrics(): OracleMetrics {
     registers: [registry],
   });
 
+  const auditIntegrityFailureTotal = new client.Counter({
+    name: 'oracle_audit_integrity_failures_total',
+    help: 'Audit-trail integrity checks that found the chain inconsistent',
+    registers: [registry],
+  });
+
   const sloErrorBudgetBurn = new client.Gauge({
     name: 'oracle_slo_error_budget_burn',
     help: 'Current SLO error-budget burn rate by SLO name',
@@ -180,6 +191,7 @@ export function createOracleMetrics(): OracleMetrics {
     fraudSignalTotal,
     fraudFlagRatio,
     externalVerificationTotal,
+    auditIntegrityFailureTotal,
     costUsdTotal,
     sloErrorBudgetBurn,
     latencySloViolationsTotal,
