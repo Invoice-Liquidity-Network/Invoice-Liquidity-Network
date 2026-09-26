@@ -13,7 +13,7 @@ document where tests belong and to prevent redundant or orphaned tests.
 
 | Location | Tests | CI Workflow | Purpose |
 |---|---|---|---|
-| `tests/e2e/` | `lifecycle.test.ts`, `oracle-e2e.test.ts` | `e2e.yml` + `e2e-nightly.yml` | Cross-package integration (contract + SDK + oracle-service + frontend) |
+| `tests/e2e/` | `lifecycle.test.ts`, `oracle-e2e.test.ts`, `disaster-recovery.test.ts` | `e2e.yml` + `e2e-nightly.yml` | Cross-package integration (contract + SDK + oracle-service + frontend) |
 | `oracle-service/` | `src/*.test.ts` | `oracle.yml` / `turbo run test` | Oracle API, trust score math, fraud heuristics, and KYB provider |
 | `sdk/tests/browser/` | Playwright browser E2E | `sdk-browser-tests.yml` | SDK-in-browser correctness |
 | `sdk/` (integration tests) | `test:integration` | `sdk-e2e-local-node.yml` | SDK ↔ local Stellar node contract interaction |
@@ -33,11 +33,13 @@ verification — using a local Stellar node and deterministic mocks.
 **Current status:**
 - `tests/e2e/lifecycle.test.ts`: Covers end-to-end invoice lifecycle transitions (`Pending → Funded → Paid → Defaulted`), balance tracking, dispute flow, and oracle-service gating.
 - `tests/e2e/oracle-e2e.test.ts`: Covers cross-package oracle fraud heuristic assessments (`RAPID_SUCCESSION_WINDOW_MS`, concentrated defaults) and pluggable KYB provider gating prior to `fund_invoice()`.
+- `tests/e2e/disaster-recovery.test.ts`: Covers backup → restore → integrity-verification paths for indexer, notifications, and oracle-service, ensuring that disaster-recovery workflows remain correct and recoverable.
 
 **Scope rules:**
 - Adding a new cross-package integration flow → `tests/e2e/`
 - Adding a test that requires contract + SDK + oracle + frontend interaction → `tests/e2e/`
 - Tests here should use `docker compose` or deterministic local providers
+- Disaster-recovery tests should exercise full backup, restore, and integrity-verification cycles
 
 ### `oracle-service/` — Verification & Fraud Detection Scope (#865)
 
@@ -73,6 +75,43 @@ verification — using a local Stellar node and deterministic mocks.
 | `e2e-nightly.yml` | Daily 00:00 UTC | Deploy contracts, seed accounts, run frontend Playwright | Full system nightly |
 | `sdk-e2e-local-node.yml` | PR + push to main | SDK integration tests against local Stellar | SDK ↔ contract |
 | `sdk-browser-tests.yml` | PR + push to main | SDK Playwright browser tests | SDK browser bundle |
+
+---
+
+## Disaster-Recovery Testing Scope
+
+### What disaster-recovery tests cover
+
+Disaster-recovery e2e tests (`tests/e2e/disaster-recovery.test.ts`) ensure that the backup, restore,
+and integrity-verification workflows remain functional and correct across the full system stack:
+
+**Indexer disaster-recovery:**
+- Backup of indexer state (ledger cursors, processed events, derived state)
+- Restore from a backup snapshot and re-ingest events from the last known cursor
+- Integrity verification that restored state matches canonical chain state
+
+**Notifications disaster-recovery:**
+- Backup of notification delivery status and subscription state
+- Restore delivery queues and re-attempt pending notifications
+- Verify that no notifications are lost or duplicated after restore
+
+**Oracle-service disaster-recovery:**
+- Backup of cached prices, trust scores, and verification state
+- Restore from backup and refresh transient caches from live sources
+- Verify consistency between cached and re-fetched data
+
+### Frequency and CI integration
+
+- Disaster-recovery tests run in `e2e-nightly.yml` (daily at 00:00 UTC) to detect regressions
+- Tests execute against a realistic dataset with at least N active invoices and transactions
+- Each run generates a recovery success/failure report and stores benchmark metrics
+- Flakiness is tracked via the flaky-test quarantine process (see [Flaky Test Quarantine](./flaky-test-quarantine.md))
+
+### What is NOT tested in disaster-recovery
+
+- Physical hardware failures or multi-region failover (out of scope for e2e)
+- Stellar network-level consensus recovery (trust the Stellar network)
+- Contract-only disaster-recovery (trust smart contract upgrade capabilities)
 
 ---
 
