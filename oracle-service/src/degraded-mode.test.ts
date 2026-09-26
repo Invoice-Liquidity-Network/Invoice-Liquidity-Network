@@ -125,9 +125,9 @@ describe('degraded-mode contract (issue #1057)', () => {
       // A stale answer must never verify: downstream halts price action on it.
       expect(degraded.body.isVerified).toBe(false);
       expect(degraded.body.dataAgeMs).toBeGreaterThanOrEqual(0);
-      expect(
-        degraded.body.evidence.some((e: string) => e.toLowerCase().includes('stale'))
-      ).toBe(true);
+      expect(degraded.body.evidence.some((e: string) => e.toLowerCase().includes('stale'))).toBe(
+        true
+      );
     } finally {
       await created.close();
     }

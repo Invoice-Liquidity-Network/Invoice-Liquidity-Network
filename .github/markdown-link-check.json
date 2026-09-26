@@ -35,6 +35,10 @@
     {
       "comment": "npmjs.com blocks automated link checkers with 403; package pages are valid",
       "pattern": "^https://www\\.npmjs\\.com/package/"
+    },
+    {
+      "comment": "w3.org returns 403 to non-browser user agents; the TR spec pages are valid (see docs/monitoring.md trace-context citation)",
+      "pattern": "^https://www\\.w3\\.org/"
     }
   ],
   "aliveStatusCodes": [200, 206, 301, 302, 429],

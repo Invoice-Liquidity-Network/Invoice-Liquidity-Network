@@ -8,14 +8,7 @@ function main() {
   console.log('🚀 Starting Oracle Stress Test wrapper...');
 
   // Forward all arguments, ensuring the service is set to oracle
-  const args = [
-    'ts-node',
-    '--esm',
-    scriptPath,
-    '--service',
-    'oracle',
-    ...process.argv.slice(2),
-  ];
+  const args = ['ts-node', '--esm', scriptPath, '--service', 'oracle', ...process.argv.slice(2)];
 
   const result = spawnSync('npx', args, {
     cwd: rootDir,
