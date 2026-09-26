@@ -6,6 +6,14 @@ import { traceMiddleware, withSpan, propagateFetch } from '@iln/opentelemetry';
 
 import { createOracleCache } from './cache';
 import { createOracleMetrics } from './metrics';
+import { loadDeltaBoundsConfig } from './deltaBounds';
+import {
+  SOURCE_HEALTH_STATE_RANK,
+  SourceHealthTracker,
+  loadSourceFailoverConfig,
+  withFailover,
+  type SourceHealthState,
+} from './sourceFailover';
 import {
   type IndexerInvoiceHistoryEntry,
   type OracleServiceHealth,
@@ -13,7 +21,12 @@ import {
   type OracleVerificationRequest,
   type ReputationSnapshot,
 } from './types';
-import { OracleVerifier, fetchOnChainReputation } from './verifier';
+import {
+  OracleVerifier,
+  fetchOnChainReputation,
+  fetchOnChainReputationOrThrow,
+  type LedgerRpcOracleOptions,
+} from './verifier';
 
 const DEFAULT_PORT = 3010;
 const DEFAULT_INDEXER_BASE_URL = 'http://localhost:3001';
@@ -149,22 +162,52 @@ function createDefaultOptions(options: Partial<OracleServiceOptions> = {}): Orac
       options.rateLimitMaxRequests ??
       Number(process.env.ORACLE_RATE_LIMIT_MAX_REQUESTS ?? DEFAULT_RATE_LIMIT_MAX_REQUESTS),
     enableRateLimit: options.enableRateLimit ?? process.env.ORACLE_ENABLE_RATE_LIMIT !== 'false',
+    indexerFallbackUrl:
+      options.indexerFallbackUrl ?? process.env.ORACLE_INDEXER_FALLBACK_URL,
+    reputationFallbackRpcUrl:
+      options.reputationFallbackRpcUrl ?? process.env.ORACLE_REPUTATION_FALLBACK_RPC_URL,
+    deltaBounds: options.deltaBounds ?? loadDeltaBoundsConfig(),
+    sourceFailover: options.sourceFailover ?? loadSourceFailoverConfig(),
   };
 }
 
-async function createHistoryProvider(baseUrl: string, timeoutMs: number) {
+function indexerFetcher(baseUrl: string, timeoutMs: number) {
   const normalized = stripTrailingSlash(baseUrl);
   return async (payer: string): Promise<IndexerInvoiceHistoryEntry[]> => {
+    const url = new URL(`/v1/history/${encodeURIComponent(payer)}`, normalized);
+    url.searchParams.set('role', 'payer');
+    const payload = await fetchJson<unknown>(url.toString(), timeoutMs);
+    if (!Array.isArray(payload)) {
+      return [];
+    }
+    return payload.map((entry) => normalizeHistoryEntry(entry as Record<string, unknown>));
+  };
+}
+
+async function createHistoryProvider(
+  baseUrl: string,
+  timeoutMs: number,
+  fallbackUrl: string | undefined,
+  tracker: SourceHealthTracker
+) {
+  const primary = indexerFetcher(baseUrl, timeoutMs);
+  const secondary = fallbackUrl ? indexerFetcher(fallbackUrl, timeoutMs) : undefined;
+
+  const invoke = secondary
+    ? withFailover(
+        {
+          primary: { id: 'indexer-primary', invoke: primary },
+          secondary: { id: 'indexer-fallback', invoke: secondary },
+        },
+        tracker
+      )
+    : primary;
+
+  return async (payer: string): Promise<IndexerInvoiceHistoryEntry[]> => {
     try {
-      const url = new URL(`/v1/history/${encodeURIComponent(payer)}`, normalized);
-      url.searchParams.set('role', 'payer');
-      const payload = await fetchJson<unknown>(url.toString(), timeoutMs);
-      if (!Array.isArray(payload)) {
-        return [];
-      }
-      return payload.map((entry) => normalizeHistoryEntry(entry as Record<string, unknown>));
+      return await invoke(payer);
     } catch (error) {
-      // Gracefully degrade when indexer is unavailable
+      // Gracefully degrade when every history source is unavailable
       // Log the error for monitoring but don't fail the entire verification
       const errorMessage = error instanceof Error ? error.message : String(error);
       // In production, this should be sent to monitoring/logging service
@@ -176,7 +219,8 @@ async function createHistoryProvider(baseUrl: string, timeoutMs: number) {
 }
 
 async function createReputationProvider(
-  options: OracleServiceOptions
+  options: OracleServiceOptions,
+  tracker: SourceHealthTracker
 ): Promise<(payer: string) => Promise<ReputationSnapshot>> {
   if (!options.reputationRpcUrl || !options.reputationContractId) {
     return async (payer: string) => ({
@@ -189,16 +233,40 @@ async function createReputationProvider(
     });
   }
 
-  return async (payer: string) =>
-    fetchOnChainReputation(
-      {
-        rpcUrl: options.reputationRpcUrl!,
-        contractId: options.reputationContractId!,
-        networkPassphrase: process.env.ORACLE_NETWORK_PASSPHRASE,
-        source: process.env.ORACLE_RPC_SOURCE,
-      },
-      payer
-    );
+  const baseRpcOptions: LedgerRpcOracleOptions = {
+    rpcUrl: options.reputationRpcUrl,
+    contractId: options.reputationContractId,
+    networkPassphrase: process.env.ORACLE_NETWORK_PASSPHRASE,
+    source: process.env.ORACLE_RPC_SOURCE,
+  };
+  const primary = (payer: string) => fetchOnChainReputationOrThrow(baseRpcOptions, payer);
+  const secondary = options.reputationFallbackRpcUrl
+    ? (payer: string) =>
+        fetchOnChainReputationOrThrow(
+          { ...baseRpcOptions, rpcUrl: options.reputationFallbackRpcUrl! },
+          payer
+        )
+    : undefined;
+
+  const invoke = secondary
+    ? withFailover(
+        {
+          primary: { id: 'reputation-primary', invoke: primary },
+          secondary: { id: 'reputation-fallback', invoke: secondary },
+        },
+        tracker
+      )
+    : primary;
+
+  // Same total function as before the failover existed: every source down
+  // still yields a zeroed snapshot, never a thrown verification.
+  return async (payer: string) => {
+    try {
+      return await invoke(payer);
+    } catch {
+      return fetchOnChainReputation(baseRpcOptions, payer);
+    }
+  };
 }
 
 export interface CreateOracleAppResult {
@@ -212,6 +280,16 @@ export async function createOracleApp(
 ): Promise<CreateOracleAppResult> {
   const resolved = createDefaultOptions(options);
   const metrics = createOracleMetrics();
+  const sourceTracker = new SourceHealthTracker({
+    config: resolved.sourceFailover,
+    onStateChange: (source, _from, to) => {
+      // The state change is the failover event: routing moved off the source.
+      metrics.sourceHealthState.set({ source }, SOURCE_HEALTH_STATE_RANK[to]);
+      if (to !== 'healthy') {
+        metrics.failoverEventsTotal.inc({ source });
+      }
+    },
+  });
   const cache = options.cache
     ? { cache: options.cache, kind: 'memory' as const, close: async () => {} }
     : await createOracleCache({
@@ -220,9 +298,14 @@ export async function createOracleApp(
       });
   const historyProvider =
     options.historyProvider ??
-    (await createHistoryProvider(resolved.indexerBaseUrl, resolved.requestTimeoutMs));
+    (await createHistoryProvider(
+      resolved.indexerBaseUrl,
+      resolved.requestTimeoutMs,
+      resolved.indexerFallbackUrl,
+      sourceTracker
+    ));
   const reputationProvider =
-    options.reputationProvider ?? (await createReputationProvider(resolved));
+    options.reputationProvider ?? (await createReputationProvider(resolved, sourceTracker));
   const verifier = new OracleVerifier({
     cache: cache.cache,
     historyProvider,
@@ -233,6 +316,7 @@ export async function createOracleApp(
     kybProvider: options.kybProvider,
     cacheTtlSeconds: resolved.cacheTtlSeconds,
     maxOracleAgeMs: resolved.maxOracleAgeMs,
+    deltaBounds: resolved.deltaBounds,
   });
 
   const startedAt = Date.now();
@@ -285,6 +369,19 @@ export async function createOracleApp(
 
   app.get('/v1/verify', async (_req: Request, res: Response) => {
     res.status(405).json({ error: 'Use POST /v1/verify' });
+  });
+
+  /**
+   * Over-bound updates held for human review (issue #1052).
+   *
+   * A held update is frozen, never dropped: the protocol keeps receiving the
+   * last known-good verdict while the queue entry waits to be resolved.
+   */
+  app.get('/v1/oracle/delta-holds', async (_req: Request, res: Response) => {
+    res.json({
+      heldUpdates: verifier.getHeldDeltaUpdates(),
+      stats: verifier.deltaGuard.getStats(),
+    });
   });
 
   /**
@@ -363,6 +460,20 @@ export async function createOracleApp(
         cacheHit: response.cacheHit,
       });
 
+      // Delta-bound guard observations (issue #1052): a violation must ALERT
+      // as well as HOLD, so the violation counter and the active-hold gauge
+      // are both written on the request path.
+      const guard = response.deltaGuard;
+      if (guard && !response.cacheHit) {
+        if (guard.decision === 'hold') {
+          metrics.deltaBoundViolationsTotal.inc({ feed: guard.feed });
+        }
+        if (guard.decision === 'publish-quorum') {
+          metrics.deltaQuorumConfirmationsTotal.inc({ feed: guard.feed });
+        }
+        metrics.deltaHoldsActive.set(verifier.deltaGuard.getStats().activeHolds);
+      }
+
       lastVerificationAt = response.generatedAt;
       res.json(response);
     } catch (error) {
@@ -376,13 +487,16 @@ export async function createOracleApp(
   }
 
   function health(): OracleServiceHealth {
+    const sources: Record<string, SourceHealthState> = sourceTracker.snapshot();
+    const anyUnavailable = Object.values(sources).some((state) => state === 'unavailable');
     return {
-      status: healthy ? 'ok' : 'degraded',
+      status: healthy && !anyUnavailable ? 'ok' : 'degraded',
       uptimeMs: Date.now() - startedAt,
       cache: cache.kind,
       indexerBaseUrl: resolved.indexerBaseUrl,
       reputationConfigured: Boolean(resolved.reputationRpcUrl && resolved.reputationContractId),
       lastVerificationAt,
+      sources,
     };
   }
 

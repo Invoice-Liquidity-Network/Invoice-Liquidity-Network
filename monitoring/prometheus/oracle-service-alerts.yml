@@ -170,3 +170,141 @@ groups:
             The provider is likely down. Verdicts still resolve — the composition
             policy treats unknown as inert — but they lose the corroborating
             signal, so confidence is lower across the board.
+
+  # ── Manipulation-resistant delta bounds (#1052) ───────────────────────────
+  # The guard holds any single-update trust movement that exceeds a feed's
+  # bound until an independent source quorum confirms it or a human resolves
+  # it. These rules watch the two failure directions: a spike in violations
+  # (someone is trying to move scores fast) and a queue that is not draining
+  # (holds are piling up because nobody is triaging them).
+  - name: oracle-service-delta-bounds
+    interval: 30s
+    rules:
+      - alert: OracleDeltaHoldsNotDraining
+        expr: oracle_delta_holds_active > 0
+        for: 10m
+        labels:
+          severity: warning
+          team: ops
+          component: oracle-service
+        annotations:
+          summary: >-
+            {{ $value }} delta-bound update(s) on {{ $labels.instance }} have
+            been held for review for over 10 minutes.
+          description: >-
+            A held update is serving the last known-good verdict, so funding is
+            not broken — but the review queue is not draining. Inspect the held
+            updates at GET /v1/oracle/delta-holds and resolve each one
+            (accept publishes the proposed score, reject restores the previous
+            one). Sustained holds usually mean the bound is set too tight for a
+            legitimately volatile payer, or an upstream source is stuck. See
+            docs/oracle-source-failover-runbook.md.
+
+      - alert: OracleDeltaBoundViolationsElevated
+        expr: |
+          sum by (instance, feed) (rate(oracle_delta_bound_violations_total[10m])) > 0.05
+        for: 15m
+        labels:
+          severity: warning
+          team: ops
+          component: oracle-service
+        annotations:
+          summary: >-
+            Oracle is holding repeated over-bound {{ $labels.feed }} updates on
+            {{ $labels.instance }}.
+          description: >-
+            Occasional holds are expected — that is the guard doing its job. A
+            sustained rate means many subjects are moving further than the bound
+            in one update at once, which is the signature of either a corrupted
+            upstream feed or a deliberate attempt to swing scores in a single
+            step. Cross-check oracle_delta_quorum_confirmations_total: if quorum
+            is confirming the same movement, the baseline is genuinely shifting.
+
+      # This is informational, not a page: over-bound updates that a source
+      # quorum confirmed are published normally. A high rate alongside elevated
+      # violations tells the on-call that the holds are legitimate, so the
+      # review can be deferred rather than treated as an incident.
+      - alert: OracleDeltaQuorumConfirmationsHigh
+        expr: |
+          sum by (instance, feed) (rate(oracle_delta_quorum_confirmations_total[30m])) > 0.05
+        for: 30m
+        labels:
+          severity: info
+          team: ops
+          component: oracle-service
+        annotations:
+          summary: >-
+            Repeated quorum-confirmed over-bound {{ $labels.feed }} updates on
+            {{ $labels.instance }}.
+          description: >-
+            Independent sources are corroborating movements that breach the
+            single-source bound, so they are published without a hold. Expected
+            during real reputation shifts; if it coincides with
+            OracleDeltaBoundViolationsElevated, the widening is genuine rather
+            than a single manipulated feed.
+
+  # ── Automated source failover (#1051) ─────────────────────────────────────
+  # Each provider (history indexer, reputation RPC) is a primary/secondary
+  # pair when a fallback is configured. oracle_source_health_state is 0 healthy
+  # / 1 degraded / 2 unavailable per source; oracle_failover_events_total counts
+  # transitions out of healthy. See docs/oracle-source-failover-runbook.md.
+  - name: oracle-service-source-failover
+    interval: 30s
+    rules:
+      - alert: OracleSourceUnavailable
+        expr: oracle_source_health_state >= 2
+        for: 5m
+        labels:
+          severity: critical
+          team: ops
+          component: oracle-service
+        annotations:
+          summary: >-
+            Oracle source {{ $labels.source }} on {{ $labels.instance }} is
+            unavailable.
+          description: >-
+            The tracker has demoted {{ $labels.source }} out of rotation after its
+            error rate crossed the unavailable threshold (or it went stale). If a
+            fallback is configured, traffic has already moved to it and verdicts
+            still resolve — but there is no second pair of eyes on this source, so
+            a fallback outage now means the feed fails safe (empty history /
+            zeroed reputation). Confirm the fallback is healthy and check the
+            source endpoint.
+
+      - alert: OracleSourceDegraded
+        expr: oracle_source_health_state == 1
+        for: 15m
+        labels:
+          severity: warning
+          team: ops
+          component: oracle-service
+        annotations:
+          summary: >-
+            Oracle source {{ $labels.source }} on {{ $labels.instance }} has been
+            degraded for 15 minutes.
+          description: >-
+            {{ $labels.source }} is above its error-rate or p95-latency threshold
+            but still serving. The failover pair keeps calls on the healthier
+            source, so this is early warning rather than an incident. Look at
+            latency and error trends on the upstream before it escalates to
+            unavailable.
+
+      - alert: OracleFailoverChurn
+        expr: |
+          sum by (instance) (increase(oracle_failover_events_total[30m])) > 3
+        for: 30m
+        labels:
+          severity: warning
+          team: ops
+          component: oracle-service
+        annotations:
+          summary: >-
+            Oracle sources on {{ $labels.instance }} have flipped out of healthy
+            {{ $value }} times in 30 minutes.
+          description: >-
+            The recovery streak and cooldown are specifically tuned to stop a
+            flapping source from thrashing the routing, so several genuine
+            demotions in half an hour means a source is oscillating hard enough to
+            beat the anti-flap window — or two sources are failing at once.
+            Identify the oscillating source in oracle_source_health_state and
+            stabilise it; sustained churn degrades verdict consistency.

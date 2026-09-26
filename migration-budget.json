@@ -1,0 +1,13 @@
+{
+  "maxLockMs": 5000,
+  "maxRunMs": 120000,
+  "defaultPerMigration": {
+    "maxLockMs": 5000,
+    "maxRunMs": 120000
+  },
+  "overrides": {
+    "002_add_events_ledger_covering_index": {
+      "maxRunMs": 180000
+    }
+  }
+}
