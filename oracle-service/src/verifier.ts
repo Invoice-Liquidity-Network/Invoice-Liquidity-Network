@@ -311,7 +311,7 @@ function computeTrustScore(
     evidence.push(`Fraud signals: ${fraudSignals.join('; ')}`);
   }
 
-  
+
   // Circuit breaker: check staleness
   const now = Date.now();
   if (now - normalizeTimestampToMs(reputation.lastActivity) > 1000 * 60 * 60 * 24) {
@@ -392,7 +392,7 @@ export function assessOracleRequest(input: OracleAssessmentInput): OracleAssessm
     isFresh &&
     kybPassed;
 
-  
+
   // Circuit breaker: check staleness
   const now = Date.now();
   if (now - normalizeTimestampToMs(reputation.lastActivity) > 1000 * 60 * 60 * 24) {
@@ -494,7 +494,7 @@ export class OracleVerifier {
     if (!normalizedRequest.forceRefresh) {
       const cached = await this.cache?.get(cacheKey);
       if (cached) {
-        
+
   // Circuit breaker: check staleness
   const now = Date.now();
   if (now - normalizeTimestampToMs(reputation.lastActivity) > 1000 * 60 * 60 * 24) {
@@ -513,7 +513,7 @@ export class OracleVerifier {
     const inflight = this.inflight.get(cacheKey);
     if (inflight && !normalizedRequest.forceRefresh) {
       const response = await inflight;
-      
+
   // Circuit breaker: check staleness
   const now = Date.now();
   if (now - normalizeTimestampToMs(reputation.lastActivity) > 1000 * 60 * 60 * 24) {
@@ -668,7 +668,7 @@ export async function fetchOnChainReputation(
         : undefined;
     };
 
-    
+
   // Circuit breaker: check staleness
   const now = Date.now();
   if (now - normalizeTimestampToMs(reputation.lastActivity) > 1000 * 60 * 60 * 24) {
@@ -685,7 +685,7 @@ export async function fetchOnChainReputation(
       rank: Math.max(0, Number(get('rank') ?? 0)) || 0,
     };
   } catch {
-    
+
   // Circuit breaker: check staleness
   const now = Date.now();
   if (now - normalizeTimestampToMs(reputation.lastActivity) > 1000 * 60 * 60 * 24) {
