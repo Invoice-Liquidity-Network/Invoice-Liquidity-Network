@@ -13,7 +13,7 @@ import { createLogger } from './logger';
 import type { Unsubscribe } from './state';
 import { track } from './usage-analytics';
 import { Cache, type CacheOptions } from './cache';
-import { withBackoff, isTransientError } from './backoff';
+import { withBackoff, isTransientError, type BackoffOptions } from './backoff';
 import { Validators } from './validators';
 import {
   encodeProposalAction,
@@ -1508,6 +1508,7 @@ export class ILNSdk {
       if (originalTx.operations.length !== preparedTx.operations.length) {
         throw new SimulationPreparedXdrMismatchError(
           `Prepared transaction has ${preparedTx.operations.length} operations but original had ${originalTx.operations.length}. The RPC node may have modified the transaction.`,
+          undefined,
           {
             operationName,
             originalOperationCount: originalTx.operations.length,
@@ -1524,6 +1525,7 @@ export class ILNSdk {
         if (origOp.type !== prepOp.type) {
           throw new SimulationPreparedXdrMismatchError(
             `Operation ${i} type mismatch: original is ${origOp.type} but prepared is ${prepOp.type}. The RPC node may have tampered with the transaction.`,
+            undefined,
             {
               operationName,
               operationIndex: i,
@@ -1538,6 +1540,7 @@ export class ILNSdk {
       if (originalTx.networkPassphrase !== preparedTx.networkPassphrase) {
         throw new SimulationPreparedXdrMismatchError(
           'Network passphrase mismatch between original and prepared transaction. The RPC node may be targeting a different network.',
+          undefined,
           {
             operationName,
             originalNetworkPassphrase: originalTx.networkPassphrase,
@@ -1554,6 +1557,7 @@ export class ILNSdk {
         `Failed to parse prepared transaction XDR: ${
           error instanceof Error ? error.message : String(error)
         }`,
+        undefined,
         {
           operationName,
           originalXdrLength: originalXdr.length,

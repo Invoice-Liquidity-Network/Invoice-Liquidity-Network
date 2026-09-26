@@ -126,11 +126,14 @@ describe('withBackoff', () => {
     const fn = vi.fn().mockRejectedValue(new Error('fetch failed'));
 
     const promise = withBackoff(fn, { maxRetries: 2, baseDelayMs: 100, jitter: 0 });
+    // Attach the rejection handler before advancing timers so the rejection is
+    // never observed as unhandled (vitest fails the run on unhandled rejections).
+    const assertion = expect(promise).rejects.toThrow('fetch failed');
 
     await vi.advanceTimersByTimeAsync(100);
     await vi.advanceTimersByTimeAsync(200);
 
-    await expect(promise).rejects.toThrow('fetch failed');
+    await assertion;
     expect(fn).toHaveBeenCalledTimes(3); // initial + 2 retries
   });
 
@@ -155,11 +158,14 @@ describe('withBackoff', () => {
       jitter: 0,
       isRetryable,
     });
+    // Attach the rejection handler before advancing timers so the rejection is
+    // never observed as unhandled (vitest fails the run on unhandled rejections).
+    const assertion = expect(promise).rejects.toThrow();
 
     await vi.advanceTimersByTimeAsync(100);
     await vi.advanceTimersByTimeAsync(200);
 
-    await expect(promise).rejects.toThrow();
+    await assertion;
     expect(fn).toHaveBeenCalledTimes(3); // retries because isRetryable says 400 is retryable
   });
 
