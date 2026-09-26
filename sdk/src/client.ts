@@ -841,6 +841,12 @@ export class ILNSdk {
 
       return invoiceId;
     } catch (err: any) {
+      if (
+        this.offlineManager &&
+        (err instanceof NetworkError || err instanceof TimeoutError || err?.message?.includes('fetch failed'))
+      ) {
+        throw new OfflineQueuedError(this.offlineManager.enqueue('submitInvoice', params));
+      }
       track('submitInvoice', this.analyticsNetwork, false, err?.code ?? err?.name);
       throw err;
     }
@@ -899,6 +905,12 @@ export class ILNSdk {
       // Invalidate cache for this invoice after funding
       this.cache.invalidate(`invoice:${params.invoiceId}`);
     } catch (err: any) {
+      if (
+        this.offlineManager &&
+        (err instanceof NetworkError || err instanceof TimeoutError || err?.message?.includes('fetch failed'))
+      ) {
+        throw new OfflineQueuedError(this.offlineManager.enqueue('fundInvoice', params));
+      }
       track('fundInvoice', this.analyticsNetwork, false, err?.code ?? err?.name);
       throw err;
     }
@@ -947,6 +959,12 @@ export class ILNSdk {
       // Invalidate cache for this invoice after payment
       this.cache.invalidate(`invoice:${params.invoiceId}`);
     } catch (err: any) {
+      if (
+        this.offlineManager &&
+        (err instanceof NetworkError || err instanceof TimeoutError || err?.message?.includes('fetch failed'))
+      ) {
+        throw new OfflineQueuedError(this.offlineManager.enqueue('markPaid', params));
+      }
       track('markPaid', this.analyticsNetwork, false, err?.code ?? err?.name);
       throw err;
     }
@@ -1000,6 +1018,12 @@ export class ILNSdk {
       await this.signAndSend(preparedTransaction, params.funder, 'claimDefault');
       track('claimDefault', this.analyticsNetwork, true);
     } catch (err: any) {
+      if (
+        this.offlineManager &&
+        (err instanceof NetworkError || err instanceof TimeoutError || err?.message?.includes('fetch failed'))
+      ) {
+        throw new OfflineQueuedError(this.offlineManager.enqueue('claimDefault', params));
+      }
       track('claimDefault', this.analyticsNetwork, false, err?.code ?? err?.name);
       throw err;
     }
