@@ -214,6 +214,93 @@ Read by `notifications/src/config.ts`; see also `notifications/.env.example`.
 There is **no** `DATABASE_URL` or global `WEBHOOK_SECRET`; earlier revisions of
 this doc listed those and they are not read by the service.
 
+## Delivery Guarantee: At-Least-Once, Deduplicated
+
+**The service guarantees at-least-once delivery.** Every notification is written
+to a durable journal *before* the first provider call, so a transient provider
+failure or a process restart mid-dispatch leaves behind unfinished work instead
+of silently dropping the notification. It is explicitly **not** exactly-once: see
+"The window that remains open" below.
+
+### The dispatch journal
+
+`dispatch_attempts` (`notifications/src/db.ts`) holds one row per notification a
+recipient should receive:
+
+| Column | Meaning |
+| --- | --- |
+| `id` | `sha256` of `dedup_key`, so the same notification always maps to the same row |
+| `dedup_key` | `JSON.stringify([invoice_id, trigger, recipient_address, channel, destination, event_id])`; `UNIQUE` index `idx_dispatch_attempts_dedup`. Scheduled triggers (`invoice_due_soon`, `invoice_overdue`) have no event id, which the key encodes as `''` |
+| `subscription`, `payload` | The JSON needed to send the notification again, years later if necessary, without re-reading the subscription table |
+| `status` | `pending` while undelivered, `delivered` once the provider confirmed the send |
+| `attempts`, `last_error` | How many provider calls have failed and the reason for the most recent one |
+| `created_at`, `updated_at`, `delivered_at` | Timestamps for triage |
+
+`enqueueDispatchAttempt()` inserts with `INSERT OR IGNORE` against that unique
+key. A retried poll, a replayed event, or a restart re-processing its cursor
+therefore cannot create a second dispatch and cannot throw. The caller skips the
+send only when the existing row is already `delivered`; a row still `pending` is
+unfinished work and is dispatched again.
+
+`sent_notifications` stays what it always was: the audit log of confirmed sends,
+written only after delivery succeeds.
+
+### The retry driver
+
+The poller's tick is `processScheduledNotifications()` → `flushPendingNotifications()`
+(`notifications/src/poller.ts`), so **the poll is the retry mechanism** — no
+in-process timer has to survive a restart. Each flush:
+
+1. reads `pending` rows oldest-first (500 per tick, capped at 5000);
+2. checks `sent_notifications` first, and closes the row out instead of
+   re-sending when the notification is already logged as delivered;
+3. sends, then `markDispatchAttemptDelivered()` — whose `status <> 'delivered'`
+   guard makes it the single winner if two flushes race, so the loser does not
+   log a second "sent".
+
+A failing send is logged and leaves the row `pending`; it never aborts the rest
+of the flush. When direct delivery throws, the provider fallback chain gets one
+in-process attempt first, and the row records the provider's own error as the
+primary cause (`<provider error> (fallback: <why the fallback could not help>`).
+
+### The window that remains open
+
+If the process dies after the provider accepted the webhook but before the row
+was closed out, the next flush re-sends it — that is the "at-least-once" half.
+The `sent_notifications` check above narrows the window to a single crash
+interval, but cannot close it: writing the log entry and closing the row are two
+statements. **Webhook receivers must deduplicate**, and are given what they need
+to do it: `eventId` in the JSON body (a stable id when the notification came from
+a chain event) and the `X-ILN-Event-Id` header.
+
+### Known limits
+
+- **No attempt cap and no dead-letter queue.** A notification whose provider call
+  always fails stays `pending` and is retried on every poll forever. Watch
+  `attempts`/`last_error` on `pending` rows: high counts mean a destination that
+  will never accept the send.
+- A row whose `payload`/`subscription` JSON cannot be parsed is skipped by the
+  flush and stays `pending` (visible, but not retryable).
+- Retention (`purgeExpiredDeliveryLogs`) deletes only **terminal** rows, after 90
+  days. Purging pending work would break the guarantee, so it never does.
+- The guarantee covers the dispatch pipeline started by the poller. `POST /test-webhook`
+  is a diagnostic send and is not journaled.
+
+### Tests
+
+```bash
+# Real OS processes: child SIGKILLed mid-dispatch, a third process resumes from the file
+pnpm --filter ./notifications vitest run tests/crash-recovery.test.ts
+# Queue semantics against a real (in-memory) SQLite database
+pnpm --filter ./notifications vitest run src/__tests__/processor.test.ts
+```
+
+The crash test spawns the production pipeline through the same TypeScript loader
+`pnpm dev` uses and stubs only the provider boundary, so the evidence is the
+SQLite file and the provider's own log — never a mock call count. Emptying
+`enqueueDispatchAttempt()` or turning `markDispatchAttemptDelivered()` into a
+no-op makes it fail.
+
 ## Rate Limits and Delivery Guarantees
 
 - API requests are rate-limited per address (`RATE_LIMIT_PER_USER`, default
@@ -227,6 +314,10 @@ this doc listed those and they are not read by the service.
   sequentially only if every primary attempt fails.
 - Webhook payloads are HMAC-SHA256 signed **when the subscription was created
   with a `webhookSecret`** (see `X-ILN-Signature` above).
+- The retries above are in-process and best-effort. The durable guarantee —
+  at-least-once across failures and restarts, with dedup keys — is the dispatch
+  journal described in
+  [Delivery Guarantee: At-Least-Once, Deduplicated](#delivery-guarantee-at-least-once-deduplicated).
 
 ---
 

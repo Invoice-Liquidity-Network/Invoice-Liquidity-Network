@@ -1,7 +1,11 @@
 import type { rpc } from '@stellar/stellar-sdk';
 import { CONFIG } from './config';
 import { getCursorLedger, setCursorLedger } from './db';
-import { processEvent, processScheduledNotifications, flushPendingNotifications } from './processor';
+import {
+  processEvent,
+  processScheduledNotifications,
+  flushPendingNotifications,
+} from './processor';
 import { server } from './rpc';
 import { isRetryableError, normalizeError } from './errors';
 
