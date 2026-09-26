@@ -13,7 +13,7 @@ import { createLogger } from './logger';
 import type { Unsubscribe } from './state';
 import { track } from './usage-analytics';
 import { Cache, type CacheOptions } from './cache';
-import { withBackoff, isTransientError } from './backoff';
+import { withBackoff, isTransientError, type BackoffOptions } from './backoff';
 import { Validators } from './validators';
 import {
   encodeProposalAction,
@@ -181,27 +181,24 @@ export class ILNSdk {
     }
 
     // Wrap the promise factory for retry with backoff
-    const { result } = await withBackoff(
-      () => this.executeRpcCall(promise, operationName),
-      {
-        ...this.backoffOptions,
-        isRetryable: (error) => {
-          // Don't retry if it's a known ILN error (non-transient)
-          if (error instanceof ILNError) return false;
-          // Don't retry timeout errors — they should surface immediately
-          if (error instanceof TimeoutError) return false;
-          // Delegate to default transient error check
-          return isTransientError(error);
-        },
-        onRetry: (attempt, error, delayMs) => {
-          if (this.logger.enabled) {
-            this.logger(`Retrying ${operationName} (attempt ${attempt}) after ${delayMs}ms`, {
-              error: error instanceof Error ? error.message : String(error),
-            });
-          }
-        },
-      }
-    );
+    const { result } = await withBackoff(() => this.executeRpcCall(promise, operationName), {
+      ...this.backoffOptions,
+      isRetryable: (error) => {
+        // Don't retry if it's a known ILN error (non-transient)
+        if (error instanceof ILNError) return false;
+        // Don't retry timeout errors — they should surface immediately
+        if (error instanceof TimeoutError) return false;
+        // Delegate to default transient error check
+        return isTransientError(error);
+      },
+      onRetry: (attempt, error, delayMs) => {
+        if (this.logger.enabled) {
+          this.logger(`Retrying ${operationName} (attempt ${attempt}) after ${delayMs}ms`, {
+            error: error instanceof Error ? error.message : String(error),
+          });
+        }
+      },
+    });
 
     return result;
   }
@@ -1511,6 +1508,7 @@ export class ILNSdk {
       if (originalTx.operations.length !== preparedTx.operations.length) {
         throw new SimulationPreparedXdrMismatchError(
           `Prepared transaction has ${preparedTx.operations.length} operations but original had ${originalTx.operations.length}. The RPC node may have modified the transaction.`,
+          undefined,
           {
             operationName,
             originalOperationCount: originalTx.operations.length,
@@ -1527,6 +1525,7 @@ export class ILNSdk {
         if (origOp.type !== prepOp.type) {
           throw new SimulationPreparedXdrMismatchError(
             `Operation ${i} type mismatch: original is ${origOp.type} but prepared is ${prepOp.type}. The RPC node may have tampered with the transaction.`,
+            undefined,
             {
               operationName,
               operationIndex: i,
@@ -1541,6 +1540,7 @@ export class ILNSdk {
       if (originalTx.networkPassphrase !== preparedTx.networkPassphrase) {
         throw new SimulationPreparedXdrMismatchError(
           'Network passphrase mismatch between original and prepared transaction. The RPC node may be targeting a different network.',
+          undefined,
           {
             operationName,
             originalNetworkPassphrase: originalTx.networkPassphrase,
@@ -1554,8 +1554,15 @@ export class ILNSdk {
       }
       // If XDR parsing itself fails, that's a clear sign of tampering
       throw new SimulationPreparedXdrMismatchError(
-        `Failed to parse prepared transaction XDR: ${error instanceof Error ? error.message : String(error)}`,
-        { operationName, originalXdrLength: originalXdr.length, preparedXdrLength: preparedXdr.length }
+        `Failed to parse prepared transaction XDR: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+        undefined,
+        {
+          operationName,
+          originalXdrLength: originalXdr.length,
+          preparedXdrLength: preparedXdr.length,
+        }
       );
     }
   }

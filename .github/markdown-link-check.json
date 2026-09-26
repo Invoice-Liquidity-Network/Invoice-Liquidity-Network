@@ -23,6 +23,10 @@
     {
       "comment": "docs.iln.finance is an internal staging domain not reachable from CI; ignore link check",
       "pattern": "^https://docs\\.iln\\.finance"
+    },
+    {
+      "comment": "Site-root-relative routes (e.g. /tutorials/first-invoice) resolve against the deployed docs site, not against a fetchable URL from the repo, so the HTTP link check cannot verify them",
+      "pattern": "^/"
     }
   ],
   "aliveStatusCodes": [200, 206, 429],

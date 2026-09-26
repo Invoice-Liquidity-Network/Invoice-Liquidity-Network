@@ -570,6 +570,9 @@ importers:
 
   packages/docs:
     dependencies:
+      '@docsearch/react':
+        specifier: ^3.5.2
+        version: 3.9.0(@algolia/client-search@5.56.0)(@types/react@19.2.17)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(search-insights@2.17.3)
       next:
         specifier: ^15.0.0
         version: 15.5.21(@opentelemetry/api@1.9.1)(@playwright/test@1.49.1)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)

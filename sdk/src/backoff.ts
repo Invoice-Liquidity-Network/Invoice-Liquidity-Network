@@ -32,7 +32,10 @@ export interface BackoffResult<T> {
  * Compute delay in milliseconds for a given retry attempt using
  * exponential backoff with optional jitter.
  */
-export function computeDelay(attempt: number, options: Required<Omit<BackoffOptions, 'isRetryable' | 'onRetry'>>): number {
+export function computeDelay(
+  attempt: number,
+  options: Required<Omit<BackoffOptions, 'isRetryable' | 'onRetry'>>
+): number {
   const exponentialDelay = options.baseDelayMs * Math.pow(options.multiplier, attempt);
   const cappedDelay = Math.min(exponentialDelay, options.maxDelayMs);
 
@@ -114,7 +117,8 @@ export async function withBackoff<T>(
   fn: () => Promise<T>,
   options: BackoffOptions = {}
 ): Promise<BackoffResult<T>> {
-  const config: Required<Omit<BackoffOptions, 'isRetryable' | 'onRetry'>> & Pick<BackoffOptions, 'isRetryable' | 'onRetry'> = {
+  const config: Required<Omit<BackoffOptions, 'isRetryable' | 'onRetry'>> &
+    Pick<BackoffOptions, 'isRetryable' | 'onRetry'> = {
     maxRetries: options.maxRetries ?? 3,
     baseDelayMs: options.baseDelayMs ?? 500,
     maxDelayMs: options.maxDelayMs ?? 10_000,

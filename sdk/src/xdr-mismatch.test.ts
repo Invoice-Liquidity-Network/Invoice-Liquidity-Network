@@ -1,5 +1,5 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest';
-import { Account, Keypair, nativeToScVal, rpc } from '@stellar/stellar-sdk';
+import { Account, Asset, Keypair, Operation, nativeToScVal, rpc } from '@stellar/stellar-sdk';
 import { TransactionBuilder } from '@stellar/stellar-sdk';
 
 import { ILNSdk } from './client';
@@ -69,12 +69,18 @@ describe('Simulation-vs-Prepared XDR Mismatch Detection', () => {
           networkPassphrase: NETWORK_PASSPHRASE,
         })
           .addOperation(
-            // @ts-ignore - intentionally using wrong operation type for testing
-            { type: 'payment', destination: Keypair.random().publicKey(), amount: '1000' }
+            Operation.payment({
+              destination: Keypair.random().publicKey(),
+              asset: Asset.native(),
+              amount: '1000',
+            })
           )
           .addOperation(
-            // @ts-ignore
-            { type: 'payment', destination: Keypair.random().publicKey(), amount: '2000' }
+            Operation.payment({
+              destination: Keypair.random().publicKey(),
+              asset: Asset.native(),
+              amount: '2000',
+            })
           )
           .setTimeout(30)
           .build();
@@ -136,14 +142,13 @@ describe('Simulation-vs-Prepared XDR Mismatch Detection', () => {
           networkPassphrase: NETWORK_PASSPHRASE,
         })
           .addOperation(
-            // Different operation type than what was simulated
-            // The original was invokeContractFunction (mark_paid)
-            // This is a createAccount operation
-            {
-              type: 'createAccount' as any,
+            // Different operation type than what was simulated.
+            // The original was invokeContractFunction (mark_paid);
+            // this is a createAccount operation.
+            Operation.createAccount({
               destination: Keypair.random().publicKey(),
               startingBalance: '1',
-            }
+            })
           )
           .setTimeout(30)
           .build();
