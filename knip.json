@@ -1,9 +1,7 @@
 {
   "ignore": [
-    // Branch-local indexer modules that are wired in incrementally.
-    "indexer/src/idempotency.ts",
-    "indexer/src/performance.ts",
-    "indexer/src/reconciliation.ts",
+    // Branch-local indexer DLQ module, wired in incrementally.
+    "indexer/src/dlq.ts",
     "frontend/**",
     "backend/**",
     "oracle-service/**"

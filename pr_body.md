@@ -1,9 +1,9 @@
-- closes #1043
-- closes #1044
-- closes #1046
-- closes #1048
+- closes #1045
+- closes #1047
+- closes #1049
+- closes #1050
 
-- Added indexer event idempotency checks
-- Created scheduled indexed-state reconciliation job
-- Enforced query-performance budgets for heavy queries
-- Documented multi-region indexer failover plan
+- Designed horizontal read-replica strategy for the indexer
+- Added dead-letter queue and replay tooling for malformed indexer events
+- Replaced single-source oracle with multi-source aggregation and outlier rejection
+- Added staleness detection with automatic circuit-breaking to oracle-service
