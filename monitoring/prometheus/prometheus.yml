@@ -21,3 +21,17 @@ scrape_configs:
     metrics_path: '/metrics'
     static_configs:
       - targets: ['notifications:4001']
+
+  # Canary instances (issue #1095): scripts/canary/rollout.mjs writes/removes
+  # a target file here when it starts/stops a canary, labeling it
+  # `deployment="canary"` and `service="<indexer|oracle-service|notifications>"`
+  # so scripts/canary/prometheus-adapter.mjs can query canary-only SLIs
+  # without waiting for the production MWMBR alert windows. See
+  # docs/canary-deployment.md. metrics_path is per-target via the __metrics_path__
+  # meta-label set in each target file (indexer and notifications serve
+  # /metrics; oracle-service serves /v1/metrics).
+  - job_name: 'iln-canary'
+    file_sd_configs:
+      - files:
+          - '/etc/prometheus/canary-targets/*.json'
+        refresh_interval: 15s

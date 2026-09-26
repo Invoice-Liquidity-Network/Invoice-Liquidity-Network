@@ -52,6 +52,7 @@ jobs:
               - 'sdk/**'
               - 'packages/sdk/**'
               - 'packages/shared/**'
+              - 'tests/sdk-integration/**'
             cli:
               - 'cli/**'
             indexer:
@@ -334,6 +335,33 @@ jobs:
               body: '🚨 **Dependency version mismatch detected!** Run `pnpm syncpack:check` locally and align versions before merging.'
             })
 
+  sdk-fixture-mock-guard:
+    name: SDK fixture mock audit guard
+    needs: [pnpm-cache, changes]
+    if: needs.changes.outputs.sdk == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup pnpm with store cache
+        uses: ./.github/actions/setup-pnpm
+
+      - name: Fail on undocumented SDK integration mocks
+        run: pnpm check:sdk-fixture-mocks
+
+      - name: Comment PR on failure
+        if: failure() && github.event_name == 'pull_request' && !github.event.pull_request.head.repo.fork
+        continue-on-error: true
+        uses: actions/github-script@v7
+        with:
+          script: |
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: '🚨 **Undocumented SDK fixture mock detected!** Run `pnpm check:sdk-fixture-mocks` locally, then either document the mock in the "Documented mocks (CI allowlist)" block of `docs/sdk-integration-fixture-audit.md` (with justification) or replace it with a live testnet-backed fixture.'
+            })
+
   validate-packages:
     name: Validate package.json consistency
     needs: [pnpm-cache, changes]
@@ -592,6 +620,14 @@ jobs:
             exit 1
           fi
 
+      - name: Check SDK/deployed-ABI compatibility (issue #1094)
+        run: |
+          if [ -f backend/target/spec.json ]; then
+            pnpm check:contract-abi-compat
+          else
+            echo "Contract submodule not initialized, skipping ABI compatibility check"
+          fi
+
       - name: Comment PR on failure
         if: failure() && github.event_name == 'pull_request' && !github.event.pull_request.head.repo.fork
         continue-on-error: true
@@ -737,6 +773,11 @@ jobs:
           npm run test:checklist
           npm run test:audit
           npm run test:provenance
+          npm run test:sdk-fixture-mocks
+          npm run test:contract-abi-compat
+          npm run test:release-scripts
+          npm run test:canary
+          npm run canary:drill
 
   core-build:
     name: Core · build

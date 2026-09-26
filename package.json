@@ -47,7 +47,17 @@
     "validate:meta-nav": "node scripts/check-meta-nav.mjs",
     "check:shared-types": "node scripts/check-no-duplicate-types.mjs",
     "drift:check": "node scripts/check-monorepo-map-drift.mjs",
-    "test:drift": "node --test scripts/__tests__/check-monorepo-map-drift.test.mjs"
+    "test:drift": "node --test scripts/__tests__/check-monorepo-map-drift.test.mjs",
+    "check:sdk-fixture-mocks": "node scripts/check-sdk-fixture-mocks.mjs",
+    "test:sdk-fixture-mocks": "node --test scripts/__tests__/check-sdk-fixture-mocks.test.mjs",
+    "check:contract-abi-compat": "node scripts/check-contract-abi-compatibility.mjs",
+    "test:contract-abi-compat": "node --test scripts/__tests__/check-contract-abi-compatibility.test.mjs",
+    "release:verify-dry-run": "node scripts/verify-release-dry-run.mjs",
+    "release:audit-log": "node scripts/release-audit-log.mjs",
+    "test:release-scripts": "node --test scripts/__tests__/verify-release-dry-run.test.mjs scripts/__tests__/release-audit-log.test.mjs",
+    "canary:rollout": "node scripts/canary/rollout.mjs",
+    "canary:drill": "node scripts/canary/rollout-drill.mjs",
+    "test:canary": "node --test scripts/__tests__/canary-rollout-decision.test.mjs scripts/__tests__/canary-prometheus-adapter.test.mjs scripts/__tests__/canary-rollout.test.mjs scripts/__tests__/canary-register-target.test.mjs"
   },
   "devDependencies": {
     "@changesets/cli": "^2.31.0",
