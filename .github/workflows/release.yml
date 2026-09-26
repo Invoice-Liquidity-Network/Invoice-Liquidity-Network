@@ -86,3 +86,29 @@ jobs:
           subject-path: |
             sdk/dist/**
             cli/dist/**
+
+      - name: Record release audit log entry (issue #1096)
+        if: always() && steps.npm-auth.outputs.available == 'true'
+        run: |
+          if [ "${{ steps.changesets.outputs.published }}" = "true" ]; then
+            action="changesets-publish"
+          else
+            action="changesets-version-pr"
+          fi
+          node scripts/release-audit-log.mjs \
+            --action "$action" \
+            --actor "${{ github.actor }}" \
+            --ref "${{ github.sha }}" \
+            --outcome "${{ steps.changesets.outcome == 'success' && 'success' || 'failure' }}" \
+            --notes "publishedPackages=${{ steps.changesets.outputs.publishedPackages }}"
+
+      - name: Commit release audit log entry
+        if: always() && steps.npm-auth.outputs.available == 'true'
+        run: |
+          if ! git diff --quiet -- release-audit/log.jsonl; then
+            git config user.name "github-actions[bot]"
+            git config user.email "github-actions[bot]@users.noreply.github.com"
+            git add release-audit/log.jsonl
+            git commit -m "chore(release-audit): record changesets release outcome [skip ci]"
+            git push
+          fi

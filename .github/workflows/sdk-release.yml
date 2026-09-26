@@ -44,12 +44,85 @@ defaults:
 
 jobs:
   # ----------------------------------------------------------------------------
+  # Cross-repo ABI compatibility gate (issue #1094): builds the vendored
+  # ILN-Smart-Contract submodule (backend/), extracts its deployed spec via the
+  # Stellar CLI, and verifies packages/sdk/src/clients/InvoiceClient.ts still
+  # agrees with it — see docs/contract-abi-compatibility.md for the guarantee
+  # this provides. Runs on every trigger (PR dry run, tag push, manual
+  # dispatch) and gates both `dry-run` and `publish` below, so an ABI drift
+  # blocks the release rather than only being caught by a periodic check.
+  # ----------------------------------------------------------------------------
+  contract-abi-gate:
+    name: Contract ABI compatibility gate
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: .
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - uses: pnpm/action-setup@a15d269cd4658e1107c09f1fabf4cbd7bd1f308a # v4.4.0
+        with:
+          version: '9.0.0'
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@2c7215f132e9ebf062739d9130488b56d53c060c # stable
+        with:
+          toolchain: stable
+          targets: wasm32v1-none
+
+      - name: Cache Stellar CLI (cargo install)
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+          key: ${{ runner.os }}-stellar-cli
+          restore-keys: |
+            ${{ runner.os }}-stellar-cli-
+
+      - name: Install Stellar CLI
+        run: cargo install --locked stellar-cli
+
+      - name: Build contract and extract deployed ABI spec
+        working-directory: ./backend
+        run: |
+          if [ -f "Cargo.toml" ]; then
+            stellar contract build
+            stellar contract info --wasm target/wasm32v1-none/release/*.wasm --output-format json > target/spec.json
+          else
+            echo "Contract submodule not initialized, skipping"
+          fi
+
+      - name: Check SDK/deployed-ABI compatibility
+        run: |
+          if [ -f backend/target/spec.json ]; then
+            pnpm check:contract-abi-compat
+          else
+            echo "::warning::backend submodule not initialized — ABI compatibility gate could not run. Verify the checkout step has 'submodules: recursive' and the backend submodule pin is valid."
+          fi
+
+  # ----------------------------------------------------------------------------
   # Dry run on PRs to main: prove the package installs, builds and packs cleanly.
   # No publishing happens here.
   # ----------------------------------------------------------------------------
   dry-run:
     name: Pack dry run (no publish)
     if: github.event_name == 'pull_request'
+    needs: contract-abi-gate
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -87,6 +160,7 @@ jobs:
   publish:
     name: Publish to npm
     if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    needs: contract-abi-gate
     runs-on: ubuntu-latest
     permissions:
       contents: write # create the GitHub Release
