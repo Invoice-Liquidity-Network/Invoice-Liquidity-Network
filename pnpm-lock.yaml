@@ -345,6 +345,12 @@ importers:
       '@graphql-tools/schema':
         specifier: ^10.0.0
         version: 10.0.38(graphql@16.14.2)
+      '@iln/opentelemetry':
+        specifier: workspace:*
+        version: link:../packages/opentelemetry
+      '@opentelemetry/api':
+        specifier: ^1.4.0
+        version: 1.9.1
       '@stellar/stellar-sdk':
         specifier: ^15.0.1
         version: 15.1.0
@@ -448,6 +454,12 @@ importers:
 
   notifications:
     dependencies:
+      '@iln/opentelemetry':
+        specifier: workspace:*
+        version: link:../packages/opentelemetry
+      '@opentelemetry/api':
+        specifier: ^1.4.0
+        version: 1.9.1
       '@stellar/stellar-sdk':
         specifier: ^15.0.1
         version: 15.1.0
@@ -533,9 +545,18 @@ importers:
 
   oracle-service:
     dependencies:
+      '@iln/opentelemetry':
+        specifier: workspace:*
+        version: link:../packages/opentelemetry
+      '@opentelemetry/api':
+        specifier: ^1.4.0
+        version: 1.9.1
       '@stellar/stellar-sdk':
         specifier: ^15.0.1
         version: 15.1.0
+      better-sqlite3:
+        specifier: ^11.0.0
+        version: 11.10.0
       express:
         specifier: ^4.21.2
         version: 4.22.2
@@ -733,6 +754,9 @@ importers:
       '@opentelemetry/api':
         specifier: ^1.4.0
         version: 1.9.1
+      '@types/node':
+        specifier: ^20.0.0
+        version: 20.19.43
       typescript:
         specifier: ^5.0.0
         version: 5.9.3
@@ -18125,7 +18149,7 @@ snapshots:
 
   '@types/set-cookie-parser@2.4.10':
     dependencies:
-      '@types/node': 24.13.3
+      '@types/node': 20.19.43
 
   '@types/sockjs@0.3.36':
     dependencies:
