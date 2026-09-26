@@ -148,39 +148,39 @@ A service can return `200 OK` while still being broken for integrators: paginati
 | Path (check name) | What it proves for integrators | Pass criterion | Fail severity | Runbook (direct) |
 |---|---|---|---|---|
 | **Indexer** | | | | |
-| `indexer:health` | API process up & DB connected | `200` + `{status:"ok", db:"ok"}` | **P1** | [Incident #Signal-2](https://github.com/Invoice-Liquidity-Network/Invoice-Liquidity-Network/blob/main/docs/incident-response.md#signal-2-indexer-lag--ingestion-health) |
+| `indexer:health` | API process up & DB connected | `200` + `{status:"ok", db:"ok"}` | **P1** | [Signal 2](#82-signal-2-indexer-lag--ingestion-health) |
 | `indexer:health:freshness` | Not stale (ledger lag) | `lastSync` < 5 min old, `syncLag` < 300s | **P1** | same |
-| `indexer:invoice:${id}` | Canary invoice readable | `id` matches, `invoice` object present | **P1** | [Scenario B](https://github.com/Invoice-Liquidity-Network/Invoice-Liquidity-Network/blob/main/docs/incident-response.md#scenario-b-indexer-data-loss-or-state-corruption) |
+| `indexer:invoice:${id}` | Canary invoice readable | `id` matches, `invoice` object present | **P1** | [Scenario B](incident-response.md#scenario-b-indexer-data-loss-or-state-corruption) |
 | `indexer:invoice:schema` | Schema hasn't drifted | `id: number, freelancer/payer: string, amount: numeric-string, status ∈ enum` | **P1** | same |
-| `indexer:list:pagination` | Pagination correct (integrators list) | `limit=2` → `hasMore`+`nextCursor` consistent, pages disjoint, sorted ASC | **P2** | [Monitoring §4](https://github.com/Invoice-Liquidity-Network/Invoice-Liquidity-Network/blob/main/docs/monitoring.md#indexer-service-operations) |
+| `indexer:list:pagination` | Pagination correct (integrators list) | `limit=2` → `hasMore`+`nextCursor` consistent, pages disjoint, sorted ASC | **P2** | [Panel groups](#dashboard-structure--panel-groups) |
 | `indexer:filter:status` | Filtering not broken | `status=Funded` → all rows `status==="Funded"` | **P2** | same |
 | `indexer:stats` / `indexer:stats:sanity` | Stats not stale / negative | `totalInvoices: number ≥0, defaultRate 0–1` | **P3** | same |
 | `indexer:graphql:consistency` | REST ↔ GraphQL parity (**read-then-verify-consistency flow**) | `REST /v1/invoice/:id` vs `POST /graphql { invoice(id) }` fields byte-equal | **P2** | same |
 | `indexer:history` | History endpoint honest | array + schema valid | **P3** | same |
 | `indexer:dashboard` | Dashboard not lying about lag | `sync.syncLag` numeric < 600s | **P2** | same |
 | **Oracle** | | | | |
-| `oracle:health` | Process up | `200` + `status ok/degraded` | **P1** | [Scenario C](https://github.com/Invoice-Liquidity-Network/Invoice-Liquidity-Network/blob/main/docs/incident-response.md#scenario-c-oracle-service-compromise-or-malfunction) |
+| `oracle:health` | Process up | `200` + `status ok/degraded` | **P1** | [Scenario C](incident-response.md#scenario-c-oracle-service-compromise-or-malfunction) |
 | `oracle:verify:${addr}` | Real verification works | `isVerified: boolean, trustScore 0–100, confidence ∈ {low,medium,high,unknown}` | **P1** | same |
 | `oracle:verify:schema` | No field drift | strict type/range checks | **P1** | same |
-| `oracle:cache` | Cache not poisoned | 2nd verify (same payer) → `cacheHit:true` + same `trustScore` | **P2** | [Oracle docs](https://github.com/Invoice-Liquidity-Network/Invoice-Liquidity-Network/blob/main/docs/oracle-service.md#cache-invalidation) |
+| `oracle:cache` | Cache not poisoned | 2nd verify (same payer) → `cacheHit:true` + same `trustScore` | **P2** | [Oracle docs](oracle-service.md#cache-staleness) |
 | `oracle:validation` | Input validation still enforced | `payer=INVALID` → `400` + `error` field | **P2** | same |
-| `oracle:metrics` | Metrics not missing | `/v1/metrics` contains `oracle_verification` series | **P3** | [Monitoring §4.3](https://github.com/Invoice-Liquidity-Network/Invoice-Liquidity-Network/blob/main/docs/monitoring.md#oracle-service-performance--accuracy) |
+| `oracle:metrics` | Metrics not missing | `/v1/metrics` contains `oracle_verification` series | **P3** | [Panel group 3](#dashboard-structure--panel-groups) |
 | `oracle:staleness` | Not serving stale verdicts | `dataAgeMs ≤ maxOracleAgeMs` | **P2** | same |
 | **Notifications** | | | | |
-| `notifications:health` | Process up | `200` + `status:"ok"` | **P1** | [Signal-3](https://github.com/Invoice-Liquidity-Network/Invoice-Liquidity-Network/blob/main/docs/incident-response.md#signal-3-notification-service-failures) |
+| `notifications:health` | Process up | `200` + `status:"ok"` | **P1** | [Signal 3](#83-signal-3-notification-service-failures) |
 | `notifications:channel:email` | Email subscription path up | `POST /subscribe email` → `201`/`409` not `5xx`, rate-limit headers | **P1** | same |
-| `notifications:channel:webhook` | Webhook dispatch up | `POST /test-webhook` → `success:true` or health proxy | **P1** | [Signal-4](https://github.com/Invoice-Liquidity-Network/Invoice-Liquidity-Network/blob/main/docs/incident-response.md#signal-4-webhook-delivery-errors) |
-| `notifications:channel:sms` | SMS validation up | `POST /subscribe sms` with E.164 test number → not `5xx` | **P2** | [Signal-3](https://github.com/Invoice-Liquidity-Network/Invoice-Liquidity-Network/blob/main/docs/incident-response.md#signal-3-notification-service-failures) |
+| `notifications:channel:webhook` | Webhook dispatch up | `POST /test-webhook` → `success:true` or health proxy | **P1** | [Signal 4](#84-signal-4-webhook-delivery-errors) |
+| `notifications:channel:sms` | SMS validation up | `POST /subscribe sms` with E.164 test number → not `5xx` | **P2** | [Signal 3](#83-signal-3-notification-service-failures) |
 | `notifications:channel:websocket` | WS heartbeat | `ws://…/ws` → `type:"heartbeat"` | **P1** | same |
-| `notifications:websocket:subscribe` | Real subscribe flow | `subscribe` → `unsubscribe` without `type:"error"` | **P2** | [Notifications arch](https://github.com/Invoice-Liquidity-Network/Invoice-Liquidity-Network/blob/main/docs/notifications.md#architectural-note-notifications-websocket-vs-indexer-subscription) |
-| `notifications:subscription:roundtrip` | Full lifecycle works (not just health) | `POST /subscribe` → `GET /subscriptions/:addr` contains it → `POST /test-webhook` → `DELETE` | **P1** | [Signal-4](https://github.com/Invoice-Liquidity-Network/Invoice-Liquidity-Network/blob/main/docs/incident-response.md#signal-4-webhook-delivery-errors) |
-| `notifications:analytics:shape` | Analytics not broken | `GET /analytics` keys non-empty | **P3** | [Monitoring §4.4](https://github.com/Invoice-Liquidity-Network/Invoice-Liquidity-Network/blob/main/docs/monitoring.md#signal-4-notifications-service--channel-health) |
+| `notifications:websocket:subscribe` | Real subscribe flow | `subscribe` → `unsubscribe` without `type:"error"` | **P2** | [Notifications arch](notifications.md#architectural-note-notifications-websocket-vs-indexer-subscription) |
+| `notifications:subscription:roundtrip` | Full lifecycle works (not just health) | `POST /subscribe` → `GET /subscriptions/:addr` contains it → `POST /test-webhook` → `DELETE` | **P1** | [Signal 4](#84-signal-4-webhook-delivery-errors) |
+| `notifications:analytics:shape` | Analytics not broken | `GET /analytics` keys non-empty | **P3** | [Panel group 4](#dashboard-structure--panel-groups) |
 | `notifications:channel-comparison` | Channel breakdown up | `/analytics/channel-comparison` shape valid | **P3** | same |
 | `notifications:trends` | Trends not broken | `/analytics/trends?days=7` → `trends` present | **P3** | same |
-| `notifications:rate-limit` | Rate limiter headers present | `X-RateLimit-*` on `POST /subscribe` | **P3** | [Notifications docs](https://github.com/Invoice-Liquidity-Network/Invoice-Liquidity-Network/blob/main/docs/notifications.md#rate-limits-and-delivery-guarantees) |
+| `notifications:rate-limit` | Rate limiter headers present | `X-RateLimit-*` on `POST /subscribe` | **P3** | [Notifications docs](notifications.md#rate-limits-and-delivery-guarantees) |
 | `notifications:preferences` | Preferences not broken | `GET /preferences/:address` → not 5xx | **P3** | same |
 | **Cross-service** | | | | |
-| `cross:consistency:indexer-oracle` | Indexer ↔ Oracle agreement | `GET /v1/history/:payer` + `POST /v1/verify {payer}` both succeed, same payer, `trustScore` consistent | **P1** | [Scenario C](https://github.com/Invoice-Liquidity-Network/Invoice-Liquidity-Network/blob/main/docs/incident-response.md#scenario-c-oracle-service-compromise-or-malfunction) |
+| `cross:consistency:indexer-oracle` | Indexer ↔ Oracle agreement | `GET /v1/history/:payer` + `POST /v1/verify {payer}` both succeed, same payer, `trustScore` consistent | **P1** | [Scenario C](incident-response.md#scenario-c-oracle-service-compromise-or-malfunction) |
 | `cross:read-verify` | Read-then-verify-consistency flow | `GET /v1/invoice/:id` → `POST /v1/verify {payer}` | **P1** | same |
 
 Each row is an individual `CheckResult` (`runAllCanaryChecks()` returns 26+ checks; `passed` is `every(c.passed)`). Every failure carries `runbookUrl` + `severity` so the workflow can page with a clickable runbook.
