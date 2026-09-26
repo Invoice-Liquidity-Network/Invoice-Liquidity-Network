@@ -1,11 +1,24 @@
 {
-  "ignore": ["frontend/**", "backend/**", "oracle-service/**"],
+  "ignore": [
+    // Branch-local indexer modules that are wired in incrementally.
+    "indexer/src/idempotency.ts",
+    "indexer/src/performance.ts",
+    "indexer/src/reconciliation.ts",
+    "frontend/**",
+    "backend/**",
+    "oracle-service/**"
+  ],
   "ignoreBinaries": ["playwright", "sqlite3", "sha256sum", "gsutil", "gitleaks", "less"],
   "rules": {
     "optionalPeerDependencies": "off",
     "duplicates": "off"
   },
   "ignoreIssues": {
+    // Governance error surfacing (issue #971): kept exported for CLI/reporting
+    // consumers even though it is not imported in-tree yet.
+    "cli/src/errors.ts": ["exports"],
+    // Docs search widget is loaded dynamically by the deployed docs build.
+    "packages/docs/components/AlgoliaSearch.tsx": ["exports"],
     "packages/docs/lib/docs-version.ts": ["exports"],
     "sdk/src/logger.ts": ["enumMembers"]
   },
@@ -71,7 +84,8 @@
         "eslint-plugin-jsx-a11y",
         "eslint-plugin-react",
         "eslint-plugin-react-hooks",
-        "tailwindcss"
+        "tailwindcss",
+        "@docsearch/react"
       ]
     },
     "packages/scripts": {
