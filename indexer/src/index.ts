@@ -4,6 +4,7 @@ import { CONFIG } from './config';
 import { startPolling } from './poller';
 import { createGraphQLServer } from './graphql/server';
 import { startArchivalScheduler } from './archive';
+import { startReconciliationScheduler } from './reconciliation';
 import { BackupManager } from './backup';
 
 async function main() {
@@ -20,6 +21,7 @@ async function main() {
   });
 
   startPolling();
+  startReconciliationScheduler(3600000); // 1 hour interval
 
   if (CONFIG.archiveEnabled) {
     startArchivalScheduler(CONFIG.archiveIntervalMs, CONFIG.archiveOlderThanDays);
