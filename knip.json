@@ -4,6 +4,8 @@
     "indexer/src/checkpointing.ts",
     "indexer/src/reorg.ts",
     "sdk/src/queue/offlineQueue.ts",
+    // Branch-local indexer DLQ module, wired in incrementally.
+    "indexer/src/dlq.ts",
     "frontend/**",
     "backend/**",
     "oracle-service/**"
@@ -84,7 +86,8 @@
         "eslint-plugin-jsx-a11y",
         "eslint-plugin-react",
         "eslint-plugin-react-hooks",
-        "tailwindcss"
+        "tailwindcss",
+        "@docsearch/react"
       ]
     },
     "packages/scripts": {
