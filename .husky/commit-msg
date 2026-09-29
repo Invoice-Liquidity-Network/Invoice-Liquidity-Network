@@ -1,4 +1,7 @@
 #!/usr/bin/env sh
 . "$(dirname -- "$0")/_/husky.sh"
 
-npx --no -- commitlint --edit "$1"
+# Pass commitlint.config.js explicitly, matching pr-title-lint.yml. Relying on
+# commitlint's config auto-discovery breaks if a hook is ever invoked from a
+# subdirectory or a second config file is introduced.
+npx --no -- commitlint --config commitlint.config.js --edit "$1"
