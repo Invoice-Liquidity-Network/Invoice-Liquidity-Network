@@ -51,3 +51,37 @@ This section analyzes protocol exposure, failure modes, and recovery paths in th
 
 ---
 *These decisions mark the conclusion of the Trust & Liquidity Model design phase and govern the v1 mainnet deployment.*
+
+## 6. Simultaneous LP Withdrawal Stress Analysis
+
+### 6.1 Scope and current design boundary
+
+The invoice contract reference describes LP capital as funding individual invoices, supports partial funding, and describes an LP priority queue. It does not define a pooled-share redemption API, withdrawal notice period, withdrawal queue, or guarantee that an LP can redeem capital committed to an unpaid invoice. This analysis therefore stress-tests a **hypothetical pooled deployment**, not a claim that the current contract implements pool withdrawals. Capital committed to an invoice is treated as locked until repayment or another contract-defined terminal outcome; only uncommitted cash is immediately liquid.
+
+The 5% treasury first-loss provision covers a defined slice of credit losses on defaults. It is not a liquidity reserve and does not make locked invoice capital available during a withdrawal run.
+
+### 6.2 Normalized simultaneous-withdrawal model
+
+Assume a pool has 100 units of LP capital immediately before a panic. 60 units are committed to invoices and cannot be redeemed immediately; 40 units are idle cash. There are no repayments, asset sales, or new deposits during the withdrawal window. LPs submit withdrawal requests simultaneously, sized as a share of total pool capital.
+
+| Requested withdrawals | Request size | Immediately payable from 40 idle units | Remaining queued/unpaid | Immediate fulfillment |
+|---|---:|---:|---:|---:|
+| 25% severity | 25 | 25 | 0 | 100% |
+| 50% severity | 50 | 40 | 10 | 80% |
+| 75% severity | 75 | 40 | 35 | 53.3% |
+| 90% severity | 90 | 40 | 50 | 44.4% |
+
+The figures are a deterministic liquidity-accounting example, not a forecast. They exclude defaults, fees, token depegs, and secondary-market sales. If requests are fulfilled first-come-first-served rather than pro rata, early callers can receive all 40 liquid units and late callers can receive nothing, even when request sizes are equal.
+
+### 6.3 Failure mode and proposed controls
+
+There is no documented orderly redemption path in the current design boundary. A pooled implementation that promises synchronous, full redemption would hit a **liquidity cliff** once aggregate requests exceed idle cash (40% in this example). Partial or delayed withdrawals can degrade orderly only if queueing, priority, and repayment allocation are specified in advance. This does not imply that an invoice defaults: it means the LP cannot exit on demand while capital remains committed.
+
+Before introducing pooled LP shares, the contract design should specify:
+
+1. **Epoch-based withdrawal queue:** batch requests at a published cutoff and satisfy them pro rata from available cash and realized repayments. Carry unpaid amounts forward without giving transaction-order priority; disclose that locked capital is not immediately redeemable.
+2. **Funding circuit breaker:** pause new invoice deployment when liquid assets fall below an explicitly governed threshold or queued withdrawals exceed available cash. A pause protects remaining liquidity from additional commitments; it does not create cash or cancel existing obligations.
+3. **Liquidity-aware pricing:** consider an utilization premium for *new* funding only if simulations show it attracts replacement liquidity without making borrower pricing pathological. Fees cannot solve an immediate run and should not be described as a redemption guarantee.
+4. **Run disclosures and monitoring:** publish liquid/committed/queued balances, queue age, and repayment assumptions, and test recovery as invoices repay under base and stressed default assumptions.
+
+These are design recommendations, not deployed protections. The applicable Soroban implementation is maintained in the separate [smart-contract repository](https://github.com/Invoice-Liquidity-Network/ILN-Smart-Contract); no withdrawal logic is claimed here until that implementation defines and tests it.

@@ -25,7 +25,7 @@
   "sdk-e2e": "SDK End-to-End Testing",
   "sdk-migration-guide": "SDK Migration Guide",
   "sdk-next-migration": "SDK vs SDK-next",
-  "cli-vs-cli-next": "CLI vs CLI-next",
+  "cli-vs-cli-next": "CLI Consolidation History",
   "-- Smart Contracts --": {
     "type": "separator",
     "title": "Smart Contracts"
