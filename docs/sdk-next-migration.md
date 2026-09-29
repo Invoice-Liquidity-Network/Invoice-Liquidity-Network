@@ -177,3 +177,59 @@ export default defineConfig({
 ```
 
 To cross-link or view legacy migration steps, see [`docs/sdk-migration-guide.md`](sdk-migration-guide.md).
+
+## Supported Version Window & Deprecation Policy (Issue #1035)
+
+This section covers `@iln/sdk` (`sdk/`) — the package `packages/react`'s hooks,
+`cli/src`, and `examples/typescript-example` actually import today. (`@iln/sdk-next`,
+covered by the rest of this document, is the forward migration target; once
+consumers finish migrating to it, this policy moves with them.)
+
+### Supported window
+
+**The current minor and the two before it (N, N-1, N-2) are supported.**
+A consumer pinned to any of those three can upgrade `@iln/sdk` patch releases
+within its own minor without code changes, and the backward-compatibility
+matrix below is what makes that guarantee enforceable rather than aspirational.
+
+### Enforcement mechanism
+
+`scripts/check-sdk-compat-matrix.mjs` installs each supported minor and runs
+it against three fixtures modeled on real consumer code
+(`tests/sdk-integration/compat-matrix/fixtures/`: frontend hooks, CLI
+commands, example scripts). It runs in CI on every change to `sdk/` or those
+consumer paths, and is callable from a release pipeline to gate a
+release-candidate cut (`.github/workflows/sdk-compat-matrix.yml`). A failure
+against any supported version fails the build — see
+[docs/test-runtime-budgets.md](./test-runtime-budgets.md)'s enforcement
+model for the sibling mechanism this one intentionally mirrors (hard-fail
+CI, not a warning annotation).
+
+**Current status**: `@iln/sdk` has never had a tagged or published release —
+there is no N-1 or N-2 yet, only N (the working tree). The matrix resolves
+versions from `sdk-v<semver>` git tags and degrades gracefully to a
+working-tree self-check when fewer than three tagged minors exist (today,
+zero). **The first time a second `sdk-v*` tag is created, this document's
+"supported window" becomes real** — no code or workflow changes are needed
+for the matrix to pick it up; `scripts/lib/sdk-compat-versions.mjs` resolves
+the tag list at run time.
+
+### Deprecation policy
+
+- A minor is deprecated the moment it falls outside the N-2 window (i.e. as
+  soon as a new minor makes it N-3).
+- Deprecation is announced in `CHANGELOG.md` and, for a security-relevant
+  change, a GitHub Security Advisory per [SECURITY.md](../SECURITY.md).
+- A deprecated minor keeps working — this policy is about the compatibility
+  *matrix's* window, not a runtime kill-switch. Nothing here revokes an
+  already-installed SDK version.
+
+### Known naming inconsistency (pre-existing, not introduced by this issue)
+
+Some existing code and docstrings refer to this package as
+`@invoice-liquidity/sdk` (`.github/workflows/sdk-e2e-local-node.yml`'s
+`pnpm --filter` target, `examples/lp-automation/package.json`'s dependency
+name, and several `@example` docstrings in `sdk/src/*.ts`), but
+`sdk/package.json`'s real name is `@iln/sdk`. The compat matrix added here
+uses the real name throughout; the stale references elsewhere are a
+pre-existing gap this issue didn't touch.

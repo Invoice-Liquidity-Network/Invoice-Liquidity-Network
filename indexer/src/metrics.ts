@@ -50,6 +50,21 @@ export const cursorUpdatedAt = new Gauge({
   registers: [registry],
 });
 
+// ── Analytics query isolation metrics ────────────────────────────────────────
+
+export const analyticsQueryDuration = new Histogram({
+  name: 'iln_analytics_query_duration_seconds',
+  help: 'Analytics aggregation query duration in seconds (isolated from production path)',
+  buckets: [0.01, 0.05, 0.1, 0.25, 0.5, 1, 2, 5],
+  registers: [registry],
+});
+
+export const analyticsQueryExceededBudget = new Counter({
+  name: 'iln_analytics_query_exceeded_budget_total',
+  help: 'Count of analytics queries that exceeded the configured time budget',
+  registers: [registry],
+});
+
 // ── SLO instrumentation (latency & availability) ───────────────────────────
 
 export const httpRequestsTotal = new Counter({

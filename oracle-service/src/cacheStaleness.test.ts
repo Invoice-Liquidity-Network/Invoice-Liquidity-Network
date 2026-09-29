@@ -139,6 +139,7 @@ describe('the exploit window this closes', () => {
     const cache = createEphemeralOracleCache();
     const spy = {
       get: cache.get.bind(cache),
+      getStale: cache.getStale.bind(cache),
       set: async (key: string, response: Parameters<typeof cache.set>[1], ttl: number) => {
         observedTtl = ttl;
         return cache.set(key, response, ttl);
@@ -173,6 +174,7 @@ describe('the exploit window this closes', () => {
     const verifier = new OracleVerifier({
       cache: {
         get: cache.get.bind(cache),
+        getStale: cache.getStale.bind(cache),
         set: async (key, response, ttl) => {
           observedTtl = ttl;
           return cache.set(key, response, ttl);
@@ -270,7 +272,7 @@ describe('the exploit window this closes', () => {
     const verifier = new OracleVerifier({
       // A minimal cache implementation without invalidateByPrefix — absence
       // must read as "unsupported", not as a silent success.
-      cache: { get: async () => null, set: async () => {} },
+      cache: { get: async () => null, getStale: async () => null, set: async () => {} },
       now: () => now,
       historyProvider: async () => [],
       reputationProvider: async () => makeReputation(now),

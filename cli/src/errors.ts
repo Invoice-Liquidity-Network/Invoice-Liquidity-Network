@@ -96,6 +96,42 @@ export function explainContractError(code: number): string {
   return CONTRACT_ERROR_MESSAGES[code] ?? `Contract returned error code ${code}.`;
 }
 
+/**
+ * Governance contract error codes (docs/contracts/governance-contract.md
+ * §Error Codes). Kept separate from {@link CONTRACT_ERROR_MESSAGES} — the
+ * two contracts don't share a code space, and before this the invoice
+ * table was used for governance errors too, so a governance rejection
+ * (e.g. code 12, `DelegationCyclePrevented`) either silently mapped to the
+ * wrong invoice-contract message or fell through to a generic "Contract
+ * returned error code N" instead of surfacing what actually happened
+ * (issue #971).
+ */
+const GOVERNANCE_CONTRACT_ERROR_MESSAGES: Record<number, string> = {
+  1: 'Governance contract already initialized.',
+  2: 'Proposal not found.',
+  3: 'Voting period has closed.',
+  4: 'Proposal is not in Active status.',
+  5: 'You have zero voting power at this proposal’s snapshot.',
+  6: 'You have already voted on this proposal.',
+  7: 'Voting is still ongoing.',
+  8: 'Total votes are below the required quorum.',
+  9: 'Proposal was rejected (against votes met or exceeded for votes).',
+  10: 'Proposal has already been finalized.',
+  11: 'Cannot delegate voting power to your own address.',
+  12: 'Delegation rejected: this would create a cycle in the delegation chain.',
+  13: 'Timelock delay has not elapsed yet.',
+  14: 'Not authorized for this governance action.',
+  15: 'Quorum must be between 1 and 10,000 basis points.',
+  16: 'Caller is not the governance admin.',
+  17: 'Proposal cannot be vetoed in its current status.',
+  18: 'Admin veto power has been disabled.',
+  19: 'Proposer balance is below the minimum required to create a proposal.',
+};
+
+export function explainGovernanceContractError(code: number): string {
+  return GOVERNANCE_CONTRACT_ERROR_MESSAGES[code] ?? `Governance contract returned error code ${code}.`;
+}
+
 export function formatUnknownError(error: unknown): string {
   if (error instanceof Error && error.message) {
     return error.message;

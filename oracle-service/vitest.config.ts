@@ -7,11 +7,6 @@ import { defineConfig } from 'vitest/config';
  * `fund_invoice()`'s `require_oracle_verification` path, so a verification bug
  * here releases funds against an invoice that should have been rejected. It is
  * held to 95%, matching the rigour applied to the insurance pool contract.
- *
- * A local config is also what lets `vitest` run from this directory at all:
- * oracle-service is not a pnpm workspace member, so without this file vitest
- * walks up and tries to load the root config against dependencies it cannot
- * resolve.
  */
 export default defineConfig({
   test: {
@@ -28,6 +23,7 @@ export default defineConfig({
         // Test scaffolding, not shipped code — counting it would inflate the
         // figure the gate is meant to protect.
         'src/testFixtures.ts',
+        'src/chaosUpstream.ts',
       ],
       thresholds: {
         lines: 95,

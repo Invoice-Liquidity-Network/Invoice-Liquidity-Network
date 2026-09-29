@@ -1,4 +1,4 @@
-# Load Test Harness — Issue #792 & 10× Peak Hardening (#892)
+# Load Test Harness — Issue #792, 10× Peak Hardening (#892) & Realistic Traffic Shape (#1091)
 
 ## Overview
 
@@ -41,9 +41,15 @@ npx ts-node --esm scripts/load-test-notifications.ts --duration 30
 pnpm exec tsx scripts/load-test-notifications.ts --ten-x
 pnpm exec tsx scripts/load-test-notifications.ts --ten-x --duration 120 --concurrency 85
 
+# Realistic mainnet traffic shape — bursty/diurnal instead of flat RPS (Issue #1091)
+npx ts-node --esm scripts/load-test.ts --duration 30 --traffic-shape realistic
+pnpm exec tsx scripts/load-test-indexer.ts --traffic-shape realistic
+pnpm exec tsx scripts/load-test-notifications.ts --ten-x --traffic-shape realistic
+
 # Fast CI simulation (no live services required)
 node scripts/test-load-notifications.js --ten-x
 node scripts/test-load-notifications.js --ten-x --json load-test-notifications-10x-summary.json
+node scripts/test-load-notifications.js --ten-x --traffic-shape realistic --json load-test-notifications-realistic-summary.json
 ```
 
 ## Mainnet Scale Load Test Benchmarks — Issue #892 (base)
@@ -157,4 +163,54 @@ CI expectation: `load-test-notifications-10x-summary.json` must exist after `nod
 
 ---
 
-*Report generated automatically by the ILN load testing suite. 10× peak scenario: 22 → 220 RPS; validated ceiling 185 RPS documented above. Sweep logs retained in GitHub artifacts.*
+## Realistic Mainnet Traffic Shape — Issue #1091
+
+Every benchmark above uses **uniform load**: a closed worker loop firing requests at a fixed rate. Real mainnet traffic isn't uniform — it bursts around Stellar ledger closes (event ingestion → webhook/notification fan-out lands in a short window, not a trickle) and follows a diurnal day/night cycle. A capacity number measured only against uniform load can look safe while still being wrong for the traffic shape that actually shows up in production.
+
+### The model
+
+`scripts/lib/load-test-harness.ts` now supports `trafficShape: 'uniform' | 'realistic'` (default `'uniform'`, fully backward compatible — no existing caller's behavior changes). In `'realistic'` mode, the fixed 5ms inter-request gap is replaced with a Poisson-sampled gap whose rate is modulated by two factors:
+
+1. **Ledger-close burst window** — `LEDGER_CLOSE_INTERVAL_MS = 5000` mirrors the indexer's poll cadence (`indexer/src/config.ts` `pollIntervalMs`, itself tracking Stellar's ~5–6s ledger close). For the first `REALISTIC_BURST_WINDOW_MS = 750` of each interval, the request rate runs at `REALISTIC_BURST_RATE_MULTIPLIER = 6×` the uniform baseline; for the remaining ~4,250ms it runs at `REALISTIC_BACKGROUND_RATE_MULTIPLIER = 0.4×`. This correlates bursts to on-chain events instead of spreading them evenly.
+2. **Diurnal cycle** — `diurnalMultiplier()` applies a `1 + amplitude·sin(2π·phase)` swing (`REALISTIC_DIURNAL_AMPLITUDE = 0.5`) over a simulated "day" compressed into `REALISTIC_DIURNAL_PERIOD_MS = 60s` by default (configurable via `LoadTestConfig.diurnalPeriodMs`), so even a short test run shows day/night load variation.
+
+All three CLI wrappers (`load-test.ts`, `load-test-indexer.ts`, `load-test-notifications.ts`) accept `--traffic-shape <uniform|realistic>`; the JSON/Markdown reports record which shape ran (`metadata.trafficShape`).
+
+### Capacity re-run: realistic vs uniform
+
+Re-running the notifications capacity check (`scripts/test-load-notifications.js`, the CI-fast simulator — see caveat below) with `--traffic-shape realistic` instead of `--ten-x`'s default uniform shape:
+
+| Metric | Uniform load (existing baseline) | Realistic shape (bursty + diurnal) |
+|---|---|---|
+| **Validated ceiling** | 185 RPS @ 85 VUs | **84 RPS @ 40 VUs** |
+| p95 at ceiling | 286 ms | 460 ms |
+| Error rate at ceiling | 1.5% | 1.7% |
+| Dominant bottleneck beyond ceiling | queue_backpressure | queue_backpressure (reached via db_writes) |
+
+**Capacity gap: ~101 RPS (~54%) lower average-RPS ceiling under realistic traffic than under uniform load**, for the same underlying service. The reason is arrival-pattern concentration, not a different failure mode: a bursty arrival pattern with peak-to-average ratio `REALISTIC_BURST_RATE_MULTIPLIER / (dutyCycle·burst + (1-dutyCycle)·background) ≈ 4.84×` (750ms burst window every 5000ms) delivers the same *average* RPS but pushes far more of it through the queue in short windows, so backpressure and DB write contention appear at a much lower average rate than the uniform sweep found.
+
+**Operational implication**: capacity planning that budgets to the uniform-load ceiling (185 RPS) is budgeting to a number mainnet traffic won't actually experience uniformly — headroom should be sized against the realistic-shape ceiling (~84 RPS) instead, or the queue depth / worker concurrency needs to grow enough to absorb the ~4.8× instantaneous peak without the average-rate ceiling collapsing this far.
+
+> **Caveat — this is a first-order model, not a live measurement.** The table above comes from `scripts/test-load-notifications.js`'s closed-form simulator (same tool the original 10× baseline in this doc partially relies on for CI), extended with the burst/diurnal math above and a `sqrt(peak-to-average ratio)` damping term to approximate buffer smoothing. It has **not** been confirmed against a live staging sweep. Before relying on it for mainnet capacity sign-off, re-run against live services and update this table:
+> ```bash
+> pnpm exec tsx scripts/load-test-notifications.ts --ten-x --traffic-shape realistic --concurrency 40   # near the modeled realistic ceiling
+> pnpm exec tsx scripts/load-test-indexer.ts --traffic-shape realistic --duration 120
+> ```
+> `oracle-service` currently has **no** load-test script at all (only indexer and notifications are covered) — closing that gap is a prerequisite to a complete "indexer, oracle-service, and notifications" capacity re-run and is tracked separately.
+
+### Re-running the realistic-shape simulation
+
+```bash
+# Fast CI simulation (no services) — uniform baseline for comparison
+node scripts/test-load-notifications.js --ten-x --json load-test-notifications-10x-summary.json
+
+# Realistic shape
+node scripts/test-load-notifications.js --ten-x --traffic-shape realistic --json load-test-notifications-realistic-summary.json
+cat load-test-notifications-realistic-summary.json | jq '.trafficShape, .realisticCeilingRps, .capacityGapRps, .capacityGapPct'
+```
+
+The realistic-shape summary JSON adds `trafficShape`, `realisticPeakToAverageRatio`, `realisticCeilingRps`/`realisticCeilingVus` (the sweep-derived ceiling — the same number reported in the console table, not a separately-claimed figure), and `capacityGapRps`/`capacityGapPct` relative to `validatedCeilingRps`.
+
+---
+
+*Report generated automatically by the ILN load testing suite. 10× peak scenario: 22 → 220 RPS; validated ceiling 185 RPS (uniform) / ~84 RPS (realistic shape) documented above. Sweep logs retained in GitHub artifacts.*

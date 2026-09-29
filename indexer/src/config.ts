@@ -67,4 +67,17 @@ export const CONFIG = {
   backupCloudPrefix: process.env.BACKUP_CLOUD_PREFIX,
   /** Cloud storage region. */
   backupCloudRegion: process.env.BACKUP_CLOUD_REGION,
+  /**
+   * Optional path to a read-only SQLite replica for analytics queries.
+   * When set, heavy aggregation queries (getProtocolStats, getLPStats, etc.)
+   * are routed to this connection so they cannot compete with production
+   * read/write traffic on the primary.
+   */
+  analyticsDbPath: process.env.ANALYTICS_DB_PATH,
+  /**
+   * Maximum duration in milliseconds allowed for analytics queries.
+   * Queries exceeding this budget are aborted to protect I/O bandwidth.
+   * Default: 5000 ms.
+   */
+  analyticsQueryBudgetMs: Number(process.env.ANALYTICS_QUERY_BUDGET_MS ?? '5000'),
 } as const;

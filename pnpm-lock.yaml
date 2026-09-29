@@ -557,6 +557,9 @@ importers:
       '@stellar/stellar-sdk':
         specifier: ^15.0.1
         version: 15.1.0
+      better-sqlite3:
+        specifier: ^11.0.0
+        version: 11.10.0
       express:
         specifier: ^4.21.2
         version: 4.22.2

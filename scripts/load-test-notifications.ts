@@ -23,6 +23,7 @@
 import {
   getTenXNotificationConfig,
   analyzeBottleneck,
+  TrafficShape,
   TEN_X_PEAK_NOTIFICATION_RPS,
   TEN_X_NOTIFICATION_CONCURRENCY,
   TEN_X_NOTIFICATION_DURATION_S,
@@ -37,6 +38,7 @@ import {
 
 function parseArgs(): {
   tenX: boolean;
+  trafficShape: TrafficShape;
   duration?: number;
   concurrency?: number;
   indexerUrl?: string;
@@ -46,10 +48,11 @@ function parseArgs(): {
   help: boolean;
 } {
   const raw = process.argv.slice(2);
-  const out: any = { tenX: false, help: false };
+  const out: any = { tenX: false, trafficShape: 'uniform', help: false };
   for (let i = 0; i < raw.length; i++) {
     const a = raw[i];
     if (a === '--ten-x' || a === '--10x') out.tenX = true;
+    else if (a === '--traffic-shape' && raw[i + 1]) out.trafficShape = raw[++i];
     else if (a === '--duration' && raw[i + 1]) out.duration = parseInt(raw[++i], 10);
     else if (a === '--concurrency' && raw[i + 1]) out.concurrency = parseInt(raw[++i], 10);
     else if (a === '--indexer-url' && raw[i + 1]) out.indexerUrl = raw[++i];
@@ -58,6 +61,10 @@ function parseArgs(): {
     else if (a === '--json' && raw[i + 1]) out.json = raw[++i];
     else if (a === '-h' || a === '--help') out.help = true;
     else if (a.startsWith('--service')) { /* ignored — always notifications */ }
+  }
+  if (out.trafficShape !== 'uniform' && out.trafficShape !== 'realistic') {
+    console.error(`${colors.red}Invalid --traffic-shape "${out.trafficShape}". Must be "uniform" or "realistic".${colors.reset}`);
+    process.exit(1);
   }
   return out;
 }
@@ -69,6 +76,7 @@ Usage: pnpm exec tsx scripts/load-test-notifications.ts [options]
 
 Options:
   --ten-x, --10x                 Run the 10×-peak soak (default: ${TEN_X_NOTIFICATION_DURATION_S}s, ${TEN_X_NOTIFICATION_CONCURRENCY} VUs, target ~${TEN_X_PEAK_NOTIFICATION_RPS} RPS)
+  --traffic-shape <uniform|realistic>  Flat RPS, or bursty/diurnal mainnet-like shape (default: uniform)
   --duration <seconds>           Override duration (default smoke 10s; 10× 120s)
   --concurrency <count>          Override VU count
   --notifications-url <url>      Notifications base URL (default: http://localhost:4001)
@@ -95,9 +103,11 @@ async function main(): Promise<void> {
         concurrency: args.concurrency,
         notificationsUrl: args.notificationsUrl,
         indexerUrl: args.indexerUrl,
+        trafficShape: args.trafficShape,
       })
     : {
         service: 'notifications' as const,
+        trafficShape: args.trafficShape,
         duration: args.duration ?? 10,
         concurrency: args.concurrency ?? 5,
         indexerUrl: args.indexerUrl ?? 'http://localhost:3001',
@@ -116,6 +126,7 @@ async function main(): Promise<void> {
 
   console.log(`\n${colors.bright}${colors.magenta}=== NOTIFICATIONS LOAD TEST ${args.tenX ? '(10× PEAK)' : '(smoke)'} ===${colors.reset}`);
   console.log(`${colors.bright}Mode:${colors.reset}            ${args.tenX ? `10× peak validated ceiling sweep` : 'smoke'}`);
+  console.log(`${colors.bright}Traffic Shape:${colors.reset}   ${args.trafficShape}`);
   if (args.tenX) {
     console.log(`${colors.bright}Measured peak:${colors.reset}   ${MEASURED_PEAK_NOTIFICATION_RPS} RPS (prod p95, 30d)`);
     console.log(`${colors.bright}Target 10×:${colors.reset}      ${TEN_X_PEAK_NOTIFICATION_RPS} RPS`);

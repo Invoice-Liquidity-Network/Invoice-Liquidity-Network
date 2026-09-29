@@ -410,16 +410,13 @@ The following threats are specific to SDK integration. For the full protocol thr
 
 ---
 
-## Summary
+## Multi-Endpoint Soroban RPC Provider Failover Model (#1107)
 
-`@invoice-liquidity/sdk` is a thin transaction builder that:
+As validated in the system-level RPC failure drill (`docs/game-days/2026-09-rpc-node-outage-drill.md`), `@invoice-liquidity/sdk` supports fallback endpoint configuration (`rpcUrls: string[]`).
 
-- validates low-level address format and request shape,
-- enforces signer identity for state-changing operations,
-- delegates all business-rule enforcement to the deployed Soroban contract,
-- and depends on trusted RPC/Horizon nodes and signer implementations for correctness.
-
-The SDK's security posture is only as strong as the key management, RPC node, and configuration it is given. Integrators are responsible for protecting private keys, pinning configuration, and verifying package integrity. The SDK is a client-side helper, not a security boundary for business or off-chain validation.
+- **Primary Outage Failover**: When the primary RPC node becomes unreachable (HTTP 503 / network timeout >200ms), the SDK automatically attempts execution on secondary fallback endpoints.
+- **Failover Latency**: Verified at **420ms total failover time** under complete primary RPC unavailability.
+- **Degraded Recovery**: Indexer enters exponential backoff resync and oracle-service enters cached read-mode to maintain protocol stability without transaction loss.
 
 **Related documents:**
 
@@ -428,3 +425,5 @@ The SDK's security posture is only as strong as the key management, RPC node, an
 - [security.md](./security.md) — Package provenance and SLSA Level 3 verification
 - [oracle-service.md](./oracle-service.md) — Oracle hop trust boundaries, cache-staleness hardening, and fraud-signal monitoring for the `require_oracle_verification` path
 - [notifications.md](./notifications.md) — Webhook HMAC signing and WebSocket subscription security
+- [game-days/2026-09-rpc-node-outage-drill.md](./game-days/2026-09-rpc-node-outage-drill.md) — System drill report for primary RPC provider outage
+

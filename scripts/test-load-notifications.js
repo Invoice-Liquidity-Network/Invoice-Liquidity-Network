@@ -28,13 +28,50 @@ const jsonOut = (() => {
   const i = args.indexOf('--json');
   return i >= 0 ? args[i + 1] : null;
 })();
+const trafficShape = (() => {
+  const i = args.indexOf('--traffic-shape');
+  return i >= 0 ? args[i + 1] : 'uniform';
+})();
+if (!['uniform', 'realistic'].includes(trafficShape)) {
+  console.error(`Invalid --traffic-shape "${trafficShape}". Must be "uniform" or "realistic".`);
+  process.exit(1);
+}
+const isRealistic = trafficShape === 'realistic';
 
 const MEASURED_PEAK_RPS = Number(process.env.MEASURED_PEAK_RPS ?? '22');
 const TEN_X_RPS = Number(process.env.TEN_X_RPS ?? String(MEASURED_PEAK_RPS * 10));
 const VALIDATED_CEILING_RPS = 185;
 const VALIDATED_CEILING_VUS = 85;
 
+// ── Realistic traffic-shape model (Issue #1091) ─────────────────────────────
+//
+// Mirrors the burst constants in scripts/lib/load-test-harness.ts: bursts fire
+// in a 750ms window every 5000ms ledger close (Stellar's ~5-6s close cadence,
+// indexer/src/config.ts pollIntervalMs) at 6x the background rate; outside the
+// window traffic runs at 0.4x. A bursty arrival pattern concentrates the same
+// *average* RPS into short peak-rate windows, so the queue saturates at a
+// lower average RPS than perfectly uniform arrival would. This is a first-order
+// model, not a live measurement — see docs/load-test-harness.md for the
+// re-run-against-staging instructions to confirm it.
+const REALISTIC_BURST_DUTY_CYCLE = 750 / 5000;
+const REALISTIC_BURST_MULTIPLIER = 6;
+const REALISTIC_BACKGROUND_MULTIPLIER = 0.4;
+const REALISTIC_WEIGHTED_AVG_MULTIPLIER =
+  REALISTIC_BURST_DUTY_CYCLE * REALISTIC_BURST_MULTIPLIER +
+  (1 - REALISTIC_BURST_DUTY_CYCLE) * REALISTIC_BACKGROUND_MULTIPLIER;
+/** How much higher the instantaneous burst-window rate is than the sustained average. */
+const REALISTIC_PEAK_TO_AVERAGE_RATIO = REALISTIC_BURST_MULTIPLIER / REALISTIC_WEIGHTED_AVG_MULTIPLIER;
+/**
+ * Effective average-RPS ceiling under bursty arrival. Queues have some
+ * buffering, so this uses a sqrt damping of the peak-to-average ratio (a
+ * standard first-order approximation for how much a buffer smooths burst
+ * variance) rather than assuming zero buffering.
+ */
+const REALISTIC_EFFECTIVE_CEILING_RPS = Math.round(VALIDATED_CEILING_RPS / Math.sqrt(REALISTIC_PEAK_TO_AVERAGE_RATIO));
+const REALISTIC_EFFECTIVE_CEILING_VUS = Math.round(VALIDATED_CEILING_VUS / Math.sqrt(REALISTIC_PEAK_TO_AVERAGE_RATIO));
+
 console.log('📊 Starting Load Test Simulation: [test:load:notifications]');
+console.log(`🌊 Traffic shape: ${trafficShape}${isRealistic ? ` (peak/avg ratio ${REALISTIC_PEAK_TO_AVERAGE_RATIO.toFixed(2)}x, ledger-close burst every ${5000}ms)` : ''}`);
 if (isTenX) {
   console.log(`⚡ 10× scenario — measured peak ${MEASURED_PEAK_RPS} RPS → target ${TEN_X_RPS} RPS (validated ceiling ${VALIDATED_CEILING_RPS} RPS @ ${VALIDATED_CEILING_VUS} VUs)`);
   console.log('   Sweeping concurrency 25→150, estimating bottleneck from queue / 429 / DB signals ...');
@@ -56,10 +93,10 @@ function estimateBottleneck({ rps, p95, errorRate, count429, countTimeout, count
   return { bottleneck: 'none', reason: 'SLOs hold — no bottleneck at this concurrency' };
 }
 
-function simulateBurst(totalEvents, concurrencyHint) {
-  // Model: up to VALIDATED_CEILING_RPS is linear; beyond it latency grows super-linearly and 429/DB errors appear.
+function simulateBurst(totalEvents, concurrencyHint, ceilingRps = VALIDATED_CEILING_RPS) {
+  // Model: up to ceilingRps is linear; beyond it latency grows super-linearly and 429/DB errors appear.
   const targetRps = TOTAL_BURST_RPS_HINT;
-  const isBeyondCeiling = targetRps > VALIDATED_CEILING_RPS;
+  const isBeyondCeiling = targetRps > ceilingRps;
   let success = 0, rateLimited = 0, timeout = 0, dbBusy = 0, avgLatency = 0;
 
   if (!isBeyondCeiling) {
@@ -70,7 +107,7 @@ function simulateBurst(totalEvents, concurrencyHint) {
     dbBusy = totalEvents - success - rateLimited - timeout;
     avgLatency = 120 + Math.random() * 40;
   } else {
-    const excess = (targetRps - VALIDATED_CEILING_RPS) / VALIDATED_CEILING_RPS; // 0..~
+    const excess = (targetRps - ceilingRps) / ceilingRps; // 0..~
     const baseSuccessRate = 0.985 - excess * 0.4; // drops sharply beyond ceiling
     const rateLimitRate = 0.01 + excess * 0.35;
     const timeoutRate = 0.003 + excess * 0.25;
@@ -98,26 +135,32 @@ let successCount = 0, rateLimitedCount = 0, connectionFailures = 0, dbBusyCount 
 let avgLatencyStr = '0';
 let p95Str = 0, errorRateStr = 0;
 let bottleneckInfo = { bottleneck: 'none', reason: 'smoke — no sweep' };
+/** Ceiling as actually found by the sweep below — the single source of truth for reported numbers. */
+let sweepCeiling = null;
 
 if (isTenX) {
   // Simulate a 120s soak at ~220 RPS with 100 VUs would be ~26,400 events
   // We use a representative burst of 26,400 for the text harness, but also sweep concurrencies
-  const concurrencies = [25, 50, 85, 100, 125, 150];
+  const sweepCeilingRps = isRealistic ? REALISTIC_EFFECTIVE_CEILING_RPS : VALIDATED_CEILING_RPS;
+  const sweepCeilingVus = isRealistic ? REALISTIC_EFFECTIVE_CEILING_VUS : VALIDATED_CEILING_VUS;
+  // Realistic mode's effective ceiling sits much lower than the uniform sweep points bracket,
+  // so it needs finer-grained VU samples to actually find where SLOs stop holding.
+  const concurrencies = isRealistic ? [10, 20, 30, 40, 55, 70, 85, 100, 125, 150] : [25, 50, 85, 100, 125, 150];
   const rows = [];
   let bestCeiling = null;
-  console.log('\n┌─────────┬──────────┬──────┬──────┬──────┬──────────┬────────────┐');
+  console.log(`\n┌─────────┬──────────┬──────┬──────┬──────┬──────────┬────────────┐`);
   console.log('│ VUs     │ RPS      │ p95  │ err% │ 429% │ db%      │ bottleneck │');
   console.log('├─────────┼──────────┼──────┼──────┼──────┼──────────┼────────────┤');
   for (const vu of concurrencies) {
     // Model RPS as roughly linear up to ceiling then flat
-    const modeledRps = Math.min(TEN_X_RPS * (vu / 100), VALIDATED_CEILING_RPS + Math.max(0, (vu - VALIDATED_CEILING_VUS) * 0.3));
+    const modeledRps = Math.min(TEN_X_RPS * (vu / 100), sweepCeilingRps + Math.max(0, (vu - sweepCeilingVus) * 0.3));
     TOTAL_BURST_RPS_HINT = modeledRps;
     const totalEvents = Math.round(modeledRps * 30); // 30s sample
-    const sim = simulateBurst(totalEvents, vu);
+    const sim = simulateBurst(totalEvents, vu, sweepCeilingRps);
     const row429pct = ((sim.rateLimited / totalEvents) * 100).toFixed(1);
     const rowDbPct = ((sim.dbBusy / totalEvents) * 100).toFixed(1);
     const bench = estimateBottleneck({ rps: modeledRps, p95: sim.p95, errorRate: sim.errorRate, count429: sim.rateLimited, countTimeout: sim.timeout, countDb: sim.dbBusy });
-    // Pick validated ceiling as last VU where SLOs (p95<500 err<2) hold, i.e., 85
+    // Pick validated ceiling as last VU where SLOs (p95<500 err<2) hold
     const sloOk = sim.p95 < 500 && sim.errorRate < 2;
     if (sloOk && (!bestCeiling || vu > bestCeiling.vu)) bestCeiling = { vu, rps: modeledRps, ...sim, ...bench };
     const marker = sloOk ? ' ✓' : ' ✗';
@@ -125,10 +168,16 @@ if (isTenX) {
     rows.push({ vu, rps: modeledRps, ...sim, bottleneck: bench.bottleneck });
   }
   console.log('└─────────┴──────────┴──────┴──────┴──────┴──────────┴────────────┘');
-  console.log(`\nValidated ceiling (last SLO-pass row): ${bestCeiling ? `${bestCeiling.rps.toFixed(0)} RPS @ ${bestCeiling.vu} VUs (p95 ${bestCeiling.p95}ms err ${bestCeiling.errorRate.toFixed(1)}%)` : 'none — all rows breached SLO'}`);
+  sweepCeiling = bestCeiling;
+  console.log(`\n${isRealistic ? 'Realistic-shape' : 'Validated'} ceiling (last SLO-pass row): ${bestCeiling ? `${bestCeiling.rps.toFixed(0)} RPS @ ${bestCeiling.vu} VUs (p95 ${bestCeiling.p95}ms err ${bestCeiling.errorRate.toFixed(1)}%)` : 'none — all rows breached SLO'}`);
+  if (isRealistic && bestCeiling) {
+    const gapRps = VALIDATED_CEILING_RPS - bestCeiling.rps;
+    const gapPct = (gapRps / VALIDATED_CEILING_RPS) * 100;
+    console.log(`Capacity gap vs uniform-load ceiling: ${gapRps.toFixed(0)} RPS (${gapPct.toFixed(0)}%) — bursty ledger-close-correlated arrival saturates the queue at a lower average RPS than uniform arrival. Confirm with a live sweep before relying on this for mainnet capacity planning.`);
+  }
   // Use the 100-VU row as the 10× representative burst for the summary below
   TOTAL_BURST_RPS_HINT = TEN_X_RPS;
-  const rep = simulateBurst(26000, 100);
+  const rep = simulateBurst(26000, 100, sweepCeilingRps);
   TOTAL_BURST_EVENTS = 26000;
   successCount = rep.success;
   rateLimitedCount = rep.rateLimited;
@@ -169,7 +218,15 @@ if (isTenX) {
   console.log(`⏱️  p95 Latency:            ${p95Str}ms (SLO <500ms)`);
   console.log(`📉 Error Rate:             ${errorRateStr}% (SLO <2%)`);
   console.log(`🧱 Dominant bottleneck:    ${bottleneckInfo.bottleneck} — ${bottleneckInfo.reason}`);
-  console.log(`✅ Validated ceiling:      ${VALIDATED_CEILING_RPS} RPS @ ${VALIDATED_CEILING_VUS} VUs (sweep 25→150 VUs, SLOs hold)`);
+  if (isRealistic) {
+    console.log(
+      sweepCeiling
+        ? `✅ Realistic-shape ceiling: ${sweepCeiling.rps.toFixed(0)} RPS @ ${sweepCeiling.vu} VUs (vs ${VALIDATED_CEILING_RPS} RPS uniform — see capacity gap above)`
+        : `✅ Realistic-shape ceiling: none found — every swept VU breached SLO`
+    );
+  } else {
+    console.log(`✅ Validated ceiling:      ${VALIDATED_CEILING_RPS} RPS @ ${VALIDATED_CEILING_VUS} VUs (sweep 25→150 VUs, SLOs hold)`);
+  }
   console.log(`💥 Failure mode beyond ceiling: p95 → ${p95Str}ms (super-linear), 429s surge → dead-letter queue surge → SQLITE_BUSY → 500s`);
   console.log(`🔧 Backoff tuning fed in:  webhookBackoffBaseMs 500→1000ms + jitter, per-channel token bucket at 80% provider quota`);
 } else {
@@ -193,8 +250,20 @@ if (jsonOut || isTenX) {
   const payload = {
     measuredPeakRps: MEASURED_PEAK_RPS,
     tenXTargetRps: TEN_X_RPS,
+    trafficShape,
     validatedCeilingRps: VALIDATED_CEILING_RPS,
     validatedCeilingVus: VALIDATED_CEILING_VUS,
+    ...(isRealistic
+      ? {
+          realisticPeakToAverageRatio: Number(REALISTIC_PEAK_TO_AVERAGE_RATIO.toFixed(2)),
+          realisticCeilingRps: sweepCeiling ? Math.round(sweepCeiling.rps) : null,
+          realisticCeilingVus: sweepCeiling ? sweepCeiling.vu : null,
+          capacityGapRps: sweepCeiling ? Math.round(VALIDATED_CEILING_RPS - sweepCeiling.rps) : null,
+          capacityGapPct: sweepCeiling
+            ? Number((((VALIDATED_CEILING_RPS - sweepCeiling.rps) / VALIDATED_CEILING_RPS) * 100).toFixed(1))
+            : null,
+        }
+      : {}),
     simulatedBurst: {
       totalEvents: TOTAL_BURST_EVENTS,
       success: successCount,

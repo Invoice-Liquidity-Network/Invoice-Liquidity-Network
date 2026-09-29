@@ -132,6 +132,49 @@ The `oracle-service` assesses payer addresses and returns credit scores and veri
    - Rotate oracle keypair in secret manager.
    - Submit a governance proposal or admin multisig transaction to update the oracle registry on-chain ([ADR-010 Oracle Registry](https://github.com/Invoice-Liquidity-Network/ILN-Smart-Contract/blob/main/docs/adr/ADR-010-oracle-registry.md)).
 
+#### 3. Alert Reference
+
+Every `oracle-service` paging alert (`monitoring/prometheus/oracle-service-alerts.yml`) carries a `runbook_url` annotation pointing at the matching heading below. `scripts/check-alert-runbook-links.mjs` fails CI if a new alert is added without one.
+
+#### OracleFraudFlagRateHigh
+- **Trigger**: >25% of oracle verdicts fraud-flagged over 10m.
+- **Triage**: query `oracle_fraud_signal_total` broken out by heuristic — a single dominant signal indicates a heuristic bug, a spread across signals indicates a coordinated probe.
+- **Action**: if a heuristic bug, roll back the last oracle-service deploy; if an attack, escalate to the Security Lead and consider tightening the fraud-flag threshold per Containment step 1 above.
+
+#### OracleFraudFlagRateCritical
+- **Trigger**: >60% of verdicts fraud-flagged over 5m — legitimate funding is almost certainly being blocked.
+- **Action**: treat as SEV-1 heuristic regression until proven otherwise; page the Security Lead immediately, roll back the last heuristic change, and re-check the fraud-flag rate post-rollback.
+
+#### OracleNoVerifications
+- **Trigger**: zero verification requests for 15m while the service reports healthy.
+- **Triage**: confirm whether upstream traffic to `/v1/verify` has actually stopped (indexer/frontend metrics), or requests are erroring before reaching the verifier (check ingress/load-balancer 5xx).
+- **Action**: if requests are being dropped pre-verifier, check for a crash loop or an exhausted connection pool; restart the service if a leak is confirmed.
+
+#### OracleAllVerificationsRejected
+- **Trigger**: >95% rejection rate over 10m — `fund_invoice()`'s require_oracle_verification path is effectively closed.
+- **Triage**: inspect the outcome breakdown — `rejected-stale-data` points at a broken indexer feed (Scenario B), `rejected-low-trust` at a reputation-lookup failure.
+- **Action**: treat as SEV-1; follow Containment steps 1–3 above (kill-switch, cache purge, contract fallback audit).
+
+#### OracleStaleResponsesRising
+- **Trigger**: any stale verdicts served over 10m.
+- **Triage**: compare against `ORACLE_MAX_ORACLE_AGE_MS`; check indexer sync lag and reputation-contract RPC reachability.
+- **Action**: if the indexer has fallen behind, follow Scenario B's resync procedure; if the reputation contract is unreachable, check Soroban RPC health.
+
+#### OracleVerificationLatencyHigh
+- **Trigger**: p95 verification latency >2s for 10m — callers time out before the oracle does.
+- **Triage**: check indexer response time and Soroban RPC latency; cross-reference `OracleCacheHitRateLow` below.
+- **Action**: if RPC-bound, check for provider degradation; if cache-bound, restore the cache backend.
+
+#### OracleCacheHitRateLow
+- **Trigger**: cache hit rate <20% for 15m.
+- **Triage**: expected briefly after a deploy or Redis restart; sustained low hit rate means the cache backend is unreachable and every request recomputes.
+- **Action**: check Redis connectivity and restart the cache connection or fail over; expect `OracleVerificationLatencyHigh` to follow if left unresolved.
+
+#### OracleExternalProviderUnavailable
+- **Trigger**: >50% of external KYB lookups return `unknown` over 10m.
+- **Triage**: the provider is likely down; verdicts still resolve (unknown is treated as inert), so this degrades confidence rather than causing an outage.
+- **Action**: check the provider's status page; note reduced verdict confidence in the incident log if this coincides with a funding dispute.
+
 ---
 
 ### Scenario D: Notifications Service Abuse (SSRF / Webhook Spam)
@@ -164,6 +207,35 @@ The notifications service processes user subscriptions and dispatches webhooks, 
 
 ---
 
+### Scenario F: Simultaneous Multi-Service Outage (Indexer + Oracle Service) (#1105)
+
+#### 1. Blast Radius
+A simultaneous failure of both the **Indexer Service** and **Oracle Service** creates severe protocol-wide degradation:
+- Read queries (`/v1/invoice`, dashboards) fail or return stale cache.
+- Oracle gating (`fund_invoice()` path with `require_oracle_verification: true`) blocks new funding operations.
+
+#### 2. Emergency Containment & Feature Flag Priority
+As validated during the multi-service outage game-day (`docs/game-days/2026-09-multi-service-outage-game-day.md`), execute containment in exact priority order:
+
+1. **Step 1: Switch Frontend Read Path to Direct Soroban RPC**:
+   ```env
+   NEXT_PUBLIC_INDEXER_ENABLED=false
+   ```
+   *Impact*: Bypasses indexer; queries RPC node directly for authoritative invoice state.
+
+2. **Step 2: Bypass Oracle Gating in Frontend**:
+   ```env
+   NEXT_PUBLIC_ORACLE_ENABLED=false
+   ```
+   *Impact*: Enables standard invoice funding while oracle service is restored.
+
+3. **Step 3: Recover Indexer & Oracle Services**:
+   - Restore Indexer SQLite snapshot & resync from ledger head.
+   - Restart Oracle service with warm cache.
+   - Un-toggle feature flags once health checks pass (`200 OK`).
+
+---
+
 ## 4. Post-Incident Review & Cross-Repo Sync
 
 Following containment of any SEV-1 or SEV-2 incident:
@@ -180,6 +252,8 @@ Following containment of any SEV-1 or SEV-2 incident:
 
 - **Smart Contract Security & Reentrancy Policy**: [`backend/docs/security.md`](https://github.com/Invoice-Liquidity-Network/ILN-Smart-Contract/blob/main/docs/security.md)
 - **Frontend Incident Response Runbook**: [`frontend/docs/incident-response.md`](https://github.com/Invoice-Liquidity-Network/ILN-Frontend/blob/main/docs/incident-response.md)
+- **Multi-Service Outage Game-Day Report**: [`docs/game-days/2026-09-multi-service-outage-game-day.md`](./game-days/2026-09-multi-service-outage-game-day.md)
 - **Repository Security Policy**: [`SECURITY.md`](../SECURITY.md)
 - **Protocol Threat Model**: [`docs/threat-model.md`](./threat-model.md)
 - **Security Guide**: [`docs/security-guide.md`](./security-guide.md)
+

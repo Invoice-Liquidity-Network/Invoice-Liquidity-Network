@@ -1,3 +1,8 @@
+import type { AuditRowStore } from './audit-store';
+import type { DeltaBoundsConfig, OracleDeltaGuardInfo } from './deltaBounds';
+import type { OracleSigningKeyStore, SignedPriceUpdate } from './signer';
+import type { SourceFailoverConfig, SourceHealthState } from './sourceFailover';
+
 export type InvoiceStatus = 'Pending' | 'Funded' | 'Paid' | 'Defaulted';
 
 export interface IndexerInvoiceHistoryEntry {
@@ -156,8 +161,41 @@ export interface OracleVerificationResponse {
    * distinctly.
    */
   composition: OracleSignalComposition;
+  /**
+   * Outcome of the per-feed delta-bound guard applied to the composite trust
+   * score. Absent on responses produced before the guard existed (e.g. cached
+   * entries written by older instances). A `hold` means the proposal was
+   * frozen for human review and this verdict is the last known-good value.
+   */
+  deltaGuard?: OracleDeltaGuardInfo;
   kybResult?: KYBVerificationResult;
+  /**
+   * HMAC attestation of *this publication*, attached by the HTTP layer when a
+   * signing key is configured (#1053).
+   *
+   * A fresh nonce and `issuedAt` are minted per response rather than reused
+   * from the cached verdict, so a consumer's replay cache sees one event per
+   * publication while the underlying verdict may legitimately repeat.
+   */
+  attestation?: OracleVerdictAttestation | null;
+  /**
+   * Degraded-mode contract (issue #1057): when oracle-service cannot reach
+   * any source, it serves the last-known-good cached response with
+   * `stale: true, degraded: true, isVerified: false` instead of failing
+   * silently or returning fresh-looking data.
+   */
+  stale?: boolean;
+  degraded?: boolean;
 }
+
+/**
+ * The signature envelope carried by a published verdict.
+ *
+ * `payload` is the canonical JSON of the verdict with this field removed; a
+ * consumer verifies `keyId:nonce:issuedAt:payload` against `signature` using
+ * the advertised key id.
+ */
+export type OracleVerdictAttestation = SignedPriceUpdate;
 
 export interface OracleAssessmentInput {
   request: OracleVerificationRequest;
@@ -195,6 +233,23 @@ export interface OracleServiceHealth {
   indexerBaseUrl: string;
   reputationConfigured: boolean;
   lastVerificationAt?: string | null;
+  /**
+   * Whether published verdicts are being signed (#1053) and whether the audit
+   * trail is durable (#1055). Both are surfaced rather than assumed, because a
+   * deployment that quietly loses either still returns 200s.
+   */
+  signing: 'enabled' | 'disabled';
+  audit: 'sqlite' | 'memory';
+  /** Issue #1057: true once the service has served a degraded response. */
+  degradedMode: boolean;
+  degradedResponses?: number;
+  lastSuccessfulVerificationAt?: string | null;
+  /** Issue #1054: per-stage SLO violation totals served by this instance. */
+  sloViolations?: {
+    fetch: number;
+    aggregate: number;
+    publish: number;
+  };
 }
 
 export interface OracleServiceMetricsSnapshot {
@@ -214,11 +269,20 @@ export interface OracleVerifierDependencies {
   cacheTtlSeconds?: number;
   maxOracleAgeMs?: number;
   externalProvider?: ExternalVerificationProvider;
+  /** Per-feed movement bounds for the composite trust score (issue #1052). */
+  deltaBounds?: DeltaBoundsConfig;
 }
 
 export interface OracleCacheReaderWriter {
   get(key: string): Promise<OracleCacheEntry | null>;
   set(key: string, response: OracleVerificationResponse, ttlSeconds: number): Promise<void>;
+  /**
+   * Last-known-good read for degraded mode (issue #1057): returns the most
+   * recent response for key even when its TTL has expired, or null when the
+   * key was never written. Backends that cannot retain expired entries
+   * return null and the caller fails loudly instead of degrading.
+   */
+  getStale(key: string): Promise<OracleCacheEntry | null>;
   /**
    * Drop every entry under a key prefix. Used to invalidate a payer's cached
    * verdicts the moment new activity for that payer is observed, so a clean
@@ -247,4 +311,22 @@ export interface OracleServiceOptions {
   rateLimitWindowMs?: number;
   rateLimitMaxRequests?: number;
   enableRateLimit?: boolean;
+  /**
+   * Store backing the append-only audit trail. When omitted the driver is
+   * resolved from `ORACLE_AUDIT_DB_PATH` / `ORACLE_AUDIT_DRIVER`.
+   */
+  auditStore?: AuditRowStore;
+  /** How long audit entries are retained. Defaults to one year. */
+  auditRetentionMs?: number;
+  /**
+   * Key store used to sign published verdicts. `null` explicitly disables
+   * signing (non-production only); omitting it resolves from the environment.
+   */
+  signingKeyStore?: OracleSigningKeyStore | null;
+  /** Fallback indexer for automated history-source failover (issue #1051). */
+  indexerFallbackUrl?: string;
+  /** Fallback Soroban RPC for automated reputation-source failover. */
+  reputationFallbackRpcUrl?: string;
+  deltaBounds?: DeltaBoundsConfig;
+  sourceFailover?: SourceFailoverConfig;
 }

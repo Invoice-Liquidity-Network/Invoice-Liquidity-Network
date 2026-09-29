@@ -44,3 +44,8 @@ packages:
 
   # Example applications
   - 'examples/*'
+
+  # Test helper packages with their own package.json (issue #1093: needed so
+  # tests/sdk-integration can depend on @iln/sdk via workspace:* to catch
+  # fixture/interface drift at typecheck time)
+  - tests/sdk-integration

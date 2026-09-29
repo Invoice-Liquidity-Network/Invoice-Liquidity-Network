@@ -300,6 +300,53 @@ Returns invoice history for an address, filtered by role.
 
 ---
 
+### Bulk Exports (streaming)
+
+```
+GET  /export/invoices
+GET  /export/events
+POST /export/jobs
+GET  /export/jobs/:jobId
+GET  /export/download/:jobId
+```
+
+Exports are **true streams**: rows are written from a SQLite cursor as they are read
+(CSV and JSON alike), so server memory stays flat for large result sets. On top of the
+streams sits a per-session resource-budget layer (issue #1042).
+
+**Query parameters** — `GET /export/invoices` accepts `format=csv|json` plus the filters
+`status`, `freelancer`, `payer`, `funder`, `from`, `to` (ISO 8601); `GET /export/events`
+accepts `format`, `invoiceId`, `from`, `to`. Both accept `cursor` (see below).
+`POST /export/jobs` takes the same filters as a JSON body plus `type: "invoices"|"events"`
+and an optional `cursor` to continue a truncated session.
+
+**Limits**
+
+| Limit | Default | Env override | Behavior when exceeded |
+|-------|---------|--------------|------------------------|
+| Sync result size | 5,000 rows | — (fixed) | `413` from `GET /export/*` — use an async job |
+| Async job size | 50,000 rows | — (fixed) | Job `failed` with `Result set too large` |
+| Session rows (cumulative across pages of one session) | 200,000 | `EXPORT_SESSION_MAX_ROWS` | Stream cut off / `413` on the next page |
+| Per-response wall clock | 300 s | `EXPORT_SESSION_MAX_SECONDS` | Stream cut off after the last complete row |
+| Per-response bytes | 100 MB | `EXPORT_SESSION_MAX_BYTES` | Stream cut off after the last complete row |
+| Rows per streamed page | 5,000 | `EXPORT_PAGE_MAX_ROWS` | Forces a truncation + resumption cursor below the page size |
+| Finished-job TTL | 1,800 s | `EXPORT_JOB_TTL_SECONDS` | Job evicted from memory (`404` afterwards) |
+| Tracked jobs | 1,000 | `EXPORT_JOB_MAX` | Oldest finished jobs evicted first |
+
+**Truncation & resumption.** When a budget cuts a stream short, the response ends after a
+complete row (never mid-row) and — because cutoffs are computed from a count query before
+streaming — the headers are set on the *same* response:
+
+- `X-Export-Truncated: true`
+- `X-Export-Resumption-Cursor: <opaque base64 cursor>`
+
+Continue the session by repeating the request with `?cursor=<resumption cursor>` appended
+(for jobs: include `"cursor"` in the `POST /export/jobs` body). The cursor encodes both the
+position and the rows already delivered, so cumulative session budgets are enforced across
+stateless pages. Resumed job status responses expose `truncated` and `resumptionCursor`.
+Once the cumulative session row budget is exhausted the server returns `413` — start a new
+session by omitting the cursor.
+
 ---
 
 ## Administrative & operational endpoints
@@ -310,7 +357,7 @@ consumers. They are documented in the indexer operations guides rather than here
 | Path | Purpose | Reference |
 |------|---------|-----------|
 | `GET /dashboard` | HTML operational dashboard | [architecture.md](architecture.md) |
-| `GET /export/invoices`, `GET /export/events`, `POST /export/jobs`, `GET /export/jobs/:jobId`, `GET /export/download/:jobId` | Bulk data export jobs | [configuration.md](configuration.md) |
+| `GET /export/invoices`, `GET /export/events`, `POST /export/jobs`, `GET /export/jobs/:jobId`, `GET /export/download/:jobId` | Bulk data export jobs | [Bulk Exports](#bulk-exports-streaming) above · [configuration.md](configuration.md) |
 | `POST /backup`, `GET /backup`, `GET /backup/latest`, `POST /backup/restore` | Backup and restore | [backup-archive.md](backup-archive.md) |
 | `POST /archive/run`, `GET /archive/stats`, `GET /archive/events`, `GET /archive/invoices`, `POST /archive/restore/:id` | Cold-storage archival | [backup-archive.md](backup-archive.md) |
 
@@ -352,5 +399,6 @@ All error responses follow this format:
 Common HTTP status codes:
 - `400` - Bad request (invalid parameters)
 - `404` - Resource not found
+- `413` - Export result set (or session budget) too large
 - `429` - Rate limit exceeded
 - `500` - Internal server error

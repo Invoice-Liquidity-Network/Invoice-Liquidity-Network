@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8" /><title>ILN SDK Freighter signer browser test</title></head>
+<body>
+<script type="module">
+  import { createFreighterSigner } from '/src/index.browser.ts';
+
+  window.__freighterReady = false;
+  window.__freighterError = null;
+  window.__freighterPublicKey = null;
+  window.__freighterSignResult = null;
+  window.__freighterSignError = null;
+
+  try {
+    const signer = createFreighterSigner();
+    window.__freighterPublicKey = await signer.getPublicKey();
+    window.__freighterSignResult = await signer.signTransaction('unsigned-xdr', {
+      networkPassphrase: 'Test SDF Network ; September 2015',
+    });
+    window.__freighterReady = true;
+  } catch (err) {
+    window.__freighterSignError = err.message || String(err);
+  }
+</script>
+</body>
+</html>

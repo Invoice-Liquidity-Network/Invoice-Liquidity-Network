@@ -150,8 +150,6 @@ describe('oracle verifier calculations', () => {
       history: healthyHistory,
       nowMs: HEALTHY_LATEST_MS + 60_000,
       maxOracleAgeMs: 10_000_000,
-      nowMs: 1_701_100_000_000,
-      maxOracleAgeMs: 150_000_000,
     });
 
     expect(assessment.response.trustScore).toBeGreaterThan(60);

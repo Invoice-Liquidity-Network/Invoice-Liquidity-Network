@@ -40,6 +40,10 @@
   "module": "./dist/index.js",
   "browser": "./dist/browser/index.js",
   "types": "./dist/index.d.ts",
+  "files": [
+    "dist",
+    "README.md"
+  ],
   "license": "MIT",
   "engines": {
     "node": ">=20"

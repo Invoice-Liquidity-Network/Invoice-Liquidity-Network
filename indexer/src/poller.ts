@@ -1,6 +1,6 @@
 import type { rpc as StellarRpc } from '@stellar/stellar-sdk';
 import { CONFIG } from './config';
-import { getCursorLedger, setCursorLedger } from './db';
+import { getCursorLedger, setCursorLedger, rollbackToLedger } from './db';
 import { processEvent } from './processor';
 import { server } from './rpc';
 
@@ -50,8 +50,20 @@ export async function pollOnce(): Promise<void> {
       ? { cursor: paginationCursor, filters, limit: BATCH_SIZE }
       : { startLedger, filters, limit: BATCH_SIZE };
 
+
     const response = await server.getEvents(request);
     latestKnownLedger = response.latestLedger;
+
+    if (latestKnownLedger < stored) {
+      console.warn(`[poller] Chain reorg detected! Latest ledger (${latestKnownLedger}) is behind cursor (${stored}). Rolling back...`);
+      rollbackToLedger(latestKnownLedger);
+      stored = latestKnownLedger;
+      startLedger = latestKnownLedger;
+      highestEventLedger = latestKnownLedger;
+      paginationCursor = undefined;
+      continue;
+    }
+
 
     for (const event of response.events) {
       if (latestKnownLedger - event.ledger < CONFIRMATION_DEPTH) {
@@ -66,6 +78,11 @@ export async function pollOnce(): Promise<void> {
     // The response always carries a cursor. Only follow it if we hit the full
     // page limit — otherwise we've consumed all available events.
     paginationCursor = response.events.length === BATCH_SIZE ? response.cursor : undefined;
+
+    if (highestEventLedger > stored) {
+      setCursorLedger(highestEventLedger);
+      stored = highestEventLedger;
+    }
   } while (paginationCursor);
 
   // ── Advance cursor ────────────────────────────────────────────────────────

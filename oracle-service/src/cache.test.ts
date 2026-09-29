@@ -28,4 +28,28 @@ describe('oracle cache', () => {
 
     await cache.close();
   });
+
+  it('serves last-known-good via getStale after the TTL expires', async () => {
+    const cache = await createOracleCache();
+    const response = makeResponse();
+
+    await cache.cache.set(buildOracleCacheKey(request), response, 5);
+    // Expire the live entry by writing it with a TTL in the past: the
+    // fresh read misses while the stale read still serves last-known-good.
+    await cache.cache.set(buildOracleCacheKey(request), response, 0);
+    await new Promise((resolve) => setTimeout(resolve, 5));
+
+    expect(await cache.cache.get(buildOracleCacheKey(request))).toBeNull();
+    const stale = await cache.cache.getStale(buildOracleCacheKey(request));
+    expect(stale).not.toBeNull();
+    expect(stale?.response.trustScore).toBe(88);
+
+    await cache.close();
+  });
+
+  it('returns null from getStale for keys that were never written', async () => {
+    const cache = await createOracleCache();
+    expect(await cache.cache.getStale('oracle:v1:nobody:0:0')).toBeNull();
+    await cache.close();
+  });
 });

@@ -26,12 +26,20 @@ import type {
   ExternalVerificationResult,
   OracleCacheReaderWriter,
 } from './types';
+import type { OracleMetrics } from './metrics';
+import { AGGREGATE_SLO_MS, FETCH_SLO_MS, PUBLISH_SLO_MS } from './metrics';
 import {
   buildOracleCacheKey,
   buildOraclePayerKeyPrefix,
   resolveCacheTtlSeconds,
 } from './cache';
 import { composeVerdict, confidenceLevelFromScore } from './composition';
+import {
+  DeltaBoundsGuard,
+  defaultDeltaBoundsConfig,
+  type OracleDeltaGuardInfo,
+  type SourceConfirmation,
+} from './deltaBounds';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 export const MAX_FRAUD_WINDOW_MS = 30 * DAY_MS;
@@ -411,7 +419,6 @@ export function assessOracleRequest(input: OracleAssessmentInput): OracleAssessm
       fraudSignals: computed.fraudSignals,
       evidence: [...computed.evidence, ...verdict.evidence],
       composition: verdict.composition,
-      evidence: computed.evidence,
       kybResult: input.kybResult,
     },
   };
@@ -428,6 +435,65 @@ export interface OracleReputationProvider {
 export interface OracleVerifierOptions extends OracleVerifierDependencies {
   cache?: OracleCacheReaderWriter;
   cacheTtlSeconds?: number;
+  /**
+   * Optional stage metrics (issue #1054). When present, computeVerification
+   * records per-stage latency histograms and SLO-violation counters.
+   */
+  metrics?: OracleMetrics;
+}
+
+/**
+ * Thrown when every oracle source is unavailable and no cached response
+ * exists to degrade to (issue #1057). The HTTP layer maps this to 503 with
+ * `degraded: true` rather than a generic 500.
+ */
+export class OracleUnavailableError extends Error {
+  readonly degraded = true;
+  constructor(message = 'Oracle providers unavailable and no cached response') {
+    super(message);
+    this.name = 'OracleUnavailableError';
+  }
+}
+
+/**
+ * Normalize each provider result into the 0..100 point scale the delta guard
+ * compares, so a feed's "value" is the signal that feed alone would publish.
+ * A source that failed or returned nothing usable is marked `ok: false` — it
+ * must never count toward a quorum.
+ */
+export function buildSourceConfirmations(input: {
+  historyOk: boolean;
+  history: IndexerInvoiceHistoryEntry[];
+  reputationOk: boolean;
+  reputationScore: number;
+  external?: ExternalVerificationResult;
+  externalOk: boolean;
+  kyb?: { isVerified: boolean };
+  kybOk: boolean;
+}): SourceConfirmation[] {
+  const confirmations: SourceConfirmation[] = [
+    {
+      source: 'history',
+      value: input.historyOk ? successRateFromHistory(input.history) * 100 : 0,
+      ok: input.historyOk,
+    },
+    {
+      source: 'reputation',
+      value: input.reputationOk ? clamp(Math.round(input.reputationScore), 0, 100) : 0,
+      ok: input.reputationOk,
+    },
+    {
+      source: 'external',
+      value: input.external?.status === 'verified' ? 100 : 0,
+      ok: input.externalOk && input.external?.status !== 'unknown',
+    },
+    {
+      source: 'kyb',
+      value: input.kyb?.isVerified ? 100 : 0,
+      ok: input.kybOk && input.kyb !== undefined,
+    },
+  ];
+  return confirmations;
 }
 
 export class OracleVerifier {
@@ -439,7 +505,15 @@ export class OracleVerifier {
   private readonly kybProvider?: import('./types').VerificationProvider;
   private readonly maxOracleAgeMs: number;
   private readonly externalProvider?: ExternalVerificationProvider;
+  private readonly metrics?: OracleMetrics;
   private readonly inflight = new Map<string, Promise<OracleVerificationResponse>>();
+  /** Feed-movement guard shared across all payers (issue #1052). */
+  readonly deltaGuard: DeltaBoundsGuard;
+  /**
+   * Last published verdict per guard key. While an update is held, this is
+   * what the protocol keeps receiving — a freeze, never a drop.
+   */
+  private readonly lastKnownGood = new Map<string, OracleVerificationResponse>();
 
   constructor(options: OracleVerifierOptions) {
     this.cache = options.cache;
@@ -450,6 +524,10 @@ export class OracleVerifier {
     this.kybProvider = options.kybProvider;
     this.maxOracleAgeMs = options.maxOracleAgeMs ?? 5 * 60 * 1000;
     this.externalProvider = options.externalProvider;
+    this.metrics = options.metrics;
+    this.deltaGuard = new DeltaBoundsGuard(
+      options.deltaBounds ?? defaultDeltaBoundsConfig()
+    );
   }
 
   /**
@@ -464,6 +542,81 @@ export class OracleVerifier {
       return 0;
     }
     return this.cache.invalidateByPrefix(buildOraclePayerKeyPrefix(payer.trim()));
+  }
+
+  /** Held delta-bound updates awaiting human review, oldest first. */
+  getHeldDeltaUpdates(): ReturnType<DeltaBoundsGuard['getHeldUpdates']> {
+    return this.deltaGuard.getHeldUpdates();
+  }
+
+  /**
+   * Run the composite trust score through the delta-bound guard.
+   *
+   * On a hold the update is recorded in the review queue — never silently
+   * dropped — and the protocol receives whichever verdict is more
+   * conservative: the frozen last known-good one when the proposal would
+   * *improve* the payer without a quorum, the fresh worsening one otherwise.
+   * Everything else publishes normally, tagged with its decision.
+   */
+  private applyDeltaBounds(
+    response: OracleVerificationResponse,
+    payer: string,
+    nowMs: number,
+    confirmations: Parameters<typeof buildSourceConfirmations>[0]
+  ): OracleVerificationResponse {
+    const key = `composite-trust:${payer}`;
+    const decision = this.deltaGuard.assess(
+      { feed: 'composite-trust', subject: payer },
+      response.trustScore,
+      buildSourceConfirmations(confirmations),
+      nowMs
+    );
+
+    const info: OracleDeltaGuardInfo = {
+      feed: 'composite-trust',
+      decision: decision.decision,
+      delta: decision.decision === 'publish' ? 0 : decision.delta,
+      bound: decision.decision === 'publish' ? 0 : decision.bound,
+      confirmingSources: decision.decision === 'publish' ? [] : decision.confirmingSources,
+      ...(decision.decision === 'hold' ? { heldId: decision.heldId } : {}),
+    };
+
+    if (decision.decision !== 'hold') {
+      this.lastKnownGood.set(key, response);
+      return { ...response, deltaGuard: info };
+    }
+
+    const holdEvidence =
+      `Delta bound exceeded: trust movement ${Math.round(decision.delta)} > bound ` +
+      `${Math.round(decision.bound)} with ${decision.confirmingSources.length} source ` +
+      `confirmation(s). Held ${decision.heldId} for review.`;
+
+    const frozen = this.lastKnownGood.get(key);
+    // Fail safe: freezing out a sudden deterioration would let an attacker
+    // mask the payer's turn to fraud behind their last clean score, so the
+    // worsening verdict is served as-is (the hold is still recorded).
+    if (!frozen || response.trustScore <= frozen.trustScore) {
+      if (!frozen || response.trustScore < frozen.trustScore) {
+        this.lastKnownGood.set(key, response);
+      }
+      return {
+        ...response,
+        evidence: [...response.evidence, holdEvidence],
+        deltaGuard: info,
+      };
+    }
+
+    return {
+      ...frozen,
+      requestId: response.requestId,
+      invoiceId: response.invoiceId,
+      amount: response.amount,
+      generatedAt: response.generatedAt,
+      dataAgeMs: response.dataAgeMs,
+      cacheHit: false,
+      evidence: [...frozen.evidence, `${holdEvidence} Serving last known-good verdict.`],
+      deltaGuard: info,
+    };
   }
 
   async verify(request: OracleVerificationRequest): Promise<OracleVerificationResponse> {
@@ -504,6 +657,32 @@ export class OracleVerifier {
     }
   }
 
+  private observeStage(
+    stage: 'fetch' | 'aggregate' | 'publish',
+    durationMs: number
+  ): void {
+    if (!this.metrics) {
+      return;
+    }
+    const seconds = durationMs / 1000;
+    if (stage === 'fetch') {
+      this.metrics.fetchDuration.observe(seconds);
+      if (durationMs > FETCH_SLO_MS) {
+        this.metrics.fetchSloViolationsTotal.inc();
+      }
+    } else if (stage === 'aggregate') {
+      this.metrics.aggregateDuration.observe(seconds);
+      if (durationMs > AGGREGATE_SLO_MS) {
+        this.metrics.aggregateSloViolationsTotal.inc();
+      }
+    } else {
+      this.metrics.publishDuration.observe(seconds);
+      if (durationMs > PUBLISH_SLO_MS) {
+        this.metrics.publishSloViolationsTotal.inc();
+      }
+    }
+  }
+
   private async computeVerification(
     request: OracleVerificationRequest,
     cacheKey: string
@@ -520,6 +699,7 @@ export class OracleVerifier {
     };
     let indexerAvailable = true;
 
+    const fetchStart = this.now();
     const [historyResult, reputationResult, externalResult, kybResult] = await Promise.allSettled([
       this.historyProvider(request.payer),
       this.reputationProvider(request.payer),
@@ -528,15 +708,47 @@ export class OracleVerifier {
         : Promise.resolve(undefined),
       this.kybProvider ? this.kybProvider.verifyPayer(request.payer) : Promise.resolve(undefined),
     ]);
+    this.observeStage('fetch', this.now() - fetchStart);
 
+    let historyFailed = false;
+    let reputationFailed = false;
     if (historyResult.status === 'fulfilled') {
       history = historyResult.value;
     } else {
       indexerAvailable = false;
+      historyFailed = true;
     }
 
     if (reputationResult.status === 'fulfilled') {
       reputation = reputationResult.value;
+    } else {
+      reputationFailed = true;
+    }
+
+    // Degraded-mode contract (issue #1057): when EVERY source is down, serve
+    // the last-known-good cached response — marked stale/degraded and never
+    // verified — rather than inventing a fresh-looking answer. With no cache
+    // to degrade to, fail loudly so callers halt price-dependent operations.
+    if (historyFailed && reputationFailed) {
+      const stale = await this.cache?.getStale(cacheKey);
+      if (stale) {
+        const ageMs = Math.max(0, nowMs - stale.generatedAtMs);
+        this.metrics?.degradedResponsesTotal.inc();
+        this.metrics?.lastKnownGoodAgeSeconds.set(ageMs / 1000);
+        return {
+          ...stale.response,
+          cacheHit: false,
+          stale: true,
+          degraded: true,
+          isVerified: false,
+          dataAgeMs: ageMs,
+          evidence: [
+            ...stale.response.evidence,
+            'Oracle sources unavailable; serving last-known-good cached response (stale)',
+          ],
+        };
+      }
+      throw new OracleUnavailableError();
     }
 
     // A provider that threw yields `unknown`, never `unverified`: an outage
@@ -554,6 +766,7 @@ export class OracleVerifier {
     const kybVerification =
       kybResult.status === 'fulfilled' && kybResult.value ? kybResult.value : undefined;
 
+    const aggregateStart = this.now();
     const assessment = assessOracleRequest({
       request,
       history,
@@ -563,11 +776,23 @@ export class OracleVerifier {
       external,
       kybResult: kybVerification,
     });
+    this.observeStage('aggregate', this.now() - aggregateStart);
 
-    const response: OracleVerificationResponse = {
+    let response: OracleVerificationResponse = {
       ...assessment.response,
       cacheHit: false,
     };
+
+    response = this.applyDeltaBounds(response, request.payer, nowMs, {
+      historyOk: historyResult.status === 'fulfilled',
+      history,
+      reputationOk: reputationResult.status === 'fulfilled',
+      reputationScore: reputation.score ?? 0,
+      external,
+      externalOk: this.externalProvider !== undefined && externalResult.status === 'fulfilled',
+      kyb: kybVerification,
+      kybOk: this.kybProvider !== undefined && kybResult.status === 'fulfilled',
+    });
 
     // Clean verdicts for actively-invoicing payers get a short TTL so the
     // cache cannot mask fraud patterns that emerge moments later.
@@ -584,7 +809,9 @@ export class OracleVerifier {
       );
     }
 
+    const publishStart = this.now();
     await this.cache?.set(cacheKey, response, ttlSeconds);
+    this.observeStage('publish', this.now() - publishStart);
     return response;
   }
 }
@@ -596,50 +823,63 @@ export interface LedgerRpcOracleOptions {
   source?: string;
 }
 
+/**
+ * The lookup itself, with failures propagated. The failover wrapper needs to
+ * see primary outages as thrown errors — a zeroed snapshot is indistinguishable
+ * from a genuinely unknown payer, which is why the total function below keeps
+ * the catch and this one does not.
+ */
+export async function fetchOnChainReputationOrThrow(
+  options: LedgerRpcOracleOptions,
+  address: string
+): Promise<ReputationSnapshot> {
+  const server = new SorobanRpc.Server(options.rpcUrl);
+  const contract = new Contract(options.contractId);
+  const source = options.source ?? Keypair.random().publicKey();
+  const account = await server.getAccount(source);
+  const tx = new TransactionBuilder(account, {
+    fee: BASE_FEE,
+    networkPassphrase: options.networkPassphrase ?? Networks.TESTNET,
+  })
+    .addOperation(contract.call('get_reputation', new Address(address).toScVal()))
+    .setTimeout(30)
+    .build();
+
+  const simulation = await server.simulateTransaction(tx);
+  if ('error' in simulation) {
+    throw new Error(String(simulation.error));
+  }
+  const retval = simulation.result?.retval;
+  if (!retval) {
+    throw new Error('No return value');
+  }
+
+  const native = scValToNative(retval);
+  const get = (key: string): unknown => {
+    if (native instanceof Map) {
+      return native.get(key);
+    }
+    return native && typeof native === 'object'
+      ? (native as Record<string, unknown>)[key]
+      : undefined;
+  };
+
+  return {
+    address,
+    score: Math.max(0, Number(get('score') ?? 0)) || 0,
+    totalPaid: BigInt(String(get('total_paid') ?? '0')) || 0n,
+    invoiceCount: Math.max(0, Number(get('invoice_count') ?? 0)) || 0,
+    lastActivity: Math.max(0, Number(get('last_activity') ?? 0)) || 0,
+    rank: Math.max(0, Number(get('rank') ?? 0)) || 0,
+  };
+}
+
 export async function fetchOnChainReputation(
   options: LedgerRpcOracleOptions,
   address: string
 ): Promise<ReputationSnapshot> {
   try {
-    const server = new SorobanRpc.Server(options.rpcUrl);
-    const contract = new Contract(options.contractId);
-    const source = options.source ?? Keypair.random().publicKey();
-    const account = await server.getAccount(source);
-    const tx = new TransactionBuilder(account, {
-      fee: BASE_FEE,
-      networkPassphrase: options.networkPassphrase ?? Networks.TESTNET,
-    })
-      .addOperation(contract.call('get_reputation', new Address(address).toScVal()))
-      .setTimeout(30)
-      .build();
-
-    const simulation = await server.simulateTransaction(tx);
-    if ('error' in simulation) {
-      throw new Error(String(simulation.error));
-    }
-    const retval = simulation.result?.retval;
-    if (!retval) {
-      throw new Error('No return value');
-    }
-
-    const native = scValToNative(retval);
-    const get = (key: string): unknown => {
-      if (native instanceof Map) {
-        return native.get(key);
-      }
-      return native && typeof native === 'object'
-        ? (native as Record<string, unknown>)[key]
-        : undefined;
-    };
-
-    return {
-      address,
-      score: Math.max(0, Number(get('score') ?? 0)) || 0,
-      totalPaid: BigInt(String(get('total_paid') ?? '0')) || 0n,
-      invoiceCount: Math.max(0, Number(get('invoice_count') ?? 0)) || 0,
-      lastActivity: Math.max(0, Number(get('last_activity') ?? 0)) || 0,
-      rank: Math.max(0, Number(get('rank') ?? 0)) || 0,
-    };
+    return await fetchOnChainReputationOrThrow(options, address);
   } catch {
     return {
       address,

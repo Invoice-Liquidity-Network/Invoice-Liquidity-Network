@@ -1,0 +1,69 @@
+name: Alert Runbook Link Check
+
+# BLOCKING check (see docs/incident-response.md and issue #1072).
+#
+# Every paging alert in monitoring/prometheus/*.yml must carry a
+# `runbook_url` annotation that resolves to an existing heading in
+# docs/incident-response.md, so on-call never has to search the runbook by
+# hand mid-incident. A new alert added without a matching runbook section
+# fails this job. See scripts/check-alert-runbook-links.mjs.
+#
+# Run locally:
+#   pnpm run alert-runbook:check
+
+on:
+  pull_request:
+    branches:
+      - main
+      - dev
+    paths:
+      - 'monitoring/prometheus/**'
+      - 'docs/incident-response.md'
+      - 'scripts/check-alert-runbook-links.mjs'
+  push:
+    branches:
+      - main
+      - dev
+    paths:
+      - 'monitoring/prometheus/**'
+      - 'docs/incident-response.md'
+      - 'scripts/check-alert-runbook-links.mjs'
+  schedule:
+    # Daily at 06:45 UTC — catches drift even without a triggering PR.
+    - cron: '45 6 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  pnpm-cache:
+    uses: ./.github/workflows/reusable-cache-pnpm.yml
+
+  alert-runbook-links:
+    name: alert runbook links
+    needs: pnpm-cache
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm with store cache
+        uses: ./.github/actions/setup-pnpm
+        with:
+          install-args: --frozen-lockfile --ignore-scripts
+
+      - name: Run alert-runbook-link check
+        run: node scripts/check-alert-runbook-links.mjs --json=alert-runbook-report.json
+
+      - name: Upload report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: alert-runbook-link-report
+          path: alert-runbook-report.json
+          if-no-files-found: ignore

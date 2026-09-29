@@ -81,6 +81,12 @@ export function buildOracleCacheKey(request: OracleVerificationRequest): string 
 
 class InMemoryOracleCache implements OracleCacheReaderWriter {
   private readonly entries = new Map<string, OracleCacheEntry & { expiresAtMs: number }>();
+  /**
+   * Last-known-good store for degraded mode (issue #1057): updated on every
+   * set, never evicted by TTL, so a total source outage can still serve the
+   * most recent answer marked stale.
+   */
+  private readonly lastKnown = new Map<string, OracleCacheEntry>();
 
   async get(key: string): Promise<OracleCacheEntry | null> {
     const entry = this.entries.get(key);
@@ -112,6 +118,15 @@ class InMemoryOracleCache implements OracleCacheReaderWriter {
       generatedAtMs,
       expiresAtMs: Date.now() + ttlSeconds * 1000,
     });
+    this.lastKnown.set(key, { key, response, generatedAtMs });
+  }
+
+  async getStale(key: string): Promise<OracleCacheEntry | null> {
+    const entry = this.lastKnown.get(key);
+    if (!entry) {
+      return null;
+    }
+    return { key: entry.key, response: entry.response, generatedAtMs: entry.generatedAtMs };
   }
 
   async invalidateByPrefix(prefix: string): Promise<number> {
@@ -157,6 +172,25 @@ class RedisOracleCache implements OracleCacheReaderWriter {
     await this.client.set(key, JSON.stringify(payload), {
       EX: ttlSeconds,
     });
+    // Last-known-good backup for degraded mode (issue #1057): a separate
+    // key with a long TTL so a total source outage can still serve the most
+    // recent answer marked stale.
+    await this.client.set(`${key}:stale`, JSON.stringify(payload), {
+      EX: 24 * 60 * 60,
+    });
+  }
+
+  async getStale(key: string): Promise<OracleCacheEntry | null> {
+    const raw = await this.client.get(`${key}:stale`);
+    if (!raw) {
+      return null;
+    }
+
+    try {
+      return JSON.parse(raw) as OracleCacheEntry;
+    } catch {
+      return null;
+    }
   }
 
   async invalidateByPrefix(prefix: string): Promise<number> {

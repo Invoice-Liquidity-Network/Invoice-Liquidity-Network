@@ -123,6 +123,8 @@ function shouldAllowRequest(destination: string): boolean {
 // ── Dead Letter Queue ────────────────────────────────────────────────────────
 
 export interface DeadLetterEntry {
+  /** Stable operator-facing identifier (timestamp-rand suffix). */
+  id: string;
   channel: 'email' | 'sms' | 'webhook';
   destination: string;
   subscriptionId: string;
@@ -142,9 +144,33 @@ export interface RetryMetrics {
   deadLetterEntries: DeadLetterEntry[];
 }
 
+export const MAX_RETRIES = 3;
+export const MAX_RETRY_DELAY_MS = 30000;
+export const DLQ_ALERT_THRESHOLD = 10;
+
+const MAX_RETRY_DELAY = MAX_RETRY_DELAY_MS;
+
 const deadLetterQueue: DeadLetterEntry[] = [];
 let totalRetries = 0;
 let activeRetries = 0;
+
+function newDeadLetterId(): string {
+  return `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+}
+
+function pushDeadLetter(entry: Omit<DeadLetterEntry, 'id' | 'timestamp'>): DeadLetterEntry {
+  const full: DeadLetterEntry = { ...entry, id: newDeadLetterId(), timestamp: Date.now() };
+  deadLetterQueue.push(full);
+  checkDlqAlertThreshold();
+  return full;
+}
+function checkDlqAlertThreshold(): void {
+  if (deadLetterQueue.length > DLQ_ALERT_THRESHOLD) {
+    console.warn(
+      `[DLQ ALERT] Dead-letter queue accumulation exceeds threshold: ${deadLetterQueue.length} > ${DLQ_ALERT_THRESHOLD}`
+    );
+  }
+}
 
 export function getRetryMetrics(): RetryMetrics {
   return {
@@ -159,6 +185,54 @@ export function clearDeadLetterQueue(): void {
   deadLetterQueue.length = 0;
 }
 
+export function getDeadLetterEntries(): DeadLetterEntry[] {
+  return [...deadLetterQueue];
+}
+
+export function getDeadLetterCount(): number {
+  return deadLetterQueue.length;
+}
+
+export function replayDeadLetter(entryId: string): void {
+  const entry = deadLetterQueue.find((e) => e.id === entryId || String(e.timestamp) === entryId);
+  if (!entry) {
+    throw new Error(`Dead-letter entry with id ${entryId} not found`);
+  }
+
+  const subscription = {
+    id: entry.subscriptionId,
+    address: entry.destination,
+    channel: entry.channel,
+    destination: entry.destination,
+    email: entry.channel === 'email' ? entry.destination : undefined,
+    webhookUrl: entry.channel === 'webhook' ? entry.destination : undefined,
+    webhook_secret: entry.channel === 'webhook' ? '' : undefined,
+    webhookStatus: 'active' as const,
+    active: true,
+  };
+
+  const payload: NotificationPayload = {
+    trigger: entry.trigger,
+    invoice: entry.invoice,
+    recipientAddress: entry.destination,
+    subject: entry.subject,
+    message: entry.message,
+    actor: 'freelancer',
+  };
+
+  deadLetterQueue.splice(deadLetterQueue.indexOf(entry), 1);
+  // Note: deliverNotification dead-letters internally on exhaustion (email
+  // and SMS via retryWithBackoff's onDeadLetter, webhooks via sendWebhook),
+  // so a rejection here means the entry is already re-queued — logging only,
+  // otherwise the same failure would land in the queue twice.
+  deliverNotification(subscription as Subscription, payload).catch((error: any) => {
+    console.error(
+      `[delivery] replay of dead-letter ${entry.id} failed (already re-queued):`,
+      error?.message ?? error
+    );
+  });
+}
+
 async function retryWithBackoff<T>(
   fn: () => Promise<T>,
   options: {
@@ -169,7 +243,7 @@ async function retryWithBackoff<T>(
     onDeadLetter?: (lastError: string) => void;
   }
 ): Promise<T> {
-  const maxRetries = options.maxRetries ?? CONFIG.maxWebhookRetry;
+  const maxRetries = options.maxRetries ?? MAX_RETRIES;
   const baseDelayMs = options.baseDelayMs ?? CONFIG.webhookBackoffBaseMs;
 
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
@@ -185,7 +259,7 @@ async function retryWithBackoff<T>(
         activeRetries++;
         totalRetries++;
         options.onRetry?.(attempt, errorMessage);
-        const backoff = baseDelayMs * 2 ** (attempt - 1);
+        const backoff = Math.min(baseDelayMs * 2 ** (attempt - 1), MAX_RETRY_DELAY);
         await delay(backoff);
       } else {
         options.onDeadLetter?.(errorMessage);
@@ -502,7 +576,7 @@ export async function sendWebhook(
       attempts: attempt,
       error: errorMessage,
     });
-    deadLetterQueue.push({
+    pushDeadLetter({
       channel: 'webhook',
       destination: subscription.destination,
       subscriptionId: subscription.id,
@@ -512,7 +586,6 @@ export async function sendWebhook(
       message: payload.message,
       lastError: errorMessage ?? 'Unknown error',
       attempts: attempt,
-      timestamp: Date.now(),
     });
     recordCircuitFailure(destination);
     safeCreateAudit({
@@ -543,7 +616,7 @@ export async function sendWebhook(
     error: errorMessage,
   });
 
-  const backoff = CONFIG.webhookBackoffBaseMs * 2 ** (attempt - 1);
+  const backoff = Math.min(CONFIG.webhookBackoffBaseMs * 2 ** (attempt - 1), MAX_RETRY_DELAY);
   await delay(backoff);
   await sendWebhook(subscription, payload, attempt + 1, id, ts);
 }

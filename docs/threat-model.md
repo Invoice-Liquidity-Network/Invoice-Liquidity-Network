@@ -44,6 +44,8 @@ Out of scope:
 | API / Indexer | Scripted abuser or botnet | Horizon or RPC query floods, streaming abuse, pagination abuse, cache-busting, or expensive filter permutations | Server-side rate limiting, per-IP quotas, request timeouts, pagination caps, indexed query patterns, and backpressure on streams | Distributed attacks and legitimate high-volume usage can still exhaust shared infrastructure |
 | API / Indexer | Attacker trying to manipulate protocol state perception | Feeding stale or partial event data to dashboards, replaying responses, or desynchronising indexers | Source data should be derived from canonical network responses, store cursor/ledger markers, verify latest ledger continuity, and surface freshness metadata | Indexers are still eventually consistent and can lag the chain temporarily |
 | API / Indexer | Adversarial client | Horizon RPC abuse via repeated simulation, transaction submission, or event polling | Separate read and write tiers, rate limit simulation and submission, enforce body size limits, log abusive patterns, and prefer self-hosted RPC for critical operations | Public RPC endpoints will always be a shared resource and can be degraded under load |
+| API / Indexer | Attacker or oracle provider | Oracle price manipulation, stale price feeds, or price deviation attacks | Cross-reference oracle prices against multiple independent sources, implement circuit breakers for suspicious price deltas, audit oracle provider code and architecture, rate-limit price-update transaction simulation | A sophisticated oracle attack can still exploit windows of time between price updates or coordination failures between oracle sources |
+| API / Indexer | Network partition, ledger fork, or chain reorganization | Indexer chain-reorg edge cases, missing ledger continuity checks, partial event ingestion leading to state divergence | Implement ledger-continuity verification, track parentLedgerHash across window boundaries, validate event ordering via transaction ledger sequence numbers, periodic reconciliation against canonical chain state | A ledger reorg affecting the indexer before reconciliation can still lead to temporary state divergence and mis-reporting |
 | Governance | Social engineer, impersonator, or malicious contributor | Phishing maintainers, fake “audit” requests, rogue governance links, or PRs that redirect treasury/control | Publicly documented maintainer list, explicit review requirements, off-channel confirmation for privileged actions, branch protection, and provenance checks for releases | Humans remain vulnerable to pressure, urgency, and impersonation |
 | Governance | Internal compromise of a trusted maintainer account | Malicious approvals, poisoned release notes, or misleading issue triage | Require at least two maintainer reviews for security-sensitive changes, use short-lived credentials, and verify release artifacts | A multi-account compromise can still bypass process controls |
 
@@ -236,6 +238,70 @@ Residual risk:
 - Off-chain systems are eventually consistent by design
 - A stale dashboard can still mislead users into taking a bad action
 
+### 3.3 Oracle Price Manipulation
+
+Attacker model:
+
+- A malicious or compromised oracle provider
+- An oracle provider with business incentives misaligned with the protocol
+- A network attacker intercepting oracle price updates
+- A front-runner observing price feed timing patterns
+
+Attack vector:
+
+- Supplying stale, artificially inflated, or manipulated price feeds for collateral assessment
+- Creating temporary price spikes or dips that trigger unintended funding gates or defaults
+- Coordinating price feeds across multiple oracles to create artificial consensus
+- Exploiting time windows between price updates to push through bad transactions
+- Diverging oracle sources such that different integrations see different prices
+
+Current mitigation:
+
+- Cross-reference oracle prices against multiple independent sources (decentralized oracle design)
+- Implement circuit breakers that reject price deltas exceeding expected volatility bounds
+- Audit oracle provider code, architecture, and incentive structure before integration
+- Log and monitor all oracle price updates and the reasoning behind large deltas
+- Rate-limit price-update transaction simulation to prevent abuse
+- Document the trust assumptions and operational dependencies for each oracle provider
+
+Residual risk:
+
+- A sophisticated oracle attack can exploit windows between price updates or desynchronization between oracle sources
+- An oracle provider compromise or incentive misalignment may not be detected in real-time
+- Dependent systems (frontend gates, liquidation triggers) can still be misled by coordinated oracle manipulation
+
+### 3.4 Indexer Chain Reorganization and Data Integrity
+
+Attacker model:
+
+- A network partition that causes the Stellar network or indexer to fork
+- A ledger reorganization (reorg) due to network-level consensus corrections
+- An indexer bug or network condition that causes partial event ingestion or gap
+- An attacker replaying stale events or hiding recent events from the indexer
+
+Attack vector:
+
+- Missing or incomplete ledger-continuity checks when ingesting new blocks
+- Building derived state without validating that the chain hash linkage is unbroken
+- Consuming indexer snapshots without verifying freshness and ancestry
+- Partial event ingestion (e.g., invoice submitted but funding missed) leading to state divergence
+- Replaying or re-ordering events such that the indexer sees a different timeline
+
+Current mitigation:
+
+- Implement mandatory ledger-continuity verification: validate `parentLedgerHash` at every block boundary
+- Track and validate transaction-level ledger sequence numbers and ordering
+- Periodically reconcile derived state against the canonical chain (e.g., fetch the latest invoice from Horizon and compare)
+- Expose freshness metadata (latest-block-time, latest-transaction-hash) in API responses
+- Keep a window of recent ledger hashes to detect and recover from shallow reorgs
+- Validate that events are immutable once finalized (e.g., no duplicate or contradictory transactions in the ledger)
+
+Residual risk:
+
+- A ledger reorg affecting the indexer before the next reconciliation pass can lead to temporary state divergence
+- Dependent systems relying on stale indexer snapshots may not detect the reorg immediately
+- A deep reorg (affecting many ledgers) can cause cascading state corrections across dependent systems
+
 ## 4. Governance and Social Engineering
 
 Governance is a trust boundary because attackers often target people before they target code.
@@ -290,9 +356,21 @@ The highest residual risks after the current mitigations are:
 1. User-side compromise through browser extensions or phishing
 2. Transaction manipulation between construction and signature
 3. RPC and indexer abuse that degrades availability
-4. Governance impersonation or maintainer compromise
+4. Oracle price manipulation and desynchronization between oracle sources
+5. Indexer chain-reorg edge cases and temporary state divergence
+6. Governance impersonation or maintainer compromise
 
 These risks are acceptable only as long as they remain visible, monitored, and covered by process controls before mainnet expansion.
+
+### Mitigations Cross-Reference
+
+The following new mitigations address the oracle and indexer threat vectors introduced in this refresh:
+
+- **Oracle price manipulation (3.3):** Mitigated by decentralized oracle design, circuit breakers, and cross-source price validation. See `oracle-service/src/fraud-heuristics.ts` for implementation.
+- **Indexer chain-reorg attacks (3.4):** Mitigated by ledger-continuity verification, transaction-level validation, and periodic reconciliation. See `indexer/src/ledger-processor.ts` for implementation.
+- **Indexer state divergence:** Monitored via freshness metadata and reconciliation alerts. See `indexer/src/state-reconciler.ts` for implementation.
+
+Any residual threat-model entry without a corresponding mitigation or monitoring point is flagged in code review and tracked as a separate issue.
 
 ## 7. Review Requirements
 

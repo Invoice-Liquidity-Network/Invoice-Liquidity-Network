@@ -85,6 +85,10 @@ tests/load/results/
 
 .docker-output/
 
+# Canary rollout scrape targets (issue #1095) — written/removed at runtime by
+# scripts/canary/register-target.mjs, not committed.
+monitoring/prometheus/canary-targets/
+
 # =============================================================================
 # Scratch files
 #

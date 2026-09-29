@@ -32,3 +32,13 @@ export type {
   RenderResult,
   TemplateTestResult,
 } from './template-engine';
+export {
+  DLQ_ALERT_THRESHOLD,
+  MAX_RETRIES,
+  MAX_RETRY_DELAY_MS,
+  getDeadLetterEntries,
+  getDeadLetterCount,
+  replayDeadLetter,
+  clearDeadLetterQueue,
+  getRetryMetrics,
+} from './delivery';

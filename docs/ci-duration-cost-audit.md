@@ -154,7 +154,24 @@ Uses raw `pnpm/action-setup@v4` + `actions/setup-node@v4` instead of the reusabl
 
 ---
 
-## 5. Summary
+## 5. Test-runtime budgets (Issue #1092)
+
+`core-test` (the `turbo run test` step, item #1 in the inventory above) is now gated by a per-package runtime budget — see [docs/test-runtime-budgets.md](./test-runtime-budgets.md) for the full table and the enforcement mechanism (`scripts/check-test-runtime-budgets.mjs`, wired into `ci.yml::core-test` and, for `backend/`'s Cargo suite, directly into `ci.yml::test`). Headline numbers from the first full-monorepo measurement pass:
+
+| Package | Measured | Budget |
+|---|---|---|
+| `iln-notifications` (slowest) | 68.6s | 90s |
+| `@iln/react` | 34.6s | 50s |
+| `@iln/sdk-next` (packages/sdk) | 34.0s | 50s |
+| root `scripts/__tests__` (vitest) | 0.6–1.5s | 15s |
+
+**Notable finding**: `notifications/`'s measured 68.6s test runtime is already **more than double** the 30s figure this document's predecessor (docs/test-runtime-budgets.md's "Initial Budgets (Example)" table) had assumed — that number was never actually enforced, so the drift went unnoticed. The budget above (90s) gives it headroom over the real current runtime rather than masking the regression; the underlying slowness (11 of 17 test files failing/erroring, which likely correlates with retry/backoff paths burning wall-clock time) is a separate, pre-existing issue for whoever owns `notifications/` to investigate — this audit surfaces it but does not fix it.
+
+This closes optimization item #2's *visibility* gap for `oracle-service` from a different angle: `core-test`'s unconditional `turbo run test` already exercises `oracle-service`'s suite (confirmed via the turbo run summary — `@iln/oracle-service#test`, 17.4s), and it now has an enforced budget (30s) too. The `node-tests` job's path-filter gap noted in item #2 is a separate, still-open item.
+
+---
+
+## 6. Summary
 
 | Metric | Current | After optimizations (est.) |
 |--------|---------|--------------------------|

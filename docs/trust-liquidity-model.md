@@ -22,4 +22,32 @@ This document represents the finalized Trust & Liquidity Model for the Invoice L
 - **Final Decision**: We have selected regulated stablecoin issuers (like Circle for USDC) combined with Stellar Anchor Network members for local currency disbursement. This dual-anchor strategy guarantees near-instant USD-equivalent settlement while providing localized rails for SMEs who prefer native fiat.
 
 ---
-*These decisions mark the conclusion of the Trust & Liquidity Model design phase and will govern the v1 mainnet deployment.*
+
+## 5. Settlement-Anchor Partner Failure & Insolvency Analysis
+
+This section analyzes protocol exposure, failure modes, and recovery paths in the event that a settlement-anchor partner experiences either a temporary operational outage or a permanent insolvency event.
+
+### 5.1 Scenario Classification & Risk Exposure
+
+| Failure Scenario | Root Cause | Impacted Phase | User Fund Exposure | Protocol Response / Fallback |
+|---|---|---|---|---|
+| **Temporary Outage** | API downtime, SEP-24/SEP-31 endpoint failure, banking window delays | In-flight payout or deposit | Zero capital loss; temporary delay in fiat payout | Automatic transaction timeout revert; retry via secondary Stellar anchor |
+| **Anchor Insolvency** | Anchor bankruptcy, regulatory seizure, loss of fiat reserve backing | Fiat off-ramp holding reserves | On-chain Soroban funds remain safe; unredeemed fiat vouchers at risk | Multi-anchor diversification, on-chain circuit breakers, treasury insurance buffer |
+
+### 5.2 Recourse & Fallback Mechanics
+
+1. **Smart Contract Escrow Safety**:
+   - Soroban smart contract escrow funds are non-custodial and locked against on-chain conditions. Anchor downtime does not allow unauthorized withdrawal of on-chain collateral or LP funds.
+2. **Timelocked Auto-Revert**:
+   - If an anchor fails to confirm fiat delivery within the designated SEP-24 completion window (default: 24 hours), the smart contract state machine allows the borrower or funder to trigger an automated timelocked cancellation, releasing locked assets back to the original caller.
+3. **Multi-Anchor Fallback Routing**:
+   - The protocol client maintains a registry of active SEP-compliant Stellar anchors per geographic jurisdiction. When an anchor endpoint fails health checks or exceeds error thresholds, client routing automatically shifts new off-ramp volume to alternative secondary anchors.
+
+### 5.3 Protocol Mitigations & Risk Controls
+
+- **Anchor Diversification**: The protocol requires at least two independent Stellar Anchor Network partners per supported currency corridor (e.g., LATAM BRL/MXN, SEA IDR/PHP).
+- **Automated Circuit Breakers**: If an anchor's error rate exceeds 5% over a 15-minute sliding window, the protocol automatically pauses new settlement assignments to that anchor.
+- **Treasury First-Loss Protection**: In the event of a catastrophic anchor insolvency impacting in-transit user funds, the protocol's First-Loss Provision treasury buffer absorbs verified losses up to the defined cap before LP principal is impacted.
+
+---
+*These decisions mark the conclusion of the Trust & Liquidity Model design phase and govern the v1 mainnet deployment.*

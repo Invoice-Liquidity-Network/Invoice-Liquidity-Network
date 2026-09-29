@@ -68,6 +68,32 @@ new ILNSdk(config: ILNSdkConfig)
 | `timeouts` | `object` | No | Per-operation timeout overrides (`readMs`, `writeMs`, `simulationMs`) |
 | `cache` | `CacheConfig` | No | Read-operation cache (`{ ttl, storage, enabled }`) |
 | `offline` | `OfflineConfig` | No | Enable the offline write queue; `{}` for defaults |
+| `batching` | `RequestBatchingOptions \| boolean` | No | Opt-in request batching & deduplication for near-simultaneous read operations (`{ enabled: true, windowMs: 10 }`) |
+
+#### Request Batching & Deduplication (Opt-In)
+
+The SDK includes an opt-in request-batching and deduplication layer (`batching`) that coalesces near-simultaneous or in-flight read operations (such as `getInvoice`) from consumer applications (e.g. frontend list views).
+
+```typescript
+const sdk = new ILNSdk({
+  ...ILN_TESTNET,
+  batching: {
+    enabled: true,
+    windowMs: 10,       // Coalescing window in ms (default: 10ms)
+    deduplicate: true,  // Coalesce in-flight identical requests
+  },
+});
+
+// Near-simultaneous calls for the same resource are coalesced into 1 RPC request:
+const [invA, invB] = await Promise.all([
+  sdk.getInvoice(42n),
+  sdk.getInvoice(42n),
+]);
+
+// Inspect call reduction metrics:
+const metrics = sdk.getBatchingMetrics();
+console.log(`Saved ${metrics.rpcCallsSaved} RPC calls (${metrics.reductionPercentage}% reduction)`);
+```
 
 #### Invoice Operations
 

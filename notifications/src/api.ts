@@ -27,7 +27,7 @@ import {
   validateTrigger,
 } from './config';
 import type { NotificationTrigger } from './types';
-import { sendWebhook } from './delivery';
+import { getDeadLetterCount, getDeadLetterEntries, getRetryMetrics, replayDeadLetter, sendWebhook } from './delivery';
 import { createPreferencesRouter } from './preferences-api';
 import { digestScheduler, DigestScheduler } from './digest';
 import { preferencesService } from './preferences';

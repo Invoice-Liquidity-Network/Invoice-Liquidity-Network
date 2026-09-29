@@ -1,5 +1,12 @@
 import Database from 'better-sqlite3';
-import { dbQueryDuration, dbErrorsTotal, lastProcessedLedger, cursorUpdatedAt } from './metrics';
+import {
+  dbQueryDuration,
+  dbErrorsTotal,
+  lastProcessedLedger,
+  cursorUpdatedAt,
+  analyticsQueryDuration,
+  analyticsQueryExceededBudget,
+} from './metrics';
 import { CONFIG } from './config';
 import type { ILNEvent, Invoice } from './types';
 
@@ -19,7 +26,32 @@ function measure<T>(label: string, fn: () => T): T {
     _queryCount++;
     _totalQueryTime += elapsed;
     if (elapsed > SLOW_QUERY_THRESHOLD_MS) {
-      console.warn(`[DB] Slow query (${elapsed}ms): ${label}`);
+      throw new Error(`[DB] Query exceeded performance budget (${elapsed}ms): ${label}`);
+    }
+  }
+}
+
+/**
+ * Wrap an analytics query with timing, budget enforcement, and isolation
+ * metrics. Analytics queries are routed to the replica connection when
+ * configured, so they never contend with production read/write traffic.
+ */
+function measureAnalytics<T>(label: string, fn: () => T): T {
+  const start = Date.now();
+  try {
+    return fn();
+  } finally {
+    const elapsed = Date.now() - start;
+    try {
+      analyticsQueryDuration.observe(elapsed / 1000);
+      if (elapsed > CONFIG.analyticsQueryBudgetMs) {
+        analyticsQueryExceededBudget.inc();
+        console.warn(
+          `[DB] Analytics query exceeded budget (${elapsed}ms > ${CONFIG.analyticsQueryBudgetMs}ms): ${label}`
+        );
+      }
+    } catch {
+      /* metrics failure is non-fatal */
     }
   }
 }
@@ -27,6 +59,7 @@ function measure<T>(label: string, fn: () => T): T {
 // ─── Singleton connection ─────────────────────────────────────────────────────
 
 let _db: Database.Database | null = null;
+let _analyticsDb: Database.Database | null = null;
 
 /** Return the singleton database connection, creating and migrating it on first call. */
 export function getDb(): Database.Database {
@@ -34,6 +67,29 @@ export function getDb(): Database.Database {
     _db = createDb(CONFIG.dbPath);
   }
   return _db;
+}
+
+/**
+ * Return the analytics-dedicated database connection.
+ *
+ * When ANALYTICS_DB_PATH is configured, analytics queries run against a
+ * separate read-only SQLite connection (typically pointing at the same WAL
+ * file or a filesystem-level replica). This isolates analytics I/O from the
+ * production read/write path so an expensive aggregation cannot starve
+ * latency-sensitive reads.
+ *
+ * When unconfigured, falls back to the primary connection for backwards
+ * compatibility.
+ */
+export function getAnalyticsDb(): Database.Database {
+  if (CONFIG.analyticsDbPath) {
+    if (!_analyticsDb) {
+      _analyticsDb = new Database(CONFIG.analyticsDbPath, { readonly: true });
+      _analyticsDb.pragma('journal_mode = WAL');
+    }
+    return _analyticsDb;
+  }
+  return getDb();
 }
 
 /** Create a new database at the given path (use ":memory:" for tests). */
@@ -48,6 +104,11 @@ export function createDb(path: string): Database.Database {
 /** Override the singleton. Used in tests to inject an in-memory database. */
 export function setDb(db: Database.Database): void {
   _db = db;
+}
+
+/** Override the analytics singleton. Used in tests. */
+export function setAnalyticsDb(db: Database.Database | null): void {
+  _analyticsDb = db;
 }
 
 // ─── Schema migrations ────────────────────────────────────────────────────────
@@ -308,8 +369,8 @@ export interface LPStat {
 }
 
 export function getProtocolStats(): ProtocolStats {
-  const db = getDb();
-  const row = measure('getProtocolStats', () =>
+  const db = getAnalyticsDb();
+  const row = measureAnalytics('getProtocolStats', () =>
     db
       .prepare(
         `SELECT
@@ -336,8 +397,8 @@ export function getProtocolStats(): ProtocolStats {
 }
 
 export function getLPStats(address: string): LPStats {
-  const db = getDb();
-  const row = measure(`getLPStats(${address})`, () =>
+  const db = getAnalyticsDb();
+  const row = measureAnalytics(`getLPStats(${address})`, () =>
     db
       .prepare(
         `SELECT
@@ -365,8 +426,8 @@ export function getLPStats(address: string): LPStats {
 }
 
 export function getFreelancerStats(address: string): FreelancerStats {
-  const db = getDb();
-  const row = measure(`getFreelancerStats(${address})`, () =>
+  const db = getAnalyticsDb();
+  const row = measureAnalytics(`getFreelancerStats(${address})`, () =>
     db
       .prepare(
         `SELECT
@@ -388,15 +449,67 @@ export function getFreelancerStats(address: string): FreelancerStats {
   };
 }
 
+/**
+ * Allowed field names for projection filtering on the history endpoint.
+ * Restricting to a known set prevents SQL injection via column names.
+ */
+const ALLOWED_PROJECTION_FIELDS = new Set([
+  'id', 'freelancer', 'payer', 'amount', 'due_date', 'discount_rate',
+  'status', 'funder', 'funded_at', 'created_at', 'updated_at',
+]);
+
 export function getInvoiceHistory(
   address: string,
-  role: 'freelancer' | 'payer' | 'funder'
-): Invoice[] {
+  role: 'freelancer' | 'payer' | 'funder',
+  fields?: string[]
+): Invoice[] | Record<string, unknown>[] {
+  if (fields && fields.length > 0) {
+    const validFields = fields.filter((f) => ALLOWED_PROJECTION_FIELDS.has(f));
+    if (validFields.length > 0) {
+      return queryInvoicesProjected({ [role]: address }, validFields);
+    }
+  }
   return queryInvoices({ [role]: address });
 }
 
-export function getTopLPs(limit: number, period: string): LPStat[] {
+/**
+ * Return invoices matching the filter with only the requested columns.
+ * Reduces payload size when callers only need a subset of fields.
+ */
+function queryInvoicesProjected(
+  filter: InvoiceFilter,
+  fields: string[]
+): Record<string, unknown>[] {
   const db = getDb();
+  const columns = fields.join(', ');
+  const clauses: string[] = [];
+  const params: (string | number)[] = [];
+
+  if (filter.status) {
+    clauses.push('status = ?');
+    params.push(filter.status);
+  }
+  if (filter.freelancer) {
+    clauses.push('freelancer = ?');
+    params.push(filter.freelancer);
+  }
+  if (filter.payer) {
+    clauses.push('payer = ?');
+    params.push(filter.payer);
+  }
+  if (filter.funder) {
+    clauses.push('funder = ?');
+    params.push(filter.funder);
+  }
+
+  const where = clauses.length > 0 ? `WHERE ${clauses.join(' AND ')}` : '';
+  return db
+    .prepare(`SELECT ${columns} FROM invoices ${where} ORDER BY id ASC`)
+    .all(...params) as Record<string, unknown>[];
+}
+
+export function getTopLPs(limit: number, period: string): LPStat[] {
+  const db = getAnalyticsDb();
   const now = Date.now();
   const since =
     period === 'week'
@@ -412,7 +525,7 @@ export function getTopLPs(limit: number, period: string): LPStat[] {
 
   const params: (number | string)[] = since > 0 ? [since, limit] : [limit];
 
-  const rows = measure(`getTopLPs(${limit}, ${period})`, () =>
+  const rows = measureAnalytics(`getTopLPs(${limit}, ${period})`, () =>
     db
       .prepare(
         `SELECT
@@ -507,4 +620,14 @@ export function setCursorLedger(ledger: number): void {
   } catch {
     /* metrics failure is non-fatal */
   }
+}
+
+/** Rollback events and cursor to a specific ledger. */
+export function rollbackToLedger(ledger: number): void {
+  const db = getDb();
+  db.prepare('DELETE FROM events WHERE ledger > ?').run(ledger);
+  db.prepare('UPDATE cursor SET last_ledger = ? WHERE id = 1').run(ledger);
+  try {
+    lastProcessedLedger.set(ledger);
+  } catch {}
 }
