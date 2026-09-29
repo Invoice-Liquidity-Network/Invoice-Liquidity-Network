@@ -238,6 +238,18 @@ function runMigrations(db: SQLiteDatabase): void {
       nonce       TEXT    PRIMARY KEY,
       redeemed_at INTEGER NOT NULL
     );
+
+    CREATE TABLE IF NOT EXISTS retention_deletion_audit (
+      id            INTEGER PRIMARY KEY AUTOINCREMENT,
+      category      TEXT    NOT NULL,
+      cutoff_at     INTEGER NOT NULL,
+      eligible_rows INTEGER NOT NULL,
+      deleted_rows  INTEGER NOT NULL,
+      run_mode      TEXT    NOT NULL CHECK (run_mode IN ('dry-run', 'deleted', 'alerted')),
+      created_at    INTEGER NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_retention_deletion_audit_created
+      ON retention_deletion_audit(created_at);
   `);
 }
 
@@ -373,18 +385,31 @@ export function getSubscriptionById(id: number): Subscription | undefined {
 }
 
 export function deleteSubscriptionById(id: number): boolean {
-  const result = getDb().prepare('DELETE FROM subscriptions WHERE id = ?').run(id);
-  return result.changes > 0;
+  return deleteSubscriptions([id]);
 }
 
 export function deleteSubscriptionByAddressAndDestination(
   address: string,
   destination: string
 ): boolean {
-  const result = getDb()
-    .prepare('DELETE FROM subscriptions WHERE stellar_address = ? AND destination = ?')
-    .run(address, destination);
-  return result.changes > 0;
+  const ids = getDb()
+    .prepare('SELECT id FROM subscriptions WHERE stellar_address = ? AND destination = ?')
+    .all(address, destination) as { id: number }[];
+  return deleteSubscriptions(ids.map(({ id }) => id));
+}
+
+function deleteSubscriptions(ids: number[]): boolean {
+  if (ids.length === 0) return false;
+  const db = getDb();
+  return db.transaction(() => {
+    for (const id of ids) {
+      db.prepare('DELETE FROM webhook_delivery_logs WHERE subscription_id = ?').run(id);
+      db.prepare("DELETE FROM dispatch_attempts WHERE json_extract(subscription, '$.id') = ?").run(id);
+    }
+    const placeholders = ids.map(() => '?').join(', ');
+    const result = db.prepare(`DELETE FROM subscriptions WHERE id IN (${placeholders})`).run(...ids);
+    return result.changes > 0;
+  })();
 }
 
 export function createWebhookDeliveryLog(log: {
@@ -1110,39 +1135,106 @@ export function recordDispatchAttemptFailure(id: string, error: string): void {
  * - webhook_delivery_logs: 90 days (from created_at)
  * - delivery_audit_log: 90 days (from created_at) — matches webhook logs as the
  *   durable counterpart independent of retry state.
- * - dispatch_attempts: 90 days for TERMINAL (delivered) rows only. A `pending`
+ * - dispatch_attempts: 90 days for TERMINAL rows only. A `pending`
  *   row is undelivered work, so purging it would silently drop the
  *   notification and break the at-least-once guarantee (issue #1059).
+ * - redeemed_unsubscribe_tokens: 90 days from redemption.
  *
- * Returns counts of purged rows per table.
+ * Each category's eligibility and deletion count is recorded without storing
+ * recipient data, so the purge itself remains auditable.
  */
-export function purgeExpiredDeliveryLogs(nowMs: number = Date.now()): {
+export function purgeExpiredDeliveryLogs(
+  nowMs: number = Date.now(),
+  options: { dryRun?: boolean; maxRows?: number } = {}
+): {
   sentNotifications: number;
   webhookLogs: number;
   auditLogs: number;
   dispatchAttempts: number;
+  redeemedTokens: number;
+  totalEligible: number;
+  dryRun: boolean;
+  alertThresholdExceeded: boolean;
 } {
   const thirtyDaysMs = 30 * 24 * 60 * 60 * 1000;
   const ninetyDaysMs = 90 * 24 * 60 * 60 * 1000;
 
   const sentCutoff = nowMs - thirtyDaysMs;
   const longCutoff = nowMs - ninetyDaysMs;
+  const dryRun = options.dryRun ?? false;
+  const db = getDb();
 
-  const sentRes = getDb().prepare('DELETE FROM sent_notifications WHERE sent_at < ?').run(sentCutoff);
-  const webhookRes = getDb()
-    .prepare('DELETE FROM webhook_delivery_logs WHERE created_at < ?')
-    .run(longCutoff);
-  const auditRes = getDb()
-    .prepare('DELETE FROM delivery_audit_log WHERE created_at < ?')
-    .run(longCutoff);
-  const dispatchRes = getDb()
-    .prepare("DELETE FROM dispatch_attempts WHERE status = 'delivered' AND created_at < ?")
-    .run(longCutoff);
+  return db.transaction(() => {
+    const categories = [
+      {
+        name: 'sent_notifications',
+        cutoff: sentCutoff,
+        countSql: 'SELECT COUNT(*) AS count FROM sent_notifications WHERE sent_at < ?',
+        deleteSql: 'DELETE FROM sent_notifications WHERE sent_at < ?',
+      },
+      {
+        name: 'webhook_delivery_logs',
+        cutoff: longCutoff,
+        countSql: 'SELECT COUNT(*) AS count FROM webhook_delivery_logs WHERE created_at < ?',
+        deleteSql: 'DELETE FROM webhook_delivery_logs WHERE created_at < ?',
+      },
+      {
+        name: 'delivery_audit_log',
+        cutoff: longCutoff,
+        countSql: 'SELECT COUNT(*) AS count FROM delivery_audit_log WHERE created_at < ?',
+        deleteSql: 'DELETE FROM delivery_audit_log WHERE created_at < ?',
+      },
+      {
+        name: 'dispatch_attempts',
+        cutoff: longCutoff,
+        countSql: "SELECT COUNT(*) AS count FROM dispatch_attempts WHERE status IN ('delivered', 'failed') AND created_at < ?",
+        deleteSql: "DELETE FROM dispatch_attempts WHERE status IN ('delivered', 'failed') AND created_at < ?",
+      },
+      {
+        name: 'redeemed_unsubscribe_tokens',
+        cutoff: longCutoff,
+        countSql: 'SELECT COUNT(*) AS count FROM redeemed_unsubscribe_tokens WHERE redeemed_at < ?',
+        deleteSql: 'DELETE FROM redeemed_unsubscribe_tokens WHERE redeemed_at < ?',
+      },
+    ];
+    const eligible = categories.map((category) => ({
+      ...category,
+      count: (db.prepare(category.countSql).get(category.cutoff) as { count: number }).count,
+    }));
+    const totalEligible = eligible.reduce((sum, category) => sum + category.count, 0);
+    const alertThresholdExceeded =
+      options.maxRows !== undefined && totalEligible > options.maxRows;
+    const shouldDelete = !dryRun && !alertThresholdExceeded;
+    const deleted: Record<string, number> = {};
 
-  return {
-    sentNotifications: sentRes.changes,
-    webhookLogs: webhookRes.changes,
-    auditLogs: auditRes.changes,
-    dispatchAttempts: dispatchRes.changes,
-  };
+    for (const category of eligible) {
+      const deletedRows = shouldDelete
+        ? db.prepare(category.deleteSql).run(category.cutoff).changes
+        : 0;
+      deleted[category.name] = deletedRows;
+      db.prepare(
+        `INSERT INTO retention_deletion_audit
+          (category, cutoff_at, eligible_rows, deleted_rows, run_mode, created_at)
+         VALUES (?, ?, ?, ?, ?, ?)`
+      ).run(
+        category.name,
+        category.cutoff,
+        category.count,
+        deletedRows,
+        alertThresholdExceeded ? 'alerted' : shouldDelete ? 'deleted' : 'dry-run',
+        nowMs
+      );
+    }
+
+    return {
+      sentNotifications: deleted.sent_notifications,
+      webhookLogs: deleted.webhook_delivery_logs,
+      auditLogs: deleted.delivery_audit_log,
+      dispatchAttempts: deleted.dispatch_attempts,
+      redeemedTokens: deleted.redeemed_unsubscribe_tokens,
+      totalEligible,
+      dryRun: dryRun || alertThresholdExceeded,
+      alertThresholdExceeded,
+    };
+  })();
 }

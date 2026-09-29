@@ -535,6 +535,7 @@ export async function createOracleApp(
     // policy treats that as `unknown` and leaves confidence untouched.
     externalProvider: options.externalProvider,
     kybProvider: options.kybProvider,
+    requireKyb: options.requireKyb ?? process.env.NODE_ENV === 'production',
     cacheTtlSeconds: resolved.cacheTtlSeconds,
     maxOracleAgeMs: resolved.maxOracleAgeMs,
     metrics,

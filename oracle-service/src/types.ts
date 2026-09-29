@@ -100,7 +100,8 @@ export type OracleCompositionOutcome =
   | 'verified-heuristic-only'
   | 'rejected-fraud-signals'
   | 'rejected-low-trust'
-  | 'rejected-stale-data';
+  | 'rejected-stale-data'
+  | 'rejected-kyb-unavailable';
 
 /** The heuristic sub-signal, reported alongside the composed verdict. */
 export interface OracleHeuristicSignal {
@@ -264,6 +265,8 @@ export interface OracleVerifierDependencies {
   historyProvider: (payer: string) => Promise<IndexerInvoiceHistoryEntry[]>;
   reputationProvider: (payer: string) => Promise<ReputationSnapshot>;
   kybProvider?: VerificationProvider;
+  /** Require a successful live KYB check before publishing a positive verdict. */
+  requireKyb?: boolean;
   cache?: OracleCacheReaderWriter;
   now?: () => number;
   cacheTtlSeconds?: number;
@@ -308,6 +311,8 @@ export interface OracleServiceOptions {
   reputationProvider?: (payer: string) => Promise<ReputationSnapshot>;
   externalProvider?: ExternalVerificationProvider;
   kybProvider?: VerificationProvider;
+  /** Require a successful live KYB check before publishing a positive verdict. */
+  requireKyb?: boolean;
   rateLimitWindowMs?: number;
   rateLimitMaxRequests?: number;
   enableRateLimit?: boolean;

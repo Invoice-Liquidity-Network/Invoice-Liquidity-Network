@@ -49,6 +49,8 @@ export const CONFIG = {
   archiveIntervalMs: Number(process.env.ARCHIVE_INTERVAL_MS ?? '86400000'),
   /** Retention period in days (default: 90 days). */
   archiveOlderThanDays: Number(process.env.ARCHIVE_OLDER_THAN_DAYS ?? '90'),
+  /** Permanently delete archived data after this many days (default: 7 years). */
+  archivePurgeOlderThanDays: Number(process.env.ARCHIVE_PURGE_OLDER_THAN_DAYS ?? '2555'),
   /** Whether automatic background archival is enabled. */
   archiveEnabled: process.env.ARCHIVE_ENABLED !== 'false',
   /** Enable automated backups (default: false). */
