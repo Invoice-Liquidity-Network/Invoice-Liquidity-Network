@@ -292,9 +292,21 @@ To enable the automated workflow, ensure:
 
 Set these secrets in the main repository settings:
 
-- `GITHUB_TOKEN` — Already available via `secrets.GITHUB_TOKEN`
+- `CROSS_REPO_RELEASE_TOKEN` — **required** for cross-repo tagging. A classic PAT
+  (or fine-grained PAT) with `contents: write` on `ILN-Smart-Contract` and
+  `ILN-Frontend`, plus `actions: write` to trigger the frontend workflow. The
+  workflow uses this instead of `GITHUB_TOKEN` because the automatically
+  provided token is scoped to this repository only and would silently fail to
+  tag the sibling repos. If the secret is unset the workflow falls back to
+  `github.token`, which only works for `dry_run: true`.
 - `NPM_TOKEN` — npm automation token with publish rights (for npm publish steps)
-- No additional secrets required for basic functionality
+
+Validate the workflow file against the current workspace without touching any
+GitHub API:
+
+```bash
+pnpm validate:coordinate-release
+```
 
 ### Discord Webhook (Optional)
 
@@ -307,10 +319,24 @@ To receive release notifications:
 
 ### Cross-Repo Access
 
-The workflow uses the GitHub token to access sibling repositories. Ensure:
+The workflow coordinates three repositories, all under the
+`Invoice-Liquidity-Network` org with `dev` as the default branch:
 
-- All three repositories are in the same organization
-- The token has sufficient permissions (typically default for same-org workflows)
+| Repository | Role | Tag applied |
+| --- | --- | --- |
+| `ILN-Smart-Contract` | Soroban contracts | `$VERSION` |
+| `Invoice-Liquidity-Network` | `@iln/sdk`, `@iln/sdk-next`, CLI, services | `sdk-$VERSION` |
+| `ILN-Frontend` | Next.js dApp | `frontend-$VERSION` |
+
+Ensure `CROSS_REPO_RELEASE_TOKEN` can write to all three, and always dry-run a
+canary tag first:
+
+```bash
+# Local validation — no API calls
+pnpm validate:coordinate-release -- --version v1.2.0-canary.1
+
+# Or dispatch the workflow itself with dry_run: true
+```
 
 ## Rollback
 
