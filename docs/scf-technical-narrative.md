@@ -223,15 +223,20 @@ following map records their distinct purposes:
 
 | Document | Purpose |
 | --- | --- |
-| [`SECURITY.md`](../SECURITY.md) | Canonical disclosure policy: supported versions, reporting channels, vulnerability classes, severity, response timelines, safe harbour. |
+| [`SECURITY.md`](../SECURITY.md) | Canonical disclosure policy: supported versions, reporting channels, vulnerability classes, severity, response timelines, safe harbour. Links the SDK Trust Model. |
+| [`docs/sdk-trust-model.md`](./sdk-trust-model.md) | **SCF-facing trust narrative for the SDK** — honest boundaries for Freighter signing, Soroban RPC trust, and the oracle/indexer/notifications blast radius. Cross-linked from all three repos' `SECURITY.md` files. |
 | [`docs/security-guide.md`](./security-guide.md) | Integrator- and operator-facing security practices: best practices, audit information, provenance verification, incident response. |
-| [`docs/security.md`](./security.md) | Navigation stub pointing to `SECURITY.md` and the security guide; kept so existing links resolve. |
+| [`docs/security.md`](./security.md) | Navigation stub pointing to `SECURITY.md`, the SDK Trust Model, and the security guide; kept so existing links resolve. |
 | [`docs/vulnerability-disclosure.md`](./vulnerability-disclosure.md) | Entryway for reporters: how to report, expected timelines, severity summary, links to the technical threat models. |
 | [`docs/threat-model.md`](./threat-model.md) | Protocol-wide attack surface analysis across SDK, frontend, API/indexer, and governance. |
 
 The contract repo's `SECURITY.md`/`docs/security.md` and the frontend repo's
 `SECURITY.md`/`docs/security.md` are component-specific implementations of the
-same unified policy.
+same unified policy. Both must surface a prominent link to
+[`docs/sdk-trust-model.md`](./sdk-trust-model.md) (canonical URL:
+`https://github.com/Invoice-Liquidity-Network/Invoice-Liquidity-Network/blob/dev/docs/sdk-trust-model.md`).
+Ready-to-paste sibling-repo snippets live in
+[`docs/sdk-trust-model-cross-repo.md`](./sdk-trust-model-cross-repo.md).
 
 ## References
 

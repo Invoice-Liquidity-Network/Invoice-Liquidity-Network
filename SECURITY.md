@@ -7,6 +7,14 @@ This policy defines the unified security and vulnerability disclosure policy for
 
 This unified policy ensures consistent severity classification, private disclosure channels, safe-harbour commitments, and response timelines across all ILN components.
 
+## SDK Trust Model (required reading)
+
+The SDK is a thin transaction builder: it validates address format and signer identity, then delegates key custody and network verification to Freighter (or your signer) and to Soroban RPC. It is the authoritative reference for what the SDK validates, what it delegates, and what integrators must protect themselves — including browser signing via Freighter and backend keypair signing.
+
+- **[SDK Trust Model](docs/sdk-trust-model.md)** — trust boundaries, key management, and the SDK-specific threat model
+
+Sibling repositories link the same document from their `SECURITY.md` files (wallet UX in the frontend; client authorization assumptions in the contracts). See the [SCF Technical Narrative](docs/scf-technical-narrative.md#security-documentation-map) for the cross-repo security documentation map, and [Cross-repo SDK Trust Model visibility](docs/sdk-trust-model-cross-repo.md) for ready-to-paste snippets.
+
 ## Supported Versions
 
 Security fixes are provided for the latest major version of each maintained ILN component. Pre-mainnet deployments are treated as test environments and must not be used with real funds unless the release notes explicitly say otherwise.
@@ -23,8 +31,6 @@ Security fixes are provided for the latest major version of each maintained ILN 
 ## Reporting a Vulnerability
 
 Please report suspected vulnerabilities privately. Do not open a public issue, discussion, or pull request with exploit details before the maintainers have investigated and shipped any necessary fix.
-
-For the SDK's security assumptions, trust boundaries, and key management guidelines, see the [SDK Trust Model](docs/sdk-trust-model.md). This document is the authoritative reference for understanding what the SDK validates, what it delegates, and what must be protected outside the SDK — including browser signing via Freighter and backend keypair signing.
 
 Use either reporting channel:
 
