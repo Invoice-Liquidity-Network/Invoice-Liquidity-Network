@@ -28,6 +28,7 @@ groups:
             alerts cannot detect this state. Check the process, its port and
             the network path from Prometheus first; then docs/monitoring.md
             section 8 for the per-service triage runbook.
+          runbook_url: https://github.com/Invoice-Liquidity-Network/Invoice-Liquidity-Network/blob/main/docs/incident-response.md#servicedown
 
   - name: indexer-ingestion
     interval: 30s
@@ -50,6 +51,7 @@ groups:
             The indexer is up but falling behind the ledger. Inspect the poller
             logs for RPC rate limiting (429) or timeouts, and SQLite lock
             status. Warning threshold per Signal 2: syncLag > 60s.
+          runbook_url: https://github.com/Invoice-Liquidity-Network/Invoice-Liquidity-Network/blob/main/docs/incident-response.md#indexercursorstale
 
       - alert: IndexerCursorStaleCritical
         expr: |
@@ -66,6 +68,7 @@ groups:
             Critical threshold per Signal 2: syncLag > 300s. Every downstream
             consumer (oracle verdicts, notifications) is now serving stale
             state. Restart the poller or replay from the last cursor checkpoint.
+          runbook_url: https://github.com/Invoice-Liquidity-Network/Invoice-Liquidity-Network/blob/main/docs/incident-response.md#indexercursorstalecritical
 
       - alert: IndexerDatabaseErrors
         expr: increase(iln_db_errors_total[10m]) > 0
@@ -79,6 +82,7 @@ groups:
           description: >-
             Signal 2 treats db: error as critical on the health endpoint; this
             rule surfaces the counter behind it. Check disk space and SQLITE_BUSY.
+          runbook_url: https://github.com/Invoice-Liquidity-Network/Invoice-Liquidity-Network/blob/main/docs/incident-response.md#indexerdatabaseerrors
 
   - name: notifications-degraded-mode
     interval: 30s
@@ -96,3 +100,4 @@ groups:
             Degraded mode is active: a primary provider is failing health
             checks. Deliveries still succeed, so the delivery SLO stays green.
             Check /health/providers and the provider dashboards.
+          runbook_url: https://github.com/Invoice-Liquidity-Network/Invoice-Liquidity-Network/blob/main/docs/incident-response.md#notificationsfallbackactive

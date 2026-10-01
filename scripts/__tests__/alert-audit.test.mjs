@@ -117,10 +117,84 @@ test('audit reports unknown metrics, ghost alerts, coverage, precision and recal
   assert.match(md, /Incidents with no covering rule\n\n- i3/);
 });
 
+test("a recording rule after an alert does not leak into that alert's expression", () => {
+  const text = `
+groups:
+  - name: g
+    rules:
+      - alert: First
+        expr: |
+          iln_first_total > 0
+        for: 1m
+        labels:
+          severity: warning
+      - record: slo:second:ratio
+        expr: rate(iln_second_total[5m])
+      - alert: Third
+        expr: slo:second:ratio > 1
+        for: 1m
+        labels:
+          severity: warning
+`;
+  const { rules, recordings } = parseRules(text);
+  assert.deepEqual(
+    rules.map((r) => r.name),
+    ['First', 'Third']
+  );
+  assert.deepEqual(metricsIn(rules[0].expr), ['iln_first_total']);
+  assert.deepEqual([...recordings], ['slo:second:ratio']);
+});
+
+test('a pending-metric decision is reported without failing, and goes stale once the metric exists', () => {
+  const ledger = {
+    ...LEDGER,
+    ruleDecisions: {
+      ...LEDGER.ruleDecisions,
+      Ghosted: { decision: 'pending-metric', reason: 'specified in #1108, not instrumented' },
+    },
+  };
+  const report = audit({
+    ruleFiles: [{ file: 'demo.yml', text: RULES }],
+    metricSources: [METRICS],
+    ledger,
+  });
+  assert.deepEqual(report.unknownMetrics, []);
+  assert.deepEqual(report.pendingMetrics, [
+    {
+      rule: 'Ghosted',
+      missing: ['oracle_never_emitted_total'],
+      reason: 'specified in #1108, not instrumented',
+    },
+  ]);
+  assert.deepEqual(report.staleDecisions, []);
+  const md = renderMarkdown(report);
+  assert.match(md, /waiting on instrumentation/);
+  assert.match(md, /Ghosted: oracle_never_emitted_total — specified in #1108/);
+
+  // Once the service emits the metric the exemption must not survive.
+  const instrumented =
+    METRICS + "export const c = new Counter({ name: 'oracle_never_emitted_total' });";
+  const later = audit({
+    ruleFiles: [{ file: 'demo.yml', text: RULES }],
+    metricSources: [instrumented],
+    ledger,
+  });
+  assert.deepEqual(later.pendingMetrics, []);
+  assert.deepEqual(later.staleDecisions, ['Ghosted']);
+  assert.match(renderMarkdown(later), /Stale `pending-metric` decisions/);
+});
+
 test('the repository rule set passes the audit', () => {
   const report = audit(loadInputs());
   assert.deepEqual(report.unknownMetrics, [], JSON.stringify(report.unknownMetrics));
+  assert.deepEqual(report.staleDecisions, []);
   assert.deepEqual(report.uncovered, []);
+  // The two #1108 rules are specified ahead of their metrics; they are
+  // visible in the report, not hidden.
+  assert.deepEqual(report.pendingMetrics.map((p) => p.rule).sort(), [
+    'ILNOraclePayloadDataCorruption',
+    'ILNStateSnapshotMismatchDetected',
+  ]);
   assert.ok(report.rules.some((r) => r.name === 'ServiceDown'));
   assert.ok(
     report.rules.every((r) => r.severity && r.for),

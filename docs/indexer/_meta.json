@@ -5,5 +5,6 @@
   "deployment": "Deployment",
   "api-reference": "API Reference",
   "troubleshooting": "Troubleshooting",
+  "fuzz-testing": "Fuzz Testing",
   "failover-plan": "Failover Plan"
 }

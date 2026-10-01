@@ -142,5 +142,11 @@ filing each postmortem (`docs/postmortems/PROCESS.md`).
    record a `ruleDecisions` entry (`retuned` or `removed`) with the reason.
    For every rule that should have fired and did not, fix the expression and
    record `retuned`.
-4. Commit the ledger, rule and report changes together; the `--check` mode in
+4. A rule may be written before its metric exists, to specify the signal a
+   drill or near-miss asks for (as the data-loss rules from #1108 are). Record
+   it as `pending-metric` with the reason and the issue; `--check` reports it
+   under "waiting on instrumentation" instead of failing, and fails the
+   decision as stale the moment a service registers the metric, so the
+   exemption cannot outlive the gap.
+5. Commit the ledger, rule and report changes together; the `--check` mode in
    CI keeps the two consistent.

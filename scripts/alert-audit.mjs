@@ -55,7 +55,14 @@ export function parseRules(yamlText, file = '<inline>') {
     const line = raw.replace(/\s+$/, '');
     const alert = line.match(/^\s*-\s*alert:\s*(\S+)/);
     const record = line.match(/^\s*-\s*record:\s*(\S+)/);
-    if (record) recordings.add(record[1]);
+    if (record) {
+      recordings.add(record[1]);
+      // A recording rule ends the previous alert: its `expr:` must not be
+      // appended to that alert's expression.
+      current = null;
+      inExpr = false;
+      continue;
+    }
     if (alert) {
       current = { name: alert[1], file, severity: null, for: null, expr: '' };
       rules.push(current);
@@ -108,9 +115,22 @@ export function audit({ ruleFiles, metricSources, ledger }) {
   const known = new Set([...emitted, ...recordings]);
   const ruleNames = new Set(rules.map((r) => r.name));
 
-  const unknownMetrics = rules
+  const decisions = ledger.ruleDecisions ?? {};
+  // A rule may be recorded in the ledger as `pending-metric`: its metric is
+  // specified but not instrumented yet. Such rules are reported instead of
+  // failing the audit, and the decision goes stale (fails) once the metric
+  // appears, so the exemption cannot outlive the gap it documents.
+  const pending = (name) => decisions[name]?.decision === 'pending-metric';
+  const withMissing = rules
     .map((r) => ({ rule: r.name, missing: metricsIn(r.expr).filter((m) => !known.has(m)) }))
     .filter((r) => r.missing.length > 0);
+  const unknownMetrics = withMissing.filter((r) => !pending(r.rule));
+  const pendingMetrics = withMissing
+    .filter((r) => pending(r.rule))
+    .map((r) => ({ ...r, reason: decisions[r.rule].reason ?? '' }));
+  const staleDecisions = rules
+    .filter((r) => pending(r.name) && metricsIn(r.expr).every((m) => known.has(m)))
+    .map((r) => r.name);
 
   const classRules = ledger.alertClasses ?? {};
   const incidents = ledger.incidents.map((incident) => {
@@ -156,6 +176,8 @@ export function audit({ ruleFiles, metricSources, ledger }) {
     emittedMetricCount: emitted.size,
     recordingRules: [...recordings],
     unknownMetrics,
+    pendingMetrics,
+    staleDecisions,
     ghostAlerts,
     incidents,
     precision: firedTotal.size === 0 ? null : firedCorrect.size / firedTotal.size,
@@ -163,7 +185,7 @@ export function audit({ ruleFiles, metricSources, ledger }) {
     coveredCount,
     uncovered: uncovered.map((i) => i.id),
     neverFired,
-    decisions: ledger.ruleDecisions ?? {},
+    decisions,
   };
 }
 
@@ -224,6 +246,21 @@ export function renderMarkdown(report) {
     for (const u of report.unknownMetrics) lines.push(`- ${u.rule}: ${u.missing.join(', ')}`);
     lines.push('');
   }
+  if (report.pendingMetrics.length) {
+    lines.push(
+      '## Rules waiting on instrumentation (ledger decision `pending-metric`, not failing)'
+    );
+    lines.push('');
+    for (const u of report.pendingMetrics)
+      lines.push(`- ${u.rule}: ${u.missing.join(', ')} — ${u.reason}`);
+    lines.push('');
+  }
+  if (report.staleDecisions.length) {
+    lines.push('## Stale `pending-metric` decisions (the metric now exists; retune the decision)');
+    lines.push('');
+    for (const r of report.staleDecisions) lines.push(`- ${r}`);
+    lines.push('');
+  }
   if (report.ghostAlerts.length) {
     lines.push('## Ghost alerts (cited in incident records, not defined here)');
     lines.push('');
@@ -270,6 +307,10 @@ function main() {
     if (report.uncovered.length)
       problems.push(
         `${report.uncovered.length} incident(s) have no covering rule and no accepted gap`
+      );
+    if (report.staleDecisions.length)
+      problems.push(
+        `${report.staleDecisions.length} pending-metric decision(s) are stale: the metric is emitted now`
       );
     if (problems.length) {
       process.stderr.write(`\n✗ alert audit failed: ${problems.join('; ')}\n`);

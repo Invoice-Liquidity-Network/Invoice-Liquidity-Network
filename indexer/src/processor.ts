@@ -1,5 +1,7 @@
-import { type rpc, scValToNative } from '@stellar/stellar-sdk';
-import { hasEvent, insertEvent, upsertInvoice, getInvoiceById } from './db';
+import type { rpc } from '@stellar/stellar-sdk';
+import { getDb, getInvoiceById, hasEvent, insertEvent, upsertInvoice } from './db';
+import { deadLetterEvent } from './deadLetter';
+import { decodeEvent, isValidInvoiceState } from './decode';
 import { eventsProcessedTotal, invoicesUpsertedTotal } from './metrics';
 import { invalidateInvoiceCache } from './cache';
 import { fetchInvoice } from './rpc';
@@ -62,9 +64,18 @@ export async function processEvent(event: rpc.Api.EventResponse): Promise<void> 
   }
 
   // ── Persist event + state atomically ─────────────────────────────────────
+  // The invoice row is rewritten only when the fetched state differs from the
+  // stored one, so an event that changes nothing does not churn the cache.
+  const existing = invoice ? getInvoiceById(ilnEvent.invoice_id) : undefined;
+  const isChanged =
+    invoice !== null &&
+    invoice !== undefined &&
+    (!existing ||
+      existing.status !== invoice.status ||
+      existing.funder !== (invoice.funder ?? null));
   getDb().transaction(() => {
     insertEvent(ilnEvent);
-    if (invoice) {
+    if (invoice && isChanged) {
       upsertInvoice(invoice);
     }
   })();
@@ -76,12 +87,8 @@ export async function processEvent(event: rpc.Api.EventResponse): Promise<void> 
   }
 
   if (invoice) {
-    const existing = getInvoiceById(invoiceId);
-    const isChanged = !existing || existing.status !== invoice.status || existing.funder !== (invoice.funder ?? null);
-
     if (isChanged) {
-      upsertInvoice(invoice);
-      await invalidateInvoiceCache(invoiceId);
+      await invalidateInvoiceCache(ilnEvent.invoice_id);
       try {
         invoicesUpsertedTotal.inc();
       } catch {

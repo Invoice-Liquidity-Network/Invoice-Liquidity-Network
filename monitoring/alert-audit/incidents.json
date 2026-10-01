@@ -109,6 +109,14 @@
     "IndexerDatabaseErrors": {
       "decision": "added",
       "reason": "Signal 2 lists db: error as critical; iln_db_errors_total existed with no rule."
+    },
+    "ILNStateSnapshotMismatchDetected": {
+      "decision": "pending-metric",
+      "reason": "Added by #1108 (data-loss detection) against iln_state_snapshot_hash_mismatch_total, which no service emits yet: the indexer has no on-chain state-root comparison to count mismatches from. Kept as the specification of that signal; the audit will fail this decision as stale the moment the indexer registers the metric, at which point the rule needs a real-traffic retune."
+    },
+    "ILNOraclePayloadDataCorruption": {
+      "decision": "pending-metric",
+      "reason": "Added by #1108 against iln_oracle_payload_corrupt_counter, which the oracle service does not emit: payload validation failures are not counted today. Kept as the specification of that signal; the audit flags this decision as stale once the oracle service registers the metric."
     }
   }
 }

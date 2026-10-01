@@ -169,7 +169,7 @@ This section documents three critical stress scenarios that could threaten LP li
 4. **Governance Tuning:** If auction scenarios repeat, governance can adjust the `DEFAULT_AUCTION_WINDOW` or escrow distribution algorithm via timelock-protected parameter changes.
 
 **Gaps & Follow-ups:**
-- *No gap:* Dutch-auction logic is enforced on-chain and documented in the contract threat model. See [`ILN-Smart-Contract/docs/threat-model.md`](https://github.com/Invoice-Liquidity-Network/ILN-Smart-Contract/blob/dev/docs/threat-model.md) for escrow and auction analysis, and the [`ILN-Smart-Contract/docs/trust-liquidity-model.md`](https://github.com/Invoice-Liquidity-Network/ILN-Smart-Contract/blob/dev/docs/trust-liquidity-model.md) for governance parameters.
+- *No gap:* Dutch-auction logic is enforced on-chain and documented in the contract threat model. See [`ILN-Smart-Contract/docs/threat-model.md`](https://github.com/Invoice-Liquidity-Network/ILN-Smart-Contract/blob/dev/docs/threat-model.md) for escrow and auction analysis, and the [`ILN-Smart-Contract/docs/governance.md`](https://github.com/Invoice-Liquidity-Network/ILN-Smart-Contract/blob/dev/docs/governance.md) for governance parameters.
 
 ---
 

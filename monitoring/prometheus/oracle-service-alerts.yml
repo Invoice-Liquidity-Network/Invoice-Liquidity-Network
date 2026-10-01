@@ -99,43 +99,13 @@ groups:
             failure.
           runbook_url: https://github.com/Invoice-Liquidity-Network/Invoice-Liquidity-Network/blob/main/docs/incident-response.md#oracleallverificationsrejected
 
-      # ── Stale upstream data ───────────────────────────────────────────────
-      - alert: OracleStaleResponsesRising
-        expr: rate(oracle_stale_responses_total[10m]) > 0
-        for: 10m
-        labels:
-          severity: warning
-          team: ops
-          component: oracle-service
-        annotations:
-          summary: Oracle is serving stale verdicts on {{ $labels.instance }}.
-          description: >-
-            Source data is older than ORACLE_MAX_ORACLE_AGE_MS. Usually the
-            indexer has fallen behind or the reputation contract is unreachable.
-          runbook_url: https://github.com/Invoice-Liquidity-Network/Invoice-Liquidity-Network/blob/main/docs/incident-response.md#oraclestaleresponsesrising
-
   - name: oracle-service-availability
     interval: 30s
     rules:
-      - alert: OracleVerificationLatencyHigh
-        expr: |
-          histogram_quantile(0.95,
-            sum by (le, instance) (rate(oracle_verification_duration_seconds_bucket[5m]))
-          ) > 2
-        for: 10m
-        labels:
-          severity: warning
-          team: ops
-          component: oracle-service
-        annotations:
-          summary: >-
-            Oracle p95 verification latency on {{ $labels.instance }} is
-            {{ $value | humanizeDuration }}.
-          description: >-
-            Callers time out well before the oracle does. Check the indexer and
-            the Soroban RPC endpoint.
-          runbook_url: https://github.com/Invoice-Liquidity-Network/Invoice-Liquidity-Network/blob/main/docs/incident-response.md#oracleverificationlatencyhigh
-
+      # OracleVerificationLatencyHigh and OracleStaleResponsesRising were
+      # removed by the alert-rule audit (docs/alert-rule-audit.md): both
+      # duplicated the SLO burn-rate rules in slo-alerts.yml at looser or
+      # single-sample thresholds.
       # ── Cache effectiveness ───────────────────────────────────────────────
       # A collapsed hit rate means every verification is hitting the indexer and
       # RPC, which is how latency alerts start.
@@ -207,6 +177,7 @@ groups:
             one). Sustained holds usually mean the bound is set too tight for a
             legitimately volatile payer, or an upstream source is stuck. See
             docs/oracle-source-failover-runbook.md.
+          runbook_url: https://github.com/Invoice-Liquidity-Network/Invoice-Liquidity-Network/blob/main/docs/incident-response.md#oracledeltaholdsnotdraining
 
       - alert: OracleDeltaBoundViolationsElevated
         expr: |
@@ -227,6 +198,7 @@ groups:
             upstream feed or a deliberate attempt to swing scores in a single
             step. Cross-check oracle_delta_quorum_confirmations_total: if quorum
             is confirming the same movement, the baseline is genuinely shifting.
+          runbook_url: https://github.com/Invoice-Liquidity-Network/Invoice-Liquidity-Network/blob/main/docs/incident-response.md#oracledeltaboundviolationselevated
 
       # This is informational, not a page: over-bound updates that a source
       # quorum confirmed are published normally. A high rate alongside elevated
@@ -250,6 +222,7 @@ groups:
             during real reputation shifts; if it coincides with
             OracleDeltaBoundViolationsElevated, the widening is genuine rather
             than a single manipulated feed.
+          runbook_url: https://github.com/Invoice-Liquidity-Network/Invoice-Liquidity-Network/blob/main/docs/incident-response.md#oracledeltaquorumconfirmationshigh
 
   # ── Automated source failover (#1051) ─────────────────────────────────────
   # Each provider (history indexer, reputation RPC) is a primary/secondary
@@ -278,6 +251,7 @@ groups:
             a fallback outage now means the feed fails safe (empty history /
             zeroed reputation). Confirm the fallback is healthy and check the
             source endpoint.
+          runbook_url: https://github.com/Invoice-Liquidity-Network/Invoice-Liquidity-Network/blob/main/docs/incident-response.md#oraclesourceunavailable
 
       - alert: OracleSourceDegraded
         expr: oracle_source_health_state == 1
@@ -296,6 +270,7 @@ groups:
             source, so this is early warning rather than an incident. Look at
             latency and error trends on the upstream before it escalates to
             unavailable.
+          runbook_url: https://github.com/Invoice-Liquidity-Network/Invoice-Liquidity-Network/blob/main/docs/incident-response.md#oraclesourcedegraded
 
       - alert: OracleFailoverChurn
         expr: |
@@ -316,3 +291,4 @@ groups:
             beat the anti-flap window — or two sources are failing at once.
             Identify the oscillating source in oracle_source_health_state and
             stabilise it; sustained churn degrades verdict consistency.
+          runbook_url: https://github.com/Invoice-Liquidity-Network/Invoice-Liquidity-Network/blob/main/docs/incident-response.md#oraclefailoverchurn

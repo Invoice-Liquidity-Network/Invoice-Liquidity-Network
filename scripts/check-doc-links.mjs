@@ -3,17 +3,62 @@ import { readFileSync, existsSync } from 'fs';
 import { resolve, dirname, join } from 'path';
 import { readdir } from 'fs/promises';
 
+// `.github/markdown-link-check.json` is the one place the ignore list and the
+// accepted status codes live, shared with anyone running markdown-link-check
+// by hand. Honouring it here keeps a documented exception (mailto:, Nextra
+// routes, hosts that 403 automated clients) from failing CI.
+const CONFIG_PATH = '.github/markdown-link-check.json';
+
+function loadConfig(repoRoot) {
+  const path = resolve(repoRoot, CONFIG_PATH);
+  const raw = existsSync(path) ? JSON.parse(readFileSync(path, 'utf8')) : {};
+  const timeoutMatch = /^(\d+)(ms|s)?$/.exec(String(raw.timeout ?? '20s'));
+  const timeoutMs = timeoutMatch
+    ? Number(timeoutMatch[1]) * (timeoutMatch[2] === 'ms' ? 1 : 1000)
+    : 20000;
+  return {
+    ignore: (raw.ignorePatterns ?? []).map((p) => new RegExp(p.pattern)),
+    alive: new Set(raw.aliveStatusCodes ?? [200, 206, 301, 302]),
+    retryOn429: raw.retryOn429 === true,
+    retryCount: Number(raw.retryCount ?? 0),
+    timeoutMs,
+  };
+}
+
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+// HEAD first (cheap), then GET for hosts that refuse HEAD (405) or gate it
+// behind a browser check (403); a 429 is retried with backoff when the config
+// asks for it.
+async function fetchStatus(url, config) {
+  const request = (method) =>
+    fetch(url, { method, redirect: 'follow', signal: AbortSignal.timeout(config.timeoutMs) });
+  for (let attempt = 0; ; attempt++) {
+    let res = await request('HEAD');
+    if (!res.ok && !config.alive.has(res.status)) res = await request('GET');
+    if (res.status === 429 && config.retryOn429 && attempt < config.retryCount) {
+      await sleep(1000 * (attempt + 1));
+      continue;
+    }
+    return res;
+  }
+}
+
 function extractLinks(text) {
   const re = /\[([^\]]+)\]\(([^)]+)\)/g;
   const links = [];
   let m;
+  // Code holds examples (sample nav files, templates, grep patterns), not
+  // links the reader can follow; a Markdown parser skips fenced blocks and
+  // inline spans and so do we.
+  text = text.replace(/^(`{3,}|~{3,})[^\n]*\n[\s\S]*?^\1[^\n]*$/gm, '').replace(/`[^`\n]*`/g, '');
   while ((m = re.exec(text))) {
     links.push(m[2]);
   }
   return links;
 }
 
-async function checkFile(filePath, repoRoot) {
+async function checkFile(filePath, repoRoot, config) {
   const content = readFileSync(filePath, 'utf8');
   const links = extractLinks(content);
   const problems = [];
@@ -24,12 +69,16 @@ async function checkFile(filePath, repoRoot) {
       if (link.startsWith('#')) return;
       // strip title part: url "title"
       const url = link.split(/\s+/)[0];
+      if (config.ignore.some((re) => re.test(url))) return;
       if (/^https?:\/\//i.test(url)) {
         try {
-          const res = await fetch(url, { method: 'HEAD', redirect: 'follow', timeout: 5000 });
-          if (!res.ok) problems.push(`external ${url} -> ${res.status}`);
+          const res = await fetchStatus(url, config);
+          if (!res.ok && !config.alive.has(res.status))
+            problems.push(`external ${url} -> ${res.status}`);
         } catch (err) {
-          problems.push(`external ${url} -> ${String(err)}`);
+          problems.push(
+            `external ${url} -> ${err?.cause?.code ?? err?.cause?.message ?? String(err)}`
+          );
         }
       } else {
         // local file
@@ -44,6 +93,7 @@ async function checkFile(filePath, repoRoot) {
 
 async function main() {
   const repoRoot = process.cwd();
+  const config = loadConfig(repoRoot);
   const args = process.argv.slice(2);
   const targets = args.length ? args : ['docs/**/*.md', 'packages/docs/content/**/*.mdx', 'README.md', 'CONTRIBUTING.md', 'SECURITY.md', 'DEPLOYMENT_GUIDE.md', 'CHANGELOG.md'];
 
@@ -94,7 +144,7 @@ async function main() {
   const results = [];
   for (const f of fileList) {
     try {
-      const r = await checkFile(resolve(repoRoot, f), repoRoot);
+      const r = await checkFile(resolve(repoRoot, f), repoRoot, config);
       results.push(r);
     } catch (err) {
       results.push({ file: f, problems: [`error ${String(err)}`] });

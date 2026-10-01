@@ -14,7 +14,7 @@ import type { Unsubscribe } from './state';
 import { track } from './usage-analytics';
 import { Cache, type CacheOptions } from './cache';
 import { RequestBatcher, type BatchingMetrics } from './batcher';
-import { withBackoff, isTransientError, type BackoffOptions } from './backoff';
+import { createResilientRpcServer, getRpcResilience } from './rpc-resilience';
 import { Validators } from './validators';
 import {
   encodeProposalAction,
@@ -192,6 +192,11 @@ export class ILNSdk {
     return this.requestBatcher.getMetrics();
   }
 
+  /**
+   * Normalises RPC failures into ILN errors. Retries, timeouts and the circuit
+   * breaker live in the resilient server wrapper, which re-invokes the RPC
+   * method for every attempt instead of re-awaiting a single settled promise.
+   */
   private async wrapRpcCall<T>(promise: Promise<T>, operationName: string): Promise<T> {
     return this.executeRpcCall(promise, operationName);
   }
