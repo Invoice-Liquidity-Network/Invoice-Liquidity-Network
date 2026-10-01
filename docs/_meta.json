@@ -10,6 +10,7 @@
   "protocol-economics": "Protocol Economics",
   "integration-guide": "Integration Guide",
   "local-development": "Local Development",
+  "testing-strategy": "Testing Strategy",
   "-- Tutorials --": {
     "type": "separator",
     "title": "Tutorials"
