@@ -57,6 +57,14 @@ and backend PR [ILN-Smart-Contract#756](https://github.com/Invoice-Liquidity-Net
       paths (contract-level funding path covered here; service-level paths are
       tracked in the [mainnet launch checklist](mainnet-launch-checklist.md#contracts)).
 
+## Execution log (2026-10-01) — Planned
+
+- Environment: staging (topology matching production where feasible)
+- Steps to run: follow the Procedure section above; record wall-clock timings for each step.
+- Timings: TODO — perform rehearsal to measure detection → decision → execution → confirmation latency.
+- Issues encountered: TODO
+- Post-rehearsal changes: TODO — update runbook and tooling gaps discovered.
+
 ## Related
 
 - Issue: [#879](https://github.com/Invoice-Liquidity-Network/Invoice-Liquidity-Network/issues/879)

@@ -33,6 +33,8 @@
  */
 
 import { execFileSync } from 'node:child_process';
+import { existsSync, readFileSync } from 'fs';
+import { join } from 'path';
 
 const NO_RELEASE_PATTERNS = [/no new version is released/i, /no relevant changes/i, /nothing to release/i];
 
@@ -115,6 +117,36 @@ function main() {
   const result = evaluateDryRun(parsed);
 
   console.log(output);
+
+  // If a version is computed and notes exist, verify package changelogs were updated.
+  if (parsed.version && parsed.hasNotes) {
+    // Check common package locations for CHANGELOG mentions of the version
+    const pkgDirs = ['packages', 'sdk', 'cli'];
+    const missing = [];
+    for (const d of pkgDirs) {
+      try {
+        // naive: check every subdir for CHANGELOG.md
+        // Note: In monorepos changelogs may be centralized; this is a best-effort guard.
+        const out = execFileSync('bash', ['-lc', `ls -1 ${d} 2>/dev/null || true`], { encoding: 'utf8' });
+        for (const name of out.split(/\n/).map(s=>s.trim()).filter(Boolean)) {
+          const changelog = join(d, name, 'CHANGELOG.md');
+          if (existsSync(changelog)) {
+            const content = readFileSync(changelog, 'utf8');
+            if (!content.includes(parsed.version)) missing.push(changelog);
+          }
+        }
+      } catch (err) {
+        // ignore
+      }
+    }
+
+    if (missing.length) {
+      console.error('❌ The following package CHANGELOGs do not mention the computed version:');
+      for (const m of missing) console.error(` - ${m}`);
+      process.exit(1);
+    }
+  }
+
   console.log(result.ok ? `✅ ${result.reason}` : `❌ ${result.reason}`);
   process.exit(result.ok ? 0 : 1);
 }
