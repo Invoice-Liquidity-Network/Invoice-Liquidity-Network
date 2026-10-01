@@ -101,3 +101,13 @@ issue.md
 pr.md
 fix.md
 TODO.md
+
+# =============================================================================
+# Playwright output
+#
+# Browser-test artifacts (traces, screenshots, .last-run.json) are local
+# runner state and must never be committed.
+# =============================================================================
+
+test-results/
+playwright-report/

@@ -4,11 +4,16 @@ on:
   push:
     paths:
       - 'packages/sdk/**'
+      - 'sdk/**'
+      - '.github/workflows/sdk-browser-tests.yml'
   pull_request:
     paths:
       - 'packages/sdk/**'
+      - 'sdk/**'
+      - '.github/workflows/sdk-browser-tests.yml'
 
-# Least-privilege: read code to build the SDK and run browser compatibility tests.
+# Least-privilege: read code to build the SDK and run browser compatibility +
+# Freighter-shaped wallet interaction tests.
 permissions:
   contents: read
 
@@ -17,7 +22,9 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # Crypto / browser-bundle compatibility for @iln/sdk-next (packages/sdk).
   browser-tests:
+    name: packages/sdk browser bundle
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -36,4 +43,26 @@ jobs:
         run: pnpm exec playwright install --with-deps chromium firefox webkit
 
       - name: Run browser compatibility tests
+        run: pnpm run test:browser
+
+  # Real createFreighterSigner path for @iln/sdk (sdk/) against a Freighter API mock.
+  # This is the suite that would catch an SDK-level signing bug before it reaches
+  # the frontend wallet UX.
+  sdk-freighter-browser:
+    name: sdk Freighter wallet interaction
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: sdk
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup pnpm with store cache
+        uses: ./.github/actions/setup-pnpm
+
+      - name: Install Playwright Chromium
+        run: pnpm exec playwright install --with-deps chromium
+
+      - name: Run Freighter wallet-extension interaction tests
         run: pnpm run test:browser
