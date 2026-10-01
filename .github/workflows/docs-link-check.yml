@@ -42,25 +42,30 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Check links in docs/
-        uses: gaurav-nelson/github-action-markdown-link-check@5c5dfc0ac2e225883c0e5f03a85311ec2830d368 # v1
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
         with:
-          use-quiet-mode: 'yes'
-          config-file: '.github/markdown-link-check.json'
-          folder-path: 'docs'
-          file-extension: '.md'
+          node-version: '20'
+
+      - name: Check links in docs/
+        run: |
+          node scripts/check-doc-links.mjs 'docs/**/*.md'
 
       - name: Check links in packages/docs/content/
-        uses: gaurav-nelson/github-action-markdown-link-check@5c5dfc0ac2e225883c0e5f03a85311ec2830d368 # v1
-        with:
-          use-quiet-mode: 'yes'
-          config-file: '.github/markdown-link-check.json'
-          folder-path: 'packages/docs/content'
-          file-extension: '.mdx'
+        run: |
+          node scripts/check-doc-links.mjs 'packages/docs/content/**/*.mdx'
 
       - name: Check links in root markdown files
-        uses: gaurav-nelson/github-action-markdown-link-check@5c5dfc0ac2e225883c0e5f03a85311ec2830d368 # v1
-        with:
-          use-quiet-mode: 'yes'
-          config-file: '.github/markdown-link-check.json'
-          file-path: 'README.md,CONTRIBUTING.md,SECURITY.md,DEPLOYMENT_GUIDE.md,CHANGELOG.md'
+        run: |
+          node scripts/check-doc-links.mjs README.md CONTRIBUTING.md SECURITY.md DEPLOYMENT_GUIDE.md CHANGELOG.md
+
+      - name: Assert expected doc coverage
+        run: |
+          # Fail if the number of files checked drops unexpectedly.
+          # We expect at least 200 docs files (adjust if repository grows).
+          COUNT=$(node -e "console.log(require('glob').sync('docs/**/*.md').length + require('glob').sync('packages/docs/content/**/*.mdx').length + ['README.md','CONTRIBUTING.md','SECURITY.md','DEPLOYMENT_GUIDE.md','CHANGELOG.md'].filter(f=>require('fs').existsSync(f)).length)")
+          echo "Docs files checked: $COUNT"
+          if [ "$COUNT" -lt 200 ]; then
+            echo "Unexpected drop in docs coverage: $COUNT < 200" >&2
+            exit 2
+          fi

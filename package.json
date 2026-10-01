@@ -60,6 +60,8 @@
     "check:contract-abi-compat": "node scripts/check-contract-abi-compatibility.mjs",
     "test:contract-abi-compat": "node --test scripts/__tests__/check-contract-abi-compatibility.test.mjs",
     "release:verify-dry-run": "node scripts/verify-release-dry-run.mjs",
+    "audit:packages": "node scripts/audit-package-releases.mjs",
+    "check:doc-links": "node scripts/check-doc-links.mjs",
     "release:audit-log": "node scripts/release-audit-log.mjs",
     "test:release-scripts": "node --test scripts/__tests__/verify-release-dry-run.test.mjs scripts/__tests__/release-audit-log.test.mjs",
     "canary:rollout": "node scripts/canary/rollout.mjs",
