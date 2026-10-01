@@ -107,3 +107,78 @@ Values assume USDC (7 decimals). `1,000,000,000` = `100 USDC`.
 *   **Scenario:** Payer disputes the work and delays payment until Feb 1st (31 days late).
 *   **Result:** While the LP eventually receives 5,100 USDC, the delay reduces the **Effective APY** because the capital was locked for 60 days instead of 30.
 *   **Reputation Impact:** Even if paid late, the protocol may allow LPs to report the delay, or the lack of an on-time `mark_paid` event will naturally prevent the payer's score from increasing as quickly as a timely payer.
+
+---
+
+## 7. Worst-Case Liquidity Stress Scenarios
+
+This section documents three critical stress scenarios that could threaten LP liquidity and the protocol's stability, along with the explicit protocol responses defined for each.
+
+### Scenario A: Simultaneous Large Defaults (Concentrated Loss Event)
+
+**Condition:** Multiple large invoices from the same payer default in rapid succession, or multiple payers with correlated business failure default within the 30-day lookback window.
+
+**Economic Consequence:**
+- If 3+ invoices default within 30 days, total LP principal loss could exceed escrow buffer capacity.
+- Example: Three 10,000 USDC invoices funded by the same 5 LPs, each with 300 bps discount (300 USDC escrow per invoice). If all default, the 900 USDC escrow covers only 3% of the 30,000 USDC principal loss.
+
+**Protocol Response:**
+1. **Fraud Signal Blocking:** The oracle service flags 2+ defaults within 30 days as a **blocking fraud signal**. Any new invoice from that payer cannot be funded until the 30-day window clears, even if KYB passes.
+2. **LP Risk Gating:** The frontend's LP risk filter automatically dims invoices from payers with recent concentrated defaults, allowing risk-averse LPs to opt out.
+3. **Insurance Pool:** LPs holding insurance pool positions recover up to 5% of their funding contribution (if insurance premium was paid), reducing individual LP loss to 95% of principal.
+4. **Reputation Penalty:** The offending payer's reputation score is penalized by 5 points per default, making future funding significantly more expensive (higher discount rates required) or impossible if score drops below market minimum.
+
+**Gaps & Follow-ups:**
+- *No gap:* The protocol explicitly blocks repeated offenders via oracle fraud signals. See [`oracle-service.md`](./oracle-service.md) for fraud signal detail and [`ILN-Smart-Contract/docs/insurance-pool-design.md`](https://github.com/Invoice-Liquidity-Network/ILN-Smart-Contract/blob/dev/docs/insurance-pool-design.md) for insurance mechanics.
+
+---
+
+### Scenario B: Prolonged Oracle Staleness (Verification Unavailability)
+
+**Condition:** External KYB and reputation oracle providers experience outage or significant delay (>5 minutes) for >1 hour, rendering payer verification scores unavailable.
+
+**Economic Consequence:**
+- LPs cannot make informed risk decisions without reputation data.
+- Uninformed LPs may fund high-risk payers at low discount rates, increasing portfolio loss exposure.
+- Protocol could grind to a halt if oracle is mandatory for every funding.
+
+**Protocol Response:**
+1. **Graceful Degradation:** When oracle is unavailable, the service returns `verdict: "unknown"` with `confidence: 0`, **never** `unverified`. This signals data absence, not a negative verdict.
+2. **Optional Requirement:** Oracle verification can be gated at the contract level, but LPs retain the option to fund at higher discount rates to compensate for unknown risk.
+3. **Fallback to On-Chain History:** The oracle falls back to indexer-provided on-chain history (prior defaults, settlement latency) rather than blocking all transactions.
+4. **SLO Monitoring:** Indexer and oracle service expose health endpoints and SLO violation metrics so operators can trigger escalation before impact reaches LPs.
+
+**Gaps & Follow-ups:**
+- *No gap:* Oracle unavailability is explicitly handled with "unknown" verdicts and fallback data. See [`oracle-service.md`](./oracle-service.md) for oracle composition and degradation modes, and [`threat-model.md`](./threat-model.md) for oracle attack surfaces.
+
+---
+
+### Scenario C: Thin-Liquidity Dutch-Auction Failure (Escrow Auction Collapse)
+
+**Condition:** An invoice in funded state reaches its due date with insufficient payment received to settle all partial LP funders proportionally. The contract's Dutch-auction mechanism for escrow distribution faces a scenario where the calculated price falls below zero or auction exceeds time bounds.
+
+**Economic Consequence:**
+- Escrow distribution algorithm breaks down; LPs receive incorrect amounts.
+- Freelancer may receive more than owed, or LP recovery is unfairly skewed.
+- Loss of trust in contract fairness.
+
+**Protocol Response:**
+1. **Auction Bounds Enforcement:** The contract's Dutch-auction escrow split enforces a minimum floor price and maximum time bound (defined in the contract's `DEFAULT_AUCTION_WINDOW` parameter, set by governance). If the computed price overshoots, the transaction reverts and the freelancer cannot settle until the scenario is resolved.
+2. **Partial Payment Handling:** When a payer pays less than the full invoice amount, the contract locks the partial payment and transitions the invoice to `PartiallyPaid` state. LPs and the freelancer must explicitly acknowledge and accept the partial settlement, ensuring no surprise distribution.
+3. **Manual Dispute Resolution:** The `appeal_default` path gives payers a recourse channel if they dispute the auction outcome or claim technical error. Disputes are logged and can be reviewed by governance multi-sig.
+4. **Governance Tuning:** If auction scenarios repeat, governance can adjust the `DEFAULT_AUCTION_WINDOW` or escrow distribution algorithm via timelock-protected parameter changes.
+
+**Gaps & Follow-ups:**
+- *No gap:* Dutch-auction logic is enforced on-chain and documented in the contract threat model. See [`ILN-Smart-Contract/docs/threat-model.md`](https://github.com/Invoice-Liquidity-Network/ILN-Smart-Contract/blob/dev/docs/threat-model.md) for escrow and auction analysis, and the [`ILN-Smart-Contract/docs/trust-liquidity-model.md`](https://github.com/Invoice-Liquidity-Network/ILN-Smart-Contract/blob/dev/docs/trust-liquidity-model.md) for governance parameters.
+
+---
+
+## 8. Stress Test Summary & Next Steps
+
+| Scenario | Probability | Impact | Protocol Response | Residual Risk | Follow-up |
+|---|---|---|---|---|---|
+| Concentrated Defaults | Low (multi-payer required) | High (LP principal loss) | Fraud blocking, LP risk gating, insurance pool | LP still bears >95% loss if uninsured | Monitor default clustering; adjust 30-day window if needed |
+| Oracle Staleness | Medium (third-party SLA) | Medium (uninformed decisions) | Graceful degradation to "unknown", on-chain fallback, health monitoring | LPs still take higher risk if they fund blind | Establish oracle provider SLA and failover contract |
+| Escrow Auction Collapse | Very Low (algorithm tested) | Critical (fairness break) | Auction bounds, partial-payment lock, manual dispute, governance tuning | Residual only if governance parameters are misconfigured | Annual governance audit of escrow window and auction math |
+
+**Next Step:** Integrate stress scenario results into LP onboarding materials and risk dashboards so LPs make informed capital allocation decisions.

@@ -45,7 +45,10 @@ Routes notifications to channel-specific senders:
 - **Webhook**: HTTP POST with HMAC signature in `X-ILN-Signature` header. Retries up to 3 times with exponential backoff (base 500ms). Logs delivery attempts to `webhook_delivery_logs` table.
 - **SMS**: Via [Twilio](https://www.twilio.com). Requires `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, and `TWILIO_FROM_NUMBER`.
 
-Failed deliveries after exhausting retries are placed in a dead-letter queue for inspection via the retry metrics endpoint.
+Failed deliveries after exhausting retries are placed in a dead-letter queue
+for inspection via the retry metrics endpoint. A destination that exhausts its
+retry budget is circuit-broken for 60 seconds; subsequent delivery attempts
+fail immediately for that destination while other destinations continue.
 
 ### Multi-Channel Delivery (`src/multi-channel.ts`)
 
@@ -57,7 +60,11 @@ Buffers notification events for users preferring daily or weekly digests. The `D
 
 ### Rate Limiter (`src/rate-limiter.ts`)
 
-Sliding-window rate limiting with per-user and per-channel buckets. Used on subscription and webhook-test endpoints to prevent abuse.
+Sliding-window rate limiting combines a per-user bucket with a bucket scoped
+to each `(channel, destination)` recipient. One busy email address, webhook URL,
+or phone number therefore cannot consume another recipient's quota. Configure
+the recipient threshold with `RATE_LIMIT_PER_RECIPIENT`; the legacy
+`RATE_LIMIT_PER_CHANNEL` variable remains a fallback.
 
 ## User Preferences
 
@@ -124,6 +131,9 @@ Optional:
 | `NOTIFICATIONS_POLL_INTERVAL_MS` | `30000` | Polling interval in milliseconds |
 | `RESEND_FROM_EMAIL` | `no-reply@invoice-liquidity.network` | Sender email address |
 | `DUE_WARNING_HOURS` | `48` | Hours before due date to send warning |
+| `RATE_LIMIT_PER_USER` | `60` | Subscription/test requests per user per window |
+| `RATE_LIMIT_PER_RECIPIENT` | `200` | Requests per channel and destination per window |
+| `RATE_LIMIT_WINDOW_MS` | `60000` | Sliding rate-limit window in milliseconds |
 | `TWILIO_ACCOUNT_SID` | — | Twilio account SID for SMS |
 | `TWILIO_AUTH_TOKEN` | — | Twilio auth token |
 | `TWILIO_FROM_NUMBER` | — | Twilio phone number |

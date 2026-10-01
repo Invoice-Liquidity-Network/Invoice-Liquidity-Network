@@ -153,6 +153,39 @@ const MAX_RETRY_DELAY = MAX_RETRY_DELAY_MS;
 const deadLetterQueue: DeadLetterEntry[] = [];
 let totalRetries = 0;
 let activeRetries = 0;
+const destinationCircuits = new Map<string, number>();
+const CIRCUIT_BREAKER_COOLDOWN_MS = 60_000;
+
+function circuitKey(channel: string, destination: string): string {
+  return JSON.stringify([channel, destination]);
+}
+
+function assertCircuitClosed(channel: string, destination: string): void {
+  const key = circuitKey(channel, destination);
+  const openUntil = destinationCircuits.get(key);
+  if (openUntil === undefined) return;
+  if (openUntil > Date.now()) {
+    throw new Error(
+      `[delivery] Circuit open for ${channel} destination ${destination} until ${new Date(openUntil).toISOString()}`,
+    );
+  }
+  destinationCircuits.delete(key);
+}
+
+function recordDestinationFailure(channel: string, destination: string): void {
+  destinationCircuits.set(
+    circuitKey(channel, destination),
+    Date.now() + CIRCUIT_BREAKER_COOLDOWN_MS,
+  );
+}
+
+function recordDestinationSuccess(channel: string, destination: string): void {
+  destinationCircuits.delete(circuitKey(channel, destination));
+}
+
+export function resetDeliveryCircuitBreakers(): void {
+  destinationCircuits.clear();
+}
 
 function newDeadLetterId(): string {
   return `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
@@ -245,7 +278,31 @@ async function retryWithBackoff<T>(
 ): Promise<T> {
   const maxRetries = options.maxRetries ?? MAX_RETRIES;
   const baseDelayMs = options.baseDelayMs ?? CONFIG.webhookBackoffBaseMs;
+  let retryIsActive = false;
 
+  try {
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      try {
+        const result = await fn();
+        if (attempt > 1) {
+          totalRetries++;
+        }
+        return result;
+      } catch (error: any) {
+        const errorMessage = error?.message ?? String(error);
+        if (attempt < maxRetries) {
+          if (!retryIsActive) {
+            activeRetries++;
+            retryIsActive = true;
+          }
+          totalRetries++;
+          options.onRetry?.(attempt, errorMessage);
+          const backoff = baseDelayMs * 2 ** (attempt - 1);
+          await delay(backoff);
+        } else {
+          options.onDeadLetter?.(errorMessage);
+          throw error;
+        }
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
     try {
       const result = await fn();
@@ -266,6 +323,8 @@ async function retryWithBackoff<T>(
         throw error;
       }
     }
+  } finally {
+    if (retryIsActive) activeRetries--;
   }
 
   throw new Error(`Retry exhausted for ${options.label}`);
@@ -275,6 +334,18 @@ export async function sendEmail(
   subscription: Subscription,
   payload: NotificationPayload
 ): Promise<void> {
+  assertCircuitClosed("email", subscription.destination);
+  try {
+    await retryWithBackoff(
+      async () => {
+        await resend.emails.send({
+          from: CONFIG.resendFromEmail,
+          to: subscription.destination,
+          subject: payload.subject,
+          html: `<p>${payload.message}</p>
+      <p><strong>Invoice #${payload.invoice.id}</strong></p>
+      <p>Status: ${payload.invoice.status}</p>
+      <p>Due date: ${new Date(payload.invoice.due_date * 1000).toISOString()}</p>`,
   const destination = subscription.destination;
   const attemptTimestamps: number[] = [];
   const start = Date.now();
@@ -328,6 +399,9 @@ export async function sendEmail(
       },
       {
         label: `email to ${subscription.destination}`,
+        onDeadLetter: (lastError) => {
+          deadLetterQueue.push({
+            channel: "email",
         onRetry: (_attempt, error) => {
           lastError = error;
         },
@@ -341,11 +415,18 @@ export async function sendEmail(
             invoice: payload.invoice,
             subject: payload.subject,
             message: payload.message,
+            lastError,
             lastError: deadLetterError,
             attempts: CONFIG.maxWebhookRetry,
             timestamp: Date.now(),
           });
         },
+      },
+    );
+    recordDestinationSuccess("email", subscription.destination);
+  } catch (error) {
+    recordDestinationFailure("email", subscription.destination);
+    throw error;
       }
     );
     recordCircuitSuccess(destination);
@@ -402,6 +483,17 @@ export async function sendWebhook(
   attempt = 1,
   logId?: number,
   auditTimestamps?: number[]
+): Promise<void> {
+  assertCircuitClosed("webhook", subscription.destination);
+  await sendWebhookAttempt(subscription, payload, attempt, logId, false);
+}
+
+async function sendWebhookAttempt(
+  subscription: Subscription,
+  payload: NotificationPayload,
+  attempt: number,
+  logId: number | undefined,
+  retryIsActive: boolean,
 ): Promise<void> {
   const destination = subscription.destination;
   const ts = auditTimestamps ?? [];
@@ -543,6 +635,8 @@ export async function sendWebhook(
       await updateWebhookDeliveryLog(id, {
         status: 'success',
       });
+      recordDestinationSuccess("webhook", subscription.destination);
+      if (retryIsActive) activeRetries--;
       recordCircuitSuccess(destination);
       safeCreateAudit({
         invoice_id: payload.invoice.id,
@@ -587,6 +681,8 @@ export async function sendWebhook(
       lastError: errorMessage ?? 'Unknown error',
       attempts: attempt,
     });
+    recordDestinationFailure("webhook", subscription.destination);
+    if (retryIsActive) activeRetries--;
     recordCircuitFailure(destination);
     safeCreateAudit({
       invoice_id: payload.invoice.id,
@@ -608,7 +704,10 @@ export async function sendWebhook(
   }
 
   totalRetries++;
-  activeRetries++;
+  if (!retryIsActive) {
+    activeRetries++;
+    retryIsActive = true;
+  }
 
   await updateWebhookDeliveryLog(id, {
     attempts: attempt,
@@ -618,6 +717,7 @@ export async function sendWebhook(
 
   const backoff = Math.min(CONFIG.webhookBackoffBaseMs * 2 ** (attempt - 1), MAX_RETRY_DELAY);
   await delay(backoff);
+  await sendWebhookAttempt(subscription, payload, attempt + 1, id, retryIsActive);
   await sendWebhook(subscription, payload, attempt + 1, id, ts);
 }
 
@@ -629,6 +729,7 @@ export async function sendSms(
   if (!client) {
     throw new Error('Twilio credentials not configured');
   }
+  assertCircuitClosed("sms", subscription.destination);
 
   const destination = subscription.destination;
   const attemptTimestamps: number[] = [];
@@ -673,6 +774,11 @@ export async function sendSms(
     `Invoice #${payload.invoice.id}`,
     `Status: ${payload.invoice.status}`,
     `Due date: ${new Date(payload.invoice.due_date * 1000).toISOString()}`,
+  ].join("\n");
+
+  try {
+    await retryWithBackoff(
+      async () => {
   ].join('\n'));
 
   let lastError: string | null = null;
@@ -688,6 +794,9 @@ export async function sendSms(
       },
       {
         label: `sms to ${subscription.destination}`,
+        onDeadLetter: (lastError) => {
+          deadLetterQueue.push({
+            channel: "sms",
         onRetry: (_attempt, error) => {
           lastError = error;
         },
@@ -701,11 +810,18 @@ export async function sendSms(
             invoice: payload.invoice,
             subject: payload.subject,
             message: payload.message,
+            lastError,
             lastError: deadLetterError,
             attempts: CONFIG.maxWebhookRetry,
             timestamp: Date.now(),
           });
         },
+      },
+    );
+    recordDestinationSuccess("sms", subscription.destination);
+  } catch (error) {
+    recordDestinationFailure("sms", subscription.destination);
+    throw error;
       }
     );
     recordCircuitSuccess(destination);

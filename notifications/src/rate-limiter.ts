@@ -1,11 +1,19 @@
-export interface RateLimitConfig {
+type RateLimitBaseConfig = {
   /** Maximum requests per window per user. */
   perUserLimit: number;
-  /** Maximum requests per window per channel. */
-  perChannelLimit: number;
   /** Sliding window length in milliseconds. */
   windowMs: number;
-}
+};
+
+export type RateLimitConfig = RateLimitBaseConfig &
+  (
+    | { perRecipientLimit: number; perChannelLimit?: never }
+    | {
+        /** @deprecated Use perRecipientLimit. */
+        perChannelLimit: number;
+        perRecipientLimit?: never;
+      }
+  );
 
 export interface RateLimitResult {
   allowed: boolean;
@@ -53,14 +61,18 @@ function checkBucket(bucket: Bucket, now: number): RateLimitResult {
 
 export class RateLimiter {
   private userBuckets = new Map<string, Bucket>();
-  private channelBuckets = new Map<string, Bucket>();
-  private config: RateLimitConfig;
+  private recipientBuckets = new Map<string, Bucket>();
+  private config: RateLimitBaseConfig & { perRecipientLimit: number };
 
   constructor(config: RateLimitConfig) {
-    this.config = config;
+    this.config = {
+      perUserLimit: config.perUserLimit,
+      perRecipientLimit: config.perRecipientLimit ?? config.perChannelLimit,
+      windowMs: config.windowMs,
+    };
   }
 
-  check(userId: string, channel: string): RateLimitResult {
+  check(userId: string, channel: string, recipientId = userId): RateLimitResult {
     const now = Date.now();
 
     // Per-user check.
@@ -74,33 +86,41 @@ export class RateLimiter {
     const userResult = checkBucket(this.userBuckets.get(userId)!, now);
     if (!userResult.allowed) return userResult;
 
+    // Per-recipient channel check: one subscriber cannot consume another's quota.
+    const normalizedRecipient =
+      channel === "email" ? recipientId.trim().toLowerCase() : recipientId.trim();
+    const recipientKey = JSON.stringify([channel, normalizedRecipient]);
+    if (!this.recipientBuckets.has(recipientKey)) {
+      this.recipientBuckets.set(recipientKey, {
     // Per-recipient check (user + channel combined).
     const recipientKey = `${userId}:${channel}`;
     if (!this.channelBuckets.has(recipientKey)) {
       this.channelBuckets.set(recipientKey, {
         timestamps: [],
         windowMs: this.config.windowMs,
-        limit: this.config.perChannelLimit,
+        limit: this.config.perRecipientLimit,
       });
     }
+    const recipientResult = checkBucket(this.recipientBuckets.get(recipientKey)!, now);
+    if (!recipientResult.allowed) {
     const channelResult = checkBucket(this.channelBuckets.get(recipientKey)!, now);
     if (!channelResult.allowed) {
       // Roll back the user-bucket timestamp we just inserted.
       const ub = this.userBuckets.get(userId)!;
       ub.timestamps.pop();
-      return channelResult;
+      return recipientResult;
     }
 
-    // Return the more-restrictive remaining of the two buckets.
+    // Return the more-restrictive remaining of the user and recipient buckets.
     return {
       allowed: true,
-      limit: Math.min(userResult.limit, channelResult.limit),
-      remaining: Math.min(userResult.remaining, channelResult.remaining),
-      resetAt: Math.max(userResult.resetAt, channelResult.resetAt),
+      limit: Math.min(userResult.limit, recipientResult.limit),
+      remaining: Math.min(userResult.remaining, recipientResult.remaining),
+      resetAt: Math.max(userResult.resetAt, recipientResult.resetAt),
     };
   }
 
-  /** Remove all tracking data for a user (e.g. on unsubscribe). */
+  /** Remove the aggregate user bucket; recipient quotas expire with their window. */
   reset(userId: string): void {
     this.userBuckets.delete(userId);
   }

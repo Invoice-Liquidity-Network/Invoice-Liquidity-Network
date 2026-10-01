@@ -355,3 +355,7 @@ pnpm --filter @invoice-liquidity/docs-next dev
 # Legacy site (Nextra 2 — content source, not deployed)
 pnpm --filter @invoice-liquidity/docs dev
 ```
+
+git add package.json scripts/test-load-notifications.js docs/notifications.md
+git commit -m "test: verify notifications service load performance and resilience post-hardening"
+git push origin fix/notifications-websocket-limits-and-auth --force

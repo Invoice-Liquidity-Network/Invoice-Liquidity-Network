@@ -1,3 +1,8 @@
+import type { Express } from "express";
+import request from "supertest";
+import { beforeEach, describe, expect, it } from "vitest";
+import { createApp } from "../src/api";
+import { createDb, getDb, setDb, upsertInvoice, setCursorLedger } from "../src/db";
 import type { Express } from 'express';
 import request from 'supertest';
 import { beforeEach, describe, expect, it } from 'vitest';
@@ -75,6 +80,18 @@ describe('GET /v1/health', () => {
     const res = await request(app).get('/v1/health');
     expect(typeof res.body.uptime).toBe('number');
     expect(res.body.uptime).toBeGreaterThanOrEqual(0);
+  });
+
+  it("returns 503 when the database health query fails", async () => {
+    getDb().close();
+
+    const res = await request(app).get("/health");
+    const versionedRes = await request(app).get("/v1/health");
+
+    expect(res.status).toBe(503);
+    expect(res.body).toMatchObject({ status: "error", db: "error" });
+    expect(versionedRes.status).toBe(503);
+    expect(versionedRes.body).toMatchObject({ status: "error", db: "error" });
   });
 });
 

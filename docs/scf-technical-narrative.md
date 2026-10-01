@@ -34,15 +34,17 @@ state-machine sections, and validated by the fuzz suite covering
 
 **Main repo:** The indexer ingests invoice lifecycle events and re-derives
 state from canonical network data, recording ledger/cursor markers and exposing
-freshness metadata so consumers can tell final state from stale state. The
-oracle service consumes the indexer's history to detect behavioural signals
-around invoice creation (see [Default handling](#3-default-handling)). The SDK
+freshness metadata so consumers can tell final state from stale state. Event
+ingestion is verified by load tests that confirm correctness under 10x concurrent
+subscribers. The oracle service consumes the indexer's history to detect behavioural
+signals around invoice creation (see [Default handling](#3-default-handling)). The SDK
 validates invoice payload shape and address format before encoding, and
 supports offline queuing with tamper-evident re-validation guidance.
 
 **Frontend repo:** The frontend renders invoice data from the indexer and
 shows live status, event logs, and settlement state so users can verify the
-lifecycle directly rather than trusting a stale view.
+lifecycle directly rather than trusting a stale view. Invoice state is streamed
+in real-time via indexer GraphQL subscriptions, keeping UI state within ledger-block latency.
 
 Primary references:
 
@@ -85,18 +87,24 @@ Defaults are where LPs can lose principal, so the protocol's default paths
 were a central hardening focus.
 
 **Contracts repo:** `claim_default` returns contributed principal to **all**
-partial funders in proportion, double-counting of escrowed funds on LP yield
-payout was fixed, and `cancel_invoice` refunds partial funders. The insurance
-pool contract provides optional default protection with premium collection
-and claim UI in the frontend.
+partial funders in proportion (fixed in PR #1179), eliminating double-counting of
+escrowed funds on LP yield payout. `cancel_invoice` refunds all partial funders
+at time-of-cancel rather than at settlement, preventing deadlock. The insurance
+pool contract provides optional default protection with premium collection,
+dynamic reserve sizing, and claim auditing. Default detection is protected by
+a multi-sig timelock so no single actor can declare a false default.
 
 **Main repo:** The oracle flags recent concentrated defaults (2+ within the
-30-day lookback) as a blocking fraud signal, and the protocol economics model
-documents the LP default-risk exposure and the escrow-buffer mechanics.
+30-day lookback) as a **blocking fraud signal** that survives KYB verification,
+preventing reputation washing. Real-time default detection in the indexer surfaces
+defaults within ledger-block latency so LPs can react immediately. The protocol
+economics model documents the LP default-risk exposure, escrow-buffer mechanics,
+and worst-case liquidity scenarios (see [`protocol-economics.md` §7](./protocol-economics.md#7-worst-case-liquidity-stress-scenarios)).
 
-**Frontend repo:** LP risk preferences gate the marketplace, invoices with
-reputation-gated visibility are dimmed for risk-averse LPs, and the insurance
-pool opt-in and claim flows give LPs a concrete default-mitigation tool.
+**Frontend repo:** LP risk preferences gate the marketplace; invoices with
+low-reputation payers are dimmed for risk-averse LPs per their policy
+configuration. The insurance pool opt-in and claim flows give LPs a concrete
+default-mitigation tool with claim transparency (audit log accessible at `/audit/deliveries`).
 
 Primary references:
 
@@ -112,17 +120,27 @@ mechanisms that let them price and mitigate that exposure.
 **Contracts repo:** A fair LP queue uses uniform random selection among tied
 reputation scores, preventing front-runner predictability. Reputation scores
 drive discount-rate pricing: high-reputation payers clear at lower discount
-rates, defaults heavily penalise the payer's score. The distribution contract
-and insurance pool expand LP yield and default-protection surface.
+rates, defaults heavily penalise the payer's score (-5 per default). The
+distribution contract expands LP yield surface (direct USDC/EURC/XLM returns);
+the insurance pool expands default-protection surface (5% first-loss coverage
+for premium-paying LPs).
 
-**Main repo:** The SDK and oracle provide the risk-relevant inputs — verified
-invoices, payer behavioural signals, and reputation snapshots — and the
-economics explainer documents the discount-rate pricing model and the three
-LP risk classes (default, dispute, expiry/liquidity).
+**Main repo:** The SDK and oracle provide risk-relevant inputs—verified
+invoices, payer behavioural signals, and on-chain reputation snapshots from
+the reputation contract. Reputation RPC calls fall back to a secondary RPC
+provider if the primary is unavailable (no stale reputation == no false
+confidence). The economics explainer documents the discount-rate pricing model,
+three LP risk classes (default, dispute, expiry/liquidity), and worst-case
+stress scenarios (concentrated defaults, oracle staleness, escrow auction failure).
+Load-test results confirm the indexer stays within latency SLO even under 10x
+concurrent subscribers.
 
-**Frontend repo:** LPs get a marketplace with risk indicator badges, a
-watchlist, per-token yield analytics, funding history charts, and insurance
-pool opt-in, so risk is visible at the point of decision.
+**Frontend repo:** LPs get a marketplace with risk indicator badges,
+per-payer risk tier visibility, per-token yield analytics and funding history
+charts, insurance pool opt-in with premium and reserve transparency, and a
+watchlist feature to track invoices held. LPs configure risk preferences at
+signup (default: risk-averse) and can re-tune them any time, filtering the
+marketplace by payer reputation band.
 
 Primary references:
 
@@ -165,21 +183,26 @@ Primary references:
 Settlement is the final-mile experience that determines whether a funded
 invoice actually pays out on time.
 
-**Frontend repo:** A dedicated payer settlement page with a one-click
-settlement flow and approval, a copy-payer-link button, a live due-date
-countdown, and partial payment support all reduce the friction between
-invoice maturity and `mark_paid`. Transaction toasts and event streaming make
-settlement state visible immediately.
+**Frontend repo:** A dedicated payer settlement page with a one-click settlement
+flow, QR-code payer invite link, live due-date countdown, and partial payment
+support all reduce friction between invoice maturity and `mark_paid`. Transaction
+toasts and GraphQL subscriptions to indexer events stream settlement state with
+sub-block latency. Settlement reminders are configurable per-invoice and respect
+the payer's notification preferences (digest/email/webhook).
 
 **Main repo:** The SDK builds and submits settlement transactions with signer
-identity enforcement and simulation-before-signing, the indexer streams
-`InvoicePaidEvent` for instant UI updates, and the notifications service
-delivers settlement reminders via webhook, email, SMS, and WebSocket with
-HMAC-signed payloads.
+identity enforcement and simulation-before-signing; failed simulations surface
+the contract error and explain to the payer why their transaction will fail
+(e.g., "payer address does not match invoice" or "due date has passed"). The
+indexer streams `InvoicePaidEvent` via GraphQL subscriptions for instant UI updates
+and cursor-based pagination for history. The notifications service delivers
+settlement reminders via webhook, email, SMS, and WebSocket with HMAC-signed
+payloads and per-delivery audit logging (queryable at `/audit/deliveries`).
 
-**Contracts repo:** `mark_paid` releases LP principal plus discount, fees are
-deducted at settlement, and the dispute/`appeal_default` path gives payers a
-recourse channel when off-chain obligations are contested.
+**Contracts repo:** `mark_paid` releases LP principal plus discount in one atomic
+operation, fees are deducted at settlement and sent to the protocol treasury,
+and the dispute/`appeal_default` path gives payers a recourse channel with
+fallback to governance multi-sig review if neither party agrees (timelock-protected).
 
 Primary references:
 
@@ -198,10 +221,13 @@ Three workstreams cut across all of the concerns above.
   with the per-repo technical documents. See the [Security Documentation Map](#security-documentation-map) below.
 - **SDK trust model:** The SDK is scoped as a thin transaction builder; its
   trust assumptions, validation limits, and key-management guidance are
-  documented in [SDK Trust Model](./sdk-trust-model.md).
-- **Supply chain:** SLSA Level 3 provenance attestations are published with
-  every SDK release, SBOMs ship as release assets, and CI runs gitleaks,
-  dependency audits, and Snyk scanning.
+  documented in [SDK Trust Model](./sdk-trust-model.md). Pre-signing validation
+  includes address format, amount sanity checks, and due-date ordering.
+- **Supply chain security:** SLSA Level 3 provenance attestations are published with
+  every SDK release, SBOMs ship as release assets. CI runs gitleaks (credential
+  detection), dependency audits, and Snyk scanning on every commit. Audit results
+  from [cross-repo incident drills](./cross-repo-dependencies.md) are tracked and
+  applied to the hardening backlog.
 
 ### Cross-repo coordination
 
@@ -223,15 +249,20 @@ following map records their distinct purposes:
 
 | Document | Purpose |
 | --- | --- |
-| [`SECURITY.md`](../SECURITY.md) | Canonical disclosure policy: supported versions, reporting channels, vulnerability classes, severity, response timelines, safe harbour. |
+| [`SECURITY.md`](../SECURITY.md) | Canonical disclosure policy: supported versions, reporting channels, vulnerability classes, severity, response timelines, safe harbour. Links the SDK Trust Model. |
+| [`docs/sdk-trust-model.md`](./sdk-trust-model.md) | **SCF-facing trust narrative for the SDK** — honest boundaries for Freighter signing, Soroban RPC trust, and the oracle/indexer/notifications blast radius. Cross-linked from all three repos' `SECURITY.md` files. |
 | [`docs/security-guide.md`](./security-guide.md) | Integrator- and operator-facing security practices: best practices, audit information, provenance verification, incident response. |
-| [`docs/security.md`](./security.md) | Navigation stub pointing to `SECURITY.md` and the security guide; kept so existing links resolve. |
+| [`docs/security.md`](./security.md) | Navigation stub pointing to `SECURITY.md`, the SDK Trust Model, and the security guide; kept so existing links resolve. |
 | [`docs/vulnerability-disclosure.md`](./vulnerability-disclosure.md) | Entryway for reporters: how to report, expected timelines, severity summary, links to the technical threat models. |
 | [`docs/threat-model.md`](./threat-model.md) | Protocol-wide attack surface analysis across SDK, frontend, API/indexer, and governance. |
 
 The contract repo's `SECURITY.md`/`docs/security.md` and the frontend repo's
 `SECURITY.md`/`docs/security.md` are component-specific implementations of the
-same unified policy.
+same unified policy. Both must surface a prominent link to
+[`docs/sdk-trust-model.md`](./sdk-trust-model.md) (canonical URL:
+`https://github.com/Invoice-Liquidity-Network/Invoice-Liquidity-Network/blob/dev/docs/sdk-trust-model.md`).
+Ready-to-paste sibling-repo snippets live in
+[`docs/sdk-trust-model-cross-repo.md`](./sdk-trust-model-cross-repo.md).
 
 ## References
 

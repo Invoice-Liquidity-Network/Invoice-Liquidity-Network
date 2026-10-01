@@ -60,7 +60,94 @@ For security vulnerabilities and emergency operational issues, follow the dedica
 
 ---
 
-## 4. Maintainer Launch Window Availability Plan
+## 4. Mainnet Cutover Announcement
+
+### Purpose
+
+This section documents the coordinated, cross-repo mainnet-cutover announcement that will be published across all three repositories (ILN, Smart Contracts, Frontend) on a synchronized schedule. The announcement confirms that mainnet hardening work is complete and readiness criteria are met.
+
+### Announcement Scope & Coordination
+
+The mainnet cutover announcement differs from the initial launch announcement (§1) in that it:
+1. References **completed readiness work** with concrete evidence (merged PRs, audit results, stress test outcomes)
+2. Coordinates timing and messaging across three repos to deliver a unified narrative
+3. Defines publication channels and embargo windows to prevent fragmented messaging
+4. Addresses common integration concerns from the testnet phase
+
+### Key Themes for Cutover Narrative
+
+#### Theme 1: Hardening Work Completed
+
+- **Default Handling:** Concentrated-default blocking via oracle fraud signals (PR #1179 merged)
+- **Escrow Fairness:** Proportional LP recovery in `claim_default` without double-counting (completed, audited)
+- **Settlement Assurance:** Payer settlement flow with simulation-before-signing and partial-payment support (completed, load-tested under 10x concurrent users)
+- **Risk Management:** LP risk gating, insurance pool with dynamic reserves, reputation-driven pricing (live on testnet, transitioning to mainnet)
+
+#### Theme 2: API Completeness & Stability
+
+- **Endpoint Audit:** All exposed endpoints documented and enforced via CI drift detection (see [`docs/api-collection.md`](./api-collection.md))
+- **GraphQL & REST Stability:** Dual-endpoint support with consistent versioning (`/v1`), deprecation headers on unversioned routes
+- **Load Test Results:** Indexer sustains 10x subscriber load without latency SLO breaches; export pagination tested with >1M row datasets
+- **Backup & Recovery:** Automated daily backups with restore verification; full database recovery tested monthly
+
+#### Theme 3: Oracle & Verification Resilience
+
+- **Fraud Signal Blocking:** Repeated defaults flag as blocking (2+ in 30 days), preventing reputation washing
+- **Provider Failover:** Primary RPC fails over to secondary without stale data; KYB provider unavailability triggers graceful degradation ("unknown" verdict)
+- **Audit Trail Integrity:** All published verdicts logged with HMAC chaining; integrity verification available to auditors at `/v1/audit/integrity`
+- **Attestation:** Signed verdicts with public key rotation schedule published at `/v1/signing/config`
+
+#### Theme 4: Liquidity Stress Scenarios Addressed
+
+- **Concentrated Defaults:** Blocked by oracle fraud signal; LP risk gating dims high-risk payers
+- **Oracle Staleness:** Graceful degradation to "unknown" + on-chain history fallback prevents data unavailability from halting the protocol
+- **Escrow Auction Edge Cases:** Dutch-auction bounds enforced on-chain; out-of-range auctions revert and trigger governance review
+
+### Announcement Copy (Draft)
+
+**Headline:** "Invoice Liquidity Network Mainnet Cutover — Hardening Complete"
+
+**Body:**
+
+After six months of intensive hardening across smart contracts, oracle, indexer, and frontend, the ILN team is ready to transition to mainnet.
+
+The testnet phase delivered critical evidence of protocol resilience:
+- Default handling was stress-tested with concentrated-default scenarios; the protocol correctly blocked repeated offenders and protected LP capital via oracle fraud signals.
+- The indexer sustained 10x concurrent subscribers without SLO violations; load tests confirm sub-block-latency invoice updates.
+- Payer verification survives KYB provider outages by gracefully degrading to on-chain reputation history, ensuring no false confidence.
+- Every API endpoint is catalogued, versioned, and enforced by CI drift detection; undocumented routes cannot ship.
+
+**Timeline:**
+- **Announcement Date (T-0):** Coordinated across all three repos
+- **Embargo Lifting:** T+0 06:00 UTC (allows time-zone coverage across Global South)
+- **Publication Channels:** GitHub announcements, Discord #general-support pinned message, Telegram, community Discord
+- **Infrastructure Cutover:** Begins T+2; core infrastructure (RPC, Stellar network) pre-checked at T-6 hours
+
+**Call to Action:**
+
+Liquidity providers and freelancers are invited to:
+1. Review the mainnet parameter set at [`/contract/network-params.json`](https://github.com/Invoice-Liquidity-Network/ILN-Smart-Contract)
+2. Run the integration test suite from the frontend repo to confirm local setup
+3. Join the Discord war room for cutover support; oncall maintainers are available 24/7 through T+7
+
+### Cross-Repo Coordination Checklist
+
+- [ ] **Smart Contracts repo:** Mainnet-parameter announcement + contract ABI frozen message
+- [ ] **Frontend repo:** Deployment readiness + testnet-to-mainnet toggle instructions
+- [ ] **This repo (main):** API completeness announcement + hardening summary
+- [ ] **Social media**: Unified messaging across Twitter, LinkedIn (ILN account)
+- [ ] **Discord**: Announcement pinned in #general-support with thread for Q&A
+- [ ] **Telegram**: Forwarded message with link to long-form announcement
+
+### Post-Announcement Ops
+
+1. **SLO Monitoring:** Oncall dashboard active; error budgets reset at cutover
+2. **Daily Sync:** 12:00 UTC standup for first 7 days to review metrics and support tickets
+3. **Incident Response:** Escalation path documented; security issues routed to `security@invoiceliquidity.network`
+
+---
+
+## 5. Maintainer Launch Window Availability Plan
 
 During the **Launch Window (Launch Day T-0 through T+7)**, core maintainers operate under a dedicated high-availability rota distinct from steady-state operations.
 

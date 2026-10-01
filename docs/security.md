@@ -4,6 +4,12 @@
 > how to report, vulnerability classes, severity, and response timelines — now lives in the
 > repository root [`SECURITY.md`](../SECURITY.md).
 
+For the SDK's trust boundaries — what it validates, what it delegates to Freighter and
+Soroban RPC, and what integrators must protect themselves — see the
+**[SDK Trust Model](./sdk-trust-model.md)**. Sibling repos link the same document from
+their `SECURITY.md` files; the cross-repo snippets live in
+[Cross-repo SDK Trust Model visibility](./sdk-trust-model-cross-repo.md).
+
 For broader security practices (integrator guidance, node-operator hardening, package
 provenance verification, audit information, and general incident response), see the
 [Security Guide](./security-guide.md).

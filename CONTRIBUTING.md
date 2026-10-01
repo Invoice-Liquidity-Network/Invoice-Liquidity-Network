@@ -76,10 +76,53 @@ pnpm gitleaks:scan
 4. Run the relevant formatting, lint, type-check, build, and test commands locally.
 5. Open a pull request with a clear description of the change, verification performed, and any follow-up work.
 
-Use conventional commit messages where possible, for example:
+### Commit messages and PR titles (unified convention)
+
+Commit messages and pull-request titles share **one** rule set:
+[`commitlint.config.js`](./commitlint.config.js), based on
+[`@commitlint/config-conventional`](https://github.com/conventional-changelog/commitlint)
+with an extended `type-enum`.
+
+| Enforcement point | What it checks | How |
+| --- | --- | --- |
+| Commit messages (local) | Each commit header | [`.husky/commit-msg`](./.husky/commit-msg) via `commitlint --config commitlint.config.js` |
+| PR titles (CI) | The PR title only | [`.github/workflows/pr-title-lint.yml`](./.github/workflows/pr-title-lint.yml) runs `commitlint --config commitlint.config.js` |
+
+Because both points load the same config file, anything accepted by one is
+accepted by the other.
+
+Allowed types (must match exactly; both commits and PR titles):
+
+`feat`, `fix`, `docs`, `chore`, `test`, `refactor`, `perf`, `ci`, `design`, `build`
+
+Format:
 
 ```text
-security: add gitleaks pre-commit hook via Husky
+<type>(optional-scope): <imperative summary>
+```
+
+Examples:
+
+```text
+feat(sdk): add Freighter network mismatch guard
+fix(indexer): retry Horizon cursor on 429
+docs: cross-link SDK trust model from SECURITY.md
+ci: reconcile PR title lint and commitlint rules
+test: expand SDK browser Freighter interaction coverage
+chore: bump stellar-sdk to 15.0.1
+```
+
+Notes:
+
+- Use `docs` or `chore` for security-policy and tooling changes — there is no
+  `security` type, so `security: ...` is rejected by both checks.
+- Keep the header at or under 100 characters (the conventional-commit default).
+- Do not end the subject with a period.
+
+Verify the two enforcement points have not drifted apart:
+
+```bash
+pnpm validate:commit-convention
 ```
 
 ## Code standards

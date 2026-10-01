@@ -12,7 +12,8 @@
     "test": "vitest run",
     "test:coverage": "vitest run --coverage",
     "test:watch": "vitest",
-    "dead-code:check": "pnpm dead-code:check --filter iln-notifications"
+    "dead-code:check": "pnpm dead-code:check --filter iln-notifications",
+    "test:load:notifications": "node scripts/test-load-notifications.js"
   },
   "dependencies": {
     "resend": "^2.0.0",

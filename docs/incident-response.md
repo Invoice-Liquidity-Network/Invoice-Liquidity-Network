@@ -14,6 +14,7 @@ Incidents in the main repository frequently intersect with contract execution an
 | --- | --- | --- | --- | --- |
 | **SDK Compromise** (malicious npm package, XDR mutation) | SDK Lead / Security Team | `frontend`, third-party integrators | Deprecate npm version, publish security advisory, enforce SLSA attestation verification | [Frontend Runbook](https://github.com/Invoice-Liquidity-Network/ILN-Frontend/blob/main/docs/incident-response.md#step-2-emergency-vercel-rollback-sev-1-mitigation) |
 | **Indexer Data Loss / Corruption** | Infrastructure Lead | `frontend`, analytics dashboards | Switch frontend to direct Soroban RPC read mode, restore SQLite WAL backup | [Frontend Runbook](https://github.com/Invoice-Liquidity-Network/ILN-Frontend/blob/main/docs/incident-response.md#step-1-execute-feature-flag-kill-switches) |
+| **Indexer Performance Degradation** (slow queries, stalled cursor) | Infrastructure Lead | `frontend` (stale data only) | Restart indexer service, investigate query plans, check index health | [Scenario C Details](#scenario-c-indexer-performance-degradation-slow-queries--ledger-cursor-stalled) |
 | **Oracle-Service Compromise** | Security Lead & Governance Lead | `backend`, `frontend` | Disable oracle feature flag in frontend (`NEXT_PUBLIC_ORACLE_ENABLED=false`), trigger contract fallback mode | [Contract Policy](https://github.com/Invoice-Liquidity-Network/ILN-Smart-Contract/blob/main/docs/security.md#oracle-integration--manipulation) |
 | **Notifications Abuse** (SSRF, Webhook flood) | Backend Services Lead | Integrator webhooks, user channels | Rotate HMAC signing keys, enforce IP blocklist, trip service circuit breaker | [Security Policy](../SECURITY.md#severity-classification) |
 | **Contract-Level Emergency** (drained escrow, reentrancy) | Smart Contract Lead | `backend`, `frontend` | Trigger contract pause via admin multisig | [Contract Reentrancy Matrix](https://github.com/Invoice-Liquidity-Network/ILN-Smart-Contract/blob/main/docs/security.md#reentrancy-analysis-issue-535) |
@@ -104,7 +105,99 @@ The indexer parses Soroban event streams to populate the REST API (`/v1/invoice/
 
 ---
 
-### Scenario C: Oracle-Service Compromise or Malfunction
+### Scenario C: Indexer Performance Degradation (Slow Queries / Ledger Cursor Stalled)
+
+#### 1. Blast Radius
+
+The indexer's polling loop fetches new ledger events every N milliseconds. If database queries become slow (> 5 seconds), the polling loop blocks and fails to advance the ledger cursor. The frontend receives stale state via `/v1/stats`, but on-chain state remains authoritative and unaffected.
+
+**Key Distinction:** This is NOT data loss or corruption (Scenario B); the database is healthy but queries are slow. Frontline symptoms mimic data corruption but remediation is different.
+
+#### 2. Detection & Diagnosis Workflow
+
+1. **Check Indexer Health Endpoint**:
+   ```bash
+   curl http://indexer:3001/health
+   # Should return: { "status": "ok", "db": "ok", "lastLedger": <N> }
+   ```
+
+2. **Check Cursor Advancement**:
+   ```bash
+   curl http://indexer:3001/metrics | grep 'iln_last_processed_ledger'
+   # If flat-lining (not advancing for > 2 minutes), proceed to step 3
+   ```
+
+3. **Query Database Directly for Slow Query Indicators**:
+   ```bash
+   sqlite3 indexer.db "PRAGMA query_only=true; .timer on"
+   sqlite3 indexer.db "SELECT last_ledger FROM cursor WHERE id = 1;"
+   # If this takes > 5 seconds, the query plan is degraded
+   ```
+
+4. **Check for Index Corruption**:
+   ```bash
+   sqlite3 indexer.db "PRAGMA integrity_check;"
+   # Should return: "ok"
+   ```
+
+#### 3. Containment & Recovery
+
+**DO NOT escalate to the smart-contract team** unless `PRAGMA integrity_check` fails (which would indicate Scenario B).
+
+1. **Quick Fix: Restart Indexer Service**:
+   ```bash
+   systemctl restart iln-indexer
+   # Monitor cursor advancement for 2 minutes
+   watch -n 1 'curl -s http://indexer:3001/metrics | grep iln_last_processed_ledger'
+   # Should advance every 5–10 seconds after restart
+   ```
+
+2. **If Restart Doesn't Fix It: Investigate Query Plans**:
+   ```bash
+   sqlite3 indexer.db "EXPLAIN QUERY PLAN SELECT last_ledger FROM cursor WHERE id = 1;"
+   # Output should show: "SEARCH cursor USING sqlite_autoindex_cursor_1 (id=?)"
+   # If it shows "SCAN TABLE cursor", indexes are missing or corrupted
+   ```
+
+3. **If Indexes Are Missing: Rebuild Indexes from Schema**:
+   The indexer schema includes indexes in `indexer/src/db.ts`. If indexes are missing, manually re-apply the schema:
+   ```bash
+   sqlite3 indexer.db < indexer/src/db.ts
+   systemctl restart iln-indexer
+   ```
+
+4. **If Query Plans Are Still Degraded: Check for Query Regressions**:
+   A recent deployment may have introduced a new query that lacks indexes. Compare recent commits to `indexer/src/db.ts` and `indexer/src/processor.ts` against the last known-good deployment.
+
+#### 4. Escalation Decision Tree
+
+- ✅ **Restart Fixed It:** No cross-repo escalation. Log the incident and investigate why restart was needed (memory leak? connection exhaustion?).
+- ⚠️ **Restart Didn't Fix It + PRAGMA integrity_check Failed:** Escalate to **Scenario B (Data Loss / Corruption)** immediately.
+- ⚠️ **Restart Didn't Fix It + Integrity OK:** Notify Infrastructure Lead and Smart Contract Lead that performance may degrade user experience, but no funds are at risk. Frontend can switch to direct RPC reads if desired.
+
+#### 5. Prevention
+
+Deploy the following Prometheus alerting rules (located in `monitoring/prometheus/indexer-alerts.yml`):
+
+```yaml
+- alert: IndexerSlowQuery
+  expr: histogram_quantile(0.95, rate(iln_db_query_duration_seconds_bucket[5m])) > 5
+  for: 2m
+  annotations:
+    summary: "Indexer queries slower than 5s (p95)"
+    description: "95th percentile query duration exceeds 5 seconds. Check PRAGMA integrity_check and query plans."
+
+- alert: IndexerCursorStalled
+  expr: increase(iln_last_processed_ledger[2m]) == 0
+  for: 1m
+  annotations:
+    summary: "Indexer cursor has not advanced in 2 minutes"
+    description: "Ledger sync is stuck. Check slow queries, RPC connectivity, and service logs."
+```
+
+---
+
+### Scenario D: Oracle-Service Compromise or Malfunction
 
 #### 1. Blast Radius
 The `oracle-service` assesses payer addresses and returns credit scores and verification markers (`/v1/verify`). A compromised or malfunctioning oracle service could return inflated trust scores for fraudulent payers or fail during invoice funding checks.
@@ -177,7 +270,7 @@ Every `oracle-service` paging alert (`monitoring/prometheus/oracle-service-alert
 
 ---
 
-### Scenario D: Notifications Service Abuse (SSRF / Webhook Spam)
+### Scenario E: Notifications Service Abuse (SSRF / Webhook Spam)
 
 #### 1. Blast Radius
 The notifications service processes user subscriptions and dispatches webhooks, emails, and SMS alerts upon invoice state changes. Attackers may attempt Server-Side Request Forgery (SSRF) via malicious webhook URLs (`/subscribe`), send webhook spam, or exhaust SMS/email budgets.

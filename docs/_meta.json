@@ -22,6 +22,7 @@
   "sdk-quickstart": "SDK Quickstart",
   "sdk-api-reference": "SDK API Reference",
   "sdk-trust-model": "SDK Trust Model",
+  "sdk-trust-model-cross-repo": "SDK Trust Model Cross-Repo Visibility",
   "sdk-e2e": "SDK End-to-End Testing",
   "sdk-migration-guide": "SDK Migration Guide",
   "sdk-next-migration": "SDK vs SDK-next",

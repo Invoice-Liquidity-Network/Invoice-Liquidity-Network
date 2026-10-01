@@ -67,6 +67,7 @@ vi.mock('../src/db', () => ({
 
 import {
   clearDeadLetterQueue,
+  resetDeliveryCircuitBreakers,
   deliverNotification,
   getRetryMetrics,
   getCircuitBreakerState,
@@ -156,6 +157,7 @@ let fetchMock: ReturnType<typeof vi.fn>;
 beforeEach(() => {
   vi.useFakeTimers();
   clearDeadLetterQueue();
+  resetDeliveryCircuitBreakers();
   resetCircuitBreakers();
 
   emailSend.mockResolvedValue({ id: 'email-1' });
@@ -190,6 +192,7 @@ describe('sendEmail failure handling', () => {
 
     expect(emailSend).toHaveBeenCalledTimes(2);
     expect(getRetryMetrics().deadLetterCount).toBe(0);
+    expect(getRetryMetrics().activeRetries).toBe(0);
   });
 
   it('gives up after CONFIG.maxWebhookRetry attempts and rejects', async () => {
@@ -198,6 +201,24 @@ describe('sendEmail failure handling', () => {
     await expectSendToReject(sendEmail(makeSubscription(), makePayload()), 'provider down');
 
     expect(emailSend).toHaveBeenCalledTimes(MAX_RETRIES);
+  });
+
+  it('opens a destination circuit after exhausted retries without blocking another recipient', async () => {
+    emailSend.mockRejectedValueOnce(new Error('provider down'))
+      .mockRejectedValueOnce(new Error('provider down'))
+      .mockRejectedValueOnce(new Error('provider down'))
+      .mockResolvedValueOnce({ id: 'email-healthy' });
+    const unavailable = makeSubscription({ destination: 'unavailable@example.com' });
+
+    await expectSendToReject(sendEmail(unavailable, makePayload()), 'provider down');
+    expect(getRetryMetrics().activeRetries).toBe(0);
+    await expect(sendEmail(unavailable, makePayload())).rejects.toThrow(/Circuit open/);
+    expect(emailSend).toHaveBeenCalledTimes(MAX_RETRIES);
+
+    await expect(
+      sendEmail(makeSubscription({ destination: 'healthy@example.com' }), makePayload()),
+    ).resolves.toBeUndefined();
+    expect(emailSend).toHaveBeenCalledTimes(MAX_RETRIES + 1);
   });
 
   it('waits an exponentially increasing time between attempts', async () => {
@@ -355,6 +376,7 @@ describe('sendWebhook failure handling', () => {
     await promise;
 
     expect(fetchMock).toHaveBeenCalledTimes(MAX_RETRIES);
+    expect(getRetryMetrics().activeRetries).toBe(0);
     expect(updateLog).toHaveBeenCalledWith(99, {
       status: 'failed',
       attempts: MAX_RETRIES,
@@ -369,6 +391,35 @@ describe('sendWebhook failure handling', () => {
       lastError: 'HTTP 500',
       attempts: MAX_RETRIES,
     });
+  });
+
+  it('opens a failed webhook circuit and keeps other destinations deliverable', async () => {
+    fetchMock.mockImplementation(async (url: string) =>
+      url === WEBHOOK_URL
+        ? { ok: false, status: 503 }
+        : { ok: true, status: 200 },
+    );
+
+    const unavailable = webhookSub();
+    const promise = sendWebhook(unavailable, makePayload());
+    await vi.runAllTimersAsync();
+    await promise;
+
+    expect(fetchMock).toHaveBeenCalledTimes(MAX_RETRIES);
+    await expect(sendWebhook(unavailable, makePayload())).rejects.toThrow(/Circuit open/);
+    expect(fetchMock).toHaveBeenCalledTimes(MAX_RETRIES);
+
+    await expect(
+      sendWebhook(
+        makeSubscription({
+          id: 'healthy-webhook',
+          channel: 'webhook',
+          destination: 'https://healthy.example.com/hook',
+        }),
+        makePayload(),
+      ),
+    ).resolves.toBeUndefined();
+    expect(fetchMock).toHaveBeenCalledTimes(MAX_RETRIES + 1);
   });
 
   it('records the network error message when the request never completes', async () => {
