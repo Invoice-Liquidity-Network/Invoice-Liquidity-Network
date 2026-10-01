@@ -1,0 +1,318 @@
+# Prometheus alerting rules for oracle-service.
+#
+# Load alongside the other rule files:
+#
+#   # prometheus.yml
+#   rule_files:
+#     - /etc/prometheus/rules/oracle-service-alerts.yml
+#
+# Under the Prometheus Operator, wrap `groups` in a PrometheusRule resource.
+#
+# Scrape target: oracle-service exposes /metrics and /v1/metrics on
+# ORACLE_PORT (default 3010).
+
+groups:
+  - name: oracle-service-verification-outcomes
+    interval: 30s
+    rules:
+      # ── Fraud-flag rate anomaly ───────────────────────────────────────────
+      # The alert the service exists to have. A sudden spike in flagged
+      # submissions means one of two things and both are urgent:
+      #   - an attacker probing the oracle, or
+      #   - a bug in the heuristics rejecting legitimate payers.
+      # Neither is visible from a bare request-count metric, which is why the
+      # service publishes a ratio rather than only counters.
+      - alert: OracleFraudFlagRateHigh
+        expr: avg_over_time(oracle_fraud_flag_ratio[10m]) > 0.25
+        for: 10m
+        labels:
+          severity: warning
+          team: ops
+          component: oracle-service
+        annotations:
+          summary: >-
+            {{ $value | humanizePercentage }} of oracle verdicts on
+            {{ $labels.instance }} carried a fraud signal over the last 10m.
+          description: >-
+            Baseline is low single digits. Sustained elevation is either an
+            attack or a heuristic regression. Check
+            oracle_fraud_signal_total to see which heuristic is firing — a
+            single signal dominating points at a bug, a spread points at an
+            attack.
+          runbook_url: https://github.com/Invoice-Liquidity-Network/Invoice-Liquidity-Network/blob/main/docs/incident-response.md#oraclefraudflagratehigh
+
+      - alert: OracleFraudFlagRateCritical
+        expr: avg_over_time(oracle_fraud_flag_ratio[5m]) > 0.6
+        for: 5m
+        labels:
+          severity: critical
+          team: ops
+          component: oracle-service
+        annotations:
+          summary: >-
+            Most oracle verdicts on {{ $labels.instance }} are being fraud-flagged
+            ({{ $value | humanizePercentage }}).
+          description: >-
+            At this rate legitimate funding is almost certainly being blocked.
+            Treat as a heuristic regression until proven otherwise.
+          runbook_url: https://github.com/Invoice-Liquidity-Network/Invoice-Liquidity-Network/blob/main/docs/incident-response.md#oraclefraudflagratecritical
+
+      # ── Nothing is being verified ─────────────────────────────────────────
+      # A flat verdict counter while the service is up means verification is
+      # silently broken — the failure mode a plain uptime check misses, because
+      # /health keeps returning 200.
+      - alert: OracleNoVerifications
+        expr: |
+          rate(oracle_verification_requests_total[15m]) == 0
+          and on(instance) up{job="oracle-service"} == 1
+        for: 15m
+        labels:
+          severity: warning
+          team: ops
+          component: oracle-service
+        annotations:
+          summary: No oracle verifications on {{ $labels.instance }} for 15 minutes.
+          description: >-
+            The service is up but has verified nothing. Either upstream traffic
+            has stopped or requests are failing before they reach the verifier.
+          runbook_url: https://github.com/Invoice-Liquidity-Network/Invoice-Liquidity-Network/blob/main/docs/incident-response.md#oraclenoverifications
+
+      # ── Everything rejected ───────────────────────────────────────────────
+      - alert: OracleAllVerificationsRejected
+        expr: |
+          sum by (instance) (rate(oracle_verification_outcome_total{outcome=~"rejected-.*"}[10m]))
+          / clamp_min(sum by (instance) (rate(oracle_verification_outcome_total[10m])), 0.0001)
+          > 0.95
+        for: 10m
+        labels:
+          severity: critical
+          team: ops
+          component: oracle-service
+        annotations:
+          summary: >-
+            Oracle is rejecting essentially every verification on
+            {{ $labels.instance }}.
+          description: >-
+            `fund_invoice()`'s require_oracle_verification path is effectively
+            closed. Check the outcome breakdown: rejected-stale-data points at
+            a broken indexer feed, rejected-low-trust at a reputation lookup
+            failure.
+          runbook_url: https://github.com/Invoice-Liquidity-Network/Invoice-Liquidity-Network/blob/main/docs/incident-response.md#oracleallverificationsrejected
+
+      # ── Stale upstream data ───────────────────────────────────────────────
+      - alert: OracleStaleResponsesRising
+        expr: rate(oracle_stale_responses_total[10m]) > 0
+        for: 10m
+        labels:
+          severity: warning
+          team: ops
+          component: oracle-service
+        annotations:
+          summary: Oracle is serving stale verdicts on {{ $labels.instance }}.
+          description: >-
+            Source data is older than ORACLE_MAX_ORACLE_AGE_MS. Usually the
+            indexer has fallen behind or the reputation contract is unreachable.
+          runbook_url: https://github.com/Invoice-Liquidity-Network/Invoice-Liquidity-Network/blob/main/docs/incident-response.md#oraclestaleresponsesrising
+
+  - name: oracle-service-availability
+    interval: 30s
+    rules:
+      - alert: OracleVerificationLatencyHigh
+        expr: |
+          histogram_quantile(0.95,
+            sum by (le, instance) (rate(oracle_verification_duration_seconds_bucket[5m]))
+          ) > 2
+        for: 10m
+        labels:
+          severity: warning
+          team: ops
+          component: oracle-service
+        annotations:
+          summary: >-
+            Oracle p95 verification latency on {{ $labels.instance }} is
+            {{ $value | humanizeDuration }}.
+          description: >-
+            Callers time out well before the oracle does. Check the indexer and
+            the Soroban RPC endpoint.
+          runbook_url: https://github.com/Invoice-Liquidity-Network/Invoice-Liquidity-Network/blob/main/docs/incident-response.md#oracleverificationlatencyhigh
+
+      # ── Cache effectiveness ───────────────────────────────────────────────
+      # A collapsed hit rate means every verification is hitting the indexer and
+      # RPC, which is how latency alerts start.
+      - alert: OracleCacheHitRateLow
+        expr: |
+          sum by (instance) (rate(oracle_cache_hits_total[15m]))
+          / clamp_min(
+              sum by (instance) (rate(oracle_cache_hits_total[15m]))
+            + sum by (instance) (rate(oracle_cache_misses_total[15m])), 0.0001)
+          < 0.2
+        for: 15m
+        labels:
+          severity: warning
+          team: ops
+          component: oracle-service
+        annotations:
+          summary: Oracle cache hit rate on {{ $labels.instance }} is below 20%.
+          description: >-
+            Expected to be low right after a deploy or a Redis restart. Sustained
+            low hit rate suggests the cache backend is unreachable and every
+            request is recomputing.
+          runbook_url: https://github.com/Invoice-Liquidity-Network/Invoice-Liquidity-Network/blob/main/docs/incident-response.md#oraclecachehitratelow
+
+      - alert: OracleExternalProviderUnavailable
+        expr: |
+          sum by (instance) (rate(oracle_external_verification_total{status="unknown"}[10m]))
+          / clamp_min(sum by (instance) (rate(oracle_external_verification_total[10m])), 0.0001)
+          > 0.5
+        for: 10m
+        labels:
+          severity: warning
+          team: ops
+          component: oracle-service
+        annotations:
+          summary: >-
+            Over half of external KYB lookups on {{ $labels.instance }} returned
+            unknown.
+          description: >-
+            The provider is likely down. Verdicts still resolve — the composition
+            policy treats unknown as inert — but they lose the corroborating
+            signal, so confidence is lower across the board.
+          runbook_url: https://github.com/Invoice-Liquidity-Network/Invoice-Liquidity-Network/blob/main/docs/incident-response.md#oracleexternalproviderunavailable
+
+  # ── Manipulation-resistant delta bounds (#1052) ───────────────────────────
+  # The guard holds any single-update trust movement that exceeds a feed's
+  # bound until an independent source quorum confirms it or a human resolves
+  # it. These rules watch the two failure directions: a spike in violations
+  # (someone is trying to move scores fast) and a queue that is not draining
+  # (holds are piling up because nobody is triaging them).
+  - name: oracle-service-delta-bounds
+    interval: 30s
+    rules:
+      - alert: OracleDeltaHoldsNotDraining
+        expr: oracle_delta_holds_active > 0
+        for: 10m
+        labels:
+          severity: warning
+          team: ops
+          component: oracle-service
+        annotations:
+          summary: >-
+            {{ $value }} delta-bound update(s) on {{ $labels.instance }} have
+            been held for review for over 10 minutes.
+          description: >-
+            A held update is serving the last known-good verdict, so funding is
+            not broken — but the review queue is not draining. Inspect the held
+            updates at GET /v1/oracle/delta-holds and resolve each one
+            (accept publishes the proposed score, reject restores the previous
+            one). Sustained holds usually mean the bound is set too tight for a
+            legitimately volatile payer, or an upstream source is stuck. See
+            docs/oracle-source-failover-runbook.md.
+
+      - alert: OracleDeltaBoundViolationsElevated
+        expr: |
+          sum by (instance, feed) (rate(oracle_delta_bound_violations_total[10m])) > 0.05
+        for: 15m
+        labels:
+          severity: warning
+          team: ops
+          component: oracle-service
+        annotations:
+          summary: >-
+            Oracle is holding repeated over-bound {{ $labels.feed }} updates on
+            {{ $labels.instance }}.
+          description: >-
+            Occasional holds are expected — that is the guard doing its job. A
+            sustained rate means many subjects are moving further than the bound
+            in one update at once, which is the signature of either a corrupted
+            upstream feed or a deliberate attempt to swing scores in a single
+            step. Cross-check oracle_delta_quorum_confirmations_total: if quorum
+            is confirming the same movement, the baseline is genuinely shifting.
+
+      # This is informational, not a page: over-bound updates that a source
+      # quorum confirmed are published normally. A high rate alongside elevated
+      # violations tells the on-call that the holds are legitimate, so the
+      # review can be deferred rather than treated as an incident.
+      - alert: OracleDeltaQuorumConfirmationsHigh
+        expr: |
+          sum by (instance, feed) (rate(oracle_delta_quorum_confirmations_total[30m])) > 0.05
+        for: 30m
+        labels:
+          severity: info
+          team: ops
+          component: oracle-service
+        annotations:
+          summary: >-
+            Repeated quorum-confirmed over-bound {{ $labels.feed }} updates on
+            {{ $labels.instance }}.
+          description: >-
+            Independent sources are corroborating movements that breach the
+            single-source bound, so they are published without a hold. Expected
+            during real reputation shifts; if it coincides with
+            OracleDeltaBoundViolationsElevated, the widening is genuine rather
+            than a single manipulated feed.
+
+  # ── Automated source failover (#1051) ─────────────────────────────────────
+  # Each provider (history indexer, reputation RPC) is a primary/secondary
+  # pair when a fallback is configured. oracle_source_health_state is 0 healthy
+  # / 1 degraded / 2 unavailable per source; oracle_failover_events_total counts
+  # transitions out of healthy. See docs/oracle-source-failover-runbook.md.
+  - name: oracle-service-source-failover
+    interval: 30s
+    rules:
+      - alert: OracleSourceUnavailable
+        expr: oracle_source_health_state >= 2
+        for: 5m
+        labels:
+          severity: critical
+          team: ops
+          component: oracle-service
+        annotations:
+          summary: >-
+            Oracle source {{ $labels.source }} on {{ $labels.instance }} is
+            unavailable.
+          description: >-
+            The tracker has demoted {{ $labels.source }} out of rotation after its
+            error rate crossed the unavailable threshold (or it went stale). If a
+            fallback is configured, traffic has already moved to it and verdicts
+            still resolve — but there is no second pair of eyes on this source, so
+            a fallback outage now means the feed fails safe (empty history /
+            zeroed reputation). Confirm the fallback is healthy and check the
+            source endpoint.
+
+      - alert: OracleSourceDegraded
+        expr: oracle_source_health_state == 1
+        for: 15m
+        labels:
+          severity: warning
+          team: ops
+          component: oracle-service
+        annotations:
+          summary: >-
+            Oracle source {{ $labels.source }} on {{ $labels.instance }} has been
+            degraded for 15 minutes.
+          description: >-
+            {{ $labels.source }} is above its error-rate or p95-latency threshold
+            but still serving. The failover pair keeps calls on the healthier
+            source, so this is early warning rather than an incident. Look at
+            latency and error trends on the upstream before it escalates to
+            unavailable.
+
+      - alert: OracleFailoverChurn
+        expr: |
+          sum by (instance) (increase(oracle_failover_events_total[30m])) > 3
+        for: 30m
+        labels:
+          severity: warning
+          team: ops
+          component: oracle-service
+        annotations:
+          summary: >-
+            Oracle sources on {{ $labels.instance }} have flipped out of healthy
+            {{ $value }} times in 30 minutes.
+          description: >-
+            The recovery streak and cooldown are specifically tuned to stop a
+            flapping source from thrashing the routing, so several genuine
+            demotions in half an hour means a source is oscillating hard enough to
+            beat the anti-flap window — or two sources are failing at once.
+            Identify the oscillating source in oracle_source_health_state and
+            stabilise it; sustained churn degrades verdict consistency.

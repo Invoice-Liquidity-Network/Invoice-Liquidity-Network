@@ -60,7 +60,16 @@ describe('usage-analytics', () => {
 
     const [, init] = fetchMock.mock.calls[0];
     const body = JSON.parse(init.body);
-    const piiFields = ['address', 'freelancer', 'payer', 'funder', 'secretKey', 'publicKey', 'amount', 'invoiceId'];
+    const piiFields = [
+      'address',
+      'freelancer',
+      'payer',
+      'funder',
+      'secretKey',
+      'publicKey',
+      'amount',
+      'invoiceId',
+    ];
     for (const field of piiFields) {
       expect(body).not.toHaveProperty(field);
     }

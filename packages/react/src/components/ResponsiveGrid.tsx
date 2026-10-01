@@ -7,13 +7,15 @@ export interface ResponsiveGridProps {
    * Number of columns. Can be a static number or an object mapping breakpoints to column counts.
    * Default: { xs: 1, sm: 2, md: 3, lg: 4 }
    */
-  cols?: number | {
-    xs?: number;
-    sm?: number;
-    md?: number;
-    lg?: number;
-    xl?: number;
-  };
+  cols?:
+    | number
+    | {
+        xs?: number;
+        sm?: number;
+        md?: number;
+        lg?: number;
+        xl?: number;
+      };
   /** Spacing between items (e.g. "16px", 20, "1.5rem"). Default: "20px" */
   gap?: number | string;
   /** Custom inline styles for the container */
@@ -31,12 +33,12 @@ export const ResponsiveGrid: React.FC<ResponsiveGridProps> = ({
 }) => {
   const uniqueId = useId().replace(/:/g, '');
   const gridClass = `iln-grid-${uniqueId}`;
-  
+
   const parsedGap = typeof gap === 'number' ? `${gap}px` : gap;
 
   // Resolve media query rules
   let cssRules = '';
-  
+
   if (typeof cols === 'number') {
     cssRules = `
       .${gridClass} {
@@ -45,10 +47,10 @@ export const ResponsiveGrid: React.FC<ResponsiveGridProps> = ({
     `;
   } else {
     const xs = cols.xs ?? 1;
-    const sm = cols.sm ?? (cols.xs ?? 2);
-    const md = cols.md ?? (cols.sm ?? 3);
-    const lg = cols.lg ?? (cols.md ?? 4);
-    const xl = cols.xl ?? (cols.lg ?? 4);
+    const sm = cols.sm ?? cols.xs ?? 2;
+    const md = cols.md ?? cols.sm ?? 3;
+    const lg = cols.lg ?? cols.md ?? 4;
+    const xl = cols.xl ?? cols.lg ?? 4;
 
     cssRules = `
       .${gridClass} {
@@ -79,14 +81,18 @@ export const ResponsiveGrid: React.FC<ResponsiveGridProps> = ({
 
   return (
     <>
-      <style dangerouslySetInnerHTML={{ __html: `
+      <style
+        dangerouslySetInnerHTML={{
+          __html: `
         .${gridClass} {
           display: grid;
           width: 100%;
           box-sizing: border-box;
         }
         ${cssRules}
-      `}} />
+      `,
+        }}
+      />
       <div
         className={`${gridClass} ${className}`}
         style={{

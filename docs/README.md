@@ -52,3 +52,7 @@ pnpm --filter @invoice-liquidity/docs dev
 pnpm --filter @invoice-liquidity/docs-next dev
 # Site runs at http://localhost:3000 (Nextra 3 / App Router)
 ```
+
+## Security and Disclosures
+
+We take protocol security seriously. If you discover a vulnerability, please consult our unified [Vulnerability Disclosure Policy](vulnerability-disclosure.md) before reporting.

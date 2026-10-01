@@ -8,6 +8,9 @@ import {
   parseInvoiceCancelledEvent,
   parseInvoiceExpiredEvent,
   parseInvoiceDisputedEvent,
+  parseDisputeEvidenceSubmittedEvent,
+  parseDisputeResolvedEvent,
+  parseDisputeAutoResolvedEvent,
   parseReputationUpdatedEvent,
   parseContractPausedEvent,
   parseTokenAddedEvent,
@@ -53,10 +56,7 @@ function addressScVal(addr: string): xdr.ScVal {
 
 function scvMap(entries: Record<string, xdr.ScVal>): xdr.ScVal {
   return xdr.ScVal.scvMap(
-    Object.entries(entries).map(
-      ([key, val]) =>
-        new xdr.ScMapEntry({ key: sym(key), val }),
-    ),
+    Object.entries(entries).map(([key, val]) => new xdr.ScMapEntry({ key: sym(key), val }))
   );
 }
 
@@ -81,7 +81,7 @@ describe('parseInvoiceSubmittedEvent', () => {
   it('parses a valid InvoiceSubmitted event', () => {
     const raw = makeRawEvent(
       [sym('invoice_submitted'), u64(INVOICE_ID), addressScVal(TEST_ISSUER)],
-      valueWith({ amount: i128(AMOUNT) }),
+      valueWith({ amount: i128(AMOUNT) })
     );
 
     const event = parseInvoiceSubmittedEvent(raw);
@@ -96,7 +96,7 @@ describe('parseInvoiceSubmittedEvent', () => {
   it('returns null for wrong event name', () => {
     const raw = makeRawEvent(
       [sym('invoice_funded'), u64(INVOICE_ID)],
-      valueWith({ amount: i128(AMOUNT) }),
+      valueWith({ amount: i128(AMOUNT) })
     );
     expect(parseInvoiceSubmittedEvent(raw)).toBeNull();
   });
@@ -111,7 +111,7 @@ describe('parseInvoiceFundedEvent', () => {
   it('parses a valid InvoiceFunded event', () => {
     const raw = makeRawEvent(
       [sym('invoice_funded'), u64(INVOICE_ID), addressScVal(TEST_FUNDER)],
-      valueWith({ amount: i128(AMOUNT) }),
+      valueWith({ amount: i128(AMOUNT) })
     );
 
     const event = parseInvoiceFundedEvent(raw);
@@ -126,7 +126,7 @@ describe('parseInvoiceFundedEvent', () => {
   it('returns null for wrong event name', () => {
     const raw = makeRawEvent(
       [sym('invoice_paid'), u64(INVOICE_ID)],
-      valueWith({ amount: i128(AMOUNT) }),
+      valueWith({ amount: i128(AMOUNT) })
     );
     expect(parseInvoiceFundedEvent(raw)).toBeNull();
   });
@@ -136,7 +136,7 @@ describe('parseInvoicePaidEvent', () => {
   it('parses a valid InvoicePaid event', () => {
     const raw = makeRawEvent(
       [sym('invoice_paid'), u64(INVOICE_ID), addressScVal(TEST_PAYER)],
-      valueWith({ amount: i128(AMOUNT) }),
+      valueWith({ amount: i128(AMOUNT) })
     );
 
     const event = parseInvoicePaidEvent(raw);
@@ -151,10 +151,7 @@ describe('parseInvoicePaidEvent', () => {
 
 describe('parseInvoiceCancelledEvent', () => {
   it('parses a valid InvoiceCancelled event', () => {
-    const raw = makeRawEvent(
-      [sym('invoice_cancelled'), u64(INVOICE_ID)],
-      valueWith({}),
-    );
+    const raw = makeRawEvent([sym('invoice_cancelled'), u64(INVOICE_ID)], valueWith({}));
 
     const event = parseInvoiceCancelledEvent(raw);
     expect(event).not.toBeNull();
@@ -166,10 +163,7 @@ describe('parseInvoiceCancelledEvent', () => {
 
 describe('parseInvoiceExpiredEvent', () => {
   it('parses a valid InvoiceExpired event', () => {
-    const raw = makeRawEvent(
-      [sym('invoice_expired'), u64(INVOICE_ID)],
-      valueWith({}),
-    );
+    const raw = makeRawEvent([sym('invoice_expired'), u64(INVOICE_ID)], valueWith({}));
 
     const event = parseInvoiceExpiredEvent(raw);
     expect(event).not.toBeNull();
@@ -183,7 +177,7 @@ describe('parseInvoiceDisputedEvent', () => {
   it('parses a valid InvoiceDisputed event', () => {
     const raw = makeRawEvent(
       [sym('invoice_disputed'), u64(INVOICE_ID), addressScVal(TEST_DISPUTER)],
-      valueWith({}),
+      valueWith({})
     );
 
     const event = parseInvoiceDisputedEvent(raw);
@@ -195,11 +189,63 @@ describe('parseInvoiceDisputedEvent', () => {
   });
 });
 
+describe('parseDisputeEvidenceSubmittedEvent', () => {
+  it('parses a valid DisputeEvidenceSubmitted event', () => {
+    const evidenceCid = 'ipfs://bafybeigdyrzt5sfp7udm7hu76uh7y26nf3efuylqabf3oclgtqy55fbzdi';
+    const raw = makeRawEvent(
+      [sym('dispute_evidence_submitted'), u64(INVOICE_ID), addressScVal(TEST_DISPUTER)],
+      valueWith({ evidence_cid: nativeToScVal(evidenceCid, { type: 'string' }) })
+    );
+
+    const event = parseDisputeEvidenceSubmittedEvent(raw);
+    expect(event).not.toBeNull();
+    expect(event!.type).toBe('DisputeEvidenceSubmitted');
+    expect(event!.invoiceId).toBe(INVOICE_ID);
+    expect(event!.submitter).toBe(TEST_DISPUTER);
+    expect(event!.evidenceCid).toBe(evidenceCid);
+    expect(event!.timestamp).toBe(TIMESTAMP);
+  });
+});
+
+describe('parseDisputeResolvedEvent', () => {
+  it('parses a valid DisputeResolved event', () => {
+    const raw = makeRawEvent(
+      [sym('dispute_resolved'), u64(INVOICE_ID), addressScVal(TEST_PUBLIC_KEY)],
+      valueWith({
+        decision: nativeToScVal('favor_freelancer', { type: 'string' }),
+        notes: nativeToScVal('Arbitration completed', { type: 'string' }),
+      })
+    );
+
+    const event = parseDisputeResolvedEvent(raw);
+    expect(event).not.toBeNull();
+    expect(event!.type).toBe('DisputeResolved');
+    expect(event!.invoiceId).toBe(INVOICE_ID);
+    expect(event!.resolver).toBe(TEST_PUBLIC_KEY);
+    expect(event!.decision).toBe('favor_freelancer');
+    expect(event!.notes).toBe('Arbitration completed');
+    expect(event!.timestamp).toBe(TIMESTAMP);
+  });
+});
+
+describe('parseDisputeAutoResolvedEvent', () => {
+  it('parses a valid DisputeAutoResolved event', () => {
+    const raw = makeRawEvent([sym('dispute_auto_resolved'), u64(INVOICE_ID)], valueWith({}));
+
+    const event = parseDisputeAutoResolvedEvent(raw);
+    expect(event).not.toBeNull();
+    expect(event!.type).toBe('DisputeAutoResolved');
+    expect(event!.invoiceId).toBe(INVOICE_ID);
+    expect(event!.decision).toBe('favor_freelancer');
+    expect(event!.timestamp).toBe(TIMESTAMP);
+  });
+});
+
 describe('parseReputationUpdatedEvent', () => {
   it('parses a valid ReputationUpdated event', () => {
     const raw = makeRawEvent(
       [sym('reputation_updated'), addressScVal(TEST_ADDRESS)],
-      valueWith({ score: u32(SCORE) }),
+      valueWith({ score: u32(SCORE) })
     );
 
     const event = parseReputationUpdatedEvent(raw);
@@ -213,10 +259,7 @@ describe('parseReputationUpdatedEvent', () => {
 
 describe('parseContractPausedEvent', () => {
   it('parses a valid ContractPaused event', () => {
-    const raw = makeRawEvent(
-      [sym('contract_paused')],
-      valueWith({}),
-    );
+    const raw = makeRawEvent([sym('contract_paused')], valueWith({}));
 
     const event = parseContractPausedEvent(raw);
     expect(event).not.toBeNull();
@@ -227,10 +270,7 @@ describe('parseContractPausedEvent', () => {
 
 describe('parseTokenAddedEvent', () => {
   it('parses a valid TokenAdded event', () => {
-    const raw = makeRawEvent(
-      [sym('token_added'), addressScVal(TEST_TOKEN)],
-      valueWith({}),
-    );
+    const raw = makeRawEvent([sym('token_added'), addressScVal(TEST_TOKEN)], valueWith({}));
 
     const event = parseTokenAddedEvent(raw);
     expect(event).not.toBeNull();
@@ -249,7 +289,7 @@ describe('parseLPPositionTransferredEvent', () => {
         addressScVal(TEST_TO),
         u64(INVOICE_ID),
       ],
-      valueWith({}),
+      valueWith({})
     );
 
     const event = parseLPPositionTransferredEvent(raw);
@@ -262,10 +302,7 @@ describe('parseLPPositionTransferredEvent', () => {
   });
 
   it('returns null when topics are missing', () => {
-    const raw = makeRawEvent(
-      [sym('lp_position_transferred')],
-      valueWith({}),
-    );
+    const raw = makeRawEvent([sym('lp_position_transferred')], valueWith({}));
 
     expect(parseLPPositionTransferredEvent(raw)).toBeNull();
   });
@@ -279,7 +316,7 @@ describe('parseContractEvent', () => {
   it('dispatches InvoiceSubmitted', () => {
     const raw = makeRawEvent(
       [sym('invoice_submitted'), u64(INVOICE_ID), addressScVal(TEST_ISSUER)],
-      valueWith({ amount: i128(AMOUNT) }),
+      valueWith({ amount: i128(AMOUNT) })
     );
     const event = parseContractEvent(raw);
     expect(event).not.toBeNull();
@@ -289,7 +326,7 @@ describe('parseContractEvent', () => {
   it('dispatches InvoiceFunded', () => {
     const raw = makeRawEvent(
       [sym('invoice_funded'), u64(INVOICE_ID), addressScVal(TEST_FUNDER)],
-      valueWith({ amount: i128(AMOUNT) }),
+      valueWith({ amount: i128(AMOUNT) })
     );
     const event = parseContractEvent(raw);
     expect(event).not.toBeNull();
@@ -299,7 +336,7 @@ describe('parseContractEvent', () => {
   it('dispatches InvoicePaid', () => {
     const raw = makeRawEvent(
       [sym('invoice_paid'), u64(INVOICE_ID), addressScVal(TEST_PAYER)],
-      valueWith({ amount: i128(AMOUNT) }),
+      valueWith({ amount: i128(AMOUNT) })
     );
     const event = parseContractEvent(raw);
     expect(event).not.toBeNull();
@@ -307,20 +344,14 @@ describe('parseContractEvent', () => {
   });
 
   it('dispatches InvoiceCancelled', () => {
-    const raw = makeRawEvent(
-      [sym('invoice_cancelled'), u64(INVOICE_ID)],
-      valueWith({}),
-    );
+    const raw = makeRawEvent([sym('invoice_cancelled'), u64(INVOICE_ID)], valueWith({}));
     const event = parseContractEvent(raw);
     expect(event).not.toBeNull();
     expect(event!.type).toBe('InvoiceCancelled');
   });
 
   it('dispatches InvoiceExpired', () => {
-    const raw = makeRawEvent(
-      [sym('invoice_expired'), u64(INVOICE_ID)],
-      valueWith({}),
-    );
+    const raw = makeRawEvent([sym('invoice_expired'), u64(INVOICE_ID)], valueWith({}));
     const event = parseContractEvent(raw);
     expect(event).not.toBeNull();
     expect(event!.type).toBe('InvoiceExpired');
@@ -329,7 +360,7 @@ describe('parseContractEvent', () => {
   it('dispatches InvoiceDisputed', () => {
     const raw = makeRawEvent(
       [sym('invoice_disputed'), u64(INVOICE_ID), addressScVal(TEST_DISPUTER)],
-      valueWith({}),
+      valueWith({})
     );
     const event = parseContractEvent(raw);
     expect(event).not.toBeNull();
@@ -339,7 +370,7 @@ describe('parseContractEvent', () => {
   it('dispatches ReputationUpdated', () => {
     const raw = makeRawEvent(
       [sym('reputation_updated'), addressScVal(TEST_ADDRESS)],
-      valueWith({ score: u32(SCORE) }),
+      valueWith({ score: u32(SCORE) })
     );
     const event = parseContractEvent(raw);
     expect(event).not.toBeNull();
@@ -347,20 +378,14 @@ describe('parseContractEvent', () => {
   });
 
   it('dispatches ContractPaused', () => {
-    const raw = makeRawEvent(
-      [sym('contract_paused')],
-      valueWith({}),
-    );
+    const raw = makeRawEvent([sym('contract_paused')], valueWith({}));
     const event = parseContractEvent(raw);
     expect(event).not.toBeNull();
     expect(event!.type).toBe('ContractPaused');
   });
 
   it('dispatches TokenAdded', () => {
-    const raw = makeRawEvent(
-      [sym('token_added'), addressScVal(TEST_TOKEN)],
-      valueWith({}),
-    );
+    const raw = makeRawEvent([sym('token_added'), addressScVal(TEST_TOKEN)], valueWith({}));
     const event = parseContractEvent(raw);
     expect(event).not.toBeNull();
     expect(event!.type).toBe('TokenAdded');
@@ -374,7 +399,7 @@ describe('parseContractEvent', () => {
         addressScVal(TEST_TO),
         u64(INVOICE_ID),
       ],
-      valueWith({}),
+      valueWith({})
     );
     const event = parseContractEvent(raw);
     expect(event).not.toBeNull();
@@ -382,10 +407,7 @@ describe('parseContractEvent', () => {
   });
 
   it('returns null for unknown event names', () => {
-    const raw = makeRawEvent(
-      [sym('unknown_event'), u64(INVOICE_ID)],
-      valueWith({}),
-    );
+    const raw = makeRawEvent([sym('unknown_event'), u64(INVOICE_ID)], valueWith({}));
     expect(parseContractEvent(raw)).toBeNull();
   });
 
@@ -401,15 +423,18 @@ describe('parseContractEvent', () => {
 });
 
 describe('supportedEventTypes', () => {
-  it('returns all 10 event type names', () => {
+  it('returns all 13 event type names', () => {
     const types = supportedEventTypes();
-    expect(types).toHaveLength(10);
+    expect(types).toHaveLength(13);
     expect(types).toContain('InvoiceSubmitted');
     expect(types).toContain('InvoiceFunded');
     expect(types).toContain('InvoicePaid');
     expect(types).toContain('InvoiceCancelled');
     expect(types).toContain('InvoiceExpired');
     expect(types).toContain('InvoiceDisputed');
+    expect(types).toContain('DisputeEvidenceSubmitted');
+    expect(types).toContain('DisputeResolved');
+    expect(types).toContain('DisputeAutoResolved');
     expect(types).toContain('ReputationUpdated');
     expect(types).toContain('ContractPaused');
     expect(types).toContain('TokenAdded');

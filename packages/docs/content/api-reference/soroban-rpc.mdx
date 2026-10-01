@@ -17,16 +17,23 @@ curl -X POST https://soroban-testnet.stellar.org \
       "hash": "YOUR_TX_HASH"
     }
   }'
+```
 
+## simulateTransaction
 
-  simulateTransaction
 Simulate a contract call before submitting:
+
+```ts
 const simulation = await rpc.simulateTransaction(transaction);
 console.log(simulation.minResourceFee); // Estimated fee
 console.log(simulation.result); // Expected return value
+```
 
-getLedgerEntries
+## getLedgerEntries
+
 Read contract state directly:
+
+```bash
 curl -X POST https://soroban-testnet.stellar.org \
   -H 'Content-Type: application/json' \
   -d '{
@@ -45,10 +52,13 @@ curl -X POST https://soroban-testnet.stellar.org \
       ]
     }
   }'
+```
 
+## getEvents
 
-  getEvents
 Subscribe to contract events:
+
+```bash
 curl -X POST https://soroban-testnet.stellar.org \
   -H 'Content-Type: application/json' \
   -d '{
@@ -70,10 +80,11 @@ curl -X POST https://soroban-testnet.stellar.org \
       }
     }
   }'
+```
 
+## RPC Methods Reference
 
-  RPC Methods Reference
-  | Method                | Description                 |
+| Method                | Description                 |
 | --------------------- | --------------------------- |
 | `getHealth`           | Check server status         |
 | `getLatestLedger`     | Get current ledger sequence |
@@ -83,5 +94,3 @@ curl -X POST https://soroban-testnet.stellar.org \
 | `simulateTransaction` | Dry-run a transaction       |
 | `getEvents`           | Query contract events       |
 | `getLedgerEntries`    | Read ledger state           |
-
-

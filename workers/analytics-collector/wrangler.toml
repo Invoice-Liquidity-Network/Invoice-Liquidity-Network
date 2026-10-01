@@ -1,0 +1,49 @@
+# ILN SDK Analytics Collector — Cloudflare Worker configuration
+#
+# Concurrency and cost decisions (see docs/workers-concurrency-audit.md):
+#
+# - This worker handles SDK usage telemetry (POST /event). Each request is a
+#   single Postgres INSERT via Hyperdrive — CPU time is <5ms per invocation.
+#
+# - Mainnet-projected load: ~50 RPS sustained, ~200 RPS burst (derived from
+#   the SDK install base × average transaction frequency from load-test data).
+#
+# - Cloudflare Workers Standard plan: 10M requests/month included ($5/month
+#   base), $0.30 per additional 1M requests. At 50 RPS sustained ≈ 130M
+#   requests/month ≈ $41/month total.
+#
+# - Hyperdrive connection pooling: up to 100 concurrent connections, connection
+#   reuse across requests within the same isolate. No additional cost.
+#
+# Cost/capacity tradeoff: the Standard plan with default concurrency handles
+# the projected load with headroom. No custom scaling configuration is needed;
+# Cloudflare auto-scales isolates to demand.
+
+name = "iln-analytics-collector"
+main = "worker.ts"
+compatibility_date = "2024-09-23"
+compatibility_flags = ["nodejs_compat"]
+
+# Concurrency model: each isolate handles one request at a time by default.
+# Cloudflare spins up isolates on demand — no manual concurrency tuning needed
+# for this workload profile (low CPU, I/O-bound on Hyperdrive).
+
+[observability]
+enabled = true
+
+# Hyperdrive binding for Postgres connection pooling.
+# The actual Hyperdrive config ID is set per environment.
+[[hyperdrive]]
+binding = "HYPERDRIVE"
+id = ""  # Set via `wrangler hyperdrive create` or dashboard
+
+[env.production]
+# Production Hyperdrive config (set during deploy)
+[[env.production.hyperdrive]]
+binding = "HYPERDRIVE"
+id = ""  # Production Hyperdrive config ID
+
+[env.staging]
+[[env.staging.hyperdrive]]
+binding = "HYPERDRIVE"
+id = ""  # Staging Hyperdrive config ID

@@ -1,19 +1,15 @@
 /** @type {import('eslint').Linter.Config} */
 module.exports = {
-  extends: [
-    'eslint:recommended',
-    'plugin:@typescript-eslint/recommended',
-    'prettier'
-  ],
+  extends: ['eslint:recommended', 'plugin:@typescript-eslint/recommended', 'prettier'],
   parser: '@typescript-eslint/parser',
   parserOptions: {
     ecmaVersion: 2022,
-    sourceType: 'module'
+    sourceType: 'module',
   },
   plugins: ['@typescript-eslint'],
   env: {
     node: true,
-    es2022: true
+    es2022: true,
   },
   rules: {
     // TypeScript-specific rules
@@ -23,22 +19,15 @@ module.exports = {
       'error',
       {
         argsIgnorePattern: '^_',
-        varsIgnorePattern: '^_'
-      }
+        varsIgnorePattern: '^_',
+      },
     ],
 
     // General rules
     'no-console': ['warn', { allow: ['warn', 'error'] }],
     'prefer-const': 'error',
     'no-var': 'error',
-    'eqeqeq': ['error', 'always']
+    eqeqeq: ['error', 'always'],
   },
-  ignorePatterns: [
-    'dist',
-    'node_modules',
-    'coverage',
-    'build',
-    '*.config.js',
-    '*.config.ts'
-  ]
+  ignorePatterns: ['dist', 'node_modules', 'coverage', 'build', '*.config.js', '*.config.ts'],
 };

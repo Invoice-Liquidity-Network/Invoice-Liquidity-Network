@@ -19,7 +19,7 @@ concurrency:
 jobs:
   changes:
     name: Detect changed paths
-    runs-on: namespace-profile-nursca
+    runs-on: ubuntu-latest
     outputs:
       backend: ${{ steps.filter.outputs.backend }}
       shared_config: ${{ steps.filter.outputs.shared_config }}
@@ -27,6 +27,7 @@ jobs:
       sdk: ${{ steps.filter.outputs.sdk }}
       cli: ${{ steps.filter.outputs.cli }}
       indexer: ${{ steps.filter.outputs.indexer }}
+      oracle: ${{ steps.filter.outputs.oracle }}
       packages: ${{ steps.filter.outputs.packages }}
     steps:
       - uses: actions/checkout@v4
@@ -51,13 +52,14 @@ jobs:
               - 'sdk/**'
               - 'packages/sdk/**'
               - 'packages/shared/**'
-              - 'packages/invoice-sdk/**'
+              - 'tests/sdk-integration/**'
             cli:
               - 'cli/**'
-              - 'packages/cli/**'
             indexer:
               - 'indexer/**'
               - 'packages/indexer/**'
+            oracle:
+              - 'oracle-service/**'
             packages:
               - 'packages/**'
 
@@ -71,7 +73,7 @@ jobs:
     name: Run tests
     needs: changes
     if: needs.changes.outputs.backend == 'true'
-    runs-on: namespace-profile-nursca
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         with:
@@ -98,7 +100,17 @@ jobs:
 
       - name: Run cargo test
         working-directory: ./backend
-        run: cargo test --target x86_64-unknown-linux-gnu
+        run: |
+          START=$(date +%s)
+          cargo test --target x86_64-unknown-linux-gnu
+          END=$(date +%s)
+          DURATION=$((END - START))
+          BUDGET=$(jq -r '.budgets[] | select(.package=="backend") | .budgetSeconds' ../test-runtime-budgets.json)
+          echo "backend test runtime: ${DURATION}s (budget: ${BUDGET}s)"
+          if [ "$DURATION" -gt "$BUDGET" ]; then
+            echo "::error::backend test suite took ${DURATION}s, exceeding its ${BUDGET}s runtime budget (test-runtime-budgets.json). See docs/test-runtime-budgets.md."
+            exit 1
+          fi
 
       - name: Comment PR on failure
         if: failure() && github.event_name == 'pull_request' && !github.event.pull_request.head.repo.fork
@@ -117,7 +129,7 @@ jobs:
     name: Build contract
     needs: changes
     if: needs.changes.outputs.backend == 'true'
-    runs-on: namespace-profile-nursca
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         with:
@@ -163,7 +175,7 @@ jobs:
     name: Lint code
     needs: changes
     if: needs.changes.outputs.backend == 'true'
-    runs-on: namespace-profile-nursca
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         with:
@@ -217,7 +229,7 @@ jobs:
     name: Test results
     needs: [node-tests, core-test]
     if: always()
-    runs-on: namespace-profile-nursca
+    runs-on: ubuntu-latest
     steps:
       - name: Download JUnit reports
         uses: actions/download-artifact@v4
@@ -247,7 +259,6 @@ jobs:
       - build
       - lint
       - node-tests
-      - node-coverage
       - license-compliance
       - sdk-types-sync
       - core-install
@@ -257,7 +268,7 @@ jobs:
       - core-test
       - core-build
     if: failure() && github.event_name == 'push' && github.ref == 'refs/heads/main'
-    runs-on: namespace-profile-nursca
+    runs-on: ubuntu-latest
     steps:
       - name: Send Discord notification
         env:
@@ -276,7 +287,7 @@ jobs:
 
           # Collect which jobs failed
           FAILED_JOBS=""
-          for job in test build lint node-tests node-coverage license-compliance sdk-types-sync core-install core-format core-lint core-type-check core-test core-build; do
+          for job in test build lint node-tests license-compliance sdk-types-sync core-install core-format core-lint core-type-check core-test core-build; do
             result=$(echo '${{ toJSON(needs) }}' | jq -r --arg job "$job" '.[$job].result // "skipped"')
             if [ "$result" = "failure" ]; then
               FAILED_JOBS="$FAILED_JOBS\n- **$job**: ❌ $result"
@@ -311,7 +322,7 @@ jobs:
       needs.changes.outputs.sdk == 'true' ||
       needs.changes.outputs.cli == 'true' ||
       needs.changes.outputs.indexer == 'true'
-    runs-on: namespace-profile-nursca
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
@@ -334,6 +345,33 @@ jobs:
               body: '🚨 **Dependency version mismatch detected!** Run `pnpm syncpack:check` locally and align versions before merging.'
             })
 
+  sdk-fixture-mock-guard:
+    name: SDK fixture mock audit guard
+    needs: [pnpm-cache, changes]
+    if: needs.changes.outputs.sdk == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup pnpm with store cache
+        uses: ./.github/actions/setup-pnpm
+
+      - name: Fail on undocumented SDK integration mocks
+        run: pnpm check:sdk-fixture-mocks
+
+      - name: Comment PR on failure
+        if: failure() && github.event_name == 'pull_request' && !github.event.pull_request.head.repo.fork
+        continue-on-error: true
+        uses: actions/github-script@v7
+        with:
+          script: |
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: '🚨 **Undocumented SDK fixture mock detected!** Run `pnpm check:sdk-fixture-mocks` locally, then either document the mock in the "Documented mocks (CI allowlist)" block of `docs/sdk-integration-fixture-audit.md` (with justification) or replace it with a live testnet-backed fixture.'
+            })
+
   validate-packages:
     name: Validate package.json consistency
     needs: [pnpm-cache, changes]
@@ -344,7 +382,7 @@ jobs:
       needs.changes.outputs.sdk == 'true' ||
       needs.changes.outputs.cli == 'true' ||
       needs.changes.outputs.indexer == 'true'
-    runs-on: namespace-profile-nursca
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
@@ -430,10 +468,24 @@ jobs:
               repo: context.repo.repo,
               body: '🚨 **Cross-repo compatibility failed!** Update the matching matrix row in `docs/cross-repo-dependencies.md` before merging.'
             })
+  gitleaks:
+    name: Secret scanning
+    needs: pnpm-cache
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup pnpm with store cache
+        uses: ./.github/actions/setup-pnpm
+      - name: Install gitleaks
+        run: |
+          GITLEAKS_VERSION=$(curl -s https://api.github.com/repos/gitleaks/gitleaks/releases/latest | grep '"tag_name"' | sed -E 's/.*"v([^"]+)".*/\1/')
+          curl -sSfL "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz" | sudo tar -xz -C /usr/local/bin gitleaks
+      - name: Scan repository for secrets
+        run: gitleaks detect --no-git -s . --config gitleaks.toml --baseline-path .secrets.baseline
 
   no-foreign-lockfiles:
     name: Guard against non-pnpm lockfiles
-    runs-on: namespace-profile-nursca
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
@@ -459,7 +511,7 @@ jobs:
     if: >-
       needs.changes.outputs.shared_config == 'true' ||
       needs.changes.outputs.notifications == 'true'
-    runs-on: namespace-profile-nursca
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
@@ -474,7 +526,7 @@ jobs:
         if: always()
         continue-on-error: true
         run: |
-          for pkg in sdk cli indexer notifications packages/react packages/mock-backend packages/opentelemetry packages/upgrade-tests packages/test-utils packages/cli; do
+          for pkg in sdk cli indexer notifications packages/react packages/mock-backend packages/opentelemetry packages/upgrade-tests packages/test-utils; do
             if [ -f "$pkg/vitest.config.ts" ] || [ -f "$pkg/vitest.config.js" ]; then
               echo "Generating JUnit report for $pkg..."
               cd "$GITHUB_WORKSPACE/$pkg"
@@ -503,39 +555,28 @@ jobs:
               body: '🚨 **CI Node.js tests failed!** Please check the action logs for details.'
             })
 
-  node-coverage:
-    name: Node.js coverage (≥80%)
-    needs: [pnpm-cache, changes]
-    if: >-
-      needs.changes.outputs.notifications == 'true' ||
-      needs.changes.outputs.shared_config == 'true'
-    runs-on: namespace-profile-nursca
+  # Node.js coverage for the notifications package lives in coverage.yml
+  # (Coverage / Node.js coverage (notifications)) — it ran an identical
+  # `vitest run tests/templates.test.ts --coverage ...` command here too,
+  # duplicating the same test run and Codecov upload on every push/PR.
+
+  # packages/shared is a dependency of the SDK, CLI, indexer, and notifications
+  # service, so a type-level regression there breaks type-checking for every
+  # consumer without failing a runtime test. `pnpm test` in that package runs
+  # tsc over src/ and then tsd over test-d/. This runs unconditionally rather
+  # than path-filtered so it is always present as a required status check.
+  shared-type-tests:
+    name: Shared package type tests
+    needs: pnpm-cache
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
       - name: Setup pnpm with store cache
         uses: ./.github/actions/setup-pnpm
 
-      - name: Run notification template coverage
-        run: >
-          pnpm exec vitest run tests/templates.test.ts
-          --coverage
-          --coverage.include=src/templates/funded.template.ts
-          --coverage.include=src/templates/payment.template.ts
-          --coverage.include=src/templates/dispute.template.ts
-          --coverage.include=src/templates/due-warning.template.ts
-          --coverage.include=src/templates/helpers.ts
-          --coverage.thresholds.lines=80
-          --coverage.thresholds.functions=80
-          --coverage.thresholds.branches=80
-          --coverage.thresholds.statements=80
-        working-directory: notifications
-
-      - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@5975040f7f7d40edaff8d784b576fd65ae95c073 # v5.5.5
-        with:
-          token: ${{ secrets.CODECOV_TOKEN }}
-          slug: Nursca/Invoice-Liquidity-Network
+      - name: Type-check and run tsd assertions
+        run: pnpm --filter @iln/shared test
 
       - name: Comment PR on failure
         if: failure() && github.event_name == 'pull_request' && !github.event.pull_request.head.repo.fork
@@ -547,7 +588,7 @@ jobs:
               issue_number: context.issue.number,
               owner: context.repo.owner,
               repo: context.repo.repo,
-              body: '🚨 **Coverage dropped below 80%!** Please check the action logs for details.'
+              body: '🚨 **`@iln/shared` type tests failed!** A type in `packages/shared` changed in a way its `test-d/` assertions reject. Every consumer (`sdk`, `cli`, `indexer`, `notifications`) type-checks against these types — run `pnpm --filter @iln/shared test` locally before merging.'
             })
 
   license-compliance:
@@ -560,7 +601,7 @@ jobs:
       needs.changes.outputs.sdk == 'true' ||
       needs.changes.outputs.cli == 'true' ||
       needs.changes.outputs.indexer == 'true'
-    runs-on: namespace-profile-nursca
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
@@ -598,7 +639,7 @@ jobs:
     name: SDK types in sync
     needs: [pnpm-cache, changes]
     if: needs.changes.outputs.backend == 'true'
-    runs-on: namespace-profile-nursca
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         with:
@@ -621,12 +662,12 @@ jobs:
             ~/.cargo/registry/index/
             ~/.cargo/registry/cache/
             ~/.cargo/git/db/
-          key: ${{ runner.os }}-stellar-cli-opt
+          key: ${{ runner.os }}-stellar-cli
           restore-keys: |
             ${{ runner.os }}-stellar-cli-
 
       - name: Install Stellar CLI
-        run: cargo install --locked stellar-cli --features opt
+        run: cargo install --locked stellar-cli
 
       - name: Configure testnet
         run: stellar network use testnet
@@ -652,6 +693,14 @@ jobs:
             exit 1
           fi
 
+      - name: Check SDK/deployed-ABI compatibility (issue #1094)
+        run: |
+          if [ -f backend/target/spec.json ]; then
+            pnpm check:contract-abi-compat
+          else
+            echo "Contract submodule not initialized, skipping ABI compatibility check"
+          fi
+
       - name: Comment PR on failure
         if: failure() && github.event_name == 'pull_request' && !github.event.pull_request.head.repo.fork
         continue-on-error: true
@@ -669,7 +718,7 @@ jobs:
     name: SDK testnet integration tests
     needs: [pnpm-cache, testnet-health]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main' && needs.testnet-health.outputs.healthy == 'true'
-    runs-on: namespace-profile-nursca
+    runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
@@ -685,16 +734,6 @@ jobs:
           PAYER_SECRET: ${{ secrets.TESTNET_PAYER_SECRET }}
           FUNDER_SECRET: ${{ secrets.TESTNET_FUNDER_SECRET }}
 
-  sdk-testnet-skipped:
-    name: SDK testnet integration (skipped — unhealthy testnet)
-    needs: [testnet-health]
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && needs.testnet-health.outputs.healthy != 'true'
-    runs-on: namespace-profile-nursca
-    steps:
-      - name: Report skipped integration tests
-        run: |
-          echo "::warning::Horizon testnet was unhealthy; SDK testnet integration tests were skipped."
-
   # ===========================================================================
   # Core JS/TS quality gate — Issue #252
   #
@@ -708,7 +747,7 @@ jobs:
   core-install:
     name: Core · install
     needs: pnpm-cache
-    runs-on: namespace-profile-nursca
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - name: Setup pnpm with store cache
@@ -717,7 +756,7 @@ jobs:
   core-format:
     name: Core · format
     needs: core-install
-    runs-on: namespace-profile-nursca
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         with:
@@ -753,7 +792,7 @@ jobs:
     name: Core · lint
     needs: core-install
     if: github.event_name == 'push'
-    runs-on: namespace-profile-nursca
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - name: Setup pnpm with store cache
@@ -765,13 +804,13 @@ jobs:
           key: ${{ runner.os }}-turbo-lint-${{ github.sha }}
           restore-keys: ${{ runner.os }}-turbo-lint-
       - name: Lint
-        run: pnpm lint -- --cache-dir=.turbo
+        run: pnpm exec turbo run lint --cache-dir=.turbo
 
   core-type-check:
     name: Core · type-check
     needs: core-install
     if: github.event_name == 'push'
-    runs-on: namespace-profile-nursca
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - name: Setup pnpm with store cache
@@ -783,12 +822,12 @@ jobs:
           key: ${{ runner.os }}-turbo-typecheck-${{ github.sha }}
           restore-keys: ${{ runner.os }}-turbo-typecheck-
       - name: Type-check
-        run: pnpm type-check -- --cache-dir=.turbo
+        run: pnpm exec turbo run type-check --cache-dir=.turbo
 
   core-test:
     name: Core · test
     needs: [core-format, core-lint, core-type-check]
-    runs-on: namespace-profile-nursca
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - name: Setup pnpm with store cache
@@ -800,24 +839,35 @@ jobs:
           key: ${{ runner.os }}-turbo-test-${{ github.sha }}
           restore-keys: ${{ runner.os }}-turbo-test-
       - name: Test
-        run: pnpm test -- --cache-dir=.turbo
+        run: pnpm exec turbo run test --cache-dir=.turbo --summarize
 
-      - name: Generate JUnit reports (vitest packages)
-        if: always()
-        continue-on-error: true
+      - name: Root node --test suites
         run: |
-          for pkg in sdk cli indexer notifications packages/react packages/mock-backend packages/opentelemetry packages/upgrade-tests packages/test-utils packages/cli; do
-            if [ -f "$pkg/vitest.config.ts" ] || [ -f "$pkg/vitest.config.js" ]; then
-              echo "Generating JUnit report for $pkg..."
-              cd "$GITHUB_WORKSPACE/$pkg"
-              pnpm vitest run --reporter=junit --outputFile=test-results.xml 2>/dev/null || true
-            fi
-          done
+          npm run test:checklist
+          npm run test:audit
+          npm run test:provenance
+          npm run test:sdk-fixture-mocks
+          npm run test:contract-abi-compat
+          npm run test:release-scripts
+          npm run test:canary
+          npm run canary:drill
+
+      - name: Root scripts/__tests__ (vitest)
+        run: |
+          START=$(date +%s.%N)
+          pnpm exec vitest run scripts/__tests__ --exclude "**/*.test.mjs" --exclude "**/*.test.js" --exclude "**/check-compatibility.test.ts"
+          END=$(date +%s.%N)
+          echo "ROOT_SCRIPTS_TEST_DURATION_SECONDS=$(echo "$END - $START" | bc)" >> "$GITHUB_ENV"
+
+      - name: Enforce test-runtime budgets
+        run: |
+          SUMMARY=$(ls -t .turbo/runs/*.json | head -1)
+          node scripts/check-test-runtime-budgets.mjs --turbo-summary="$SUMMARY" --external "root-scripts=${ROOT_SCRIPTS_TEST_DURATION_SECONDS}"
 
   core-build:
     name: Core · build
     needs: core-test
-    runs-on: namespace-profile-nursca
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - name: Setup pnpm with store cache
@@ -829,13 +879,13 @@ jobs:
           key: ${{ runner.os }}-turbo-build-${{ github.sha }}
           restore-keys: ${{ runner.os }}-turbo-build-
       - name: Build
-        run: pnpm build -- --cache-dir=.turbo
+        run: pnpm exec turbo run build --cache-dir=.turbo
 
   core-summary:
     name: Core · PR summary
     needs: [core-install, core-format, core-lint, core-type-check, core-test, core-build]
     if: always() && github.event_name == 'pull_request'
-    runs-on: namespace-profile-nursca
+    runs-on: ubuntu-latest
     steps:
       - name: Post results summary to PR
         continue-on-error: true

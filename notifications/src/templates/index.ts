@@ -1,22 +1,32 @@
 /**
- * Email templates barrel (#446)
+ * Email templates barrel (#446) + hardening batch injection audit
  *
- * Re-exports all template renderers and subject-line builders so callers can
- * import from a single entry point:
+ * Re-exports all template renderers, subject-line builders and the escaping
+ * helpers so callers can import from a single entry point:
  *
  *   import { renderFundedEmail, buildFundedSubject } from "./templates";
+ *   import { escapeHtml, escapeDiscordMarkdown } from "./templates";
  */
 
-export { renderFundedEmail, buildFundedSubject } from "./funded.template";
-export type { FundedTemplateVars } from "./funded.template";
+export { renderFundedEmail, buildFundedSubject } from './funded.template';
 
-export { renderPaymentEmail, buildPaymentSubject } from "./payment.template";
-export type { PaymentTemplateVars } from "./payment.template";
+export { renderPaymentEmail, buildPaymentSubject } from './payment.template';
 
-export { renderDisputeEmail, buildDisputeSubject } from "./dispute.template";
-export type { DisputeTemplateVars } from "./dispute.template";
+export { renderDisputeEmail, buildDisputeSubject } from './dispute.template';
 
-export { renderDueWarningEmail, buildDueWarningSubject } from "./due-warning.template";
-export type { DueWarningTemplateVars } from "./due-warning.template";
+export { renderDueWarningEmail, buildDueWarningSubject } from './due-warning.template';
 
-export { emailShell, formatAmount, formatDate, shortAddress, escapeHtml } from "./helpers";
+export { renderDigestEmail, buildDigestSubject } from './digest.template';
+
+export {
+  emailShell,
+  escapeHtml,
+  escapeAttribute,
+  escapeDiscordMarkdown,
+  escapeSmsText,
+  escapeHeaderValue,
+  isJsonSafeRoundTrip,
+  formatAmount,
+  formatDate,
+  shortAddress,
+} from './helpers';

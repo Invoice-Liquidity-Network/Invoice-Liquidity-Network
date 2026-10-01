@@ -1,10 +1,5 @@
 // Context
-export {
-  ILNProvider,
-  useILNClient,
-  ILNContext,
-  ILNProviderNotFoundError,
-} from './context';
+export { ILNProvider, useILNClient, ILNContext, ILNProviderNotFoundError } from './context';
 export type { ILNProviderProps } from './context';
 
 // Hooks
@@ -14,6 +9,9 @@ export {
   useInvoices,
   useInvoiceList,
   useSubmitInvoice,
+  useBatchSubmitInvoice,
+  useAuctionRate,
+  deriveAuctionRateState,
   useFundInvoice,
   useMarkPaid,
   useReputationScore,
@@ -22,6 +20,21 @@ export {
   useLPRiskMetrics,
   useGovernanceProposal,
   useTokenBalances,
+  useLPCoverage,
+  usePoolBalance,
+  useClaim,
+  useClaimsList,
+  useEnroll,
+  useDepositPremium,
+  useSubmitClaim,
+  useReviewClaim,
+  useDispute,
+  useDisputeList,
+  useFileDispute,
+  useSubmitDisputeEvidence,
+  useResolveDispute,
+  useAutoResolveDispute,
+  useDisputeAnalytics,
 } from './hooks';
 
 export type {
@@ -33,6 +46,14 @@ export type {
   InvoiceRole,
   UseSubmitInvoiceResult,
   SubmitInvoiceParams,
+  UseBatchSubmitInvoiceResult,
+  BatchInvoiceInput,
+  BatchProgress,
+  InvoiceProgress,
+  AuctionRatePoint,
+  AuctionRateState,
+  UseAuctionRateOptions,
+  UseAuctionRateResult,
   UseFundInvoiceResult,
   FundInvoiceParams,
   UseMarkPaidResult,
@@ -45,6 +66,25 @@ export type {
   GovernanceTimelockState,
   UseGovernanceProposalResult,
   UseTokenBalancesResult,
+  UseLPCoverageResult,
+  UsePoolBalanceResult,
+  UseClaimResult,
+  UseClaimsListResult,
+  UseEnrollResult,
+  UseDepositPremiumResult,
+  UseSubmitClaimResult,
+  UseReviewClaimResult,
+  UseDisputeResult,
+  UseDisputeListResult,
+  UseFileDisputeResult,
+  UseSubmitDisputeEvidenceResult,
+  UseResolveDisputeResult,
+  UseAutoResolveDisputeResult,
+  UseDisputeAnalyticsResult,
+  FileDisputeParams,
+  SubmitDisputeEvidenceParams,
+  ResolveDisputeParams,
+  AutoResolveDisputeParams,
 } from './hooks';
 
 // Components

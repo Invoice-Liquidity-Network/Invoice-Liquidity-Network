@@ -1,5 +1,11 @@
 # ILN Indexer Data Model
 
+## Cache freshness
+
+The optional Redis cache in [`indexer/src/cache.ts`](../indexer/src/cache.ts) has one fixed duration: invoice records and invoice-list results default to **30 seconds** (`INVOICE_TTL_SECONDS`). Callers may pass a different TTL to `cacheSet`; the indexer defines no other fixed cache-duration constants.
+
+Invoice mutations invalidate both `invoice:{id}` and all `invoices:*` list entries. Cache failures are non-fatal and fall back to database reads, so cache presence is not a consistency guarantee.
+
 This document describes the on-chain data model for third-party indexers (The Graph, custom Postgres, SQLite) that want to index Invoice Liquidity Network (ILN) contract state.
 
 ---

@@ -77,7 +77,7 @@ function parseYamlList(filePath) {
 function hasBuildScript(pkg) {
   if (!pkg.scripts) return false;
   return BUILD_SCRIPT_PATTERNS.some((pattern) =>
-    Object.keys(pkg.scripts).some((key) => key.includes(pattern)),
+    Object.keys(pkg.scripts).some((key) => key.includes(pattern))
   );
 }
 

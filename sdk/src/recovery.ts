@@ -1,4 +1,4 @@
-import { createLogger } from "./logger";
+import { createLogger } from './logger';
 import {
   ILNError,
   NetworkError,
@@ -9,10 +9,10 @@ import {
   TokenMismatchError,
   PayerReputationTooLowError,
   GenericContractError,
-} from "./errors";
-import { TimeoutError } from "./timeouts";
+} from './errors';
+import { TimeoutError } from './timeouts';
 
-const logger = createLogger("recovery");
+const logger = createLogger('recovery');
 
 export interface RetryOptions {
   maxAttempts: number;
@@ -29,7 +29,7 @@ export interface CircuitBreakerOptions {
   cooldownMs: number;
 }
 
-export type CircuitBreakerState = "CLOSED" | "OPEN" | "HALF_OPEN";
+export type CircuitBreakerState = 'CLOSED' | 'OPEN' | 'HALF_OPEN';
 
 const DEFAULT_RETRY: RetryOptions = {
   maxAttempts: 3,
@@ -50,7 +50,7 @@ export function isRetryableError(err: unknown): boolean {
   if (err instanceof TimeoutError) return true;
   // SimulationError (code "SIMULATION_FAILED") is retryable — check by code
   // since the compiled JS output may be stale and missing this class.
-  if (err instanceof ILNError && err.code === "SIMULATION_FAILED") return true;
+  if (err instanceof ILNError && err.code === 'SIMULATION_FAILED') return true;
   // All other known ILN business/contract errors are non-retryable by default.
   // Callers can override per-operation via RetryOptions.retryIf.
   if (err instanceof ValidationError) return false;
@@ -71,7 +71,7 @@ function sleep(ms: number): Promise<void> {
 
 export async function withRetry<T>(
   fn: () => Promise<T>,
-  options?: Partial<RetryOptions>,
+  options?: Partial<RetryOptions>
 ): Promise<T> {
   const opts: RetryOptions = { ...DEFAULT_RETRY, ...options };
   const shouldRetry = opts.retryIf ?? isRetryableError;
@@ -85,37 +85,36 @@ export async function withRetry<T>(
 
       let delay = Math.min(
         opts.initialDelayMs * Math.pow(opts.backoffFactor, attempt - 1),
-        opts.maxDelayMs,
+        opts.maxDelayMs
       );
       if (opts.jitter) {
         delay = delay * (0.5 + Math.random() * 0.5);
       }
 
-      logger(
-        `retry ${attempt}/${opts.maxAttempts - 1} after ${Math.round(delay)}ms`,
-        { error: err instanceof Error ? err.message : String(err) },
-      );
+      logger(`retry ${attempt}/${opts.maxAttempts - 1} after ${Math.round(delay)}ms`, {
+        error: err instanceof Error ? err.message : String(err),
+      });
 
       await sleep(delay);
     }
   }
 
-  throw new Error("withRetry: unexpected exit");
+  throw new Error('withRetry: unexpected exit');
 }
 
 export class CircuitOpenError extends ILNError {
   constructor() {
     super(
-      "Circuit breaker is open; requests are temporarily blocked.",
-      "CIRCUIT_OPEN",
-      "Wait for the cooldown period to elapse, then retry your request.",
+      'Circuit breaker is open; requests are temporarily blocked.',
+      'CIRCUIT_OPEN',
+      'Wait for the cooldown period to elapse, then retry your request.'
     );
     Object.setPrototypeOf(this, new.target.prototype);
   }
 }
 
 export class CircuitBreaker {
-  private state: CircuitBreakerState = "CLOSED";
+  private state: CircuitBreakerState = 'CLOSED';
   private failureCount = 0;
   private successCount = 0;
   private openedAt: number | null = null;
@@ -130,35 +129,35 @@ export class CircuitBreaker {
   }
 
   reset(): void {
-    this.state = "CLOSED";
+    this.state = 'CLOSED';
     this.failureCount = 0;
     this.successCount = 0;
     this.openedAt = null;
-    logger("circuit breaker reset to CLOSED");
+    logger('circuit breaker reset to CLOSED');
   }
 
   async execute<T>(fn: () => Promise<T>): Promise<T> {
-    if (this.state === "OPEN") {
+    if (this.state === 'OPEN') {
       const elapsed = Date.now() - (this.openedAt ?? 0);
       if (elapsed < this.options.cooldownMs) {
         throw new CircuitOpenError();
       }
-      this.state = "HALF_OPEN";
+      this.state = 'HALF_OPEN';
       this.successCount = 0;
-      logger("circuit breaker → HALF_OPEN");
+      logger('circuit breaker → HALF_OPEN');
     }
 
     try {
       const result = await fn();
 
-      if (this.state === "HALF_OPEN") {
+      if (this.state === 'HALF_OPEN') {
         this.successCount++;
         if (this.successCount >= this.options.successThreshold) {
-          this.state = "CLOSED";
+          this.state = 'CLOSED';
           this.failureCount = 0;
           this.successCount = 0;
           this.openedAt = null;
-          logger("circuit breaker → CLOSED");
+          logger('circuit breaker → CLOSED');
         }
       } else {
         this.failureCount = 0;
@@ -166,18 +165,18 @@ export class CircuitBreaker {
 
       return result;
     } catch (err) {
-      if (this.state === "HALF_OPEN") {
-        this.state = "OPEN";
+      if (this.state === 'HALF_OPEN') {
+        this.state = 'OPEN';
         this.openedAt = Date.now();
         this.successCount = 0;
-        logger("circuit breaker → OPEN (from HALF_OPEN)");
+        logger('circuit breaker → OPEN (from HALF_OPEN)');
       } else {
         this.failureCount++;
         if (this.failureCount >= this.options.failureThreshold) {
-          this.state = "OPEN";
+          this.state = 'OPEN';
           this.openedAt = Date.now();
           this.failureCount = 0;
-          logger("circuit breaker → OPEN");
+          logger('circuit breaker → OPEN');
         }
       }
       throw err;

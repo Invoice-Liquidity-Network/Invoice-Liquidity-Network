@@ -2,7 +2,7 @@ import React from 'react';
 import { describe, expect, it } from 'vitest';
 import { render } from '@testing-library/react';
 import { axe, toHaveNoViolations } from 'jest-axe';
-import type { Invoice, LPPortfolio } from '@invoice-liquidity/sdk';
+import type { Invoice, LPPortfolio } from '@iln/sdk';
 import { ILNProvider } from '../context';
 import { LPRiskDashboard } from './LPRiskDashboard';
 
@@ -29,7 +29,7 @@ const invoices = [
     payer: 'GPAYER_A',
     amount: 100n,
     discountRate: 300,
-    dueDate: NOW + (5 * 86_400_000),
+    dueDate: NOW + 5 * 86_400_000,
     status: 'Funded',
     fundedBy: ADDRESS,
     token: 'USDC_CONTRACT_ID',
@@ -40,7 +40,7 @@ const invoices = [
     payer: 'GPAYER_A',
     amount: 100n,
     discountRate: 200,
-    dueDate: NOW + (20 * 86_400_000),
+    dueDate: NOW + 20 * 86_400_000,
     status: 'Funded',
     fundedBy: ADDRESS,
     token: 'USDC_CONTRACT_ID',
@@ -51,7 +51,7 @@ const invoices = [
     payer: 'GPAYER_B',
     amount: 50n,
     discountRate: 400,
-    dueDate: NOW + (40 * 86_400_000),
+    dueDate: NOW + 40 * 86_400_000,
     status: 'Funded',
     fundedBy: ADDRESS,
     token: 'EURC_CONTRACT_ID',
@@ -62,7 +62,7 @@ const invoices = [
     payer: 'GPAYER_C',
     amount: 50n,
     discountRate: 500,
-    dueDate: NOW + (120 * 86_400_000),
+    dueDate: NOW + 120 * 86_400_000,
     status: 'Funded',
     fundedBy: ADDRESS,
     token: 'XLM',
@@ -92,7 +92,7 @@ describe('LPRiskDashboard', () => {
             simulations={1000}
           />
         </div>
-      </ILNProvider>,
+      </ILNProvider>
     );
 
     expect(getByText('Comprehensive portfolio risk analytics for LPs')).toBeTruthy();

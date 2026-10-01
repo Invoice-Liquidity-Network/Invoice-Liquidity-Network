@@ -7,12 +7,14 @@ import { vi, beforeEach, afterEach } from 'vitest';
  * - Resets all vitest mocks between tests
  * - Provides deterministic Date.now() seeding when a seed is passed
  */
-export function setupILNTestEnvironment(options: {
-  /** Freeze Date.now() to this unix-ms value for the test suite. */
-  frozenTime?: number;
-  /** Additional env vars to set before each test. */
-  env?: Record<string, string>;
-} = {}): void {
+export function setupILNTestEnvironment(
+  options: {
+    /** Freeze Date.now() to this unix-ms value for the test suite. */
+    frozenTime?: number;
+    /** Additional env vars to set before each test. */
+    env?: Record<string, string>;
+  } = {}
+): void {
   beforeEach(() => {
     vi.resetAllMocks();
 

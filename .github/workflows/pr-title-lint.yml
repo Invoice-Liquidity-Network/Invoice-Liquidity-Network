@@ -15,7 +15,7 @@ concurrency:
 
 jobs:
   lint:
-    runs-on: namespace-profile-nursca
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - name: Setup pnpm with store cache

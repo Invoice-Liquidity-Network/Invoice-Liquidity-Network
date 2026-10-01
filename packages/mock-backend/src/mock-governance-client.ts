@@ -5,14 +5,16 @@ import type {
   ProposalStatus,
   ProtocolParameters,
   VoteChoice,
-} from "./types.js";
+} from './types.js';
 
-import { SEED_PROPOSALS, SEED_PROTOCOL_PARAMS } from "./seed.js";
+import { SEED_PROPOSALS, SEED_PROTOCOL_PARAMS } from './seed.js';
 
 function fakeTxHash(): string {
   return Array.from({ length: 32 }, () =>
-    Math.floor(Math.random() * 256).toString(16).padStart(2, "0")
-  ).join("");
+    Math.floor(Math.random() * 256)
+      .toString(16)
+      .padStart(2, '0')
+  ).join('');
 }
 
 function delay(ms = 80): Promise<void> {
@@ -76,18 +78,14 @@ export class MockGovernanceClient implements GovernanceClient {
 
   // ─── Writes ─────────────────────────────────────────────────────────────────
 
-  async castVote(
-    proposalId: number,
-    choice: VoteChoice,
-    _signerAddress: string
-  ): Promise<string> {
+  async castVote(proposalId: number, choice: VoteChoice, _signerAddress: string): Promise<string> {
     await delay(200);
 
     const proposal = this.proposals.get(proposalId);
     if (!proposal) {
       throw new Error(`Proposal ${proposalId} not found`);
     }
-    if (proposal.status !== "Active") {
+    if (proposal.status !== 'Active') {
       throw new Error(`Proposal ${proposalId} is not active (status: ${proposal.status})`);
     }
     if (this.userVotes.has(proposalId)) {
@@ -95,8 +93,8 @@ export class MockGovernanceClient implements GovernanceClient {
     }
 
     // Apply vote weight
-    if (choice === "For") proposal.votesFor += this.votingPower;
-    else if (choice === "Against") proposal.votesAgainst += this.votingPower;
+    if (choice === 'For') proposal.votesFor += this.votingPower;
+    else if (choice === 'Against') proposal.votesAgainst += this.votingPower;
     else proposal.votesAbstain += this.votingPower;
 
     this.proposals.set(proposalId, proposal);
@@ -105,21 +103,18 @@ export class MockGovernanceClient implements GovernanceClient {
     return fakeTxHash();
   }
 
-  async executeProposal(
-    proposalId: number,
-    _signerAddress: string
-  ): Promise<string> {
+  async executeProposal(proposalId: number, _signerAddress: string): Promise<string> {
     await delay(200);
 
     const proposal = this.proposals.get(proposalId);
     if (!proposal) {
       throw new Error(`Proposal ${proposalId} not found`);
     }
-    if (proposal.status !== "Passed") {
+    if (proposal.status !== 'Passed') {
       throw new Error(`Proposal ${proposalId} cannot be executed (status: ${proposal.status})`);
     }
 
-    proposal.status = "Executed" as ProposalStatus;
+    proposal.status = 'Executed' as ProposalStatus;
     this.proposals.set(proposalId, proposal);
     return fakeTxHash();
   }
@@ -138,7 +133,7 @@ export class MockGovernanceClient implements GovernanceClient {
       title: payload.title,
       description: payload.description,
       type: payload.type,
-      status: "Active",
+      status: 'Active',
       proposer: signerAddress,
       createdAt: nowSec,
       votingStartsAt: nowSec,

@@ -8,10 +8,8 @@
     "build": "react-scripts build"
   },
   "dependencies": {
-    "@iln/sdk": "^0.1.0",
-    "@stellar/stellar-sdk": "^15.0.1",
+    "@iln/sdk": "file:../../sdk",
     "react": "^19.0.0",
-    "react-dom": "^19.0.0",
     "react-scripts": "^5.0.1"
   },
   "license": "MIT",
@@ -20,11 +18,18 @@
   },
   "devDependencies": {
     "@types/react": "^19.0.0",
-    "@types/react-dom": "^19.0.0",
     "typescript": "^5.9.3"
   },
   "browserslist": {
-    "production": [">0.2%", "not dead", "not op_mini all"],
-    "development": ["last 1 chrome version", "last 1 firefox version", "last 1 safari version"]
+    "production": [
+      ">0.2%",
+      "not dead",
+      "not op_mini all"
+    ],
+    "development": [
+      "last 1 chrome version",
+      "last 1 firefox version",
+      "last 1 safari version"
+    ]
   }
 }

@@ -9,9 +9,7 @@ export function parseDueDate(input: string): number {
   const timestamp = Date.parse(isoValue);
 
   if (Number.isNaN(timestamp)) {
-    throw new Error(
-      "Invalid due date. Use a Unix timestamp or an ISO date like `2025-12-31`.",
-    );
+    throw new Error('Invalid due date. Use a Unix timestamp or an ISO date like `2025-12-31`.');
   }
 
   return Math.floor(timestamp / 1000);

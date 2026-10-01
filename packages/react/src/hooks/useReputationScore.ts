@@ -7,23 +7,23 @@ const reputationKeys = {
 };
 
 export interface UseReputationScoreResult {
-  data: import('@invoice-liquidity/sdk').ReputationScore | undefined;
+  data: import('@iln/sdk').ReputationScore | undefined;
   isLoading: boolean;
   error: Error | null;
 }
 
 /**
  * Fetches the on-chain reputation score for a given address.
- * 
+ *
  * @param address - The Stellar address to check
  * @returns {UseReputationScoreResult} Reputation data, loading state, and error
- * 
+ *
  * @example
  * ```tsx
  * function TrustBadge({ address }: { address: string }) {
  *   const { data: rep } = useReputationScore(address);
  *   if (!rep) return null;
- *   
+ *
  *   return <Badge score={rep.score} />;
  * }
  * ```

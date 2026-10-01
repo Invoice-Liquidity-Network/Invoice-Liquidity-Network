@@ -13,11 +13,9 @@
 #   docs/           Nextra 2 legacy docs source      (@invoice-liquidity/docs)
 #
 # Shared library packages     (packages/*)
-#   packages/cli            Experimental CLI package    (@iln/cli)
 #   packages/docs           Canonical deployed docs site (@invoice-liquidity/docs-next)
 #   packages/eslint-config  Shared ESLint config         (@iln/eslint-config)
 #   packages/indexer        Horizon indexer utility lib  (@iln/indexer)
-#   packages/invoice-sdk    Invoice SDK variant          (@iln/invoice-sdk)
 #   packages/mock-backend   Mock backend for testing     (@iln/mock-backend)
 #   packages/opentelemetry  OpenTelemetry instrumentation (@iln/opentelemetry)
 #   packages/react          React component library      (@iln/react)
@@ -38,10 +36,16 @@ packages:
   - cli
   - indexer
   - notifications
+  - oracle-service
   - docs
 
   # All packages/* subdirectories (covers packages/shared and every other package)
-  - "packages/*"
+  - 'packages/*'
 
   # Example applications
-  - "examples/*"
+  - 'examples/*'
+
+  # Test helper packages with their own package.json (issue #1093: needed so
+  # tests/sdk-integration can depend on @iln/sdk via workspace:* to catch
+  # fixture/interface drift at typecheck time)
+  - tests/sdk-integration

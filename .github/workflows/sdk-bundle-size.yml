@@ -3,20 +3,21 @@ name: SDK Bundle Size
 on:
   push:
     paths:
-      - "sdk/src/**"
-      - "sdk/package.json"
-      - "sdk/tsup.config.ts"
-      - "sdk/.bundle-size.json"
-      - "packages/shared/src/**"
+      - 'sdk/src/**'
+      - 'sdk/package.json'
+      - 'sdk/tsup.config.ts'
+      - 'sdk/.bundle-size.json'
+      - 'packages/shared/src/**'
   pull_request:
     paths:
-      - "sdk/src/**"
-      - "sdk/package.json"
-      - "sdk/tsup.config.ts"
-      - "sdk/.bundle-size.json"
-      - "packages/shared/src/**"
+      - 'sdk/src/**'
+      - 'sdk/package.json'
+      - 'sdk/tsup.config.ts'
+      - 'sdk/.bundle-size.json'
+      - 'packages/shared/src/**'
 
 permissions:
+  contents: read
   pull-requests: write
 
 concurrency:
@@ -30,7 +31,7 @@ jobs:
   bundle-size:
     name: sdk-bundle-size
     needs: [pnpm-cache]
-    runs-on: namespace-profile-nursca
+    runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -40,7 +41,7 @@ jobs:
 
       - name: Build SDK
         env:
-          SKIP_DTS: "true"
+          SKIP_DTS: 'true'
         run: pnpm --filter @iln/sdk build
 
       - name: Check bundle size

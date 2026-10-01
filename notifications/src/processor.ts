@@ -1,45 +1,38 @@
-import type { rpc } from "@stellar/stellar-sdk";
-import { scValToNative } from "@stellar/stellar-sdk";
+import type { rpc } from '@stellar/stellar-sdk';
+import { scValToNative } from '@stellar/stellar-sdk';
 import {
   hasEvent,
   insertEvent,
   upsertInvoice,
-  getInvoiceById,
   queryInvoicesByStatus,
   getSubscriptionsByAddress,
   hasSentNotification,
   logSentNotification,
-} from "./db";
-import { fetchInvoice } from "./rpc";
-import { deliverNotification } from "./delivery";
-import { digestScheduler, DigestScheduler } from "./digest";
-import { preferencesService } from "./preferences";
-import type {
-  Invoice,
-  ILNEventType,
-  NotificationTrigger,
-  Subscription,
-  InvoiceEvent,
-} from "./types";
-import { CONFIG } from "./config";
+  enqueueDispatchAttempt,
+  getPendingDispatchAttempts,
+  markDispatchAttemptDelivered,
+  recordDispatchAttemptFailure,
+  dispatchDestinationOf,
+} from './db';
+import { fetchInvoice } from './rpc';
+import { deliverNotification } from './delivery';
+import { deliverWithFallback } from './fallback';
+import { getProviderHealth } from './provider-health';
+import { digestScheduler, DigestScheduler } from './digest';
+import { preferencesService } from './preferences';
+import type { Invoice, ILNEventType, NotificationTrigger, InvoiceEvent } from './types';
+import { CONFIG } from './config';
 
-const KNOWN_EVENT_TYPES = new Set<ILNEventType>([
-  "submitted",
-  "funded",
-  "paid",
-  "defaulted",
-]);
+const KNOWN_EVENT_TYPES = new Set<ILNEventType>(['submitted', 'funded', 'paid', 'defaulted']);
 
 const EVENT_TO_TRIGGER: Record<ILNEventType, NotificationTrigger | null> = {
   submitted: null,
-  funded: "invoice_funded",
-  paid: "invoice_paid",
-  defaulted: "invoice_defaulted",
+  funded: 'invoice_funded',
+  paid: 'invoice_paid',
+  defaulted: 'invoice_defaulted',
 };
 
-export async function processEvent(
-  event: rpc.Api.EventResponse,
-): Promise<void> {
+export async function processEvent(event: rpc.Api.EventResponse): Promise<void> {
   if (hasEvent(event.id)) {
     return;
   }
@@ -80,65 +73,117 @@ export async function processScheduledNotifications(): Promise<void> {
   await notifyOverdue();
 }
 
+/**
+ * Resume the durable dispatch queue (issue #1059).
+ *
+ * Every notification is written to `dispatch_attempts` before its first
+ * provider call, so anything still `pending` after a crash — or after a
+ * transient failure — is unfinished work rather than a lost notification. This
+ * runs at the end of every poll, which makes the poller the retry driver: no
+ * in-process timer has to survive the restart.
+ *
+ * A row is only re-sent if it was never confirmed delivered:
+ * - `getPendingDispatchAttempts()` returns `pending` rows only, so an
+ *   already-delivered notification cannot be picked up again;
+ * - `sent_notifications` is checked first, covering the window where the
+ *   provider call succeeded but the process died before the attempt row was
+ *   closed out — that row is completed instead of re-sent;
+ * - `markDispatchAttemptDelivered()` returns false if another flush already
+ *   closed the row, and the caller then skips the "sent" bookkeeping.
+ *
+ * One failing delivery is logged and left pending; it never aborts the rest of
+ * the flush.
+ */
+export async function flushPendingNotifications(): Promise<void> {
+  const pending = getPendingDispatchAttempts();
+  for (const attempt of pending) {
+    const { invoice, trigger, recipientAddress } = attempt.payload;
+    const channel = attempt.subscription.channel;
+    const destination = dispatchDestinationOf(attempt.subscription);
+
+    if (hasSentNotification(invoice.id, trigger, recipientAddress, channel, destination)) {
+      markDispatchAttemptDelivered(attempt.id);
+      continue;
+    }
+
+    try {
+      await deliverNotification(attempt.subscription, attempt.payload);
+      if (markDispatchAttemptDelivered(attempt.id)) {
+        logSentNotification(
+          invoice.id,
+          trigger,
+          recipientAddress,
+          channel,
+          destination,
+          attempt.event_id ?? undefined
+        );
+      }
+    } catch (error: any) {
+      recordDispatchAttemptFailure(attempt.id, error?.message ?? String(error));
+      console.error(`[processor] Failed to deliver pending notification ${attempt.id}:`, error);
+    }
+  }
+}
+
 async function notifyDueSoon(): Promise<void> {
   const now = Math.floor(Date.now() / 1000);
   const cutoff = now + CONFIG.dueWarningHours * 3600;
-  const invoices = queryInvoicesByStatus("Funded");
+  const invoices = queryInvoicesByStatus('Funded');
 
   for (const invoice of invoices) {
     if (invoice.due_date <= now || invoice.due_date > cutoff) {
       continue;
     }
 
-    await dispatchNotifications("invoice_due_soon", invoice);
+    await dispatchNotifications('invoice_due_soon', invoice);
   }
 }
 
 async function notifyOverdue(): Promise<void> {
   const now = Math.floor(Date.now() / 1000);
-  const invoices = queryInvoicesByStatus("Funded");
+  const invoices = queryInvoicesByStatus('Funded');
 
   for (const invoice of invoices) {
     if (invoice.due_date >= now) {
       continue;
     }
 
-    await dispatchNotifications("invoice_overdue", invoice);
+    await dispatchNotifications('invoice_overdue', invoice);
   }
 }
 
 function getNotificationTargets(
   trigger: NotificationTrigger,
-  invoice: Invoice,
-): Array<{ recipient: string; actor: "freelancer" | "lp" | "payer" }> {
+  invoice: Invoice
+): Array<{ recipient: string; actor: 'freelancer' | 'lp' | 'payer' }> {
   switch (trigger) {
-    case "invoice_funded":
+    case 'invoice_funded':
       return [
-        { recipient: invoice.freelancer, actor: "freelancer" },
-        { recipient: invoice.payer, actor: "payer" },
+        { recipient: invoice.freelancer, actor: 'freelancer' },
+        { recipient: invoice.payer, actor: 'payer' },
       ];
-    case "invoice_paid": {
+    case 'invoice_paid': {
       const targets: Array<{
         recipient: string;
-        actor: "freelancer" | "lp" | "payer";
-      }> = [{ recipient: invoice.freelancer, actor: "freelancer" }];
+        actor: 'freelancer' | 'lp' | 'payer';
+      }> = [{ recipient: invoice.freelancer, actor: 'freelancer' }];
       if (invoice.funder) {
-        targets.push({ recipient: invoice.funder, actor: "lp" });
+        targets.push({ recipient: invoice.funder, actor: 'lp' });
       }
       return targets;
     }
-    case "invoice_defaulted":
+    case 'invoice_defaulted':
       if (!invoice.funder) {
         return [];
       }
-      return [{ recipient: invoice.funder, actor: "lp" }];
-    case "invoice_due_soon":
+      return [{ recipient: invoice.funder, actor: 'lp' }];
+    case 'invoice_due_soon':
       if (!invoice.funder) {
         return [];
       }
-      return [{ recipient: invoice.funder, actor: "lp" }];
-    case "invoice_overdue":
-      return [{ recipient: invoice.payer, actor: "payer" }];
+      return [{ recipient: invoice.funder, actor: 'lp' }];
+    case 'invoice_overdue':
+      return [{ recipient: invoice.payer, actor: 'payer' }];
     default:
       return [];
   }
@@ -148,11 +193,11 @@ function formatPayload(
   trigger: NotificationTrigger,
   invoice: Invoice,
   recipient: string,
-  actor: "freelancer" | "lp" | "payer",
+  actor: 'freelancer' | 'lp' | 'payer'
 ): { subject: string; message: string } {
   switch (trigger) {
-    case "invoice_funded":
-      if (actor === "freelancer") {
+    case 'invoice_funded':
+      if (actor === 'freelancer') {
         return {
           subject: `Invoice #${invoice.id} funded`,
           message: `Your invoice #${invoice.id} has been funded for ${invoice.amount} stroops.`,
@@ -162,8 +207,8 @@ function formatPayload(
         subject: `Invoice #${invoice.id} funding reminder`,
         message: `Invoice #${invoice.id} is funded and payment is due.`,
       };
-    case "invoice_paid":
-      if (actor === "lp") {
+    case 'invoice_paid':
+      if (actor === 'lp') {
         return {
           subject: `Invoice #${invoice.id} has been paid`,
           message: `Invoice #${invoice.id} was settled. Your loan has been repaid.`,
@@ -173,19 +218,19 @@ function formatPayload(
         subject: `Invoice #${invoice.id} paid`,
         message: `Invoice #${invoice.id} has been marked as paid.`,
       };
-    case "invoice_defaulted":
+    case 'invoice_defaulted':
       return {
         subject: `Invoice #${invoice.id} defaulted`,
         message: `Invoice #${invoice.id} has defaulted and requires attention.`,
       };
-    case "invoice_due_soon":
+    case 'invoice_due_soon':
       return {
         subject: `Invoice #${invoice.id} due in ${CONFIG.dueWarningHours} hours`,
         message: `Invoice #${invoice.id} is approaching its due date at ${new Date(
-          invoice.due_date * 1000,
+          invoice.due_date * 1000
         ).toISOString()}.`,
       };
-    case "invoice_overdue":
+    case 'invoice_overdue':
       return {
         subject: `Invoice #${invoice.id} overdue`,
         message: `Invoice #${invoice.id} is overdue. Payment is now past due.`,
@@ -198,25 +243,22 @@ function formatPayload(
   }
 }
 
-const TRIGGER_TO_EVENT_TYPE: Record<NotificationTrigger, ILNEventType | null> =
-  {
-    invoice_funded: "funded",
-    invoice_paid: "paid",
-    invoice_defaulted: "defaulted",
-    invoice_due_soon: null,
-    invoice_overdue: null,
-  };
+const TRIGGER_TO_EVENT_TYPE: Record<NotificationTrigger, ILNEventType | null> = {
+  invoice_funded: 'funded',
+  invoice_paid: 'paid',
+  invoice_defaulted: 'defaulted',
+  invoice_due_soon: null,
+  invoice_overdue: null,
+};
 
-function triggerToEventType(
-  trigger: NotificationTrigger,
-): ILNEventType | undefined {
+function triggerToEventType(trigger: NotificationTrigger): ILNEventType | undefined {
   return TRIGGER_TO_EVENT_TYPE[trigger] ?? undefined;
 }
 
 async function dispatchNotifications(
   trigger: NotificationTrigger,
   invoice: Invoice,
-  eventId?: string,
+  eventId?: string
 ): Promise<void> {
   const targets = getNotificationTargets(trigger, invoice);
   for (const target of targets) {
@@ -248,7 +290,7 @@ async function dispatchNotifications(
 
     const subscriptions = getSubscriptionsByAddress(target.recipient);
     const matchingSubscriptions = subscriptions.filter((subscription) =>
-      subscription.triggers.includes(trigger),
+      subscription.triggers.includes(trigger)
     );
 
     for (const subscription of matchingSubscriptions) {
@@ -257,7 +299,7 @@ async function dispatchNotifications(
         trigger,
         target.recipient,
         subscription.channel,
-        subscription.destination,
+        dispatchDestinationOf(subscription)
       );
       if (alreadySent) {
         continue;
@@ -273,21 +315,126 @@ async function dispatchNotifications(
         ...formatPayload(trigger, invoice, target.recipient, target.actor),
       };
 
+      // Issue #1059: the intent to deliver is written durably *before* the first
+      // provider call. If this process dies mid-dispatch, or the provider fails,
+      // the row stays `pending` and the poller's flush retries it, so delivery is
+      // at-least-once rather than best-effort. The enqueue is `INSERT OR IGNORE`
+      // on a UNIQUE dedup key, so a duplicated event or a replayed poll can
+      // neither queue nor send a second copy of the same notification.
+      const attempt = enqueueDispatchAttempt(subscription, payload);
+      if (attempt.alreadyDelivered) {
+        // Some earlier run already confirmed this exact notification.
+        continue;
+      }
+
       try {
-        await deliverNotification(subscription, payload);
-        logSentNotification(
-          invoice.id,
-          trigger,
-          target.recipient,
-          subscription.channel,
-          subscription.destination,
-          eventId,
-        );
+        // Check provider health and route via fallback if degraded, with
+        // priority-aware capacity handling. Critical alerts are never shed.
+        const health = getProviderHealth(subscription.channel as any);
+        if (health !== 'healthy') {
+          const fbResult = await deliverWithFallback(subscription, payload);
+          if (fbResult.success) {
+            const usedChannel = (fbResult.fallbackChannel as any) ?? subscription.channel;
+            // Find the actual destination used for the fallback channel
+            let usedDestination = dispatchDestinationOf(subscription);
+            if (fbResult.fallbackChannel) {
+              const fallbackSubs = getSubscriptionsByAddress(target.recipient).filter(
+                (s) => s.channel === fbResult.fallbackChannel && s.triggers.includes(trigger)
+              );
+              if (fallbackSubs.length > 0) usedDestination = dispatchDestinationOf(fallbackSubs[0]);
+            }
+            // The recipient was reached, just not on the primary channel: close
+            // the primary attempt so the flush does not send it a second time.
+            markDispatchAttemptDelivered(attempt.id);
+            logSentNotification(
+              invoice.id,
+              trigger,
+              target.recipient,
+              usedChannel,
+              usedDestination,
+              eventId
+            );
+          } else if (!fbResult.capacityAllowed) {
+            recordDispatchAttemptFailure(
+              attempt.id,
+              fbResult.error ?? `fallback capacity exhausted for ${trigger}`
+            );
+            console.warn(
+              `[processor] Fallback capacity exhausted for ${trigger} to ${target.recipient} (priority ${fbResult.priority}) — shedding low-priority notification`
+            );
+          } else {
+            recordDispatchAttemptFailure(attempt.id, fbResult.error ?? 'fallback delivery failed');
+            console.error(
+              `[processor] Failed to deliver notification for invoice ${
+                invoice.id
+              } to ${dispatchDestinationOf(subscription)} via fallback:`,
+              fbResult.error
+            );
+          }
+        } else {
+          await deliverNotification(subscription, payload);
+          markDispatchAttemptDelivered(attempt.id);
+          logSentNotification(
+            invoice.id,
+            trigger,
+            target.recipient,
+            subscription.channel,
+            dispatchDestinationOf(subscription),
+            eventId
+          );
+        }
       } catch (error) {
-        console.error(
-          `[processor] Failed to deliver notification for invoice ${invoice.id} to ${subscription.destination}:`,
-          error,
-        );
+        const primaryError = error instanceof Error ? error.message : String(error);
+        // Direct delivery failure — try fallback as second chance for critical
+        try {
+          const fbResult = await deliverWithFallback(subscription, payload);
+          if (fbResult.success) {
+            const usedChannel = (fbResult.fallbackChannel as any) ?? subscription.channel;
+            let usedDestination = dispatchDestinationOf(subscription);
+            if (fbResult.fallbackChannel) {
+              const fallbackSubs = getSubscriptionsByAddress(target.recipient).filter(
+                (s) => s.channel === fbResult.fallbackChannel && s.triggers.includes(trigger)
+              );
+              if (fallbackSubs.length > 0) usedDestination = dispatchDestinationOf(fallbackSubs[0]);
+            }
+            markDispatchAttemptDelivered(attempt.id);
+            logSentNotification(
+              invoice.id,
+              trigger,
+              target.recipient,
+              usedChannel,
+              usedDestination,
+              eventId
+            );
+          } else {
+            // Row stays pending: the poller flush owns the retry from here.
+            // The provider that refused the send is the actionable cause, so it
+            // is kept even when the fallback reports its own reason.
+            recordDispatchAttemptFailure(
+              attempt.id,
+              fbResult.error ? `${primaryError} (fallback: ${fbResult.error})` : primaryError
+            );
+            console.error(
+              `[processor] Failed to deliver notification for invoice ${
+                invoice.id
+              } to ${dispatchDestinationOf(subscription)}:`,
+              error
+            );
+          }
+        } catch (fallbackError) {
+          recordDispatchAttemptFailure(
+            attempt.id,
+            `${primaryError} (fallback: ${
+              fallbackError instanceof Error ? fallbackError.message : String(fallbackError)
+            })`
+          );
+          console.error(
+            `[processor] Failed to deliver notification for invoice ${
+              invoice.id
+            } to ${dispatchDestinationOf(subscription)}:`,
+            fallbackError
+          );
+        }
       }
     }
   }

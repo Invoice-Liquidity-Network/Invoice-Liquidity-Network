@@ -17,12 +17,12 @@ import {
   Account,
   Operation,
   Asset,
-} from "@stellar/stellar-sdk";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+} from '@stellar/stellar-sdk';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 // ─── Mock Freighter API ───────────────────────────────────────────────────────
 
-vi.mock("@stellar/freighter-api", () => ({
+vi.mock('@stellar/freighter-api', () => ({
   getAddress: vi.fn(),
   getNetworkDetails: vi.fn(),
   isConnected: vi.fn(),
@@ -30,8 +30,8 @@ vi.mock("@stellar/freighter-api", () => ({
   signTransaction: vi.fn(),
 }));
 
-import * as freighterApi from "@stellar/freighter-api";
-import { createFreighterSigner, createKeypairSigner } from "./signers";
+import * as freighterApi from '@stellar/freighter-api';
+import { createFreighterSigner, createKeypairSigner } from './signers';
 
 // ─── Test constants ───────────────────────────────────────────────────────────
 
@@ -51,19 +51,19 @@ const KEYPAIR_C = Keypair.random();
  */
 function buildTestTransactionXdr(
   sourceKeypair: Keypair = KEYPAIR_A,
-  networkPassphrase: string = TESTNET_PASSPHRASE,
+  networkPassphrase: string = TESTNET_PASSPHRASE
 ): string {
-  const account = new Account(sourceKeypair.publicKey(), "100");
+  const account = new Account(sourceKeypair.publicKey(), '100');
   const tx = new TransactionBuilder(account, {
-    fee: "100",
+    fee: '100',
     networkPassphrase,
   })
     .addOperation(
       Operation.payment({
         destination: KEYPAIR_B.publicKey(),
         asset: Asset.native(),
-        amount: "1",
-      }),
+        amount: '1',
+      })
     )
     .setTimeout(30)
     .build();
@@ -80,22 +80,22 @@ function countSignatures(signedXdr: string): number {
 
 // ─── Freighter signing ────────────────────────────────────────────────────────
 
-describe("createFreighterSigner", () => {
+describe('createFreighterSigner', () => {
   beforeEach(() => {
     vi.restoreAllMocks();
-    vi.stubGlobal("window", {});
+    vi.stubGlobal('window', {});
     vi.mocked(freighterApi.isConnected).mockResolvedValue({ isConnected: true });
     vi.mocked(freighterApi.getNetworkDetails).mockResolvedValue({
-      network: "TESTNET",
+      network: 'TESTNET',
       networkPassphrase: TESTNET_PASSPHRASE,
-      networkUrl: "https://rpc.testnet.example",
+      networkUrl: 'https://rpc.testnet.example',
     });
   });
 
   // ─── Happy path ─────────────────────────────────────────────────────────────
 
-  describe("happy path", () => {
-    it("resolves the public key from getAddress when already connected", async () => {
+  describe('happy path', () => {
+    it('resolves the public key from getAddress when already connected', async () => {
       vi.mocked(freighterApi.getAddress).mockResolvedValue({
         address: KEYPAIR_A.publicKey(),
       });
@@ -107,8 +107,8 @@ describe("createFreighterSigner", () => {
       expect(freighterApi.requestAccess).not.toHaveBeenCalled();
     });
 
-    it("falls back to requestAccess when getAddress returns an empty address", async () => {
-      vi.mocked(freighterApi.getAddress).mockResolvedValue({ address: "" });
+    it('falls back to requestAccess when getAddress returns an empty address', async () => {
+      vi.mocked(freighterApi.getAddress).mockResolvedValue({ address: '' });
       vi.mocked(freighterApi.requestAccess).mockResolvedValue({
         address: KEYPAIR_A.publicKey(),
       });
@@ -120,7 +120,7 @@ describe("createFreighterSigner", () => {
       expect(freighterApi.requestAccess).toHaveBeenCalledOnce();
     });
 
-    it("uses the pinned address when explicitly provided", async () => {
+    it('uses the pinned address when explicitly provided', async () => {
       const signer = createFreighterSigner(KEYPAIR_B.publicKey());
       // getAddress should not be called when address is pinned
       vi.mocked(freighterApi.getAddress).mockResolvedValue({ address: KEYPAIR_A.publicKey() });
@@ -131,247 +131,250 @@ describe("createFreighterSigner", () => {
       expect(publicKey).toBe(KEYPAIR_B.publicKey());
     });
 
-    it("signs a transaction and returns the signed XDR", async () => {
+    it('signs a transaction and returns the signed XDR', async () => {
       vi.mocked(freighterApi.getAddress).mockResolvedValue({
         address: KEYPAIR_A.publicKey(),
       });
-      const signedXdr = "SIGNED_TX_XDR";
+      const signedXdr = 'SIGNED_TX_XDR';
       vi.mocked(freighterApi.signTransaction).mockResolvedValue({
         signedTxXdr: signedXdr,
         signerAddress: KEYPAIR_A.publicKey(),
       });
 
       const signer = createFreighterSigner();
-      const result = await signer.signTransaction("UNSIGNED_XDR", {
+      const result = await signer.signTransaction('UNSIGNED_XDR', {
         networkPassphrase: TESTNET_PASSPHRASE,
       });
 
       expect(result).toBe(signedXdr);
-      expect(freighterApi.signTransaction).toHaveBeenCalledWith("UNSIGNED_XDR", {
+      expect(freighterApi.signTransaction).toHaveBeenCalledWith('UNSIGNED_XDR', {
         address: KEYPAIR_A.publicKey(),
         networkPassphrase: TESTNET_PASSPHRASE,
       });
     });
 
-    it("passes the override address from SignTransactionOptions", async () => {
+    it('passes the override address from SignTransactionOptions', async () => {
       vi.mocked(freighterApi.getAddress).mockResolvedValue({
         address: KEYPAIR_A.publicKey(),
       });
       vi.mocked(freighterApi.signTransaction).mockResolvedValue({
-        signedTxXdr: "SIGNED",
+        signedTxXdr: 'SIGNED',
         signerAddress: KEYPAIR_B.publicKey(),
       });
 
       const signer = createFreighterSigner();
-      await signer.signTransaction("UNSIGNED_XDR", {
+      await signer.signTransaction('UNSIGNED_XDR', {
         networkPassphrase: TESTNET_PASSPHRASE,
         address: KEYPAIR_B.publicKey(),
       });
 
-      expect(freighterApi.signTransaction).toHaveBeenCalledWith("UNSIGNED_XDR", {
+      expect(freighterApi.signTransaction).toHaveBeenCalledWith('UNSIGNED_XDR', {
         address: KEYPAIR_B.publicKey(),
         networkPassphrase: TESTNET_PASSPHRASE,
       });
     });
 
-    it("skips network assertion when getNetworkDetails is unavailable", async () => {
+    it('skips network assertion when getNetworkDetails is unavailable', async () => {
       vi.mocked(freighterApi.getAddress).mockResolvedValue({
         address: KEYPAIR_A.publicKey(),
       });
       vi.mocked(freighterApi.signTransaction).mockResolvedValue({
-        signedTxXdr: "SIGNED",
+        signedTxXdr: 'SIGNED',
         signerAddress: KEYPAIR_A.publicKey(),
       });
       // Simulate an older Freighter build that lacks getNetworkDetails
-      vi.spyOn(freighterApi, "getNetworkDetails" as any).mockImplementation(undefined as any);
+      vi.spyOn(freighterApi, 'getNetworkDetails' as any).mockImplementation(undefined as any);
 
       const signer = createFreighterSigner();
       await expect(
-        signer.signTransaction("UNSIGNED_XDR", {
+        signer.signTransaction('UNSIGNED_XDR', {
           networkPassphrase: TESTNET_PASSPHRASE,
-        }),
-      ).resolves.toBe("SIGNED");
+        })
+      ).resolves.toBe('SIGNED');
     });
   });
 
   // ─── Network mismatch ────────────────────────────────────────────────────────
 
-  describe("network mismatch", () => {
-    it("throws when Freighter is connected to mainnet but testnet passphrase is requested", async () => {
+  describe('network mismatch', () => {
+    it('throws when Freighter is connected to mainnet but testnet passphrase is requested', async () => {
       vi.mocked(freighterApi.getAddress).mockResolvedValue({
         address: KEYPAIR_A.publicKey(),
       });
       vi.mocked(freighterApi.getNetworkDetails).mockResolvedValue({
-        network: "PUBLIC",
+        network: 'PUBLIC',
         networkPassphrase: MAINNET_PASSPHRASE,
-        networkUrl: "https://rpc.mainnet.example",
+        networkUrl: 'https://rpc.mainnet.example',
       });
 
       const signer = createFreighterSigner();
       await expect(
-        signer.signTransaction("UNSIGNED_XDR", {
+        signer.signTransaction('UNSIGNED_XDR', {
           networkPassphrase: TESTNET_PASSPHRASE,
-        }),
-      ).rejects.toThrow("Freighter is connected to a different Stellar network.");
+        })
+      ).rejects.toThrow('Freighter is connected to a different Stellar network.');
     });
 
-    it("does not throw when passphrases match exactly", async () => {
+    it('does not throw when passphrases match exactly', async () => {
       vi.mocked(freighterApi.getAddress).mockResolvedValue({
         address: KEYPAIR_A.publicKey(),
       });
       vi.mocked(freighterApi.getNetworkDetails).mockResolvedValue({
-        network: "TESTNET",
+        network: 'TESTNET',
         networkPassphrase: TESTNET_PASSPHRASE,
-        networkUrl: "https://rpc.testnet.example",
+        networkUrl: 'https://rpc.testnet.example',
       });
       vi.mocked(freighterApi.signTransaction).mockResolvedValue({
-        signedTxXdr: "OK",
+        signedTxXdr: 'OK',
         signerAddress: KEYPAIR_A.publicKey(),
       });
 
       const signer = createFreighterSigner();
       await expect(
-        signer.signTransaction("UNSIGNED_XDR", {
+        signer.signTransaction('UNSIGNED_XDR', {
           networkPassphrase: TESTNET_PASSPHRASE,
-        }),
-      ).resolves.toBe("OK");
+        })
+      ).resolves.toBe('OK');
     });
   });
 
   // ─── Error propagation ───────────────────────────────────────────────────────
 
-  describe("error propagation", () => {
-    it("throws when window is undefined (non-browser environment)", async () => {
-      vi.stubGlobal("window", undefined);
+  describe('error propagation', () => {
+    it('throws when window is undefined (non-browser environment)', async () => {
+      vi.stubGlobal('window', undefined);
       const signer = createFreighterSigner();
       await expect(signer.getPublicKey()).rejects.toThrow(
-        "Freighter signing is only available in browser environments.",
+        'Freighter signing is only available in browser environments.'
       );
     });
 
-    it("throws when isConnected reports the extension is not installed", async () => {
+    it('throws when isConnected reports the extension is not installed', async () => {
       vi.mocked(freighterApi.isConnected).mockResolvedValue({ isConnected: false });
       const signer = createFreighterSigner();
       await expect(signer.getPublicKey()).rejects.toThrow(
-        "Freighter extension is not installed or not available.",
+        'Freighter extension is not installed or not available.'
       );
     });
 
-    it("throws when isConnected itself returns an error", async () => {
+    it('throws when isConnected itself returns an error', async () => {
       vi.mocked(freighterApi.isConnected).mockResolvedValue({
         isConnected: false,
-        error: "Extension crashed",
+        error: 'Extension crashed',
       });
       const signer = createFreighterSigner();
-      await expect(signer.getPublicKey()).rejects.toThrow("Extension crashed");
+      await expect(signer.getPublicKey()).rejects.toThrow('Extension crashed');
     });
 
-    it("throws when getAddress returns an error", async () => {
+    it('throws when getAddress returns an error', async () => {
       vi.mocked(freighterApi.getAddress).mockResolvedValue({
-        address: "",
-        error: "Address fetch failed",
+        address: '',
+        error: 'Address fetch failed',
       });
       const signer = createFreighterSigner();
-      await expect(signer.getPublicKey()).rejects.toThrow("Address fetch failed");
+      await expect(signer.getPublicKey()).rejects.toThrow('Address fetch failed');
     });
 
-    it("throws when requestAccess returns an error", async () => {
-      vi.mocked(freighterApi.getAddress).mockResolvedValue({ address: "" });
+    it('throws when requestAccess returns an error', async () => {
+      vi.mocked(freighterApi.getAddress).mockResolvedValue({ address: '' });
       vi.mocked(freighterApi.requestAccess).mockResolvedValue({
-        address: "",
-        error: "User rejected access",
+        address: '',
+        error: 'User rejected access',
       });
       const signer = createFreighterSigner();
-      await expect(signer.getPublicKey()).rejects.toThrow("User rejected access");
+      await expect(signer.getPublicKey()).rejects.toThrow('User rejected access');
     });
 
-    it("throws when requestAccess returns no address and no error", async () => {
-      vi.mocked(freighterApi.getAddress).mockResolvedValue({ address: "" });
-      vi.mocked(freighterApi.requestAccess).mockResolvedValue({ address: "" });
+    it('throws when requestAccess returns no address and no error', async () => {
+      vi.mocked(freighterApi.getAddress).mockResolvedValue({ address: '' });
+      vi.mocked(freighterApi.requestAccess).mockResolvedValue({ address: '' });
       const signer = createFreighterSigner();
       await expect(signer.getPublicKey()).rejects.toThrow(
-        "Freighter did not provide an account address.",
+        'Freighter did not provide an account address.'
       );
     });
 
-    it("throws when getNetworkDetails returns an error", async () => {
+    it('throws when getNetworkDetails returns an error', async () => {
       vi.mocked(freighterApi.getAddress).mockResolvedValue({
         address: KEYPAIR_A.publicKey(),
       });
       vi.mocked(freighterApi.getNetworkDetails).mockResolvedValue({
-        network: "",
-        networkPassphrase: "",
-        networkUrl: "",
-        error: "Network details unavailable",
+        network: '',
+        networkPassphrase: '',
+        networkUrl: '',
+        error: 'Network details unavailable',
       });
       const signer = createFreighterSigner();
       await expect(
-        signer.signTransaction("UNSIGNED_XDR", { networkPassphrase: TESTNET_PASSPHRASE }),
-      ).rejects.toThrow("Network details unavailable");
+        signer.signTransaction('UNSIGNED_XDR', { networkPassphrase: TESTNET_PASSPHRASE })
+      ).rejects.toThrow('Network details unavailable');
     });
 
-    it("throws when signTransaction returns an error", async () => {
+    it('throws when signTransaction returns an error', async () => {
       vi.mocked(freighterApi.getAddress).mockResolvedValue({
         address: KEYPAIR_A.publicKey(),
       });
       vi.mocked(freighterApi.signTransaction).mockResolvedValue({
-        error: "User rejected signing",
-        signedTxXdr: "",
-        signerAddress: "",
+        error: 'User rejected signing',
+        signedTxXdr: '',
+        signerAddress: '',
       });
       const signer = createFreighterSigner();
       await expect(
-        signer.signTransaction("UNSIGNED_XDR", { networkPassphrase: TESTNET_PASSPHRASE }),
-      ).rejects.toThrow("User rejected signing");
+        signer.signTransaction('UNSIGNED_XDR', { networkPassphrase: TESTNET_PASSPHRASE })
+      ).rejects.toThrow('User rejected signing');
     });
 
-    it("throws a descriptive error when signTransaction returns no XDR and no error", async () => {
+    it('throws a descriptive error when signTransaction returns no XDR and no error', async () => {
       vi.mocked(freighterApi.getAddress).mockResolvedValue({
         address: KEYPAIR_A.publicKey(),
       });
       vi.mocked(freighterApi.signTransaction).mockResolvedValue({
         signedTxXdr: undefined,
-        signerAddress: "",
-      });
+        signerAddress: '',
+      } as any);
       const signer = createFreighterSigner();
       await expect(
-        signer.signTransaction("UNSIGNED_XDR", { networkPassphrase: TESTNET_PASSPHRASE }),
-      ).rejects.toThrow("Freighter did not return a signed transaction.");
+        signer.signTransaction('UNSIGNED_XDR', { networkPassphrase: TESTNET_PASSPHRASE })
+      ).rejects.toThrow('Freighter did not return a signed transaction.');
     });
   });
 
   // ─── Timeout simulation ──────────────────────────────────────────────────────
 
-  describe("timeout handling", () => {
-    it("propagates a rejected promise when signTransaction takes too long (caller timeout)", async () => {
+  describe('timeout handling', () => {
+    it('propagates a rejected promise when signTransaction takes too long (caller timeout)', async () => {
       vi.mocked(freighterApi.getAddress).mockResolvedValue({
         address: KEYPAIR_A.publicKey(),
       });
       // Simulate a sign operation that never resolves (user left window open)
       vi.mocked(freighterApi.signTransaction).mockImplementation(
-        () => new Promise((_resolve, reject) => setTimeout(() => reject(new Error("Timed out waiting for Freighter")), 10)),
+        () =>
+          new Promise((_resolve, reject) =>
+            setTimeout(() => reject(new Error('Timed out waiting for Freighter')), 10)
+          )
       );
 
       const signer = createFreighterSigner();
       await expect(
-        signer.signTransaction("UNSIGNED_XDR", { networkPassphrase: TESTNET_PASSPHRASE }),
-      ).rejects.toThrow("Timed out waiting for Freighter");
+        signer.signTransaction('UNSIGNED_XDR', { networkPassphrase: TESTNET_PASSPHRASE })
+      ).rejects.toThrow('Timed out waiting for Freighter');
     });
   });
 });
 
 // ─── Keypair signing ──────────────────────────────────────────────────────────
 
-describe("createKeypairSigner", () => {
+describe('createKeypairSigner', () => {
   // ─── Happy path ─────────────────────────────────────────────────────────────
 
-  describe("happy path", () => {
-    it("returns the correct public key for a given secret", async () => {
+  describe('happy path', () => {
+    it('returns the correct public key for a given secret', async () => {
       const signer = createKeypairSigner(KEYPAIR_A.secret());
       expect(await signer.getPublicKey()).toBe(KEYPAIR_A.publicKey());
     });
 
-    it("produces a valid signed transaction XDR", async () => {
+    it('produces a valid signed transaction XDR', async () => {
       const txXdr = buildTestTransactionXdr(KEYPAIR_A);
       const signer = createKeypairSigner(KEYPAIR_A.secret());
 
@@ -379,7 +382,7 @@ describe("createKeypairSigner", () => {
         networkPassphrase: TESTNET_PASSPHRASE,
       });
 
-      expect(typeof signedXdr).toBe("string");
+      expect(typeof signedXdr).toBe('string');
       expect(signedXdr.length).toBeGreaterThan(0);
 
       // Verify the signature is actually valid by parsing and checking signature count
@@ -387,7 +390,7 @@ describe("createKeypairSigner", () => {
       expect(sigCount).toBe(1);
     });
 
-    it("signs the same XDR consistently (deterministic)", async () => {
+    it('signs the same XDR consistently (deterministic)', async () => {
       const txXdr = buildTestTransactionXdr(KEYPAIR_A);
       const signer = createKeypairSigner(KEYPAIR_A.secret());
 
@@ -402,7 +405,7 @@ describe("createKeypairSigner", () => {
       expect(signed1).toBe(signed2);
     });
 
-    it("different keypairs produce different signatures for the same XDR", async () => {
+    it('different keypairs produce different signatures for the same XDR', async () => {
       const txXdr = buildTestTransactionXdr(KEYPAIR_A);
       const signerA = createKeypairSigner(KEYPAIR_A.secret());
       const signerB = createKeypairSigner(KEYPAIR_B.secret());
@@ -417,7 +420,7 @@ describe("createKeypairSigner", () => {
       expect(signedA).not.toBe(signedB);
     });
 
-    it("works with mainnet network passphrase", async () => {
+    it('works with mainnet network passphrase', async () => {
       const txXdr = buildTestTransactionXdr(KEYPAIR_A, MAINNET_PASSPHRASE);
       const signer = createKeypairSigner(KEYPAIR_A.secret());
 
@@ -426,16 +429,14 @@ describe("createKeypairSigner", () => {
       });
 
       // Verify parseable on mainnet passphrase
-      expect(() =>
-        TransactionBuilder.fromXDR(signedXdr, MAINNET_PASSPHRASE),
-      ).not.toThrow();
+      expect(() => TransactionBuilder.fromXDR(signedXdr, MAINNET_PASSPHRASE)).not.toThrow();
     });
   });
 
   // ─── Multi-signature ─────────────────────────────────────────────────────────
 
-  describe("multi-signature scenarios", () => {
-    it("accumulates two signatures when two signers sign the same transaction sequentially", async () => {
+  describe('multi-signature scenarios', () => {
+    it('accumulates two signatures when two signers sign the same transaction sequentially', async () => {
       const txXdr = buildTestTransactionXdr(KEYPAIR_A);
 
       const signerA = createKeypairSigner(KEYPAIR_A.secret());
@@ -454,7 +455,7 @@ describe("createKeypairSigner", () => {
       expect(countSignatures(twiceSigned)).toBe(2);
     });
 
-    it("accumulates three signatures for a 2-of-3 multisig transaction", async () => {
+    it('accumulates three signatures for a 2-of-3 multisig transaction', async () => {
       const txXdr = buildTestTransactionXdr(KEYPAIR_A);
       const signers = [
         createKeypairSigner(KEYPAIR_A.secret()),
@@ -472,7 +473,7 @@ describe("createKeypairSigner", () => {
       expect(countSignatures(currentXdr)).toBe(3);
     });
 
-    it("each intermediate XDR has exactly the right signature count", async () => {
+    it('each intermediate XDR has exactly the right signature count', async () => {
       const txXdr = buildTestTransactionXdr(KEYPAIR_A);
       const signers = [
         createKeypairSigner(KEYPAIR_A.secret()),
@@ -489,7 +490,7 @@ describe("createKeypairSigner", () => {
       }
     });
 
-    it("signing the same XDR with the same keypair twice produces 2 identical signatures (not de-duped by SDK)", async () => {
+    it('signing the same XDR with the same keypair twice produces 2 identical signatures (not de-duped by SDK)', async () => {
       const txXdr = buildTestTransactionXdr(KEYPAIR_A);
       const signer = createKeypairSigner(KEYPAIR_A.secret());
 
@@ -507,36 +508,36 @@ describe("createKeypairSigner", () => {
 
   // ─── Invalid key handling ────────────────────────────────────────────────────
 
-  describe("invalid key handling", () => {
-    it("throws immediately when constructed with a non-Stellar secret key", () => {
-      expect(() => createKeypairSigner("not-a-valid-secret-key")).toThrow();
+  describe('invalid key handling', () => {
+    it('throws immediately when constructed with a non-Stellar secret key', () => {
+      expect(() => createKeypairSigner('not-a-valid-secret-key')).toThrow();
     });
 
-    it("throws when constructed with an empty string", () => {
-      expect(() => createKeypairSigner("")).toThrow();
+    it('throws when constructed with an empty string', () => {
+      expect(() => createKeypairSigner('')).toThrow();
     });
 
-    it("throws when constructed with a public key instead of a secret key", () => {
+    it('throws when constructed with a public key instead of a secret key', () => {
       // Public keys start with 'G', secret keys start with 'S'
       expect(() => createKeypairSigner(KEYPAIR_A.publicKey())).toThrow();
     });
 
-    it("throws when constructed with a secret key of the wrong length", () => {
-      expect(() => createKeypairSigner("SXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX")).toThrow();
+    it('throws when constructed with a secret key of the wrong length', () => {
+      expect(() => createKeypairSigner('SXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX')).toThrow();
     });
 
-    it("throws for a key with an invalid checksum", () => {
+    it('throws for a key with an invalid checksum', () => {
       // Deliberately corrupt the last character of a valid key
       const validSecret = KEYPAIR_A.secret();
-      const corrupted = validSecret.slice(0, -1) + (validSecret.endsWith("A") ? "B" : "A");
+      const corrupted = validSecret.slice(0, -1) + (validSecret.endsWith('A') ? 'B' : 'A');
       expect(() => createKeypairSigner(corrupted)).toThrow();
     });
   });
 
   // ─── Concurrent signing ──────────────────────────────────────────────────────
 
-  describe("concurrent signing", () => {
-    it("handles parallel signing calls from the same signer correctly", async () => {
+  describe('concurrent signing', () => {
+    it('handles parallel signing calls from the same signer correctly', async () => {
       const txXdr = buildTestTransactionXdr(KEYPAIR_A);
       const signer = createKeypairSigner(KEYPAIR_A.secret());
 
@@ -545,8 +546,8 @@ describe("createKeypairSigner", () => {
         Array.from({ length: 5 }, () =>
           signer.signTransaction(txXdr, {
             networkPassphrase: TESTNET_PASSPHRASE,
-          }),
-        ),
+          })
+        )
       );
 
       // All should produce the same deterministic XDR

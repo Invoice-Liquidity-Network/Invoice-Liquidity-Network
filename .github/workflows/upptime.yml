@@ -5,7 +5,7 @@ on:
     branches:
       - main
   schedule:
-    - cron: "*/5 * * * *"
+    - cron: '*/5 * * * *'
   workflow_dispatch:
 
 # Exclude from cancellation: scheduled uptime checks and push-triggered
@@ -23,16 +23,19 @@ permissions:
 jobs:
   summary:
     name: Summary
-    runs-on: namespace-profile-nursca
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: upptime/uptime-monitor@c540f23fc12982bc1df4624aa428b818f2020bdd # master
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          NOTIFICATION_SLACK: ${{ secrets.NOTIFICATION_SLACK }}
+          NOTIFICATION_DISCORD: ${{ secrets.NOTIFICATION_DISCORD }}
+          NOTIFICATION_WEBHOOK: ${{ secrets.NOTIFICATION_WEBHOOK }}
 
   response-time:
     name: Response Time
-    runs-on: namespace-profile-nursca
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: upptime/uptime-monitor@c540f23fc12982bc1df4624aa428b818f2020bdd # master
@@ -43,7 +46,7 @@ jobs:
 
   graphs:
     name: Graphs
-    runs-on: namespace-profile-nursca
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: upptime/uptime-monitor@c540f23fc12982bc1df4624aa428b818f2020bdd # master
@@ -53,7 +56,7 @@ jobs:
 
   static-site:
     name: Static Site
-    runs-on: namespace-profile-nursca
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: upptime/uptime-monitor@c540f23fc12982bc1df4624aa428b818f2020bdd # master

@@ -17,6 +17,7 @@ export interface StateDebugEntry<T> {
   next: T;
 }
 
+// eslint-disable-next-line @typescript-eslint/no-unused-vars -- T is a phantom param kept for API symmetry with StateStore<T>
 export interface StateStoreOptions<T> {
   /** Storage key for persistence (required when `persist: true`). */
   key?: string;
@@ -54,15 +55,19 @@ interface StorageAdapter {
 }
 
 function resolveStorage(): StorageAdapter {
-  if (typeof localStorage !== "undefined") {
+  if (typeof localStorage !== 'undefined') {
     return localStorage;
   }
   // In-memory fallback for Node.js / environments without localStorage
   const mem = new Map<string, string>();
   return {
     getItem: (k) => mem.get(k) ?? null,
-    setItem: (k, v) => { mem.set(k, v); },
-    removeItem: (k) => { mem.delete(k); },
+    setItem: (k, v) => {
+      mem.set(k, v);
+    },
+    removeItem: (k) => {
+      mem.delete(k);
+    },
   };
 }
 
@@ -97,14 +102,9 @@ function resolveStorage(): StorageAdapter {
  */
 export function createStateStore<T>(
   initialState: T,
-  options: StateStoreOptions<T> = {},
+  options: StateStoreOptions<T> = {}
 ): StateStore<T> {
-  const {
-    key,
-    persist = false,
-    sync = false,
-    debugHistorySize = 20,
-  } = options;
+  const { key, persist = false, sync = false, debugHistorySize = 20 } = options;
 
   const storage = persist ? resolveStorage() : null;
   const listeners = new Set<Listener<T>>();
@@ -152,7 +152,7 @@ export function createStateStore<T>(
 
   // Cross-tab synchronization (browser `storage` event)
   let syncHandler: ((e: StorageEvent) => void) | null = null;
-  if (sync && key && typeof window !== "undefined") {
+  if (sync && key && typeof window !== 'undefined') {
     syncHandler = (e: StorageEvent) => {
       if (e.key !== key || e.newValue === null) return;
       try {
@@ -164,7 +164,7 @@ export function createStateStore<T>(
         // Ignore malformed payloads from other tabs
       }
     };
-    window.addEventListener("storage", syncHandler);
+    window.addEventListener('storage', syncHandler);
   }
 
   const store: StateStore<T> = {
@@ -174,27 +174,29 @@ export function createStateStore<T>(
 
     setState(next: T | ((prev: T) => T)): void {
       const prev = current;
-      current = typeof next === "function" ? (next as (p: T) => T)(prev) : next;
+      current = typeof next === 'function' ? (next as (p: T) => T)(prev) : next;
       save(current);
       notify(current, prev);
     },
 
     patch(partial: Partial<T>): void {
-      if (typeof current !== "object" || current === null) {
-        throw new TypeError("patch() can only be used with object states");
+      if (typeof current !== 'object' || current === null) {
+        throw new TypeError('patch() can only be used with object states');
       }
       store.setState({ ...current, ...partial });
     },
 
     subscribe(listener: Listener<T>): Unsubscribe {
       listeners.add(listener);
-      return () => { listeners.delete(listener); };
+      return () => {
+        listeners.delete(listener);
+      };
     },
 
     destroy(): void {
       listeners.clear();
-      if (syncHandler && typeof window !== "undefined") {
-        window.removeEventListener("storage", syncHandler);
+      if (syncHandler && typeof window !== 'undefined') {
+        window.removeEventListener('storage', syncHandler);
         syncHandler = null;
       }
     },
@@ -224,8 +226,8 @@ export function createStateStore<T>(
  */
 export function derived<T, U>(
   source: StateStore<T>,
-  selector: (state: T) => U,
-): Omit<StateStore<U>, "setState" | "patch"> {
+  selector: (state: T) => U
+): Omit<StateStore<U>, 'setState' | 'patch'> {
   let current = selector(source.getState());
   const listeners = new Set<Listener<U>>();
 
@@ -235,7 +237,11 @@ export function derived<T, U>(
     if (computed !== prev) {
       current = computed;
       for (const l of listeners) {
-        try { l(current, prev); } catch { /* ignore */ }
+        try {
+          l(current, prev);
+        } catch {
+          /* ignore */
+        }
       }
     }
   });
@@ -244,7 +250,9 @@ export function derived<T, U>(
     getState: () => current,
     subscribe(listener: Listener<U>): Unsubscribe {
       listeners.add(listener);
-      return () => { listeners.delete(listener); };
+      return () => {
+        listeners.delete(listener);
+      };
     },
     destroy() {
       unsub();
@@ -280,8 +288,8 @@ export interface ILNInvoiceListState {
 
 export const DEFAULT_CONNECTION_STATE: ILNConnectionState = {
   connected: false,
-  network: "testnet",
-  contractId: "",
+  network: 'testnet',
+  contractId: '',
   lastSyncAt: null,
   error: null,
 };
@@ -298,11 +306,11 @@ export const DEFAULT_INVOICE_LIST_STATE: ILNInvoiceListState = {
  */
 export function createConnectionStore(
   initial?: Partial<ILNConnectionState>,
-  options?: StateStoreOptions<ILNConnectionState>,
+  options?: StateStoreOptions<ILNConnectionState>
 ): StateStore<ILNConnectionState> {
   return createStateStore<ILNConnectionState>(
     { ...DEFAULT_CONNECTION_STATE, ...initial },
-    { key: "iln:connection", ...options },
+    { key: 'iln:connection', ...options }
   );
 }
 
@@ -311,10 +319,10 @@ export function createConnectionStore(
  */
 export function createInvoiceListStore(
   initial?: Partial<ILNInvoiceListState>,
-  options?: StateStoreOptions<ILNInvoiceListState>,
+  options?: StateStoreOptions<ILNInvoiceListState>
 ): StateStore<ILNInvoiceListState> {
   return createStateStore<ILNInvoiceListState>(
     { ...DEFAULT_INVOICE_LIST_STATE, ...initial },
-    { key: "iln:invoices", ...options },
+    { key: 'iln:invoices', ...options }
   );
 }

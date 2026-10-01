@@ -44,24 +44,23 @@ export interface ComparisonResult {
 
 const SECONDS_PER_DAY = 86400;
 const BASIS_POINTS_DIVISOR = 10000;
-const YEARLY_SECONDS = 365.25 * SECONDS_PER_DAY;
 
 export function calculateYieldProjection(
   invoiceAmount: bigint,
   discountRateBps: number,
-  daysUntilDue: number,
+  daysUntilDue: number
 ): YieldProjection {
   const discountAmount = (invoiceAmount * BigInt(discountRateBps)) / BigInt(BASIS_POINTS_DIVISOR);
   const expectedReturn = invoiceAmount - discountAmount;
 
   const durationFraction = daysUntilDue / 365.25;
-  const annualizedYield = durationFraction > 0
-    ? BigInt(Math.round(Number(discountAmount) / durationFraction))
-    : 0n;
+  const annualizedYield =
+    durationFraction > 0 ? BigInt(Math.round(Number(discountAmount) / durationFraction)) : 0n;
 
-  const effectiveApr = daysUntilDue > 0
-    ? (Number(discountAmount) / Number(invoiceAmount)) * (365.25 / daysUntilDue) * 100
-    : 0;
+  const effectiveApr =
+    daysUntilDue > 0
+      ? (Number(discountAmount) / Number(invoiceAmount)) * (365.25 / daysUntilDue) * 100
+      : 0;
 
   return {
     invoiceAmount,
@@ -76,29 +75,15 @@ export function calculateYieldProjection(
 export function calculateRiskScore(
   amount: bigint,
   daysUntilDue: number,
-  discountRateBps: number,
+  discountRateBps: number
 ): RiskFactors {
-  const amountScore = amount <= 1000n * 1000000n
-    ? 10
-    : amount <= 10000n * 1000000n
-      ? 5
-      : 2;
+  const amountScore = amount <= 1000n * 1000000n ? 10 : amount <= 10000n * 1000000n ? 5 : 2;
 
-  const durationScore = daysUntilDue <= 30
-    ? 10
-    : daysUntilDue <= 90
-      ? 7
-      : daysUntilDue <= 180
-        ? 4
-        : 2;
+  const durationScore =
+    daysUntilDue <= 30 ? 10 : daysUntilDue <= 90 ? 7 : daysUntilDue <= 180 ? 4 : 2;
 
-  const discountScore = discountRateBps >= 1000
-    ? 10
-    : discountRateBps >= 500
-      ? 7
-      : discountRateBps >= 200
-        ? 4
-        : 2;
+  const discountScore =
+    discountRateBps >= 1000 ? 10 : discountRateBps >= 500 ? 7 : discountRateBps >= 200 ? 4 : 2;
 
   const overallScore = Math.round((amountScore + durationScore + discountScore) / 3);
 
@@ -111,33 +96,30 @@ export function calculateRiskScore(
 }
 
 export function calculatePortfolioAllocation(
-  invoices: Array<{ amount: bigint; status: string; token?: string }>,
+  invoices: Array<{ amount: bigint; status: string; token?: string }>
 ): PortfolioAllocation {
   let totalDeployed = 0n;
   let totalAvailable = 0n;
   const tokenMap = new Map<string, { deployed: bigint; count: number }>();
-  let activeCount = 0;
 
   for (const invoice of invoices) {
-    const token = invoice.token ?? "unknown";
+    const token = invoice.token ?? 'unknown';
 
-    if (invoice.status === "Funded" || invoice.status === "Paid") {
+    if (invoice.status === 'Funded' || invoice.status === 'Paid') {
       totalDeployed += invoice.amount;
       const existing = tokenMap.get(token) ?? { deployed: 0n, count: 0 };
       tokenMap.set(token, {
         deployed: existing.deployed + invoice.amount,
         count: existing.count + 1,
       });
-      activeCount++;
-    } else if (invoice.status === "Pending") {
+    } else if (invoice.status === 'Pending') {
       totalAvailable += invoice.amount;
     }
   }
 
   const totalValue = totalDeployed + totalAvailable;
-  const utilizationRate = totalValue > 0n
-    ? Number((totalDeployed * BigInt(10000)) / totalValue) / 100
-    : 0;
+  const utilizationRate =
+    totalValue > 0n ? Number((totalDeployed * BigInt(10000)) / totalValue) / 100 : 0;
 
   const totalDeployedNum = Number(totalDeployed);
   let concentrationIndex = 0;
@@ -164,7 +146,7 @@ export function calculateHistoricalPerformance(
     discountRate?: number;
     createdAt: number;
     settledAt?: number;
-  }>,
+  }>
 ): HistoricalPerformance {
   let totalInvoices = 0;
   let fundedCount = 0;
@@ -174,12 +156,12 @@ export function calculateHistoricalPerformance(
   let totalYield = 0n;
   let discountSum = 0;
   let discountCount = 0;
-  let settlementDays: number[] = [];
+  const settlementDays: number[] = [];
 
-  const submitted = new Map<string, typeof events[0]>();
+  const submitted = new Map<string, (typeof events)[0]>();
 
   for (const event of events) {
-    if (event.type === "submitted") {
+    if (event.type === 'submitted') {
       submitted.set(String(event.amount), event);
       totalInvoices++;
       totalVolume += event.amount;
@@ -187,19 +169,20 @@ export function calculateHistoricalPerformance(
         discountSum += event.discountRate;
         discountCount++;
       }
-    } else if (event.type === "funded") {
+    } else if (event.type === 'funded') {
       fundedCount++;
-    } else if (event.type === "paid") {
+    } else if (event.type === 'paid') {
       paidCount++;
       const submitEvent = submitted.get(String(event.amount));
       if (submitEvent && event.settledAt) {
         const days = (event.settledAt - submitEvent.createdAt) / (SECONDS_PER_DAY * 1000);
         settlementDays.push(days);
         if (submitEvent.discountRate !== undefined) {
-          totalYield += (event.amount * BigInt(submitEvent.discountRate)) / BigInt(BASIS_POINTS_DIVISOR);
+          totalYield +=
+            (event.amount * BigInt(submitEvent.discountRate)) / BigInt(BASIS_POINTS_DIVISOR);
         }
       }
-    } else if (event.type === "defaulted") {
+    } else if (event.type === 'defaulted') {
       defaultedCount++;
     }
   }
@@ -213,16 +196,17 @@ export function calculateHistoricalPerformance(
     totalVolume,
     totalYield,
     avgDiscountRate: discountCount > 0 ? discountSum / discountCount : 0,
-    avgDaysToSettlement: settlementDays.length > 0
-      ? settlementDays.reduce((a, b) => a + b, 0) / settlementDays.length
-      : 0,
+    avgDaysToSettlement:
+      settlementDays.length > 0
+        ? settlementDays.reduce((a, b) => a + b, 0) / settlementDays.length
+        : 0,
   };
 }
 
 export function compareMetrics(
   name: string,
   valueA: number | bigint,
-  valueB: number | bigint,
+  valueB: number | bigint
 ): ComparisonResult {
   const numA = Number(valueA);
   const numB = Number(valueB);

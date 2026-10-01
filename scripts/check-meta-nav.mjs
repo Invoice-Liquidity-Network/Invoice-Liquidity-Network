@@ -50,7 +50,7 @@ const EXCLUDED_FILES = new Set([
   'CHANGELOG_IMPLEMENTATION',
   'pr_description',
   'pr-16-submission-form',
-  '_app',          // Next.js custom App
+  '_app', // Next.js custom App
 ]);
 
 /** Directories to ignore when walking the docs tree. */
@@ -75,11 +75,7 @@ function isSeparatorKey(key) {
 }
 
 function isSeparatorValue(value) {
-  return (
-    value !== null &&
-    typeof value === 'object' &&
-    value.type === 'separator'
-  );
+  return value !== null && typeof value === 'object' && value.type === 'separator';
 }
 
 /**
@@ -201,9 +197,7 @@ function checkDir(dir, docsRoot) {
 
 const args = process.argv.slice(2);
 const docsDirArg = args[args.indexOf('--docs-dir') + 1];
-const docsDir = docsDirArg
-  ? resolve(process.cwd(), docsDirArg)
-  : resolve(repoRoot, 'docs');
+const docsDir = docsDirArg ? resolve(process.cwd(), docsDirArg) : resolve(repoRoot, 'docs');
 
 if (!existsSync(docsDir)) {
   console.error(`docs directory not found: ${docsDir}`);
@@ -224,8 +218,7 @@ if (totalOrphaned === 0 && totalUndiscoverable === 0) {
     `\n✗ Found ${totalOrphaned} orphaned and ${totalUndiscoverable} undiscoverable entries.`
   );
   console.error(
-    '  Fix by updating the relevant _meta.json file(s) or running:\n' +
-    '    pnpm validate:meta-nav'
+    '  Fix by updating the relevant _meta.json file(s) or running:\n' + '    pnpm validate:meta-nav'
   );
   process.exit(1);
 }

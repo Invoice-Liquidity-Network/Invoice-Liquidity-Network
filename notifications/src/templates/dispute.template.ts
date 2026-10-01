@@ -5,13 +5,13 @@
  * it transitions to the "Defaulted" state.
  */
 
-import { emailShell, escapeHtml, formatAmount, formatDate, shortAddress } from "./helpers";
-import type { InvoiceEvent } from "../types";
+import { emailShell, escapeHtml, formatAmount, formatDate, shortAddress } from './helpers';
+import type { InvoiceEvent } from '../types';
 
 export interface DisputeTemplateVars {
   event: InvoiceEvent;
   /** Role of the recipient */
-  recipientRole: "freelancer" | "lp";
+  recipientRole: 'freelancer' | 'lp';
   dashboardUrl?: string;
   /** Optional tokenized one-click unsubscribe URL. */
   unsubscribeUrl?: string;
@@ -30,12 +30,12 @@ export function buildDisputeSubject(event: InvoiceEvent): string {
 export function renderDisputeEmail(vars: DisputeTemplateVars): string {
   const { event, recipientRole, dashboardUrl, unsubscribeUrl } = vars;
 
-  const isFreelancer = recipientRole === "freelancer";
-  const roleLabel = isFreelancer ? "Freelancer" : "Liquidity Provider";
+  const isFreelancer = recipientRole === 'freelancer';
+  const roleLabel = isFreelancer ? 'Freelancer' : 'Liquidity Provider';
 
   const formattedAmount = escapeHtml(formatAmount(event.amount));
   const formattedDue = escapeHtml(formatDate(event.dueDate));
-  const funderDisplay = event.funder ? escapeHtml(shortAddress(event.funder)) : "—";
+  const funderDisplay = event.funder ? escapeHtml(shortAddress(event.funder)) : '—';
   const freelancerDisplay = escapeHtml(shortAddress(event.freelancer));
   const payerDisplay = escapeHtml(shortAddress(event.payer));
   const invoiceId = String(event.invoiceId);
@@ -86,7 +86,7 @@ export function renderDisputeEmail(vars: DisputeTemplateVars): string {
                    <td class="label">Funded By</td>
                    <td>${funderDisplay}</td>
                  </tr>`
-              : ""
+              : ''
           }
         </table>
       </div>
@@ -94,8 +94,8 @@ export function renderDisputeEmail(vars: DisputeTemplateVars): string {
       <p>
         ${
           isFreelancer
-            ? "The insurance pool may cover part of your exposure. Please review your account on the dashboard for next steps."
-            : "The default recovery process has been initiated. The insurance pool will handle your claim automatically. Visit the dashboard to review your recovery status."
+            ? 'The insurance pool may cover part of your exposure. Please review your account on the dashboard for next steps.'
+            : 'The default recovery process has been initiated. The insurance pool will handle your claim automatically. Visit the dashboard to review your recovery status.'
         }
       </p>
 

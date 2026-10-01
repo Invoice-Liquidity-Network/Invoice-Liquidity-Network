@@ -1,9 +1,10 @@
 # RFC 0001 — Dutch Auction Funding
 
-- **Status:** Draft
+- **Status:** Accepted
 - **Author(s):** [@Invoice-Liquidity-Network](https://github.com/Invoice-Liquidity-Network)
 - **Created:** 2026-06-23
 - **PR:** (pending)
+- **Tracking issues:** #6, #7, #8, #10
 
 ---
 
@@ -107,3 +108,13 @@ Invoices submitted before this change used the fixed-discount model. They are no
 1. What should the default values for `step_interval_seconds` and `auction_step_bps` be in the SDK to guide freelancers toward reasonable behaviour?
 2. Should the protocol enforce a minimum `start_discount_bps` floor to prevent invoices that can never attract LPs?
 3. What is the right deprecation timeline for the legacy fixed-discount path?
+
+---
+
+## Implementation notes
+
+*(Fill in during or after implementation)*
+
+- Tracking issues: #6, #7, #8, #10
+- Implementation PR(s): —
+- Merged: —

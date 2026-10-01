@@ -1,24 +1,24 @@
-import { Networks } from "@stellar/stellar-sdk";
-import { existsSync, readFileSync, writeFileSync } from "node:fs";
-import path from "node:path";
-import { z } from "zod";
+import { Networks } from '@stellar/stellar-sdk';
+import { existsSync, readFileSync, writeFileSync } from 'node:fs';
+import path from 'node:path';
+import { z } from 'zod';
 
-import type { ResolvedConfig, SupportedNetwork } from "./types";
+import type { ResolvedConfig, SupportedNetwork } from './types';
 
 // ─── Network defaults ─────────────────────────────────────────────────────────
 
 const DEFAULTS: Record<SupportedNetwork, { networkPassphrase: string; rpcUrl: string }> = {
   mainnet: {
     networkPassphrase: Networks.PUBLIC,
-    rpcUrl: "https://mainnet.sorobanrpc.com",
+    rpcUrl: 'https://mainnet.sorobanrpc.com',
   },
   standalone: {
     networkPassphrase: Networks.STANDALONE,
-    rpcUrl: "http://localhost:8000/soroban/rpc",
+    rpcUrl: 'http://localhost:8000/soroban/rpc',
   },
   testnet: {
     networkPassphrase: Networks.TESTNET,
-    rpcUrl: "https://soroban-testnet.stellar.org",
+    rpcUrl: 'https://soroban-testnet.stellar.org',
   },
 };
 
@@ -32,11 +32,11 @@ const DEFAULTS: Record<SupportedNetwork, { networkPassphrase: string; rpcUrl: st
 //   5. .ilnrc.yml       (YAML, alternate extension)
 
 const CONFIG_FILE_CANDIDATES = [
-  ".iln.config.ts",
-  ".iln.json",
-  ".ilnrc.json",
-  ".ilnrc.yaml",
-  ".ilnrc.yml",
+  '.iln.config.ts',
+  '.iln.json',
+  '.ilnrc.json',
+  '.ilnrc.yaml',
+  '.ilnrc.yml',
 ] as const;
 
 // ─── Errors ───────────────────────────────────────────────────────────────────
@@ -44,7 +44,7 @@ const CONFIG_FILE_CANDIDATES = [
 export class ConfigValidationError extends Error {
   constructor(message: string) {
     super(message);
-    this.name = "ConfigValidationError";
+    this.name = 'ConfigValidationError';
   }
 }
 
@@ -56,7 +56,7 @@ export const ConfigSchema = z.object({
   /** Config file version. Defaults to 2. */
   version: z.number().optional().default(2),
   /** Target Stellar network. Defaults to "testnet". */
-  network: z.enum(["testnet", "mainnet", "standalone"]).optional().default("testnet"),
+  network: z.enum(['testnet', 'mainnet', 'standalone']).optional().default('testnet'),
   horizonUrl: z.string().url().optional(),
   rpcUrl: z.string().url().optional(),
   /** Contract IDs keyed by role, e.g. { invoice: "C…", token: "C…" }. */
@@ -89,7 +89,7 @@ export type ILNConfigFile = z.infer<typeof ConfigSchema>;
  * Writes the migrated configuration back to disk if it was loaded from a JSON file.
  */
 export function migrateConfig(rawConfig: any, filePath: string | null): any {
-  if (!rawConfig || typeof rawConfig !== "object") return rawConfig;
+  if (!rawConfig || typeof rawConfig !== 'object') return rawConfig;
 
   // Clone object to avoid mutating the original reference
   const migrated = JSON.parse(JSON.stringify(rawConfig));
@@ -137,11 +137,11 @@ export function migrateConfig(rawConfig: any, filePath: string | null): any {
   if (changed && filePath && existsSync(filePath)) {
     try {
       const ext = path.extname(filePath).toLowerCase();
-      if (ext === ".json") {
-        if (!migrated["$schema"]) {
-          migrated["$schema"] = "./config.schema.json";
+      if (ext === '.json') {
+        if (!migrated['$schema']) {
+          migrated['$schema'] = './config.schema.json';
         }
-        writeFileSync(filePath, JSON.stringify(migrated, null, 2) + "\n");
+        writeFileSync(filePath, JSON.stringify(migrated, null, 2) + '\n');
       }
     } catch (err: any) {
       // Ignore write errors to ensure robustness (e.g. read-only filesystems)
@@ -181,10 +181,10 @@ export function loadConfig(options: LoadConfigOptions = {}): ResolvedConfig {
   // Validate shape
   const parsed = ConfigSchema.safeParse(rawConfig);
   if (!parsed.success) {
-    const hint = filePath ? ` (${path.basename(filePath)})` : "";
+    const hint = filePath ? ` (${path.basename(filePath)})` : '';
     const messages = parsed.error.issues
-      .map((i) => `[Field: ${i.path.join(".") || "<root>"}] - ${i.message}`)
-      .join("; ");
+      .map((i) => `[Field: ${i.path.join('.') || '<root>'}] - ${i.message}`)
+      .join('; ');
     throw new ConfigValidationError(`Config validation failed${hint}: ${messages}`);
   }
 
@@ -195,21 +195,18 @@ export function loadConfig(options: LoadConfigOptions = {}): ResolvedConfig {
   const contractId = coalesce(
     env.ILN_CONTRACT_ID,
     fileConfig.contractIds?.invoice,
-    fileConfig.contractIds?.liquidity,
+    fileConfig.contractIds?.liquidity
   );
   if (!contractId) {
     throw new ConfigValidationError(
-      "Missing contract ID. Set `contractIds.invoice` in your config file or `ILN_CONTRACT_ID` in the environment.",
+      'Missing contract ID. Set `contractIds.invoice` in your config file or `ILN_CONTRACT_ID` in the environment.'
     );
   }
 
-  const keypairPath = coalesce(
-    env.ILN_KEYPAIR_PATH,
-    fileConfig.deployer?.keypairPath,
-  );
+  const keypairPath = coalesce(env.ILN_KEYPAIR_PATH, fileConfig.deployer?.keypairPath);
   if (!keypairPath) {
     throw new ConfigValidationError(
-      "Missing keypair path. Set `deployer.keypairPath` in your config file or `ILN_KEYPAIR_PATH` in the environment.",
+      'Missing keypair path. Set `deployer.keypairPath` in your config file or `ILN_KEYPAIR_PATH` in the environment.'
     );
   }
 
@@ -217,15 +214,9 @@ export function loadConfig(options: LoadConfigOptions = {}): ResolvedConfig {
     contractId,
     keypairPath: expandHome(keypairPath, env),
     network,
-    networkPassphrase: coalesce(
-      env.ILN_NETWORK_PASSPHRASE,
-      defaults.networkPassphrase,
-    )!,
+    networkPassphrase: coalesce(env.ILN_NETWORK_PASSPHRASE, defaults.networkPassphrase)!,
     rpcUrl: coalesce(env.ILN_RPC_URL, fileConfig.rpcUrl, defaults.rpcUrl)!,
-    tokenId: coalesce(
-      env.ILN_TOKEN_ID,
-      fileConfig.contractIds?.token,
-    ),
+    tokenId: coalesce(env.ILN_TOKEN_ID, fileConfig.contractIds?.token),
   };
 }
 
@@ -242,60 +233,30 @@ export function initConfig(cwd: string): string {
     const candidate_path = path.join(cwd, candidate);
     if (existsSync(candidate_path)) {
       throw new Error(
-        `A config file already exists at ${candidate_path}. Remove it before running init.`,
+        `A config file already exists at ${candidate_path}. Remove it before running init.`
       );
     }
   }
 
-  const targetPath = path.join(cwd, ".ilnrc.json");
+  const targetPath = path.join(cwd, '.ilnrc.json');
   const template = {
-    "$schema": "./config.schema.json",
-    "version": 2,
-    "network": "testnet",
-    "rpcUrl": DEFAULTS.testnet.rpcUrl,
-    "horizonUrl": "https://horizon-testnet.stellar.org",
-    "contractIds": {
-      "invoice": "",
-      "token": "",
+    $schema: './config.schema.json',
+    version: 2,
+    network: 'testnet',
+    rpcUrl: DEFAULTS.testnet.rpcUrl,
+    horizonUrl: 'https://horizon-testnet.stellar.org',
+    contractIds: {
+      invoice: '',
+      token: '',
     },
-    "deployer": {
-      "keypairPath": "~/.stellar/testnet.key",
+    deployer: {
+      keypairPath: '~/.stellar/testnet.key',
     },
-    "aliases": {},
+    aliases: {},
   };
 
-  writeFileSync(targetPath, JSON.stringify(template, null, 2) + "\n");
+  writeFileSync(targetPath, JSON.stringify(template, null, 2) + '\n');
   return targetPath;
-}
-
-/**
- * Generate a `.iln.config.ts` scaffold (TypeScript format).
- *
- * Kept for backwards compatibility; prefer `initConfig` for new projects.
- *
- * @deprecated Use `initConfig` instead.
- */
-export function scaffoldConfig(cwd: string): string {
-  const tsConfigPath = path.join(cwd, ".iln.config.ts");
-  if (existsSync(tsConfigPath)) {
-    throw new Error(`${tsConfigPath} already exists.`);
-  }
-
-  const template = `export default {
-  network: "testnet",
-  horizonUrl: "https://horizon-testnet.stellar.org",
-  rpcUrl: "https://soroban-testnet.stellar.org",
-  contractIds: {
-    invoice: "",
-    token: ""
-  },
-  deployer: {
-    keypairPath: "~/.stellar/testnet.key"
-  }
-};
-`;
-  writeFileSync(tsConfigPath, template);
-  return tsConfigPath;
 }
 
 // ─── Internal helpers ─────────────────────────────────────────────────────────
@@ -322,15 +283,15 @@ export function writeRawConfig(cwd: string, rawConfig: any): string {
   }
 
   if (!targetPath) {
-    targetPath = path.join(cwd, ".ilnrc.json");
+    targetPath = path.join(cwd, '.ilnrc.json');
   }
 
   const ext = path.extname(targetPath).toLowerCase();
-  if (ext !== ".json") {
-    throw new Error("Only JSON config files are supported for writing aliases.");
+  if (ext !== '.json') {
+    throw new Error('Only JSON config files are supported for writing aliases.');
   }
 
-  writeFileSync(targetPath, JSON.stringify(rawConfig, null, 2) + "\n");
+  writeFileSync(targetPath, JSON.stringify(rawConfig, null, 2) + '\n');
   return targetPath;
 }
 
@@ -339,17 +300,17 @@ function readConfigFile(cwd: string): { rawConfig: unknown; filePath: string | n
     const filePath = path.join(cwd, candidate);
     if (!existsSync(filePath)) continue;
 
-    if (candidate === ".iln.config.ts") {
+    if (candidate === '.iln.config.ts') {
       return { rawConfig: loadTypeScriptConfig(filePath), filePath };
     }
 
-    if (candidate === ".ilnrc.yaml" || candidate === ".ilnrc.yml") {
+    if (candidate === '.ilnrc.yaml' || candidate === '.ilnrc.yml') {
       return { rawConfig: loadYamlConfig(filePath, candidate), filePath };
     }
 
     // JSON files (.iln.json, .ilnrc.json)
     try {
-      const raw = JSON.parse(readFileSync(filePath, "utf8"));
+      const raw = JSON.parse(readFileSync(filePath, 'utf8'));
       return { rawConfig: raw, filePath };
     } catch (err: any) {
       throw new Error(`Failed to parse ${filePath}: ${err.message}`);
@@ -365,9 +326,9 @@ function loadTypeScriptConfig(filePath: string): unknown {
     const mod = require(filePath);
     return mod.default ?? mod;
   } catch (err: any) {
-    if (err.code === "ERR_REQUIRE_ESM") {
+    if (err.code === 'ERR_REQUIRE_ESM') {
       throw new Error(
-        `Cannot synchronously load ESM ${filePath}. Use .ilnrc.json instead, or configure ts-node.`,
+        `Cannot synchronously load ESM ${filePath}. Use .ilnrc.json instead, or configure ts-node.`
       );
     }
     throw new Error(`Failed to load ${filePath}: ${err.message}`);
@@ -379,35 +340,34 @@ function loadYamlConfig(filePath: string, candidate: string): unknown {
   try {
     // Optional peer dependency — only required when YAML config is used
     // eslint-disable-next-line @typescript-eslint/no-var-requires
-    yaml = require("js-yaml") as { load(src: string): unknown };
+    yaml = require('js-yaml') as { load(src: string): unknown };
   } catch {
     try {
       // Fallback: the 'yaml' package (different API)
-      const yamlPkg = require("yaml") as { parse(src: string): unknown };
-      const content = readFileSync(filePath, "utf8");
+      // eslint-disable-next-line @typescript-eslint/no-var-requires
+      const yamlPkg = require('yaml') as { parse(src: string): unknown };
+      const content = readFileSync(filePath, 'utf8');
       return yamlPkg.parse(content);
     } catch {
       throw new Error(
-        `Cannot parse ${candidate}: install "js-yaml" or "yaml" as a dependency (npm install js-yaml).`,
+        `Cannot parse ${candidate}: install "js-yaml" or "yaml" as a dependency (npm install js-yaml).`
       );
     }
   }
-  const content = readFileSync(filePath, "utf8");
+  const content = readFileSync(filePath, 'utf8');
   return yaml.load(content);
 }
 
 function resolveNetwork(fileConfig: ILNConfigFile, env: NodeJS.ProcessEnv): SupportedNetwork {
-  const value = coalesce(env.ILN_NETWORK, fileConfig.network, "testnet");
-  if (value === "testnet" || value === "mainnet" || value === "standalone") {
+  const value = coalesce(env.ILN_NETWORK, fileConfig.network, 'testnet');
+  if (value === 'testnet' || value === 'mainnet' || value === 'standalone') {
     return value;
   }
-  throw new Error(
-    `Unsupported network "${value}". Use one of: testnet, mainnet, standalone.`,
-  );
+  throw new Error(`Unsupported network "${value}". Use one of: testnet, mainnet, standalone.`);
 }
 
 function expandHome(input: string, env: NodeJS.ProcessEnv): string {
-  if (!input.startsWith("~/")) {
+  if (!input.startsWith('~/')) {
     return input;
   }
   const home = env.HOME ?? env.USERPROFILE;
@@ -425,4 +385,3 @@ function coalesce(...values: Array<string | undefined>): string | undefined {
   }
   return undefined;
 }
-

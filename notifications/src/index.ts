@@ -1,9 +1,10 @@
-import http from "http";
-import { createApp } from "./api";
-import { startPolling } from "./poller";
-import { NotificationWebSocketServer } from "./websocket";
-import { CONFIG } from "./config";
-import { TemplateEngine } from "./template-engine";
+import http from 'http';
+import { createApp } from './api';
+import { startPolling } from './poller';
+import { NotificationWebSocketServer } from './websocket';
+import { CONFIG } from './config';
+import { TemplateEngine } from './template-engine';
+import { startHealthChecks } from './provider-health';
 
 const app = createApp();
 const server = http.createServer(app);
@@ -17,9 +18,27 @@ server.listen(CONFIG.port, () => {
 });
 
 startPolling().catch((err) => {
-  console.error("[notifications] Failed to start poller:", err);
+  console.error('[notifications] Failed to start poller:', err);
   process.exit(1);
 });
 
+// Automatic provider health checking with fallback routing — probes every 30s
+startHealthChecks();
+
 export { app, server, wsServer, TemplateEngine };
-export type { Template, TemplateContext, RenderResult, TemplateTestResult } from "./template-engine";
+export type {
+  Template,
+  TemplateContext,
+  RenderResult,
+  TemplateTestResult,
+} from './template-engine';
+export {
+  DLQ_ALERT_THRESHOLD,
+  MAX_RETRIES,
+  MAX_RETRY_DELAY_MS,
+  getDeadLetterEntries,
+  getDeadLetterCount,
+  replayDeadLetter,
+  clearDeadLetterQueue,
+  getRetryMetrics,
+} from './delivery';

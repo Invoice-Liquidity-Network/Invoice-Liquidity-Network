@@ -6,9 +6,9 @@
  * No build step required when used with ts-node or a bundler.
  */
 
-import { scValToNative } from "@stellar/stellar-sdk";
+import { scValToNative } from '@stellar/stellar-sdk';
 
-export type ILNEventType = "submitted" | "funded" | "paid" | "defaulted";
+export type ILNEventType = 'submitted' | 'funded' | 'paid' | 'defaulted';
 
 export interface DecodedILNEvent {
   eventId: string;
@@ -20,14 +20,9 @@ export interface DecodedILNEvent {
   explorerUrl: string;
 }
 
-const KNOWN_TYPES = new Set<ILNEventType>([
-  "submitted",
-  "funded",
-  "paid",
-  "defaulted",
-]);
+const KNOWN_TYPES = new Set<ILNEventType>(['submitted', 'funded', 'paid', 'defaulted']);
 
-const STELLAR_EXPERT_BASE = "https://stellar.expert/explorer/testnet/ledger";
+const STELLAR_EXPERT_BASE = 'https://stellar.expert/explorer/testnet/ledger';
 
 /**
  * Decode a single raw Soroban RPC event into a DecodedILNEvent.
@@ -65,9 +60,7 @@ export function decodeEvent(raw: {
 }
 
 /** Decode an array of raw RPC events, silently skipping unrecognised ones. */
-export function decodeEvents(
-  raws: Parameters<typeof decodeEvent>[0][]
-): DecodedILNEvent[] {
+export function decodeEvents(raws: Parameters<typeof decodeEvent>[0][]): DecodedILNEvent[] {
   return raws.flatMap((r) => {
     const decoded = decodeEvent(r);
     return decoded ? [decoded] : [];
@@ -82,16 +75,16 @@ const STROOPS_PER_UNIT = 10_000_000n;
 export function stroopsToAmount(stroops: string): string {
   const val = BigInt(stroops);
   const whole = val / STROOPS_PER_UNIT;
-  const frac = (val % STROOPS_PER_UNIT).toString().padStart(7, "0");
+  const frac = (val % STROOPS_PER_UNIT).toString().padStart(7, '0');
   return `${whole}.${frac}`;
 }
 
 /** Format a Unix timestamp as a locale date string. */
 export function formatDate(unixSecs: number): string {
   return new Date(unixSecs * 1000).toLocaleDateString(undefined, {
-    year: "numeric",
-    month: "short",
-    day: "numeric",
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
   });
 }
 
@@ -102,10 +95,10 @@ export function shortAddress(address: string): string {
 }
 
 const STATUS_LABELS: Record<string, string> = {
-  Pending: "🟡 Pending",
-  Funded: "🔵 Funded",
-  Paid: "🟢 Paid",
-  Defaulted: "🔴 Defaulted",
+  Pending: '🟡 Pending',
+  Funded: '🔵 Funded',
+  Paid: '🟢 Paid',
+  Defaulted: '🔴 Defaulted',
 };
 
 export function formatStatus(status: string): string {
@@ -113,10 +106,10 @@ export function formatStatus(status: string): string {
 }
 
 const EVENT_LABELS: Record<ILNEventType, string> = {
-  submitted: "📄 Invoice Submitted",
-  funded: "💰 Invoice Funded",
-  paid: "✅ Invoice Paid",
-  defaulted: "⚠️ Invoice Defaulted",
+  submitted: '📄 Invoice Submitted',
+  funded: '💰 Invoice Funded',
+  paid: '✅ Invoice Paid',
+  defaulted: '⚠️ Invoice Defaulted',
 };
 
 export function formatEventType(type: ILNEventType): string {

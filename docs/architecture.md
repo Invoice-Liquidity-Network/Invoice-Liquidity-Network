@@ -33,7 +33,9 @@ flowchart TD
 
     subgraph OffChain["Off-Chain Services"]
         INDEXER["Indexer Service\n(Express + SQLite)"]
+        ORACLE["Oracle Service\n(Express + Redis)"]
         NOTIF["Notifications Service\n(Express + SQLite)"]
+        WORKERS["Workers\n(analytics-collector)"]
     end
 
     subgraph OnChain["Stellar / Soroban"]
@@ -63,10 +65,15 @@ flowchart TD
     INDEXER -->|fetches state via get_invoice| RPC
     ASDK -->|REST queries| INDEXER
 
+    ORACLE -->|queries payer verification| RPC
+    ILC -->|calls for verification| ORACLE
+    
     NOTIF -->|polls events| RPC
     NSDK -->|subscribe / unsubscribe| NOTIF
 
     HORIZON -->|SSE event stream| INDEXER
+    
+    WORKERS -->|collects analytics data| INDEXER
 
     ILC --> DIST
     GOV -->|updates params| ILC
@@ -78,7 +85,7 @@ flowchart TD
 
 ```
 Invoice-Liquidity-Network/
-├── sdk/                    # @invoice-liquidity/sdk
+├── sdk/                    # @iln/sdk
 │   └── src/
 │       ├── client.ts       # ILNSdk — wraps all contract calls
 │       ├── signers.ts      # Freighter (browser) + Keypair (Node) signers
@@ -92,31 +99,63 @@ Invoice-Liquidity-Network/
 │       ├── client.ts       # ILNClient wrapping SDK for CLI use
 │       └── config.ts       # .iln.json / env var resolution
 │
-├── indexer/                # iln-indexer (private, deployed to Railway)
+├── indexer/                # iln-indexer (private, deployed to Railway/similar)
 │   └── src/
 │       ├── api.ts          # Express REST API
 │       ├── processor.ts    # Event decode + upsert logic
 │       ├── db.ts           # SQLite queries
 │       └── rpc.ts          # get_invoice() helper
 │
+├── oracle-service/         # @iln/oracle-service (off-chain payer verification)
+│   └── src/
+│       ├── api.ts          # Express REST API for payer verification
+│       ├── verifier.ts     # Payer creditworthiness verification logic
+│       └── cache.ts        # Redis cache for verification results
+│
 ├── notifications/          # iln-notifications (private, deployed separately)
 │   └── src/
 │       ├── api.ts          # Subscribe / unsubscribe endpoints
-│       ├── dispatcher.ts   # Email (Resend) + webhook delivery
+│       ├── dispatcher.ts   # Email (Resend) + webhook + SMS delivery
 │       └── poller.ts       # Event polling loop
 │
 ├── packages/
-│   └── indexer/            # @iln/indexer — reusable Horizon indexer utility
-│       └── src/
-│           ├── indexer.ts  # ILNEventIndexer class (SSE + pagination)
-│           └── types.ts    # ContractEvent, IndexerOptions
+│   ├── shared/             # @iln/shared — shared domain types
+│   ├── indexer/            # @iln/indexer — reusable Horizon indexer utility
+│   │   └── src/
+│   │       ├── indexer.ts  # ILNEventIndexer class (SSE + pagination)
+│   │       └── types.ts    # ContractEvent, IndexerOptions
+│   ├── sdk/                # @iln/sdk-next — browser-first SDK rewrite
+│   ├── react/              # @iln/react — React hooks for contract data
+│   ├── mock-backend/       # @iln/mock-backend — in-memory mock for frontend dev
+│   ├── docs/               # @invoice-liquidity/docs-next (Nextra 3 deployed site)
+│   ├── eslint-config/      # @iln/eslint-config — shared ESLint config
+│   ├── test-utils/         # @iln/test-utils — shared test helpers
+│   └── opentelemetry/      # @iln/opentelemetry — instrumentation
+│
+├── workers/
+│   └── analytics-collector/# Background workers for analytics data collection
 │
 ├── examples/
-│   └── portfolio-report/   # Example: LP/freelancer analytics script
+│   ├── javascript-example/ # Basic JavaScript example
+│   ├── typescript-example/ # Full TypeScript example
+│   ├── react-example/      # React integration example
+│   ├── submit-invoice/     # Minimal invoice submission helper
+│   ├── portfolio-report/   # Portfolio reporting example
+│   ├── lp-automation/      # LP automation script
+│   └── governance-monitor/ # Governance proposal monitoring example
 │
-├── tests/e2e/              # End-to-end lifecycle tests (requires local Docker node)
+├── monitoring/             # Infrastructure monitoring
+│   ├── prometheus/         # Prometheus configuration & dashboards
+│   ├── grafana/            # Grafana alerting & visualization
+│   └── cost/               # Cost tracking configuration
+│
+├── docs/                   # You are here (content source of record)
+├── account-seeder/         # Docker utility for seeding test accounts
+├── contract-deployer/      # Docker utility for contract deployment
+├── tests/
+│   ├── e2e/                # End-to-end lifecycle tests (requires local Docker node)
+│   └── sdk-integration/    # SDK integration tests
 ├── scripts/                # deploy.ts, seed.sh, fund-wallets.sh, dev-setup.sh
-├── docs/                   # You are here
 ├── docker-compose.yml      # Local Stellar standalone node
 └── pnpm-workspace.yaml     # Workspace manifest
 ```
@@ -155,13 +194,33 @@ The indexer is a Node.js service that keeps an off-chain SQLite mirror of on-cha
 
 This design means the indexer always holds accurate state even if events arrive out of order or after a ledger re-org.
 
+### Oracle Service
+
+The oracle service provides off-chain payer verification for contracts that require it:
+
+- Verifies payer identity and creditworthiness against external data sources
+- Integrates with contracts using the `require_oracle_verification` flag on `fund_invoice()`
+- Caches verification results in Redis to minimize repeated queries
+- Exposes verification results via REST API for frontend and SDK consumers
+- Monitors fraud signals and stale data freshness
+
+See [oracle-service.md](oracle-service.md) for detailed architecture and deployment.
+
 ### Notifications Service
 
 The notifications service watches the same contract events and dispatches alerts to subscribers:
 
-- Supports `email` (via Resend) and `webhook` channels
+- Supports `email` (via Resend), `webhook`, and `SMS` channels
 - Triggers: `invoice_funded`, `invoice_paid`, `invoice_defaulted`, `invoice_due_soon`, `invoice_overdue`
 - Rate-limited to 10 notifications per minute per address, with 3 retry attempts on delivery failure
+
+### Background Workers
+
+Worker processes handle async tasks like analytics data collection:
+
+- `analytics-collector` — aggregates invoice and liquidity pool metrics for reporting
+- Decoupled from synchronous request paths to keep service latency low
+- Can be deployed independently as serverless functions or background jobs
 
 ---
 
@@ -280,11 +339,32 @@ The CLI is itself a thin wrapper around the same SDK and serves as a reference i
 
 ---
 
+## Monitoring and Observability
+
+The system includes integrated monitoring infrastructure:
+
+- **Prometheus** (`monitoring/prometheus/`) — metrics scraping and alerting rules for all services
+- **Grafana** (`monitoring/grafana/`) — dashboards for invoice metrics, service health, and SLA tracking
+- **OpenTelemetry** (`packages/opentelemetry/`) — optional distributed tracing instrumentation
+
+Each service (indexer, oracle-service, notifications) exposes Prometheus metrics on a `/metrics` endpoint.
+
+## Deployment Infrastructure
+
+Helper utilities for bootstrapping and deployment:
+
+- **account-seeder** — Docker image for creating and funding test accounts on local/testnet Stellar nodes
+- **contract-deployer** — Docker image for packaging and deploying the three Soroban contracts
+
+See the [DEPLOYMENT_GUIDE.md](../DEPLOYMENT_GUIDE.md) for full deployment workflows.
+
+---
+
 ## Local Development Setup
 
 A full local environment requires:
 
-- Node.js 18+, pnpm 9+
+- Node.js 20+, pnpm 9+
 - Rust + Stellar CLI (for contract builds)
 - Docker (for the local Stellar node)
 
@@ -300,7 +380,7 @@ pnpm install
 docker-compose up -d
 
 # Run E2E tests against the local node
-npm run test:e2e
+pnpm test:e2e
 ```
 
 See [local-development.md](local-development.md) for a complete walkthrough including contract deployment and test account seeding.

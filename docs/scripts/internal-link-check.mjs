@@ -20,16 +20,16 @@
  *     considered. `_meta.json` and other metadata files are ignored.
  */
 
-import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
-import { dirname, extname, isAbsolute, join, relative, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
+import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
+import { dirname, extname, isAbsolute, join, relative, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const DOCS_ROOT = resolve(__dirname, "..");
-const PACKAGES_DOCS_ROOT = resolve(DOCS_ROOT, "..", "packages", "docs");
+const DOCS_ROOT = resolve(__dirname, '..');
+const PACKAGES_DOCS_ROOT = resolve(DOCS_ROOT, '..', 'packages', 'docs');
 const SEARCH_ROOTS = [DOCS_ROOT, PACKAGES_DOCS_ROOT];
 
-const MARKDOWN_EXTENSIONS = new Set([".md", ".mdx"]);
+const MARKDOWN_EXTENSIONS = new Set(['.md', '.mdx']);
 // Match [text](href) but ignore inline code, images, and HTML <a href>.
 const LINK_RE = /(?<!\!)\[(?<text>[^\]\n]*)\]\((?<href>[^)\s]+)(?:\s+["'(][^)"']+["')])?\)/g;
 // Match a heading in a markdown file, returning its slug.
@@ -61,7 +61,7 @@ function collectMarkdownFiles(root) {
     for (const ent of entries) {
       const full = join(dir, ent.name);
       if (ent.isDirectory()) {
-        if (ent.name === "node_modules" || ent.name.startsWith(".")) continue;
+        if (ent.name === 'node_modules' || ent.name.startsWith('.')) continue;
         walk(full);
       } else if (ent.isFile() && MARKDOWN_EXTENSIONS.has(extname(ent.name))) {
         out.push(full);
@@ -89,9 +89,9 @@ function anchorSlug(heading) {
   return heading
     .toLowerCase()
     .trim()
-    .replace(/[^\w\s-]/g, "")
-    .replace(/\s+/g, "-")
-    .replace(/-+/g, "-");
+    .replace(/[^\w\s-]/g, '')
+    .replace(/\s+/g, '-')
+    .replace(/-+/g, '-');
 }
 
 /**
@@ -103,7 +103,7 @@ function collectAnchors(path) {
   if (!existsSync(path)) return null;
   let content;
   try {
-    content = readFileSync(path, "utf8");
+    content = readFileSync(path, 'utf8');
   } catch {
     return null;
   }
@@ -127,34 +127,42 @@ function collectAnchors(path) {
  * @param {string} fromFile
  */
 function resolveLink(href, fromFile) {
-  if (!href || href.startsWith("#")) return null; // intra-file anchor — skip
+  if (!href || href.startsWith('#')) return null; // intra-file anchor — skip
   if (/^[a-z]+:\/\//i.test(href)) return null; // http(s)://, mailto:, etc.
   if (isAbsolute(href)) return null; // absolute fs path — out of scope
 
   // Split off anchor.
-  const [pathPart, anchorPart] = href.split("#");
+  const [pathPart, anchorPart] = href.split('#');
   // Normalize paths like `./foo` and `foo/bar`.
   const baseDir = dirname(fromFile);
 
   const candidates = [resolve(baseDir, pathPart)];
   if (!extname(pathPart)) {
-    candidates.push(resolve(baseDir, pathPart + ".md"));
-    candidates.push(resolve(baseDir, pathPart + ".mdx"));
-    candidates.push(resolve(baseDir, pathPart, "index.md"));
-    candidates.push(resolve(baseDir, pathPart, "index.mdx"));
+    candidates.push(resolve(baseDir, pathPart + '.md'));
+    candidates.push(resolve(baseDir, pathPart + '.mdx'));
+    candidates.push(resolve(baseDir, pathPart, 'index.md'));
+    candidates.push(resolve(baseDir, pathPart, 'index.mdx'));
   }
   for (const c of candidates) {
     if (existsSync(c) && statSync(c).isFile()) {
       if (anchorPart) {
         const slugs = collectAnchors(c);
         if (slugs && !slugs.has(anchorPart)) {
-          return { ok: false, resolved: relative(DOCS_ROOT, c), reason: `missing anchor "#${anchorPart}"` };
+          return {
+            ok: false,
+            resolved: relative(DOCS_ROOT, c),
+            reason: `missing anchor "#${anchorPart}"`,
+          };
         }
       }
       return { ok: true, resolved: relative(DOCS_ROOT, c) };
     }
   }
-  return { ok: false, resolved: relative(DOCS_ROOT, baseDir), reason: "target file does not exist" };
+  return {
+    ok: false,
+    resolved: relative(DOCS_ROOT, baseDir),
+    reason: 'target file does not exist',
+  };
 }
 
 /** Main entrypoint. */
@@ -164,7 +172,7 @@ function main() {
   const broken = [];
 
   for (const file of files) {
-    const content = readFileSync(file, "utf8");
+    const content = readFileSync(file, 'utf8');
     let m;
     LINK_RE.lastIndex = 0;
     while ((m = LINK_RE.exec(content))) {
@@ -183,13 +191,15 @@ function main() {
 
   if (broken.length === 0) {
     console.log(
-      `✓ internal-link-check: ${files.length} markdown file${files.length === 1 ? "" : "s"} scanned, 0 broken links.`,
+      `✓ internal-link-check: ${files.length} markdown file${
+        files.length === 1 ? '' : 's'
+      } scanned, 0 broken links.`
     );
     process.exit(0);
   }
 
   console.error(
-    `✗ internal-link-check: found ${broken.length} broken link${broken.length === 1 ? "" : "s"}:`,
+    `✗ internal-link-check: found ${broken.length} broken link${broken.length === 1 ? '' : 's'}:`
   );
   for (const b of broken) {
     console.error(`  ${b.file}: [${b.text}](${b.href}) — ${b.reason}`);

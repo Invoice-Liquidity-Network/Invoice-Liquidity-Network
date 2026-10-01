@@ -7,31 +7,23 @@ import {
   scValToNative,
   TransactionBuilder,
   xdr,
-} from "@stellar/stellar-sdk";
-import { CONFIG } from "./config";
-import type { Invoice } from "./types";
-import {
-  NetworkError,
-  SimulationError,
-  ContractCallError,
-  normalizeError,
-  type ILNError,
-} from "./errors";
+} from '@stellar/stellar-sdk';
+import { CONFIG } from './config';
+import type { Invoice } from './types';
+import { NetworkError, SimulationError, normalizeError } from './errors';
 
 export const server = new rpc.Server(CONFIG.rpcUrl, {
-  allowHttp: CONFIG.rpcUrl.startsWith("http://"),
+  allowHttp: CONFIG.rpcUrl.startsWith('http://'),
 });
 
-const DUMMY_ACCOUNT = "GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF";
+const DUMMY_ACCOUNT = 'GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF';
 
-export async function fetchInvoice(
-  id: number
-): Promise<Invoice | null> {
+export async function fetchInvoice(id: number): Promise<Invoice | null> {
   try {
-    const account = new Account(DUMMY_ACCOUNT, "0");
+    const account = new Account(DUMMY_ACCOUNT, '0');
 
     const tx = new TransactionBuilder(account, {
-      fee: "1000",
+      fee: '1000',
       networkPassphrase: CONFIG.networkPassphrase,
     })
       .addOperation(
@@ -39,8 +31,8 @@ export async function fetchInvoice(
           func: xdr.HostFunction.hostFunctionTypeInvokeContract(
             new xdr.InvokeContractArgs({
               contractAddress: Address.fromString(CONFIG.contractId).toScAddress(),
-              functionName: "get_invoice",
-              args: [nativeToScVal(BigInt(id), { type: "u64" })],
+              functionName: 'get_invoice',
+              args: [nativeToScVal(BigInt(id), { type: 'u64' })],
             })
           ),
           auth: [],
@@ -52,7 +44,7 @@ export async function fetchInvoice(
     const sim = await server.simulateTransaction(tx);
 
     if (!rpc.Api.isSimulationSuccess(sim) || !sim.result) {
-      throw new SimulationError("Simulation failed for get_invoice", {
+      throw new SimulationError('Simulation failed for get_invoice', {
         invoiceId: id,
         contractId: CONFIG.contractId,
       });
@@ -77,7 +69,7 @@ export async function fetchInvoice(
       updated_at: now,
     };
   } catch (err) {
-    const ilnErr = normalizeError(err, "RPC_ERROR", `Failed to fetch invoice ${id}`);
+    const ilnErr = normalizeError(err, 'RPC_ERROR', `Failed to fetch invoice ${id}`);
     console.error(`[rpc] ${ilnErr.code}: ${ilnErr.message}`, {
       invoiceId: id,
       retryable: ilnErr.retryable,
@@ -92,13 +84,11 @@ export async function fetchInvoice(
  * instead of returning null. Used by callers that need to
  * distinguish between "invoice not found" and "RPC error".
  */
-export async function fetchInvoiceOrThrow(
-  id: number
-): Promise<Invoice> {
-  const account = new Account(DUMMY_ACCOUNT, "0");
+export async function fetchInvoiceOrThrow(id: number): Promise<Invoice> {
+  const account = new Account(DUMMY_ACCOUNT, '0');
 
   const tx = new TransactionBuilder(account, {
-    fee: "1000",
+    fee: '1000',
     networkPassphrase: CONFIG.networkPassphrase,
   })
     .addOperation(
@@ -106,8 +96,8 @@ export async function fetchInvoiceOrThrow(
         func: xdr.HostFunction.hostFunctionTypeInvokeContract(
           new xdr.InvokeContractArgs({
             contractAddress: Address.fromString(CONFIG.contractId).toScAddress(),
-            functionName: "get_invoice",
-            args: [nativeToScVal(BigInt(id), { type: "u64" })],
+            functionName: 'get_invoice',
+            args: [nativeToScVal(BigInt(id), { type: 'u64' })],
           })
         ),
         auth: [],
@@ -146,19 +136,17 @@ export async function fetchInvoiceOrThrow(
     due_date: Number(native.due_date),
     discount_rate: Number(native.discount_rate),
     status: parseStatus(native.status),
-    funder: native.funder
-      ? Address.fromScAddress(native.funder as xdr.ScAddress).toString()
-      : null,
+    funder: native.funder ? Address.fromScAddress(native.funder as xdr.ScAddress).toString() : null,
     funded_at: native.funded_at ? Number(native.funded_at) : null,
     created_at: now,
     updated_at: now,
   };
 }
 
-function parseStatus(raw: unknown): Invoice["status"] {
+function parseStatus(raw: unknown): Invoice['status'] {
   const key = Object.keys(raw as object)[0];
-  if (key === "Funded") return "Funded";
-  if (key === "Paid") return "Paid";
-  if (key === "Defaulted") return "Defaulted";
-  return "Pending";
+  if (key === 'Funded') return 'Funded';
+  if (key === 'Paid') return 'Paid';
+  if (key === 'Defaulted') return 'Defaulted';
+  return 'Pending';
 }

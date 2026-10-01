@@ -1,16 +1,19 @@
 # ILN Release Process
 
-This document describes the process for releasing new versions of the Invoice Liquidity Network protocol across three coordinated repositories.
+This document describes the process for releasing new versions of the Invoice Liquidity Network protocol across coordinated repositories.
 
 ## Overview
 
-ILN releases require coordinating changes across three repositories:
+ILN releases require coordinating changes across the following repositories and packages:
 
 1. **ILN-Smart-Contract** — Rust/Soroban contracts (deployed to Stellar)
-2. **Invoice-Liquidity-Network** — SDK, CLI, indexer, notifications (this repo)
-3. **ILN-Frontend** — Next.js dApp
+2. **Invoice-Liquidity-Network (SDK)** — `@invoice-liquidity/sdk` (`sdk/`) and `@iln/sdk-next` (`packages/sdk/`)
+3. **Invoice-Liquidity-Network (CLI)** — `@invoice-liquidity/cli` (`cli/`)
+4. **Invoice-Liquidity-Network (Indexer)** — `@iln/indexer` (`packages/indexer/`)
+5. **Invoice-Liquidity-Network (Notifications)** — `@iln/notifications` (`notifications/`)
+6. **ILN-Frontend** — Next.js dApp (`ILN-Frontend`)
 
-The correct release order is critical: smart contract deployment must complete before SDK updates, and SDK updates must complete before frontend deployment.
+The correct release order is critical: smart contract deployment must complete before SDK updates, and SDK updates must complete before frontend and dependent service deployments.
 
 ## Workflow Relationships
 
@@ -33,15 +36,10 @@ This repository contains four release-related workflows. The following diagram s
 │                      │ Independent of coordinate-release.yml.           │
 ├──────────────────────┼──────────────────────────────────────────────────┤
 │ sdk-release.yml      │ push of v* tags OR PR touching packages/sdk/     │
-│                      │ Publishes @iln/sdk to npm with provenance;       │
-│                      │ creates GitHub Release. Dry-run on PRs.          │
-│                      │ Independent of the other three workflows.        │
-├──────────────────────┼──────────────────────────────────────────────────┤
-│ scripts-release.yml  │ push of @iln/scripts@* tags OR PR touching       │
-│                      │ packages/scripts/                                 │
-│                      │ Publishes @iln/scripts to npm with provenance;   │
-│                      │ creates GitHub Release. Dry-run on PRs.          │
-│                      │ Independent of the other three workflows.        │
+│                      │ Publishes @iln/sdk-next (packages/sdk) to npm    │
+│                      │ with provenance; creates GitHub Release.         │
+│                      │ Dry-run on PRs. Independent of the other three   │
+│                      │ workflows.                                       │
 └──────────────────────┴──────────────────────────────────────────────────┘
 ```
 
@@ -99,8 +97,8 @@ Maintainer       coordinate-release.yml     Smart Contract Repo    SDK Repo     
 
 - **No `workflow_call` dependencies exist** between the four workflows. Each is independently triggered.
 - `coordinate-release.yml` is a **manual orchestrator** — it uses `gh api` and `gh workflow run` to tag repos and trigger CI, but does not invoke `release.yml`, `sdk-release.yml`, or `scripts-release.yml` as callable workflows.
-- `release.yml` (changesets) and `sdk-release.yml` (tag-based) can **both publish `@iln/sdk`** depending on the release path chosen. This is not a bug — they serve different release strategies (changesets workflow vs. manual tag push). However, teams should pick one strategy to avoid duplicate publishes.
-- `scripts-release.yml` exclusively publishes `@iln/scripts` and has no overlap with the other workflows.
+- `release.yml` (changesets) and `sdk-release.yml` (tag-based) can **both publish `@iln/sdk-next`** (packages/sdk) depending on the release path chosen. This is not a bug — they serve different release strategies (changesets workflow vs. manual tag push). However, teams should pick one strategy to avoid duplicate publishes.
+- The former `scripts-release.yml` was removed (issue #878): its target, `@iln/scripts` (packages/scripts), is `private: true` and explicitly "not for public installation", so the workflow could never publish and was documentation ahead of reality.
 
 ## Release Order
 
@@ -110,18 +108,21 @@ Maintainer       coordinate-release.yml     Smart Contract Repo    SDK Repo     
 2. Tag the contract repository with the version (e.g., `v1.2.0`)
 3. CI verifies deployment and generates new contract IDs
 
-### Phase 2: SDK (Invoice-Liquidity-Network)
+### Phase 2: Shared Packages (Invoice-Liquidity-Network repo)
 
 1. Update contract IDs in SDK based on new deployment
-2. Run full SDK test suite
-3. Tag SDK release with `sdk-v1.2.0`
-4. Publish SDK to npm if applicable
+2. Update SDK version if needed
+3. Run full SDK test suite (`pnpm test` from package directory)
+4. Run CLI tests (`pnpm test` from `cli/` directory)
+5. Run indexer tests (`pnpm test` from `packages/indexer/` directory)
+6. Run notifications tests (`pnpm test` from `notifications/` directory)
+7. Tag releases for each published package
 
 ### Phase 3: Frontend (ILN-Frontend)
 
 1. Update SDK dependency in frontend package.json
 2. Run frontend CI (build, linting, tests)
-3. Tag frontend release with `frontend-v1.2.0`
+3. Tag frontend release
 
 ## Automated Release Workflow
 
@@ -129,7 +130,7 @@ The `.github/workflows/coordinate-release.yml` workflow automates this process.
 
 ### Triggering a Release
 
-1. Go to the main repository: [Invoice-Liquidity-Network](https://github.com/Songu3020/Invoice-Liquidity-Network)
+1. Go to the main repository: [Invoice-Liquidity-Network](https://github.com/Invoice-Liquidity-Network/Invoice-Liquidity-Network)
 2. Navigate to **Actions** → **Coordinate Cross-Repo Release**
 3. Click **Run workflow**
 4. Fill in the required inputs:
@@ -189,32 +190,83 @@ git push origin v1.2.0
 ### 2. SDK Release
 
 ```bash
-# In Invoice-Liquidity-Network repo
+# In Invoice-Liquidity-Network repo, sdk/ directory
 # Update contract IDs in sdk/src/config.ts or similar
 # Update SDK version in sdk/package.json
 
-npm ci
-npm run test
-npm run build
+pnpm install
+pnpm test
+pnpm build
 
 git add .
 git commit -m "chore(sdk): update contract IDs for v1.2.0"
-git tag sdk-v1.2.0
-git push origin main sdk-v1.2.0
+git tag v1.2.0
+git push origin main v1.2.0
 
 # Optionally publish to npm
-npm publish --workspace=sdk
+pnpm publish --provenance --access public
 ```
 
-### 3. Frontend Release
+### 3. CLI Release
+
+```bash
+# In Invoice-Liquidity-Network repo, cli/ directory
+pnpm install
+pnpm test
+pnpm build
+
+git add .
+git commit -m "chore(cli): update contract IDs for v1.2.0"
+git tag v1.2.0
+git push origin main v1.2.0
+
+# Optionally publish to npm
+pnpm publish --provenance --access public
+```
+
+### 4. Indexer Release
+
+```bash
+# In Invoice-Liquidity-Network repo, packages/indexer/ directory
+pnpm install
+pnpm test
+pnpm build
+
+git add .
+git commit -m "chore(indexer): update contract IDs for v1.2.0"
+git tag v1.2.0
+git push origin main v1.2.0
+
+# Optionally publish to npm
+pnpm publish --provenance --access public
+```
+
+### 5. Notifications Release
+
+```bash
+# In Invoice-Liquidity-Network repo, notifications/ directory
+pnpm install
+pnpm test
+pnpm build
+
+git add .
+git commit -m "chore(notifications): update contract IDs for v1.2.0"
+git tag v1.2.0
+git push origin main v1.2.0
+
+# Optionally publish to npm
+pnpm publish --provenance --access public
+```
+
+### 6. Frontend Release
 
 ```bash
 # In ILN-Frontend repo
 # Update SDK dependency
-npm install @invoice-liquidity/sdk@latest
+pnpm install @invoice-liquidity/sdk@latest
 
-npm run test
-npm run build
+pnpm test
+pnpm build
 
 git add .
 git commit -m "chore(frontend): update SDK to v1.2.0"
@@ -241,6 +293,7 @@ To enable the automated workflow, ensure:
 Set these secrets in the main repository settings:
 
 - `GITHUB_TOKEN` — Already available via `secrets.GITHUB_TOKEN`
+- `NPM_TOKEN` — npm automation token with publish rights (for npm publish steps)
 - No additional secrets required for basic functionality
 
 ### Discord Webhook (Optional)
@@ -274,7 +327,7 @@ git push origin --delete v1.2.0
 
 ```bash
 # If you need to revert to previous SDK version in frontend
-npm install @invoice-liquidity/sdk@<previous-version>
+pnpm install @invoice-liquidity/sdk@<previous-version>
 git add package.json package-lock.json
 git commit -m "chore: revert SDK to previous version"
 git push origin main
@@ -295,7 +348,7 @@ git push origin main
 ### Frontend dependency resolution fails
 
 - Check that SDK package.json version is published to npm before frontend tries to install
-- Manually run `npm install` in frontend after SDK release tag is created
+- Manually run `pnpm install` in frontend after SDK release tag is created
 
 ### Discord notification fails
 
@@ -314,12 +367,11 @@ All deploy and release workflows support manual triggering from the GitHub UI:
 | `coordinate-release.yml` | Yes | `version`, `dry_run`, `discord_webhook` |
 | `release.yml` | Yes | None (triggers changeset flow) |
 | `sdk-release.yml` | Yes | None (requires `v*` tag ref) |
-| `scripts-release.yml` | Yes | None (requires `@iln/scripts@*` tag ref) |
 
 ### When to use manual triggers
 
 - **Re-deploy docs** after a failed automatic deployment: run `docs-deploy.yml` → "Run workflow".
-- **Re-cut a release** after a failed publish: run `release.yml` → "Run workflow" on `main`, or push a new tag for `sdk-release.yml` / `scripts-release.yml`.
+- **Re-cut a release** after a failed publish: run `release.yml` → "Run workflow" on `main`, or push a new tag for `sdk-release.yml`.
 - **Dry-run a cross-repo release**: run `coordinate-release.yml` with `dry_run: true`.
 
 ## Future Improvements
@@ -332,6 +384,59 @@ Potential enhancements to the release process:
 - [ ] Release notes template population
 - [ ] Mainnet vs testnet release coordination
 - [ ] Automated frontend deploy to staging/production
+
+## Package Provenance Verification (issue #878)
+
+### Audit result
+
+Every npm publish path in this repository was audited on 2026-08-26 for
+provenance attestation (`--provenance` / OIDC-based publishing), and the
+verification steps below were recorded as evidence for the mainnet launch
+checklist ("Release provenance verified").
+
+| Publish path | Workflow | Provenance configured? | Package published? |
+|---|---|---|---|
+| `packages/sdk` → `@iln/sdk-next` | `sdk-release.yml` (tag `v*`) | ✅ `pnpm publish --provenance`, `id-token: write`, `NPM_CONFIG_PROVENANCE=true` | Not yet (first release pending) |
+| `packages/sdk` → `@iln/sdk-next` | `release.yml` (changesets) | ✅ `NPM_CONFIG_PROVENANCE=true`, `id-token: write` | Not yet |
+| `packages/scripts` → `@iln/scripts` | ~~`scripts-release.yml`~~ | Removed (package is private; see below) | n/a |
+
+Findings and fixes:
+
+1. **Provenance flags were already correct** in `sdk-release.yml` and
+   `release.yml` — the `--provenance` flag, `NPM_CONFIG_PROVENANCE=true`, and
+   the `id-token: write` permission are the three pieces GitHub Actions
+   OIDC-based publishing needs, and all are present.
+2. **Stale package name.** `sdk-release.yml` documented `@iln/sdk`, but
+   `packages/sdk` was renamed to `@iln/sdk-next` during the packages
+   consolidation. The workflow header now matches the package it publishes.
+3. **Dead workflow removed.** `scripts-release.yml` targeted `@iln/scripts`,
+   which is `private: true` and described as "not for public installation" —
+   `npm publish` refuses private packages, so the workflow could never
+   succeed. It was removed; nothing publishes `@iln/scripts`.
+4. **Nothing is published to npm yet** — every candidate package name returns
+   404 on the registry and there are no release tags. The provenance claim in
+   docs/security-guide.md was documentation ahead of reality; it now states
+   the configuration status and the procedure, not an achieved publication.
+
+### How to verify a published package's provenance (per release)
+
+Once a package is published, verify the attestation before announcing it:
+
+```bash
+# 1. The npm registry's attestations endpoint answers for the published version:
+curl -s https://registry.npmjs.org/-/npm/v1/attestations/@iln/sdk-next@<version> | jq
+
+# 2. Or check the version metadata carries a provenance field:
+npm view @iln/sdk-next@<version> --json | jq '.provenance'
+
+# 3. Or verify the tarball against the repo's GitHub Actions run:
+github_token=... gh attestation verify \
+  "$(npm pack @iln/sdk-next@<version> --silent)" \
+  --repo Invoice-Liquidity-Network/Invoice-Liquidity-Network
+```
+
+A passing verification links the tarball to the exact GitHub Actions workflow
+run and commit SHA that built it (SLSA Level 3).
 
 ## NPM Scope Ownership and Publishing Policy
 
@@ -357,19 +462,17 @@ they resolve from the workspace instead.
 
 | Local Name | Published Name | Status |
 |---|---|---|
-| `packages/cli` | `@iln/cli` | Unpublished |
 | `packages/test-utils` | `@iln/test-utils` | Unpublished |
 | `packages/scripts` | `@iln/scripts` | Unpublished |
 | `packages/sdk` | `@iln/sdk-next` | Unpublished |
 | `packages/mock-backend` | `@iln/mock-backend` | Unpublished |
 | `packages/indexer` | `@iln/indexer` | Unpublished |
-| `packages/invoice-sdk` | `@iln/invoice-sdk` | Unpublished |
 | `packages/eslint-config` | `@iln/eslint-config` | Unpublished |
 | `packages/upgrade-tests` | `@iln/upgrade-tests` | Unpublished |
 | `packages/shared` | `@iln/shared` | Unpublished |
 | `packages/react` | `@iln/react` | Unpublished |
 | `packages/opentelemetry` | `@iln/opentelemetry` | Unpublished |
-| `sdk/` | `@iln/sdk` | Published via `sdk-release.yml` |
+| `packages/sdk` | `@iln/sdk-next` | Publishable via `sdk-release.yml` / changesets (`release.yml`); not yet published |
 | `cli/` | `@invoice-liquidity/cli` | Unpublished |
 | `docs/` | `@invoice-liquidity/docs` | Unpublished |
 | `indexer/` | `iln-indexer` | Unpublished |

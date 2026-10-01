@@ -42,17 +42,17 @@ export interface Logger {
 
 // ─── Configuration ────────────────────────────────────────────────────────────
 
-const env = typeof process !== "undefined" ? process.env : {};
+const env = typeof process !== 'undefined' ? process.env : {};
 
 let currentLogLevel = LogLevel.INFO;
-const rawLevel = (env.ILN_LOG_LEVEL || "").toUpperCase();
+const rawLevel = (env.ILN_LOG_LEVEL || '').toUpperCase();
 if (rawLevel in LogLevel) {
   currentLogLevel = LogLevel[rawLevel as keyof typeof LogLevel];
-} else if (env.ILN_DEBUG === "1") {
+} else if (env.ILN_DEBUG === '1') {
   currentLogLevel = LogLevel.DEBUG;
 }
 
-const isJsonFormat = env.ILN_LOG_FORMAT === "json";
+const isJsonFormat = env.ILN_LOG_FORMAT === 'json';
 const transports: Transport[] = [];
 
 // Default console transport
@@ -72,15 +72,15 @@ const defaultTransport: Transport = (entry) => {
   const levelColor = colorMap[entry.level] || pc.white;
   const timeStr = pc.dim(new Date(entry.timestamp).toLocaleTimeString());
   const nsStr = pc.cyan(entry.namespace);
-  const durStr = entry.durationMs ? pc.magenta(` (+${entry.durationMs}ms)`) : "";
-  
+  const durStr = entry.durationMs ? pc.magenta(` (+${entry.durationMs}ms)`) : '';
+
   let msg = `${timeStr} ${levelColor(entry.level.padEnd(5))} [${nsStr}] ${entry.message}${durStr}`;
-  
+
   if (entry.data) {
     msg += ` ${pc.dim(JSON.stringify(entry.data))}`;
   }
 
-  if (entry.level === "ERROR") {
+  if (entry.level === 'ERROR') {
     console.error(msg);
   } else {
     console.log(msg);
@@ -102,11 +102,11 @@ class LoggerImpl {
   // We use a trick to make the class instance callable
   public static create(namespace: string): Logger {
     const instance = new LoggerImpl(namespace);
-    
+
     const logger = ((msg: string, ...args: any[]) => {
       instance.debug(msg, args.length > 1 ? args : args[0]);
     }) as unknown as Logger;
-    
+
     logger.debug = instance.debug.bind(instance);
     logger.info = instance.info.bind(instance);
     logger.warn = instance.warn.bind(instance);
@@ -114,24 +114,24 @@ class LoggerImpl {
     logger.measure = instance.measure.bind(instance);
     logger.enabled = instance.enabled;
     (logger as any).namespace = namespace;
-    
+
     return logger;
   }
 
   public debug(message: string, data?: any): void {
-    this.log("DEBUG", message, data);
+    this.log('DEBUG', message, data);
   }
 
   public info(message: string, data?: any): void {
-    this.log("INFO", message, data);
+    this.log('INFO', message, data);
   }
 
   public warn(message: string, data?: any): void {
-    this.log("WARN", message, data);
+    this.log('WARN', message, data);
   }
 
   public error(message: string, data?: any): void {
-    this.log("ERROR", message, data);
+    this.log('ERROR', message, data);
   }
 
   public async measure<T>(name: string, fn: () => Promise<T> | T): Promise<T> {
@@ -139,16 +139,21 @@ class LoggerImpl {
     try {
       const result = await fn();
       const durationMs = Date.now() - start;
-      this.log("DEBUG", `Measured ${name}`, { durationMs });
+      this.log('DEBUG', `Measured ${name}`, { durationMs });
       return result;
     } catch (err) {
       const durationMs = Date.now() - start;
-      this.log("ERROR", `Failed ${name} after ${durationMs}ms`, { error: err });
+      this.log('ERROR', `Failed ${name} after ${durationMs}ms`, { error: err });
       throw err;
     }
   }
 
-  private log(levelStr: keyof typeof LogLevel, message: string, data?: any, durationMs?: number): void {
+  private log(
+    levelStr: keyof typeof LogLevel,
+    message: string,
+    data?: any,
+    durationMs?: number
+  ): void {
     const level = LogLevel[levelStr];
     if (level < currentLogLevel) return;
 
@@ -166,7 +171,7 @@ class LoggerImpl {
         transport(entry);
       } catch (err) {
         // Fallback to basic console if transport fails
-        console.error("Logger transport failed", err);
+        console.error('Logger transport failed', err);
       }
     }
   }

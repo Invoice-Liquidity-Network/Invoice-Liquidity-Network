@@ -7,24 +7,24 @@ const balanceKeys = {
 };
 
 export interface UseTokenBalancesResult {
-  data: import('@invoice-liquidity/sdk').TokenBalance[] | undefined;
+  data: import('@iln/sdk').TokenBalance[] | undefined;
   isLoading: boolean;
   error: Error | null;
 }
 
 /**
  * Fetches token balances for a given address.
- * 
+ *
  * @param address - The Stellar address to check balances for
  * @returns {UseTokenBalancesResult} Token balances, loading state, and error
- * 
+ *
  * @example
  * ```tsx
  * function WalletBalances({ address }: { address: string }) {
  *   const { data: balances, isLoading } = useTokenBalances(address);
- *   
+ *
  *   if (isLoading) return <Spinner />;
- *   
+ *
  *   return (
  *     <ul>
  *       {balances?.map((b) => (

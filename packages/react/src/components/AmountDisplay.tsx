@@ -30,7 +30,9 @@ export const AmountDisplay: React.FC<AmountDisplayProps> = ({
     <span className={className} style={{ fontVariantNumeric: 'tabular-nums' }}>
       {formatted}
       {symbol && (
-        <span style={{ marginLeft: 4, fontSize: '0.85em', color: '#6B7280', fontWeight: 500 }}>{symbol}</span>
+        <span style={{ marginLeft: 4, fontSize: '0.85em', color: '#6B7280', fontWeight: 500 }}>
+          {symbol}
+        </span>
       )}
     </span>
   );

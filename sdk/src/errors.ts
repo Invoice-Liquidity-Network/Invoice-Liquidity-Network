@@ -26,7 +26,7 @@ export class ILNError extends Error {
       context?: Record<string, unknown>;
       retryable?: boolean;
       cause?: unknown;
-    },
+    }
   ) {
     super(message);
     Object.setPrototypeOf(this, new.target.prototype);
@@ -62,7 +62,7 @@ export class InvalidDiscountRateError extends ILNError {
         docsUrl: withDocs('INVALID_DISCOUNT_RATE'),
         context,
         retryable: false,
-      },
+      }
     );
     Object.setPrototypeOf(this, new.target.prototype);
   }
@@ -81,7 +81,7 @@ export class TokenMismatchError extends ILNError {
         docsUrl: withDocs('TOKEN_MISMATCH'),
         context,
         retryable: false,
-      },
+      }
     );
     Object.setPrototypeOf(this, new.target.prototype);
   }
@@ -100,7 +100,7 @@ export class PayerReputationTooLowError extends ILNError {
         docsUrl: withDocs('PAYER_REPUTATION_TOO_LOW'),
         context,
         retryable: false,
-      },
+      }
     );
     Object.setPrototypeOf(this, new.target.prototype);
   }
@@ -113,7 +113,7 @@ export class InsufficientBalanceError extends ILNError {
   constructor(
     message = 'Insufficient balance to complete the transaction.',
     remediation = 'Ensure the account has enough funds (including transaction fees) before retrying. If you are on testnet, fund the account and re-submit.',
-    context?: Record<string, unknown>,
+    context?: Record<string, unknown>
   ) {
     super(message, 'INSUFFICIENT_BALANCE', remediation, {
       docsUrl: withDocs('INSUFFICIENT_BALANCE'),
@@ -131,7 +131,7 @@ export class NetworkError extends ILNError {
   constructor(
     message = 'Network request failed.',
     remediation = 'Failed to reach the configured Stellar RPC endpoint. Verify your `rpcUrl`, check connectivity, and ensure the RPC server is healthy.',
-    context?: Record<string, unknown>,
+    context?: Record<string, unknown>
   ) {
     super(message, 'NETWORK_ERROR', remediation, {
       docsUrl: withDocs('NETWORK_ERROR'),
@@ -149,7 +149,7 @@ export class TransactionFailedError extends ILNError {
   constructor(
     message = 'Transaction execution failed on-chain.',
     remediation = 'The contract rejected the transaction. Review simulation/tx failure reason, verify invoice state, and confirm fee/resource settings.',
-    context?: Record<string, unknown>,
+    context?: Record<string, unknown>
   ) {
     super(message, 'TRANSACTION_FAILED', remediation, {
       docsUrl: withDocs('TRANSACTION_FAILED'),
@@ -167,7 +167,7 @@ export class ValidationError extends ILNError {
   constructor(
     message = 'Validation failed.',
     remediation = 'Check provided input parameters. Use `Validators` to validate fields and inspect which constraint failed.',
-    context?: Record<string, unknown>,
+    context?: Record<string, unknown>
   ) {
     super(message, 'VALIDATION_ERROR', remediation, {
       docsUrl: withDocs('VALIDATION_ERROR'),
@@ -185,7 +185,7 @@ export class WalletNotConnectedError extends ILNError {
   constructor(
     message = 'Wallet is not connected.',
     remediation = 'A transaction signer is required for this state-changing operation. Provide a `signer` in the `ILNSdk` configuration or ensure wallet is connected.',
-    context?: Record<string, unknown>,
+    context?: Record<string, unknown>
   ) {
     super(message, 'WALLET_NOT_CONNECTED', remediation, {
       docsUrl: withDocs('WALLET_NOT_CONNECTED'),
@@ -212,7 +212,7 @@ export class GenericContractError extends ILNError {
           ...(context ?? {}),
         },
         retryable: false,
-      },
+      }
     );
     Object.setPrototypeOf(this, new.target.prototype);
   }
@@ -225,10 +225,30 @@ export class SimulationError extends ILNError {
   constructor(
     message = 'Transaction simulation failed.',
     remediation = 'The SDK could not simulate the transaction successfully. Review transaction parameters and ensure contract state is consistent before retrying.',
-    context?: Record<string, unknown>,
+    context?: Record<string, unknown>
   ) {
     super(message, 'SIMULATION_FAILED', remediation, {
       docsUrl: withDocs('SIMULATION_FAILED'),
+      context,
+      retryable: false,
+    });
+    Object.setPrototypeOf(this, new.target.prototype);
+  }
+}
+
+/**
+ * Thrown when the prepared transaction XDR differs from the simulated transaction,
+ * indicating the RPC node may have tampered with or forged the prepared XDR.
+ * This is a security safeguard against compromised RPC nodes per the trust model.
+ */
+export class SimulationPreparedXdrMismatchError extends ILNError {
+  constructor(
+    message = 'Prepared transaction differs from simulated transaction.',
+    remediation = 'The prepared XDR does not match the original simulated transaction. A compromised RPC node may be forging the prepared XDR. Verify your RPC endpoint integrity and consider using a different node.',
+    context?: Record<string, unknown>
+  ) {
+    super(message, 'SIMULATION_PREPARED_XDR_MISMATCH', remediation, {
+      docsUrl: withDocs('SIMULATION_PREPARED_XDR_MISMATCH'),
       context,
       retryable: false,
     });
@@ -261,7 +281,10 @@ export function parseContractError(xdrError: unknown, signature?: string): ILNEr
     return new TokenMismatchError({ ...baseContext, matchedPattern: 'TokenMismatch' });
   }
   if (errorStr.includes('PayerReputationTooLow')) {
-    return new PayerReputationTooLowError({ ...baseContext, matchedPattern: 'PayerReputationTooLow' });
+    return new PayerReputationTooLowError({
+      ...baseContext,
+      matchedPattern: 'PayerReputationTooLow',
+    });
   }
 
   return new GenericContractError(errorStr, {
@@ -297,7 +320,7 @@ export function normalizeError(
         context: { name: err.name, stack: err.stack },
         cause: err,
         retryable: false,
-      },
+      }
     );
   }
 
@@ -315,7 +338,7 @@ export function normalizeError(
       context: { raw: err, rawStr },
       cause: err,
       retryable: false,
-    },
+    }
   );
 }
 

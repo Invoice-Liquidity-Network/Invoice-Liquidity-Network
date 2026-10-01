@@ -1,0 +1,78 @@
+# Prometheus alerting rules for automated data-loss and data-integrity risk detection
+# Derived from historical near-miss incident reviews (#1108).
+
+groups:
+  - name: data-loss-integrity-detection
+    interval: 30s
+    rules:
+      # ── 1. Indexer Ledger Sequence Gap (Event Data Loss Signal) ───────────────
+      - alert: ILNIndexerLedgerSequenceGapDetected
+        expr: |
+          (
+            stellar_soroban_latest_ledger - indexer_last_processed_ledger
+          ) > 50
+        for: 2m
+        labels:
+          severity: critical
+          team: ops
+          component: indexer
+          domain: data-integrity
+        annotations:
+          summary: >-
+            Indexer ledger processing gap detected on {{ $labels.instance }} (lagging by {{ $value }} ledgers).
+          description: >-
+            Near-miss provenance: NM-2026-02. The indexer lagged or skipped ledger sequences,
+            creating risk of missed Soroban contract event ingestion and unrecorded invoice state changes.
+
+      # ── 2. State Snapshot Hash Drift / Database Mismatch ─────────────────────
+      - alert: ILNStateSnapshotMismatchDetected
+        expr: |
+          iln_state_snapshot_hash_mismatch_total > 0
+        for: 1m
+        labels:
+          severity: critical
+          team: database
+          component: indexer
+          domain: data-integrity
+        annotations:
+          summary: >-
+            State snapshot drift detected between Soroban on-chain storage and indexer DB on {{ $labels.instance }}.
+          description: >-
+            Near-miss provenance: NM-2026-04. On-chain invoice storage state root hash differs from the indexed
+            database state, signaling data corruption or unhandled reorg.
+
+      # ── 3. Oracle Payload Data Corruption & Timestamp Drift ──────────────────
+      - alert: ILNOraclePayloadDataCorruption
+        expr: |
+          rate(iln_oracle_payload_corrupt_counter[5m]) > 0
+        for: 1m
+        labels:
+          severity: critical
+          team: ops
+          component: oracle-service
+          domain: data-integrity
+        annotations:
+          summary: >-
+            Corrupted or unparseable oracle payload detected on {{ $labels.instance }}.
+          description: >-
+            Near-miss provenance: NM-2026-05. Malformed payload or payload signature mismatch detected,
+            preventing accurate invoice pricing verification.
+
+      # ── 4. Unindexed Transaction Drop / Missing Event Records ────────────────
+      - alert: ILNUnindexedContractEventDropRate
+        expr: |
+          (
+            rate(indexer_events_emitted_total[5m]) - rate(indexer_events_persisted_total[5m])
+          ) > 0.05
+        for: 3m
+        labels:
+          severity: warning
+          team: ops
+          component: indexer
+          domain: data-integrity
+        annotations:
+          summary: >-
+            Contract event drop rate exceeded safety threshold on {{ $labels.instance }}.
+          description: >-
+            Emitted Soroban events exceed persisted indexer events. Investigate database write queue backpressure
+            and potential event loss.

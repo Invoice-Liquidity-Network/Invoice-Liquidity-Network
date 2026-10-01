@@ -17,8 +17,9 @@
     "@opentelemetry/api": "^1.4.0"
   },
   "devDependencies": {
-    "@iln/sdk": "^0.1.0",
+    "@iln/sdk": "workspace:*",
     "@opentelemetry/api": "^1.4.0",
+    "@types/node": "^20.0.0",
     "typescript": "^5.0.0",
     "vitest": "^4.1.5"
   }

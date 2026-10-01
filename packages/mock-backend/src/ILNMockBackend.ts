@@ -1,6 +1,6 @@
-import { MockInvoiceClient } from "./mock-invoice-client.js";
-import { MockGovernanceClient } from "./mock-governance-client.js";
-import { MockReputationClient } from "./mock-reputation-client.js";
+import { MockInvoiceClient } from './mock-invoice-client.js';
+import { MockGovernanceClient } from './mock-governance-client.js';
+import { MockReputationClient } from './mock-reputation-client.js';
 
 import type {
   GovernanceClient,
@@ -9,9 +9,9 @@ import type {
   Proposal,
   ProtocolParameters,
   ReputationClient,
-} from "./types.js";
+} from './types.js';
 
-import type { Invoice } from "./types.js";
+import type { Invoice } from './types.js';
 
 export interface ILNMockBackendOptions {
   /** Override the seed invoice set. */

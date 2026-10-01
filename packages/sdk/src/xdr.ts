@@ -1,4 +1,4 @@
-import { scValToNative, xdr as stellarXdr } from "@stellar/stellar-sdk";
+import { scValToNative, xdr as stellarXdr } from '@stellar/stellar-sdk';
 
 /**
  * A Stellar XDR Smart Contract Value.
@@ -23,7 +23,7 @@ export const xdr = {
    * @returns The base64-encoded XDR string.
    */
   encode(value: ScVal): string {
-    return value.toXDR("base64");
+    return value.toXDR('base64');
   },
 
   /**
@@ -36,13 +36,15 @@ export const xdr = {
   decode(base64: string): ScVal {
     const trimmed = base64.trim();
     if (!trimmed) {
-      throw new Error("XDR value must be a non-empty base64 string.");
+      throw new Error('XDR value must be a non-empty base64 string.');
     }
 
     try {
-      return stellarXdr.ScVal.fromXDR(trimmed, "base64");
+      return stellarXdr.ScVal.fromXDR(trimmed, 'base64');
     } catch (error) {
-      throw new Error(`Invalid ScVal XDR: ${error instanceof Error ? error.message : String(error)}`);
+      throw new Error(
+        `Invalid ScVal XDR: ${error instanceof Error ? error.message : String(error)}`
+      );
     }
   },
 
@@ -61,14 +63,14 @@ export const xdr = {
 };
 
 function toReadableValue(value: unknown): unknown {
-  if (typeof value === "bigint") {
+  if (typeof value === 'bigint') {
     return value.toString();
   }
 
   if (value instanceof Uint8Array) {
     return {
       bytes: Array.from(value),
-      hex: Array.from(value, (byte) => byte.toString(16).padStart(2, "0")).join(""),
+      hex: Array.from(value, (byte) => byte.toString(16).padStart(2, '0')).join(''),
     };
   }
 
@@ -78,16 +80,16 @@ function toReadableValue(value: unknown): unknown {
 
   if (value instanceof Map) {
     return Object.fromEntries(
-      Array.from(value.entries(), ([key, mapValue]) => [formatKey(key), toReadableValue(mapValue)]),
+      Array.from(value.entries(), ([key, mapValue]) => [formatKey(key), toReadableValue(mapValue)])
     );
   }
 
-  if (value && typeof value === "object") {
+  if (value && typeof value === 'object') {
     return Object.fromEntries(
       Object.entries(value as Record<string, unknown>).map(([key, objectValue]) => [
         key,
         toReadableValue(objectValue),
-      ]),
+      ])
     );
   }
 
@@ -95,11 +97,11 @@ function toReadableValue(value: unknown): unknown {
 }
 
 function formatKey(key: unknown): string {
-  if (typeof key === "string") {
+  if (typeof key === 'string') {
     return key;
   }
 
-  if (typeof key === "bigint") {
+  if (typeof key === 'bigint') {
     return key.toString();
   }
 

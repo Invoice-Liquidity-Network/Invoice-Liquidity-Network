@@ -10,6 +10,14 @@ Get the ILN SDK installed, your wallet connected, and your first invoice submitt
 
 ---
 
+## Requirements
+
+- **Node.js 20.x or 22.x** (active LTS). The SDK is tested against both versions
+  in CI on every change; other versions may work but are not part of the
+  guaranteed support matrix.
+
+---
+
 ## 1. Install the SDK
 
 ```bash
@@ -28,6 +36,11 @@ The SDK has a peer dependency on `@stellar/stellar-sdk`. Install it if you don't
 ```bash
 npm install @stellar/stellar-sdk
 ```
+
+> **Supply-Chain Security Note:**
+> All official `@iln/sdk` releases are published with SLSA Level 3 provenance attestations.
+> To cryptographically verify that your installed package was built directly from our audited source repository, see
+> [Verifying SDK Provenance](./sdk-trust-model.md#verifying-sdk-provenance).
 
 ---
 

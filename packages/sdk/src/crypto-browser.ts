@@ -15,12 +15,14 @@ export async function sha256(data: Uint8Array): Promise<Uint8Array> {
   return new Uint8Array(digest);
 }
 
-export async function generateKeyPair(): Promise<{ publicKey: Uint8Array; privateKey: Uint8Array }> {
-  const key = await crypto.subtle.generateKey(
-    { name: 'ECDSA', namedCurve: 'P-256' },
-    true,
-    ['sign', 'verify'],
-  );
+export async function generateKeyPair(): Promise<{
+  publicKey: Uint8Array;
+  privateKey: Uint8Array;
+}> {
+  const key = await crypto.subtle.generateKey({ name: 'ECDSA', namedCurve: 'P-256' }, true, [
+    'sign',
+    'verify',
+  ]);
   const [pub, priv] = await Promise.all([
     crypto.subtle.exportKey('raw', key.publicKey),
     crypto.subtle.exportKey('pkcs8', key.privateKey),

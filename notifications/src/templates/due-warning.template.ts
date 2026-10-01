@@ -4,8 +4,8 @@
  * Sent to the freelancer when an invoice is 48 hours from its due date.
  */
 
-import { emailShell, escapeHtml, formatAmount, formatDate, shortAddress } from "./helpers";
-import type { InvoiceEvent } from "../types";
+import { emailShell, escapeHtml, formatAmount, formatDate, shortAddress } from './helpers';
+import type { InvoiceEvent } from '../types';
 
 export interface DueWarningTemplateVars {
   event: InvoiceEvent;

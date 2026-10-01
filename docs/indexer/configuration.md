@@ -48,7 +48,28 @@ The ILN Indexer is configured via environment variables. This document describes
 |----------|---------|-------------|
 | `RATE_LIMIT_WINDOW_MS` | `60000` | Rate limit window in milliseconds |
 | `RATE_LIMIT_MAX` | `100` | Maximum requests per IP per window |
-| `RATE_LIMIT_WHITELIST` | - | Comma-separated list of IPs to exempt |
+| `RATE_LIMIT_WHITELIST` | - | Comma-separated list of exact client IP addresses to exempt; values are never usernames, API keys, or arbitrary identifiers |
+
+### Rate-limit whitelist threat model
+
+`RATE_LIMIT_WHITELIST` is an operational exception for trusted infrastructure such as a private monitoring agent. Entries are exact normalized IP addresses (IPv4, IPv6, or IPv4-mapped IPv6); they are not authentication credentials. The service must therefore run behind a correctly configured trusted proxy, and the proxy must overwrite—not append to—forwarded client-IP headers. Do not whitelist public users, shared NAT addresses, or values supplied by clients. An attacker who can reach the service from a whitelisted network can bypass the limiter, so network access control and authenticated infrastructure identity remain mandatory.
+
+The limiter rejects non-IP whitelist values and compares only the parsed `req.ip`, preventing spoofed arbitrary identifiers from matching an entry.
+
+### GraphQL query limits
+
+GraphQL requests are rejected before resolver execution when their calculated
+selection complexity exceeds 50 or their selection depth exceeds 2. These
+limits match the current schema's shallow, read-only query shape; clients
+should use pagination rather than large aliases or deeply nested selections.
+
+### GraphQL Subscriptions
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `SUBSCRIPTION_AUTH_TOKEN` | - | Optional bearer token required on WebSocket subscription connections (unset = public) |
+| `SUBSCRIPTION_MAX_CONNECTIONS` | `100` | Max concurrent WebSocket connections (`0` = unlimited) |
+| `SUBSCRIPTION_MAX_CONNECTIONS_PER_IP` | `10` | Max concurrent WebSocket connections per client IP (`0` = unlimited) |
 
 ## Configuration Examples
 
@@ -174,6 +195,27 @@ RATE_LIMIT_MAX=100
 # Exempt internal IPs
 RATE_LIMIT_WHITELIST=10.0.0.1,10.0.0.2
 ```
+
+### GraphQL Subscription Variables
+
+The GraphQL WebSocket transport can be rate-limited per connection and
+optionally authenticated:
+
+```env
+# Require clients to present this token as `Authorization: Bearer <token>`
+# in the connection_init handshake. When unset, subscriptions are public.
+SUBSCRIPTION_AUTH_TOKEN=change-me
+
+# At most 100 concurrent WebSocket connections total.
+SUBSCRIPTION_MAX_CONNECTIONS=100
+
+# At most 10 concurrent WebSocket connections per client IP.
+SUBSCRIPTION_MAX_CONNECTIONS_PER_IP=10
+```
+
+Connections beyond the global or per-IP cap are closed immediately with code
+`1008` (`Too many connections`). This prevents a single client from
+exhausting sockets or event-bus subscriptions.
 
 ## Validation
 

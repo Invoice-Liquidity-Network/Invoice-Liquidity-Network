@@ -1,6 +1,5 @@
 import { expect } from 'vitest';
-import type { Invoice, InvoiceStatus } from '../../../sdk/src/types';
-import type { GovernanceProposal } from '../../../sdk/src/governance-types';
+import type { Invoice, InvoiceState, GovernanceProposal } from '@iln/sdk';
 
 /** Assert that an invoice has all required fields with correct types. */
 export function assertValidInvoice(invoice: unknown): asserts invoice is Invoice {
@@ -16,7 +15,7 @@ export function assertValidInvoice(invoice: unknown): asserts invoice is Invoice
 }
 
 /** Assert that an invoice has a specific status. */
-export function assertInvoiceStatus(invoice: Invoice, status: InvoiceStatus): void {
+export function assertInvoiceStatus(invoice: Invoice, status: InvoiceState): void {
   expect((invoice as any).status).toBe(status);
 }
 

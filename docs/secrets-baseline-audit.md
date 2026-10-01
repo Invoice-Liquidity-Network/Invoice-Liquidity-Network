@@ -27,6 +27,18 @@ suppressed findings. Every match would be treated as a new finding.
 
 No action required. The baseline is current and accurate.
 
+## Ongoing enforcement
+
+The tracked baseline is enforced continuously, not only by this dated audit:
+
+- Every pull request and push runs `pnpm gitleaks:scan` in the required CI workflow.
+  The command exits non-zero for any finding not already represented in the baseline.
+- A scheduled workflow runs on the first day of January, April, July, and October,
+  and compares a freshly generated report with the tracked baseline. It can also be
+  started manually with `workflow_dispatch`.
+- Baseline changes must be reviewed as security-sensitive changes; they are not an
+  automatic way to suppress findings.
+
 ## Maintenance
 
 Regenerate this baseline after any legitimate secret-shaped strings are added
@@ -38,3 +50,24 @@ pnpm gitleaks:baseline
 
 Then review every new entry before committing to ensure it is a genuine false
 positive.
+
+## Pre-commit enforcement (Issue #1081)
+
+As of 2026-09, a local pre-commit hook (`gitleaks protect --staged`) runs
+before every commit, blocking secrets from entering the staging area. This
+closes the gap between CI-time detection (post-push) and local development
+(pre-push).
+
+### Setup
+
+The hook is installed automatically via `husky install` (the `prepare`
+script in `package.json`). After `pnpm install`, the hook is active.
+
+Developers who need to bypass the hook for a legitimate reason (e.g.
+regenerating the baseline) can use:
+
+```bash
+git commit --no-verify -m "chore: update secrets baseline"
+```
+
+But this should be rare and reviewed in PR.

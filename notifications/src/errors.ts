@@ -33,7 +33,7 @@ export class ILNError extends Error {
       context?: Record<string, unknown>;
       retryable?: boolean;
       cause?: unknown;
-    },
+    }
   ) {
     super(message);
     Object.setPrototypeOf(this, new.target.prototype);
@@ -52,10 +52,7 @@ export class ILNError extends Error {
  * Thrown when a network request to the RPC server fails.
  */
 export class NetworkError extends ILNError {
-  constructor(
-    message = 'Network request failed.',
-    context?: Record<string, unknown>,
-  ) {
+  constructor(message = 'Network request failed.', context?: Record<string, unknown>) {
     super(
       message,
       'NETWORK_ERROR',
@@ -64,7 +61,7 @@ export class NetworkError extends ILNError {
         docsUrl: withDocs('NETWORK_ERROR'),
         context,
         retryable: true,
-      },
+      }
     );
     Object.setPrototypeOf(this, new.target.prototype);
   }
@@ -77,7 +74,7 @@ export class TimeoutError extends ILNError {
   constructor(
     operation = 'unknown operation',
     timeoutMs?: number,
-    context?: Record<string, unknown>,
+    context?: Record<string, unknown>
   ) {
     super(
       `Operation "${operation}" timed out${timeoutMs ? ` after ${timeoutMs}ms` : ''}.`,
@@ -87,7 +84,7 @@ export class TimeoutError extends ILNError {
         docsUrl: withDocs('TIMEOUT'),
         context: { operation, timeoutMs, ...context },
         retryable: true,
-      },
+      }
     );
     Object.setPrototypeOf(this, new.target.prototype);
   }
@@ -97,10 +94,7 @@ export class TimeoutError extends ILNError {
  * Thrown when transaction simulation fails.
  */
 export class SimulationError extends ILNError {
-  constructor(
-    message = 'Transaction simulation failed.',
-    context?: Record<string, unknown>,
-  ) {
+  constructor(message = 'Transaction simulation failed.', context?: Record<string, unknown>) {
     super(
       message,
       'SIMULATION_FAILED',
@@ -109,7 +103,7 @@ export class SimulationError extends ILNError {
         docsUrl: withDocs('SIMULATION_FAILED'),
         context,
         retryable: true,
-      },
+      }
     );
     Object.setPrototypeOf(this, new.target.prototype);
   }
@@ -123,7 +117,7 @@ export class ContractCallError extends ILNError {
     message: string,
     public readonly contractId?: string,
     public readonly method?: string,
-    context?: Record<string, unknown>,
+    context?: Record<string, unknown>
   ) {
     super(
       message,
@@ -133,7 +127,7 @@ export class ContractCallError extends ILNError {
         docsUrl: withDocs('CONTRACT_ERROR'),
         context: { contractId, method, ...context },
         retryable: false,
-      },
+      }
     );
     Object.setPrototypeOf(this, new.target.prototype);
   }
@@ -143,10 +137,7 @@ export class ContractCallError extends ILNError {
  * Thrown when an RPC response is unexpected or malformed.
  */
 export class RPCResponseError extends ILNError {
-  constructor(
-    message = 'Unexpected RPC response.',
-    context?: Record<string, unknown>,
-  ) {
+  constructor(message = 'Unexpected RPC response.', context?: Record<string, unknown>) {
     super(
       message,
       'RPC_RESPONSE_ERROR',
@@ -155,7 +146,7 @@ export class RPCResponseError extends ILNError {
         docsUrl: withDocs('RPC_RESPONSE_ERROR'),
         context,
         retryable: false,
-      },
+      }
     );
     Object.setPrototypeOf(this, new.target.prototype);
   }
@@ -180,7 +171,7 @@ export function isRetryableError(err: unknown): boolean {
 export function normalizeError(
   err: unknown,
   fallbackCode = 'UNKNOWN_ERROR',
-  fallbackMessage = 'An unexpected error occurred.',
+  fallbackMessage = 'An unexpected error occurred.'
 ): ILNError {
   if (err instanceof ILNError) {
     return err;
@@ -216,7 +207,7 @@ export function normalizeError(
         context: { name: err.name, stack: err.stack },
         cause: err,
         retryable: isTransientNetworkError(err),
-      },
+      }
     );
   }
 
@@ -227,17 +218,12 @@ export function normalizeError(
     });
   }
 
-  return new ILNError(
-    fallbackMessage,
-    fallbackCode,
-    'An unclassified error object was thrown.',
-    {
-      docsUrl: withDocs(fallbackCode),
-      context: { raw: err },
-      cause: err,
-      retryable: false,
-    },
-  );
+  return new ILNError(fallbackMessage, fallbackCode, 'An unclassified error object was thrown.', {
+    docsUrl: withDocs(fallbackCode),
+    context: { raw: err },
+    cause: err,
+    retryable: false,
+  });
 }
 
 function isTransientNetworkError(err: Error): boolean {

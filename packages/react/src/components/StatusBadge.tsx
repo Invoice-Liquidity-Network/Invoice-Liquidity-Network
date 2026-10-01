@@ -1,5 +1,5 @@
 import React from 'react';
-import type { InvoiceStatus } from '../../../sdk/src/types';
+import type { InvoiceStatus } from '@iln/sdk';
 
 export interface StatusBadgeProps {
   status: InvoiceStatus;
@@ -7,10 +7,11 @@ export interface StatusBadgeProps {
 }
 
 const STYLE_MAP: Record<InvoiceStatus, { bg: string; text: string; label: string }> = {
-  Pending:   { bg: '#FEF9C3', text: '#854D0E', label: 'Pending' },
-  Funded:    { bg: '#DCFCE7', text: '#166534', label: 'Funded' },
-  Paid:      { bg: '#DBEAFE', text: '#1E40AF', label: 'Paid' },
+  Pending: { bg: '#FEF9C3', text: '#854D0E', label: 'Pending' },
+  Funded: { bg: '#DCFCE7', text: '#166534', label: 'Funded' },
+  Paid: { bg: '#DBEAFE', text: '#1E40AF', label: 'Paid' },
   Defaulted: { bg: '#FEE2E2', text: '#991B1B', label: 'Defaulted' },
+  Disputed: { bg: '#FFEDD5', text: '#9A3412', label: 'Disputed' },
 };
 
 export const StatusBadge: React.FC<StatusBadgeProps> = ({ status, className }) => {

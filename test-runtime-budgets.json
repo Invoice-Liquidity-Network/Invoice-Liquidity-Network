@@ -1,0 +1,21 @@
+{
+  "$comment": "Per-package test-runtime budgets — Issue #1092. See docs/test-runtime-budgets.md for the enforcement mechanism and how to update a budget. 'measuredVia' controls how scripts/check-test-runtime-budgets.mjs sources the duration: 'turbo' reads the <package>#test task from a `turbo run test --summarize` run summary; 'external' expects the duration to be passed in via --external <package>=<seconds> (used for suites turbo doesn't track); 'external-bash' means the budget is enforced directly in a CI job's own shell step (currently only backend/, which has no Node/pnpm environment) and is listed here for the full-monorepo audit table only — this checker skips it.",
+  "budgets": [
+    { "package": "@iln/sdk", "path": "sdk", "measuredVia": "turbo", "budgetSeconds": 60 },
+    { "package": "@invoice-liquidity/cli", "path": "cli", "measuredVia": "turbo", "budgetSeconds": 45 },
+    { "package": "iln-indexer", "path": "indexer", "measuredVia": "turbo", "budgetSeconds": 60 },
+    { "package": "@iln/oracle-service", "path": "oracle-service", "measuredVia": "turbo", "budgetSeconds": 30 },
+    { "package": "iln-notifications", "path": "notifications", "measuredVia": "turbo", "budgetSeconds": 90 },
+    { "package": "@iln/react", "path": "packages/react", "measuredVia": "turbo", "budgetSeconds": 50 },
+    { "package": "@iln/mock-backend", "path": "packages/mock-backend", "measuredVia": "turbo", "budgetSeconds": 20 },
+    { "package": "@iln/opentelemetry", "path": "packages/opentelemetry", "measuredVia": "turbo", "budgetSeconds": 15 },
+    { "package": "@iln/upgrade-tests", "path": "packages/upgrade-tests", "measuredVia": "turbo", "budgetSeconds": 20 },
+    { "package": "@iln/test-utils", "path": "packages/test-utils", "measuredVia": "turbo", "budgetSeconds": 35 },
+    { "package": "@iln/indexer", "path": "packages/indexer", "measuredVia": "turbo", "budgetSeconds": 30 },
+    { "package": "@iln/shared", "path": "packages/shared", "measuredVia": "turbo", "budgetSeconds": 30 },
+    { "package": "@iln/sdk-next", "path": "packages/sdk", "measuredVia": "turbo", "budgetSeconds": 50 },
+    { "package": "@invoice-liquidity/docs", "path": "docs", "measuredVia": "turbo", "budgetSeconds": 35 },
+    { "package": "root-scripts", "path": "scripts/__tests__", "measuredVia": "external", "budgetSeconds": 15 },
+    { "package": "backend", "path": "backend", "measuredVia": "external-bash", "budgetSeconds": 180 }
+  ]
+}

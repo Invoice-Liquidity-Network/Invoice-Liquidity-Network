@@ -1,6 +1,6 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
-import type { ILNClient } from '@invoice-liquidity/sdk';
+import type { ILNClient } from '@iln/sdk';
 import { ILNContext } from '../context/ILNContext';
 
 interface TestWrapperProps {
@@ -8,7 +8,7 @@ interface TestWrapperProps {
   children: ReactNode;
 }
 
-export function TestWrapper({ client, children }: TestWrapperProps): JSX.Element {
+export function TestWrapper({ client, children }: TestWrapperProps) {
   const queryClient = new QueryClient({
     defaultOptions: {
       queries: {
@@ -21,9 +21,7 @@ export function TestWrapper({ client, children }: TestWrapperProps): JSX.Element
 
   return (
     <QueryClientProvider client={queryClient}>
-      <ILNContext.Provider value={client}>
-        {children}
-      </ILNContext.Provider>
+      <ILNContext.Provider value={client}>{children}</ILNContext.Provider>
     </QueryClientProvider>
   );
 }

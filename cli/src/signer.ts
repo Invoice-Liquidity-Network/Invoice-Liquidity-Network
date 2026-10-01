@@ -1,7 +1,7 @@
-import { Keypair, TransactionBuilder } from "@stellar/stellar-sdk";
-import { readFileSync } from "node:fs";
+import { Keypair, TransactionBuilder } from '@stellar/stellar-sdk';
+import { readFileSync } from 'node:fs';
 
-import type { TransactionSigner } from "./types";
+import type { TransactionSigner } from './types';
 
 export function createKeypairFileSigner(keypairPath: string): TransactionSigner {
   const secretKey = readSecretFromFile(keypairPath);
@@ -23,14 +23,16 @@ function readSecretFromFile(keypairPath: string): string {
   let content: string;
 
   try {
-    content = readFileSync(keypairPath, "utf8").trim();
+    content = readFileSync(keypairPath, 'utf8').trim();
   } catch (error) {
     throw new Error(
-      `Failed to read keypair file at ${keypairPath}: ${error instanceof Error ? error.message : "unknown error"}.`,
+      `Failed to read keypair file at ${keypairPath}: ${
+        error instanceof Error ? error.message : 'unknown error'
+      }.`
     );
   }
 
-  if (content.startsWith("{")) {
+  if (content.startsWith('{')) {
     try {
       const parsed = JSON.parse(content) as { secretKey?: string; secret?: string };
       const secret = parsed.secretKey ?? parsed.secret;
@@ -42,10 +44,8 @@ function readSecretFromFile(keypairPath: string): string {
     }
   }
 
-  if (!content.startsWith("S")) {
-    throw new Error(
-      `Keypair file ${keypairPath} does not contain a valid Stellar secret key.`,
-    );
+  if (!content.startsWith('S')) {
+    throw new Error(`Keypair file ${keypairPath} does not contain a valid Stellar secret key.`);
   }
 
   return content;

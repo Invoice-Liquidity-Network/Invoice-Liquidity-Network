@@ -13,9 +13,11 @@
     "type-check": "tsc --noEmit"
   },
   "dependencies": {
-    "@faker-js/faker": "^8.4.1"
+    "@faker-js/faker": "^8.4.1",
+    "@iln/sdk": "workspace:*"
   },
   "devDependencies": {
+    "@types/node": "^20.0.0",
     "typescript": "^5.9.3",
     "vitest": "^4.1.5"
   }

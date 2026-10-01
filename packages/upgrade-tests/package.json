@@ -10,9 +10,15 @@
   },
   "scripts": {
     "build": "tsc",
-    "test": "vitest run"
+    "test": "vitest run",
+    "type-check": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@iln/shared": "workspace:*",
+    "@iln/sdk": "workspace:*"
   },
   "devDependencies": {
+    "@types/node": "^20.0.0",
     "typescript": "^5.4.0",
     "vitest": "^4.1.5"
   }

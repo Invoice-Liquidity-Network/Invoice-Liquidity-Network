@@ -1,7 +1,19 @@
 import { vi } from 'vitest';
-import type { ILNClient, Invoice, ReputationScore, LPPortfolio, ContractStats } from '../../../sdk/src/types';
-import type { GovernanceProposal } from '../../../sdk/src/governance-types';
-import { createInvoice, createReputationScore, createGovernanceProposal, createLPStats, createContractStats } from './factories';
+import type {
+  ILNClient,
+  Invoice,
+  ReputationScore,
+  LPPortfolio,
+  ContractStats,
+  GovernanceProposal,
+} from '@iln/sdk';
+import {
+  createInvoice,
+  createReputationScore,
+  createGovernanceProposal,
+  createLPStats,
+  createContractStats,
+} from './factories';
 
 /** A mock ILNClient backed by factory-generated data. All methods are vitest spies. */
 export function createMockILNClient(overrides: Partial<ILNClient> = {}): ILNClient {
@@ -22,7 +34,9 @@ export function createMockILNClient(overrides: Partial<ILNClient> = {}): ILNClie
     markPaid: vi.fn().mockResolvedValue(undefined),
     createProposal: vi.fn().mockResolvedValue(undefined),
     vote: vi.fn().mockResolvedValue(undefined),
-    connectWallet: vi.fn().mockResolvedValue('GDRMKYQMTNZ3XPRF7K7L3PFBJQI2S2Y2E3KJQF3KHKY3XT3LZXG3G5X2'),
+    connectWallet: vi
+      .fn()
+      .mockResolvedValue('GDRMKYQMTNZ3XPRF7K7L3PFBJQI2S2Y2E3KJQF3KHKY3XT3LZXG3G5X2'),
     ...overrides,
   } as unknown as ILNClient;
 }

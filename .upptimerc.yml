@@ -11,14 +11,36 @@ sites:
     url: https://soroban-testnet.stellar.org
     method: POST
     headers:
-      - "Content-Type: application/json"
+      - 'Content-Type: application/json'
     body: '{"jsonrpc":"2.0","id":1,"method":"getContractData","params":{"contract":"CCPASLHKRFBMVV5PZG3LKDGKFEDXZMB5U7DK42CVLUVWCMUCSRPVBIMO"}}'
+    expectedStatusCodes:
+      - 200
+  - name: ILN Indexer Service
+    url: https://indexer.iln.finance/health
+    expectedStatusCodes:
+      - 200
+  - name: ILN Notifications Service
+    url: https://notifications.iln.finance/health
+    expectedStatusCodes:
+      - 200
+  - name: ILN Oracle Service
+    url: https://oracle.iln.finance/v1/health
     expectedStatusCodes:
       - 200
   - name: ILN Frontend
     url: https://iln.finance
+    expectedStatusCodes:
+      - 200
   - name: ILN Docs
     url: https://docs.iln.finance
+  # oracle-service gates fund_invoice()'s require_oracle_verification path, so
+  # its availability is protocol-critical rather than a nice-to-have. /v1/health
+  # reports degraded after a verification failure, which a plain root check
+  # would miss.
+  - name: ILN Oracle Service
+    url: https://oracle.iln.finance/v1/health
+    expectedStatusCodes:
+      - 200
 
 status-website:
   cname: status.iln.finance
@@ -39,14 +61,14 @@ assignees:
 
 skipDeleteIssues: false
 commitMessages:
-  readmeContent: "docs: update status summary [skip ci]"
+  readmeContent: 'docs: update status summary [skip ci]'
 
 i18n:
   langCode: en
 
 workflowSchedule:
-  graphs: "0 0 * * *"
-  responseTime: "0 23 * * 0"
-  staticSite: "0 1 * * *"
-  summary: "0 0 * * *"
-  updates: "*/5 * * * *"
+  graphs: '0 0 * * *'
+  responseTime: '0 23 * * 0'
+  staticSite: '0 1 * * *'
+  summary: '0 0 * * *'
+  updates: '*/5 * * * *'

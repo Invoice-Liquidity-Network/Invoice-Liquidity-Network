@@ -4,13 +4,13 @@
  * Sent to the freelancer and the LP (funder) once the payer settles an invoice.
  */
 
-import { emailShell, escapeHtml, formatAmount, formatDate, shortAddress } from "./helpers";
-import type { InvoiceEvent } from "../types";
+import { emailShell, escapeHtml, formatAmount, formatDate, shortAddress } from './helpers';
+import type { InvoiceEvent } from '../types';
 
 export interface PaymentTemplateVars {
   event: InvoiceEvent;
   /** Role of the recipient */
-  recipientRole: "freelancer" | "lp";
+  recipientRole: 'freelancer' | 'lp';
   dashboardUrl?: string;
   /** Optional tokenized one-click unsubscribe URL. */
   unsubscribeUrl?: string;
@@ -29,15 +29,15 @@ export function buildPaymentSubject(event: InvoiceEvent): string {
 export function renderPaymentEmail(vars: PaymentTemplateVars): string {
   const { event, recipientRole, dashboardUrl, unsubscribeUrl } = vars;
 
-  const isFreelancer = recipientRole === "freelancer";
-  const roleLabel = isFreelancer ? "Freelancer" : "Liquidity Provider";
+  const isFreelancer = recipientRole === 'freelancer';
+  const roleLabel = isFreelancer ? 'Freelancer' : 'Liquidity Provider';
   const greeting = isFreelancer
-    ? "Your invoice has been paid in full."
-    : "The invoice you funded has been settled.";
+    ? 'Your invoice has been paid in full.'
+    : 'The invoice you funded has been settled.';
 
   const formattedAmount = escapeHtml(formatAmount(event.amount));
   const formattedDue = escapeHtml(formatDate(event.dueDate));
-  const funderDisplay = event.funder ? escapeHtml(shortAddress(event.funder)) : "—";
+  const funderDisplay = event.funder ? escapeHtml(shortAddress(event.funder)) : '—';
   const freelancerDisplay = escapeHtml(shortAddress(event.freelancer));
   const payerDisplay = escapeHtml(shortAddress(event.payer));
   const invoiceId = String(event.invoiceId);
@@ -87,7 +87,7 @@ export function renderPaymentEmail(vars: PaymentTemplateVars): string {
                    <td class="label">Funded By</td>
                    <td>${funderDisplay}</td>
                  </tr>`
-              : ""
+              : ''
           }
         </table>
       </div>
@@ -95,8 +95,8 @@ export function renderPaymentEmail(vars: PaymentTemplateVars): string {
       <p>
         ${
           isFreelancer
-            ? "Thank you for using Invoice Liquidity Network. The full settlement is now complete."
-            : "Your yield has been credited. View your portfolio for the updated yield summary."
+            ? 'Thank you for using Invoice Liquidity Network. The full settlement is now complete.'
+            : 'Your yield has been credited. View your portfolio for the updated yield summary.'
         }
       </p>
 

@@ -53,7 +53,10 @@ async function runSmokeTest(opts: { timeout?: number }) {
   // Example smoke checks: verify contract id strings exist
   const missing = Object.entries(contractIds || {}).filter(([, v]) => !v);
   if (missing.length) {
-    console.error('Smoke test failed: some contract IDs are missing', missing.map(([k]) => k));
+    console.error(
+      'Smoke test failed: some contract IDs are missing',
+      missing.map(([k]) => k)
+    );
     process.exitCode = 2;
     return;
   }
@@ -144,7 +147,9 @@ program
 
 program
   .command('release <bumpType>')
-  .description('Automate release of @iln/scripts: bump version, update changelog, git commit & tag, push to remote')
+  .description(
+    'Automate release of @iln/scripts: bump version, update changelog, git commit & tag, push to remote'
+  )
   .action(async (bumpType) => {
     try {
       if (!['major', 'minor', 'patch'].includes(bumpType)) {

@@ -145,7 +145,7 @@ function sleep(ms: number): Promise<void> {
  */
 export async function withRetry<T>(
   fn: () => Promise<T>,
-  options?: Partial<RetryOptions>,
+  options?: Partial<RetryOptions>
 ): Promise<T> {
   const opts: RetryOptions = { ...DEFAULT_RETRY, ...options };
   const shouldRetry = opts.retryIf ?? isRetryableError;
@@ -159,7 +159,7 @@ export async function withRetry<T>(
 
       let delay = Math.min(
         opts.initialDelayMs * Math.pow(opts.backoffFactor, attempt - 1),
-        opts.maxDelayMs,
+        opts.maxDelayMs
       );
       if (opts.jitter) {
         delay = delay * (0.5 + Math.random() * 0.5);
@@ -185,7 +185,7 @@ export class CircuitOpenError extends ILNError {
       'Wait for the cooldown period to elapse, then retry your request.',
       {
         retryable: false,
-      },
+      }
     );
     Object.setPrototypeOf(this, new.target.prototype);
   }

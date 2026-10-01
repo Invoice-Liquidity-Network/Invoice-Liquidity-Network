@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import type { LPPortfolio } from '@invoice-liquidity/sdk';
+import type { LPPortfolio } from '@iln/sdk';
 import { useLPPortfolio } from '../hooks/useLPPortfolio';
 
 export interface YieldDisplayProps {
@@ -32,15 +32,15 @@ export const YieldDisplay: React.FC<YieldDisplayProps> = ({
   const [resolvedTheme, setResolvedTheme] = useState<'light' | 'dark'>('light');
 
   useEffect(() => {
-    if (theme === 'system') {
-      const mq = window.matchMedia('(prefers-color-scheme: dark)');
-      setResolvedTheme(mq.matches ? 'dark' : 'light');
-      const handler = (e: MediaQueryListEvent) => setResolvedTheme(e.matches ? 'dark' : 'light');
-      mq.addEventListener('change', handler);
-      return () => mq.removeEventListener('change', handler);
-    } else {
+    if (theme !== 'system') {
       setResolvedTheme(theme);
+      return;
     }
+    const mq = window.matchMedia('(prefers-color-scheme: dark)');
+    setResolvedTheme(mq.matches ? 'dark' : 'light');
+    const handler = (e: MediaQueryListEvent) => setResolvedTheme(e.matches ? 'dark' : 'light');
+    mq.addEventListener('change', handler);
+    return () => mq.removeEventListener('change', handler);
   }, [theme]);
 
   const isDark = resolvedTheme === 'dark';
@@ -56,9 +56,11 @@ export const YieldDisplay: React.FC<YieldDisplayProps> = ({
 
   // ── Data Fetching ────────────────────────────────────────────────────────
   const isAutoFetch = !staticPortfolio && !!address && address.startsWith('G');
-  const { data: fetchedPortfolio, isLoading: hookLoading, error } = useLPPortfolio(
-    isAutoFetch ? address : ''
-  );
+  const {
+    data: fetchedPortfolio,
+    isLoading: hookLoading,
+    error,
+  } = useLPPortfolio(isAutoFetch ? address : '');
 
   const portfolio = staticPortfolio ?? fetchedPortfolio;
   const isLoading = staticLoading || (isAutoFetch && hookLoading);
@@ -84,7 +86,9 @@ export const YieldDisplay: React.FC<YieldDisplayProps> = ({
 
   return (
     <>
-      <style dangerouslySetInnerHTML={{ __html: `
+      <style
+        dangerouslySetInnerHTML={{
+          __html: `
         @keyframes iln-pulse {
           0%, 100% { opacity: 1; }
           50% { opacity: .5; }
@@ -117,7 +121,9 @@ export const YieldDisplay: React.FC<YieldDisplayProps> = ({
         .iln-calc-slider::-webkit-slider-thumb:hover {
           transform: scale(1.15);
         }
-      `}} />
+      `,
+        }}
+      />
       <div
         className={className}
         style={{
@@ -132,87 +138,198 @@ export const YieldDisplay: React.FC<YieldDisplayProps> = ({
           ...style,
         }}
       >
-        <h3 style={{ margin: '0 0 16px 0', fontSize: '18px', fontWeight: 600 }}>Yield & Earnings Overview</h3>
+        <h3 style={{ margin: '0 0 16px 0', fontSize: '18px', fontWeight: 600 }}>
+          Yield & Earnings Overview
+        </h3>
 
         {/* Main Stats Row */}
         {isLoading ? (
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: '16px', marginBottom: '24px' }}>
+          <div
+            style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))',
+              gap: '16px',
+              marginBottom: '24px',
+            }}
+          >
             {[1, 2, 3].map((n) => (
-              <div key={n} style={{ border: `1px solid ${border}`, borderRadius: '8px', padding: '16px' }}>
-                <div className="iln-yield-skeleton" style={{ width: '60px', height: '12px', marginBottom: '8px' }} />
+              <div
+                key={n}
+                style={{ border: `1px solid ${border}`, borderRadius: '8px', padding: '16px' }}
+              >
+                <div
+                  className="iln-yield-skeleton"
+                  style={{ width: '60px', height: '12px', marginBottom: '8px' }}
+                />
                 <div className="iln-yield-skeleton" style={{ width: '100px', height: '24px' }} />
               </div>
             ))}
           </div>
         ) : error ? (
-          <div style={{ padding: '16px', color: '#ef4444', border: '1px dashed #ef4444', borderRadius: '8px', marginBottom: '24px', fontSize: '13px' }}>
+          <div
+            style={{
+              padding: '16px',
+              color: '#ef4444',
+              border: '1px dashed #ef4444',
+              borderRadius: '8px',
+              marginBottom: '24px',
+              fontSize: '13px',
+            }}
+          >
             Could not fetch portfolio statistics: {error.message}
           </div>
         ) : portfolio ? (
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '16px', marginBottom: '24px' }}>
+          <div
+            style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))',
+              gap: '16px',
+              marginBottom: '24px',
+            }}
+          >
             {/* Accrued Yield Card */}
-            <div style={{
-              border: `1px solid ${border}`,
-              borderRadius: '8px',
-              padding: '16px',
-              borderLeft: `4px solid ${accentColor}`,
-            }}>
-              <div style={{ fontSize: '12px', color: textMuted, fontWeight: 500, textTransform: 'uppercase', letterSpacing: '0.02em' }}>
+            <div
+              style={{
+                border: `1px solid ${border}`,
+                borderRadius: '8px',
+                padding: '16px',
+                borderLeft: `4px solid ${accentColor}`,
+              }}
+            >
+              <div
+                style={{
+                  fontSize: '12px',
+                  color: textMuted,
+                  fontWeight: 500,
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.02em',
+                }}
+              >
                 Total Yield Accrued
               </div>
-              <div style={{ fontSize: '24px', fontWeight: 700, marginTop: '8px', color: accentColor }}>
+              <div
+                style={{ fontSize: '24px', fontWeight: 700, marginTop: '8px', color: accentColor }}
+              >
                 {formatUSDC(portfolio.totalYield)} USDC
               </div>
             </div>
 
             {/* Average Return Card */}
-            <div style={{
-              border: `1px solid ${border}`,
-              borderRadius: '8px',
-              padding: '16px',
-            }}>
-              <div style={{ fontSize: '12px', color: textMuted, fontWeight: 500, textTransform: 'uppercase', letterSpacing: '0.02em' }}>
+            <div
+              style={{
+                border: `1px solid ${border}`,
+                borderRadius: '8px',
+                padding: '16px',
+              }}
+            >
+              <div
+                style={{
+                  fontSize: '12px',
+                  color: textMuted,
+                  fontWeight: 500,
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.02em',
+                }}
+              >
                 Average APY
               </div>
-              <div style={{ fontSize: '24px', fontWeight: 700, marginTop: '8px', color: textPrimary }}>
+              <div
+                style={{ fontSize: '24px', fontWeight: 700, marginTop: '8px', color: textPrimary }}
+              >
                 {Number(portfolio.avgReturn).toFixed(2)}%
               </div>
             </div>
 
             {/* Total Invested */}
-            <div style={{
-              border: `1px solid ${border}`,
-              borderRadius: '8px',
-              padding: '16px',
-            }}>
-              <div style={{ fontSize: '12px', color: textMuted, fontWeight: 500, textTransform: 'uppercase', letterSpacing: '0.02em' }}>
+            <div
+              style={{
+                border: `1px solid ${border}`,
+                borderRadius: '8px',
+                padding: '16px',
+              }}
+            >
+              <div
+                style={{
+                  fontSize: '12px',
+                  color: textMuted,
+                  fontWeight: 500,
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.02em',
+                }}
+              >
                 Total Invested
               </div>
-              <div style={{ fontSize: '24px', fontWeight: 700, marginTop: '8px', color: textPrimary }}>
+              <div
+                style={{ fontSize: '24px', fontWeight: 700, marginTop: '8px', color: textPrimary }}
+              >
                 {formatUSDC(portfolio.totalInvested)} USDC
               </div>
             </div>
           </div>
         ) : (
-          <div style={{ padding: '16px', color: textMuted, background: calculatorBg, borderRadius: '8px', marginBottom: '24px', fontSize: '13px', textAlign: 'center' }}>
+          <div
+            style={{
+              padding: '16px',
+              color: textMuted,
+              background: calculatorBg,
+              borderRadius: '8px',
+              marginBottom: '24px',
+              fontSize: '13px',
+              textAlign: 'center',
+            }}
+          >
             No portfolio connected. Use the calculator below to simulate potential returns.
           </div>
         )}
 
         {/* Portfolio Stats Distribution */}
         {portfolio && !isLoading && (
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '16px', marginBottom: '28px', fontSize: '14px' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', padding: '10px 0', borderBottom: `1px solid ${border}` }}>
+          <div
+            style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
+              gap: '16px',
+              marginBottom: '28px',
+              fontSize: '14px',
+            }}
+          >
+            <div
+              style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                padding: '10px 0',
+                borderBottom: `1px solid ${border}`,
+              }}
+            >
               <span style={{ color: textMuted }}>Active Funding Slots</span>
               <span style={{ fontWeight: 600 }}>{portfolio.activePositions}</span>
             </div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', padding: '10px 0', borderBottom: `1px solid ${border}` }}>
+            <div
+              style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                padding: '10px 0',
+                borderBottom: `1px solid ${border}`,
+              }}
+            >
               <span style={{ color: textMuted }}>Completed Positions</span>
               <span style={{ fontWeight: 600 }}>{portfolio.completedPositions}</span>
             </div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', padding: '10px 0', borderBottom: `1px solid ${border}` }}>
+            <div
+              style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                padding: '10px 0',
+                borderBottom: `1px solid ${border}`,
+              }}
+            >
               <span style={{ color: textMuted }}>Default Incidents</span>
-              <span style={{ fontWeight: 600, color: portfolio.defaultedPositions > 0 ? '#ef4444' : textPrimary }}>
+              <span
+                style={{
+                  fontWeight: 600,
+                  color: portfolio.defaultedPositions > 0 ? '#ef4444' : textPrimary,
+                }}
+              >
                 {portfolio.defaultedPositions}
               </span>
             </div>
@@ -220,22 +337,37 @@ export const YieldDisplay: React.FC<YieldDisplayProps> = ({
         )}
 
         {/* Interactive Yield Estimator */}
-        <div style={{
-          background: calculatorBg,
-          borderRadius: '10px',
-          padding: '20px',
-          border: `1px solid ${border}`,
-        }}>
-          <h4 style={{ margin: '0 0 16px 0', fontSize: '15px', fontWeight: 600, color: textPrimary }}>
+        <div
+          style={{
+            background: calculatorBg,
+            borderRadius: '10px',
+            padding: '20px',
+            border: `1px solid ${border}`,
+          }}
+        >
+          <h4
+            style={{ margin: '0 0 16px 0', fontSize: '15px', fontWeight: 600, color: textPrimary }}
+          >
             Interactive LP Yield Calculator
           </h4>
 
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', marginBottom: '20px' }}>
+          <div
+            style={{ display: 'flex', flexDirection: 'column', gap: '16px', marginBottom: '20px' }}
+          >
             {/* Principal Slider */}
             <div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px', marginBottom: '6px' }}>
+              <div
+                style={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  fontSize: '13px',
+                  marginBottom: '6px',
+                }}
+              >
                 <span style={{ color: textMuted }}>Simulated Capital (USDC)</span>
-                <span style={{ fontWeight: 700, color: textPrimary }}>${calcPrincipal.toLocaleString()}</span>
+                <span style={{ fontWeight: 700, color: textPrimary }}>
+                  ${calcPrincipal.toLocaleString()}
+                </span>
               </div>
               <input
                 type="range"
@@ -250,7 +382,14 @@ export const YieldDisplay: React.FC<YieldDisplayProps> = ({
 
             {/* APY Slider */}
             <div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px', marginBottom: '6px' }}>
+              <div
+                style={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  fontSize: '13px',
+                  marginBottom: '6px',
+                }}
+              >
                 <span style={{ color: textMuted }}>Simulated ROI / Discount Rate</span>
                 <span style={{ fontWeight: 700, color: accentColor }}>{calcApy.toFixed(1)}%</span>
               </div>
@@ -267,31 +406,45 @@ export const YieldDisplay: React.FC<YieldDisplayProps> = ({
           </div>
 
           {/* Calculator Output Grid */}
-          <div style={{
-            display: 'grid',
-            gridTemplateColumns: 'repeat(3, 1fr)',
-            gap: '8px',
-            background: inputBg,
-            borderRadius: '8px',
-            padding: '12px',
-            textAlign: 'center',
-            border: `1px solid ${border}`,
-          }}>
+          <div
+            style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(3, 1fr)',
+              gap: '8px',
+              background: inputBg,
+              borderRadius: '8px',
+              padding: '12px',
+              textAlign: 'center',
+              border: `1px solid ${border}`,
+            }}
+          >
             <div>
-              <div style={{ fontSize: '11px', color: textMuted, textTransform: 'uppercase' }}>Weekly</div>
-              <div style={{ fontSize: '15px', fontWeight: 700, marginTop: '4px', color: textPrimary }}>
+              <div style={{ fontSize: '11px', color: textMuted, textTransform: 'uppercase' }}>
+                Weekly
+              </div>
+              <div
+                style={{ fontSize: '15px', fontWeight: 700, marginTop: '4px', color: textPrimary }}
+              >
                 ${calculatedYield.weekly.toFixed(2)}
               </div>
             </div>
             <div style={{ borderLeft: `1px solid ${border}`, borderRight: `1px solid ${border}` }}>
-              <div style={{ fontSize: '11px', color: textMuted, textTransform: 'uppercase' }}>Monthly</div>
-              <div style={{ fontSize: '15px', fontWeight: 700, marginTop: '4px', color: textPrimary }}>
+              <div style={{ fontSize: '11px', color: textMuted, textTransform: 'uppercase' }}>
+                Monthly
+              </div>
+              <div
+                style={{ fontSize: '15px', fontWeight: 700, marginTop: '4px', color: textPrimary }}
+              >
                 ${calculatedYield.monthly.toFixed(2)}
               </div>
             </div>
             <div>
-              <div style={{ fontSize: '11px', color: textMuted, textTransform: 'uppercase' }}>Yearly</div>
-              <div style={{ fontSize: '15px', fontWeight: 700, marginTop: '4px', color: accentColor }}>
+              <div style={{ fontSize: '11px', color: textMuted, textTransform: 'uppercase' }}>
+                Yearly
+              </div>
+              <div
+                style={{ fontSize: '15px', fontWeight: 700, marginTop: '4px', color: accentColor }}
+              >
                 ${calculatedYield.yearly.toFixed(2)}
               </div>
             </div>

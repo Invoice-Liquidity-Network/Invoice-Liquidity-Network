@@ -1,6 +1,6 @@
 // ─── Invoice types ────────────────────────────────────────────────────────────
 
-export type InvoiceStatus = "Pending" | "Funded" | "Paid" | "Defaulted" | "Cancelled" | "Expired";
+export type InvoiceStatus = 'Pending' | 'Funded' | 'Paid' | 'Defaulted' | 'Cancelled' | 'Expired';
 
 export interface Invoice {
   id: bigint;
@@ -63,9 +63,9 @@ export interface TokenMetadata {
 
 // ─── Governance types ─────────────────────────────────────────────────────────
 
-export type ProposalType = "ParameterUpdate" | "ProtocolUpgrade" | "TextProposal";
-export type ProposalStatus = "Active" | "Passed" | "Failed" | "Executed" | "Pending";
-export type VoteChoice = "For" | "Against" | "Abstain";
+export type ProposalType = 'ParameterUpdate' | 'ProtocolUpgrade' | 'TextProposal';
+export type ProposalStatus = 'Active' | 'Passed' | 'Failed' | 'Executed' | 'Pending';
+export type VoteChoice = 'For' | 'Against' | 'Abstain';
 
 export interface ParameterChange {
   parameter: string;
@@ -132,7 +132,12 @@ export interface InvoiceClient {
   claimDefault(funder: string, invoiceId: bigint): Promise<{ txHash: string }>;
   cancelInvoice(freelancer: string, invoiceId: bigint): Promise<{ txHash: string }>;
   updateInvoice(args: UpdateInvoiceArgs): Promise<{ txHash: string }>;
-  approveToken(args: { owner: string; amount: bigint; spender?: string; tokenId?: string }): Promise<{ txHash: string }>;
+  approveToken(args: {
+    owner: string;
+    amount: bigint;
+    spender?: string;
+    tokenId?: string;
+  }): Promise<{ txHash: string }>;
 }
 
 export interface ReputationClient {
@@ -147,5 +152,8 @@ export interface GovernanceClient {
   executeProposal(proposalId: number, signerAddress: string): Promise<string>;
   getVotingPower(address: string): Promise<number>;
   fetchProtocolParameters(): Promise<ProtocolParameters>;
-  createProposal(payload: CreateProposalPayload, signerAddress: string): Promise<{ txHash: string; proposalId: number }>;
+  createProposal(
+    payload: CreateProposalPayload,
+    signerAddress: string
+  ): Promise<{ txHash: string; proposalId: number }>;
 }

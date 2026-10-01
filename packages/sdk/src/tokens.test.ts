@@ -64,9 +64,7 @@ describe('formatAmount', () => {
   });
 
   it('handles very large amounts beyond Number.MAX_SAFE_INTEGER', () => {
-    expect(formatAmount(123_456_789_012_345_678n, USDC)).toBe(
-      '123456789012.345678',
-    );
+    expect(formatAmount(123_456_789_012_345_678n, USDC)).toBe('123456789012.345678');
   });
 });
 
@@ -146,9 +144,7 @@ describe('getToken', () => {
   });
 
   it('constrains the lookup to a single network when given', () => {
-    const mainnetUsdc = SUPPORTED_TOKENS.mainnet.find(
-      (t) => t.symbol === 'USDC',
-    ) as Token;
+    const mainnetUsdc = SUPPORTED_TOKENS.mainnet.find((t) => t.symbol === 'USDC') as Token;
     expect(getToken(mainnetUsdc.address, 'mainnet')?.symbol).toBe('USDC');
     expect(getToken(mainnetUsdc.address, 'testnet')).toBeUndefined();
   });

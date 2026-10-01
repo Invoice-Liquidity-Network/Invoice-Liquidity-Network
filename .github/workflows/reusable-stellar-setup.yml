@@ -1,5 +1,30 @@
 # Reusable workflow: install Stellar CLI, configure testnet, and create a funded identity.
 # Callable from this repo or sibling repos (ILN-Smart-Contract, ILN-Frontend).
+#
+# Contract
+# ─────────────────────────────────────────────────────────────────────────────
+# Inputs (all optional — safe defaults for this repo):
+#   identity-name       string  Stellar identity alias       (default: ci-test)
+#   network             string  Stellar network name          (default: testnet)
+#   fund-identity       bool    Fund via Friendbot?           (default: true)
+#   horizon-url         string  Horizon base URL              (default: https://horizon-testnet.stellar.org)
+#   rpc-url             string  Soroban RPC URL               (default: https://soroban-testnet.stellar.org)
+#   network-passphrase  string  Network passphrase            (default: Test SDF Network ; September 2015)
+#   stellar-cli-features string Cargo features for CLI build  (default: '')
+#
+# Outputs:
+#   identity-name  string  Identity alias used
+#   public-key     string  G-address of the funded identity
+#   network        string  Network alias configured
+#
+# Side effects:
+#   - Installs stellar-cli via cargo (cached across runs)
+#   - Registers and selects the Stellar network
+#   - Generates and optionally funds a testnet identity
+#   - Verifies Horizon connectivity
+#
+# Consumers: sdk-e2e-local-node.yml, ci.yml
+# ─────────────────────────────────────────────────────────────────────────────
 name: Reusable Stellar setup
 
 on:
@@ -34,12 +59,12 @@ on:
         description: Network passphrase for custom testnet registration
         required: false
         type: string
-        default: "Test SDF Network ; September 2015"
+        default: 'Test SDF Network ; September 2015'
       stellar-cli-features:
         description: Cargo features passed to stellar-cli install
         required: false
         type: string
-        default: opt
+        default: ''
     outputs:
       identity-name:
         description: Identity alias created or reused in the Stellar CLI config
@@ -58,7 +83,7 @@ permissions:
 jobs:
   setup:
     name: Stellar CLI and testnet identity
-    runs-on: namespace-profile-nursca
+    runs-on: ubuntu-latest
     outputs:
       identity-name: ${{ steps.identity.outputs.identity-name }}
       public-key: ${{ steps.identity.outputs.public-key }}
@@ -82,7 +107,7 @@ jobs:
             ${{ runner.os }}-stellar-cli-
 
       - name: Install Stellar CLI
-        run: cargo install --locked stellar-cli --features ${{ inputs.stellar-cli-features }}
+        run: cargo install --locked stellar-cli ${{ inputs.stellar-cli-features != '' && format('--features {0}', inputs.stellar-cli-features) || '' }}
 
       - name: Configure Stellar network
         id: network

@@ -1,31 +1,32 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
-import { SimulationError } from "./errors";
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { SimulationError } from './errors';
 
-vi.mock("@stellar/stellar-sdk", () => {
+vi.mock('@stellar/stellar-sdk', () => {
   class MockTransactionBuilder {
     addOperation = vi.fn().mockReturnThis();
     setTimeout = vi.fn().mockReturnThis();
     setFee = vi.fn().mockReturnThis();
     build = vi.fn().mockReturnValue({
-      toXDR: vi.fn().mockReturnValue("mock-xdr"),
+      toXDR: vi.fn().mockReturnValue('mock-xdr'),
     });
+    static cloneFrom = vi.fn().mockImplementation(() => new MockTransactionBuilder());
   }
 
   return {
     TransactionBuilder: MockTransactionBuilder,
-    Networks: { TESTNET: "Test SDF Network ; September 2015" },
+    Networks: { TESTNET: 'Test SDF Network ; September 2015' },
   };
 });
 
-import { ILNTransactionBuilder } from "./transaction";
-import type { RpcClient } from "./transaction";
+import { ILNTransactionBuilder } from './transaction';
+import type { RpcClient } from './transaction';
 
 function createMockRpcClient(overrides?: Partial<RpcClient>): RpcClient {
   return {
     getAccount: vi.fn().mockResolvedValue({
-      accountId: () => "GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF",
-      sequenceNumber: () => "0",
-      sequence: () => "0",
+      accountId: () => 'GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF',
+      sequenceNumber: () => '0',
+      sequence: () => '0',
     }),
     simulateTransaction: vi.fn().mockResolvedValue({
       success: true,
@@ -37,7 +38,7 @@ function createMockRpcClient(overrides?: Partial<RpcClient>): RpcClient {
   };
 }
 
-describe("ILNTransactionBuilder", () => {
+describe('ILNTransactionBuilder', () => {
   let mockRpc: RpcClient;
 
   beforeEach(() => {
@@ -45,10 +46,10 @@ describe("ILNTransactionBuilder", () => {
     mockRpc = createMockRpcClient();
   });
 
-  it("should build a transaction with simulation", async () => {
+  it('should build a transaction with simulation', async () => {
     const builder = new ILNTransactionBuilder(mockRpc);
     const { transaction, simulation } = await builder.buildTransaction([], {
-      sourceAccount: "GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF",
+      sourceAccount: 'GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF',
     });
 
     expect(transaction).toBeDefined();
@@ -56,11 +57,11 @@ describe("ILNTransactionBuilder", () => {
     expect(mockRpc.simulateTransaction).toHaveBeenCalled();
   });
 
-  it("should cache successful simulations", async () => {
+  it('should cache successful simulations', async () => {
     const builder = new ILNTransactionBuilder(mockRpc);
 
     const tx1 = await builder.buildTransaction([], {
-      sourceAccount: "GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF",
+      sourceAccount: 'GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF',
     });
 
     const sim2 = await builder.simulateWithCache(tx1.transaction);
@@ -69,22 +70,22 @@ describe("ILNTransactionBuilder", () => {
     expect(mockRpc.simulateTransaction).toHaveBeenCalledTimes(1);
   });
 
-  it("should return cached simulation on second call", async () => {
+  it('should return cached simulation on second call', async () => {
     const builder = new ILNTransactionBuilder(mockRpc);
 
     const tx1 = await builder.buildTransaction([], {
-      sourceAccount: "GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF",
+      sourceAccount: 'GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF',
     });
     const sim2 = await builder.simulateWithCache(tx1.transaction);
 
     expect(sim2.cached).toBe(true);
   });
 
-  it("should estimate cost correctly", async () => {
+  it('should estimate cost correctly', async () => {
     const builder = new ILNTransactionBuilder(mockRpc);
 
     const cost = await builder.estimateCost([], {
-      sourceAccount: "GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF",
+      sourceAccount: 'GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF',
       baseFee: 100,
       maxFee: 500,
     });
@@ -95,7 +96,7 @@ describe("ILNTransactionBuilder", () => {
     expect(cost.resources).toBeDefined();
   });
 
-  it("should detect when cost exceeds budget", async () => {
+  it('should detect when cost exceeds budget', async () => {
     const rpc = createMockRpcClient({
       simulateTransaction: vi.fn().mockResolvedValue({
         success: true,
@@ -108,7 +109,7 @@ describe("ILNTransactionBuilder", () => {
     const builder = new ILNTransactionBuilder(rpc);
 
     const cost = await builder.estimateCost([], {
-      sourceAccount: "GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF",
+      sourceAccount: 'GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF',
       baseFee: 100,
       maxFee: 500,
     });
@@ -116,33 +117,35 @@ describe("ILNTransactionBuilder", () => {
     expect(cost.withinBudget).toBe(false);
   });
 
-  it("should throw SimulationError on force submit with failed simulation", async () => {
+  it('should throw SimulationError on force submit with failed simulation', async () => {
     const rpc = createMockRpcClient({
       simulateTransaction: vi.fn().mockResolvedValue({
         success: false,
-        error: "Contract error",
+        error: 'Contract error',
       }),
     });
 
     const builder = new ILNTransactionBuilder(rpc);
 
     await expect(
-      builder.forceSubmit([], { sourceAccount: "GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF" })
+      builder.forceSubmit([], {
+        sourceAccount: 'GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF',
+      })
     ).rejects.toThrow(SimulationError);
   });
 
-  it("should succeed force submit with passing simulation", async () => {
+  it('should succeed force submit with passing simulation', async () => {
     const builder = new ILNTransactionBuilder(mockRpc);
 
     const { transaction, simulation } = await builder.forceSubmit([], {
-      sourceAccount: "GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF",
+      sourceAccount: 'GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF',
     });
 
     expect(transaction).toBeDefined();
     expect(simulation.success).toBe(true);
   });
 
-  it("should validate before submit and throw on failure", () => {
+  it('should validate before submit and throw on failure', () => {
     const builder = new ILNTransactionBuilder(mockRpc);
 
     expect(() => {
@@ -151,12 +154,12 @@ describe("ILNTransactionBuilder", () => {
         fee: 0,
         resources: { cpu: 0, memory: 0, readBytes: 0, writeBytes: 0 },
         minResourceFee: 100,
-        error: "Contract error",
+        error: 'Contract error',
       });
     }).toThrow(SimulationError);
   });
 
-  it("should validate before submit and pass on success", () => {
+  it('should validate before submit and pass on success', () => {
     const builder = new ILNTransactionBuilder(mockRpc);
 
     expect(() => {
@@ -169,11 +172,11 @@ describe("ILNTransactionBuilder", () => {
     }).not.toThrow();
   });
 
-  it("should clear cache", async () => {
+  it('should clear cache', async () => {
     const builder = new ILNTransactionBuilder(mockRpc);
 
     const tx1 = await builder.buildTransaction([], {
-      sourceAccount: "GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF",
+      sourceAccount: 'GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF',
     });
 
     await builder.simulateWithCache(tx1.transaction);
@@ -183,22 +186,22 @@ describe("ILNTransactionBuilder", () => {
     expect(builder.cacheSize).toBe(0);
   });
 
-  it("should handle simulation errors gracefully", async () => {
+  it('should handle simulation errors gracefully', async () => {
     const rpc = createMockRpcClient({
-      simulateTransaction: vi.fn().mockRejectedValue(new Error("Network error")),
+      simulateTransaction: vi.fn().mockRejectedValue(new Error('Network error')),
     });
 
     const builder = new ILNTransactionBuilder(rpc);
 
     const { simulation } = await builder.buildTransaction([], {
-      sourceAccount: "GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF",
+      sourceAccount: 'GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF',
     });
 
     expect(simulation.success).toBe(false);
-    expect(simulation.error).toBe("Network error");
+    expect(simulation.error).toBe('Network error');
   });
 
-  it("should cap fee at maxFee", async () => {
+  it('should cap fee at maxFee', async () => {
     const rpc = createMockRpcClient({
       simulateTransaction: vi.fn().mockResolvedValue({
         success: true,
@@ -211,7 +214,7 @@ describe("ILNTransactionBuilder", () => {
     const builder = new ILNTransactionBuilder(rpc);
 
     const { simulation } = await builder.buildTransaction([], {
-      sourceAccount: "GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF",
+      sourceAccount: 'GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF',
       baseFee: 100,
       maxFee: 500,
     });
@@ -220,20 +223,22 @@ describe("ILNTransactionBuilder", () => {
   });
 });
 
-describe("SimulationError", () => {
-  it("should have correct code and remediation", () => {
-    const error = new SimulationError("test message", "test remediation");
+describe('SimulationError', () => {
+  it('should have correct code and remediation', () => {
+    const error = new SimulationError('test message', 'test remediation');
 
-    expect(error.code).toBe("SIMULATION_FAILED");
-    expect(error.message).toBe("test message");
-    expect(error.remediation).toBe("test remediation");
+    expect(error.code).toBe('SIMULATION_FAILED');
+    expect(error.message).toBe('test message');
+    expect(error.remediation).toBe('test remediation');
     expect(error).toBeInstanceOf(Error);
   });
 
-  it("should have default messages", () => {
+  it('should have default messages', () => {
     const error = new SimulationError();
 
-    expect(error.message).toBe("Transaction simulation failed.");
-    expect(error.remediation).toBe("Review transaction parameters and contract state.");
+    expect(error.message).toBe('Transaction simulation failed.');
+    expect(error.remediation).toBe(
+      'The SDK could not simulate the transaction successfully. Review transaction parameters and ensure contract state is consistent before retrying.'
+    );
   });
 });

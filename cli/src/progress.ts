@@ -3,9 +3,16 @@
  *
  * Supports TTY animation with clean completion; falls back to plain status
  * lines when stdout is not a TTY (tests, pipes, CI).
+ *
+ * Exports:
+ *   createSpinner            — indeterminate spinner for unknown-duration ops
+ *   createProgressBar        — determinate bar with ETA for multi-step ops
+ *   withSpinner              — async wrapper that stops the spinner on resolve/reject
+ *   withProgressBar          — async wrapper that stops the bar on resolve/reject
+ *   createTransactionProgress — 4-step bar (build → simulate → sign → submit)
  */
 
-import pc from "picocolors";
+import pc from 'picocolors';
 
 export interface ProgressOptions {
   /** Output stream (defaults to process.stdout). */
@@ -38,9 +45,38 @@ export interface ProgressBar {
   stop(): void;
 }
 
-const SPINNER_FRAMES = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
+/**
+ * A fixed 4-phase transaction progress handle.
+ * Call each phase method in order, then `succeed` or `fail`.
+ */
+export interface TransactionProgress {
+  /** Mark the "building transaction" phase complete and advance to simulate. */
+  built(): void;
+  /** Mark the "simulating" phase complete and advance to sign. */
+  simulated(): void;
+  /** Mark the "signing" phase complete and advance to submit. */
+  signed(): void;
+  /** Mark all phases complete and print a green success line. */
+  succeed(message?: string): void;
+  /** Abort and print a red failure line. */
+  fail(message?: string): void;
+}
+
+// ---------------------------------------------------------------------------
+// Internal constants
+// ---------------------------------------------------------------------------
+
+const SPINNER_FRAMES = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'];
 const SPINNER_INTERVAL_MS = 80;
 const BAR_WIDTH = 24;
+
+/** Labels for each of the 4 transaction steps. */
+const TX_STEPS = ['Building', 'Simulating', 'Signing', 'Submitting'] as const;
+const TX_TOTAL = TX_STEPS.length;
+
+// ---------------------------------------------------------------------------
+// Internal helpers
+// ---------------------------------------------------------------------------
 
 function resolveEnabled(options?: ProgressOptions): boolean {
   if (options?.enabled === false) return false;
@@ -53,7 +89,35 @@ function writeLine(output: NodeJS.WritableStream, line: string): void {
 }
 
 function clearLine(output: NodeJS.WritableStream, width: number): void {
-  output.write(`\r${" ".repeat(width)}\r`);
+  output.write(`\r${' '.repeat(width)}\r`);
+}
+
+/**
+ * Format elapsed seconds as a human-readable string, e.g. "1.2s" or "1m 03s".
+ */
+function formatElapsed(seconds: number): string {
+  if (seconds < 60) {
+    return `${seconds.toFixed(1)}s`;
+  }
+  const m = Math.floor(seconds / 60);
+  const s = Math.floor(seconds % 60);
+  return `${m}m ${String(s).padStart(2, '0')}s`;
+}
+
+/**
+ * Format an ETA string. Returns empty string when there is not enough data.
+ *
+ * @param current  Number of completed steps.
+ * @param total    Total number of steps.
+ * @param elapsed  Elapsed milliseconds since start.
+ */
+function formatEta(current: number, total: number, elapsed: number): string {
+  if (current <= 0 || total <= 0 || elapsed <= 0) return '';
+  const rate = current / elapsed; // steps per ms
+  const remaining = (total - current) / rate; // ms
+  const etaSec = remaining / 1000;
+  if (etaSec < 0.5) return pc.dim('ETA <1s');
+  return pc.dim(`ETA ${formatElapsed(etaSec)}`);
 }
 
 function formatBar(current: number, total: number): string {
@@ -61,9 +125,13 @@ function formatBar(current: number, total: number): string {
   const filled = Math.round(ratio * BAR_WIDTH);
   const empty = BAR_WIDTH - filled;
   const percent = Math.round(ratio * 100);
-  const bar = `${pc.green("█".repeat(filled))}${pc.dim("░".repeat(empty))}`;
+  const bar = `${pc.green('█'.repeat(filled))}${pc.dim('░'.repeat(empty))}`;
   return `[${bar}] ${pc.bold(String(percent).padStart(3))}% (${current}/${total})`;
 }
+
+// ---------------------------------------------------------------------------
+// Public API
+// ---------------------------------------------------------------------------
 
 /**
  * Start an indeterminate spinner for long-running operations.
@@ -117,14 +185,14 @@ export function createSpinner(message: string, options?: ProgressOptions): Spinn
       if (animated) {
         renderLine();
       } else if (!silent) {
-        writeLine(output, `${pc.cyan("→")} ${nextMessage}`);
+        writeLine(output, `${pc.cyan('→')} ${nextMessage}`);
       }
     },
     succeed(message?: string) {
-      finish(message ? `${pc.green("✓")} ${message}` : undefined);
+      finish(message ? `${pc.green('✓')} ${message}` : undefined);
     },
     fail(message?: string) {
-      finish(message ? `${pc.red("✗")} ${message}` : undefined);
+      finish(message ? `${pc.red('✗')} ${message}` : undefined);
     },
     stop() {
       finish();
@@ -134,11 +202,14 @@ export function createSpinner(message: string, options?: ProgressOptions): Spinn
 
 /**
  * Start a determinate progress bar for multi-step operations.
+ *
+ * The bar automatically tracks elapsed time and computes an ETA after the
+ * first step completes.
  */
 export function createProgressBar(
   total: number,
   message: string,
-  options?: ProgressOptions,
+  options?: ProgressOptions
 ): ProgressBar {
   const output = options?.output ?? process.stdout;
   const silent = options?.enabled === false;
@@ -146,8 +217,15 @@ export function createProgressBar(
   let messageText = message;
   let current = 0;
   let active = true;
+  const startedAt = Date.now();
 
-  const render = (): string => `${formatBar(current, total)} ${messageText}`;
+  const render = (): string => {
+    const elapsed = Date.now() - startedAt;
+    const eta = formatEta(current, total, elapsed);
+    const bar = formatBar(current, total);
+    const elapsedStr = elapsed >= 500 ? pc.dim(` [${formatElapsed(elapsed / 1000)}]`) : '';
+    return `${bar} ${messageText}${elapsedStr}${eta ? `  ${eta}` : ''}`;
+  };
 
   const paint = (): void => {
     if (!active) return;
@@ -166,7 +244,8 @@ export function createProgressBar(
     if (!active) return;
     active = false;
     if (animated) {
-      clearLine(output, messageText.length + BAR_WIDTH + 24);
+      // Clear enough width to cover the widest possible rendered line
+      clearLine(output, messageText.length + BAR_WIDTH + 48);
     }
     if (line && !silent) writeLine(output, line);
   };
@@ -191,10 +270,10 @@ export function createProgressBar(
     },
     succeed(message?: string) {
       if (current < total) setProgress(total);
-      finish(message ? `${pc.green("✓")} ${message}` : undefined);
+      finish(message ? `${pc.green('✓')} ${message}` : undefined);
     },
     fail(message?: string) {
-      finish(message ? `${pc.red("✗")} ${message}` : undefined);
+      finish(message ? `${pc.red('✗')} ${message}` : undefined);
     },
     stop() {
       finish();
@@ -203,17 +282,69 @@ export function createProgressBar(
 }
 
 /**
+ * Create a 4-phase transaction progress bar: Build → Simulate → Sign → Submit.
+ *
+ * Usage:
+ * ```ts
+ * const tx = createTransactionProgress("Submitting invoice", options);
+ * // ... build transaction
+ * tx.built();
+ * // ... simulate
+ * tx.simulated();
+ * // ... sign
+ * tx.signed();
+ * // ... broadcast
+ * tx.succeed("Invoice 42 submitted in tx abc…");
+ * ```
+ */
+export function createTransactionProgress(
+  label: string,
+  options?: ProgressOptions
+): TransactionProgress {
+  const bar = createProgressBar(TX_TOTAL, `${label} — ${TX_STEPS[0]}…`, options);
+
+  return {
+    built() {
+      bar.increment(1, `${label} — ${TX_STEPS[1]}…`);
+    },
+    simulated() {
+      bar.increment(1, `${label} — ${TX_STEPS[2]}…`);
+    },
+    signed() {
+      bar.increment(1, `${label} — ${TX_STEPS[3]}…`);
+    },
+    succeed(message?: string) {
+      bar.succeed(message);
+    },
+    fail(message?: string) {
+      bar.fail(message ?? `${label} failed`);
+    },
+  };
+}
+
+/**
  * Run `fn` behind a spinner that stops on success or failure.
+ *
+ * @param message      Initial spinner message.
+ * @param fn           Async work to perform.
+ * @param options      Progress options (output stream, enabled flag).
+ * @param successMsg   Optional message to print on success. When omitted the
+ *                     spinner simply disappears without a completion line.
  */
 export async function withSpinner<T>(
   message: string,
   fn: () => Promise<T>,
   options?: ProgressOptions,
+  successMsg?: string
 ): Promise<T> {
   const spinner = createSpinner(message, options);
   try {
     const result = await fn();
-    spinner.stop();
+    if (successMsg) {
+      spinner.succeed(successMsg);
+    } else {
+      spinner.stop();
+    }
     return result;
   } catch (error) {
     spinner.fail(message);
@@ -228,7 +359,7 @@ export async function withProgressBar<T>(
   total: number,
   message: string,
   fn: (bar: ProgressBar) => Promise<T>,
-  options?: ProgressOptions,
+  options?: ProgressOptions
 ): Promise<T> {
   const bar = createProgressBar(total, message, options);
   try {

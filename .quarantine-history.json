@@ -1,0 +1,10 @@
+{
+  "version": "1.0.0",
+  "last_updated": "2025-09-26T00:00:00Z",
+  "quarantine_metadata": {
+    "monitoring_window_runs": 10,
+    "re_quarantine_flake_threshold": 2,
+    "report_schedule": "quarterly"
+  },
+  "quarantined_tests": {}
+}

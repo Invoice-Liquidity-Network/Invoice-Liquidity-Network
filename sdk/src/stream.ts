@@ -1,6 +1,21 @@
-import type { ContractEvent } from "./types";
+/**
+ * A minimally-parsed Soroban RPC/Horizon contract event as delivered over
+ * the raw SSE stream — before any invoice-domain decoding. Distinct from
+ * `@iln/shared`'s `ContractEvent`, which is the already-decoded, invoice-
+ * domain-specific discriminated union.
+ */
+export interface RawContractEvent {
+  contractId: string;
+  type: string;
+  topics: unknown[];
+  value: unknown;
+  ledger: number;
+  ledgerClosedAt: string;
+  txHash: string;
+  pagingToken: string;
+}
 
-type OnEvent = (e: ContractEvent) => void | Promise<void>;
+type OnEvent = (e: RawContractEvent) => void | Promise<void>;
 type OnError = (err: Error) => void | undefined;
 
 /**
@@ -47,12 +62,15 @@ export class SSEStream {
     if (this.closed) return;
 
     this.controller = new AbortController();
-    const sseUrl = this.url.includes("?") ? `${this.url}&accept=text/event-stream` : `${this.url}?accept=text/event-stream`;
+    const sseUrl = this.url.includes('?')
+      ? `${this.url}&accept=text/event-stream`
+      : `${this.url}?accept=text/event-stream`;
 
-    globalThis.fetch(sseUrl, {
-      signal: this.controller.signal,
-      headers: { Accept: "text/event-stream" },
-    })
+    globalThis
+      .fetch(sseUrl, {
+        signal: this.controller.signal,
+        headers: { Accept: 'text/event-stream' },
+      })
       .then(async (res) => {
         if (!res.ok || !res.body) {
           throw new Error(`SSE stream failed: HTTP ${res.status}`);
@@ -60,31 +78,32 @@ export class SSEStream {
 
         const reader = res.body.getReader();
         const decoder = new TextDecoder();
-        let buffer = "";
+        let buffer = '';
 
+        // eslint-disable-next-line no-constant-condition -- reads until the stream signals done
         while (true) {
           const { done, value } = await reader.read();
           if (done) break;
 
           buffer += decoder.decode(value, { stream: true });
-          const lines = buffer.split("\n");
-          buffer = lines.pop() ?? "";
+          const lines = buffer.split('\n');
+          buffer = lines.pop() ?? '';
 
           for (const line of lines) {
-            if (line.startsWith("data:")) {
+            if (line.startsWith('data:')) {
               const data = line.slice(5).trim();
-              if (data === "" || data === '"hello"') continue;
+              if (data === '' || data === '"hello"') continue;
               try {
                 const raw = JSON.parse(data) as Record<string, unknown>;
-                const ev: ContractEvent = {
-                  contractId: (raw.contract_id as string) ?? "",
-                  type: (raw.type as string) ?? "",
+                const ev: RawContractEvent = {
+                  contractId: (raw.contract_id as string) ?? '',
+                  type: (raw.type as string) ?? '',
                   topics: (raw.topics as unknown[]) ?? [],
                   value: raw.value ?? null,
                   ledger: (raw.ledger as number) ?? 0,
-                  ledgerClosedAt: (raw.ledger_closed_at as string) ?? "",
-                  txHash: (raw.tx_hash as string) ?? "",
-                  pagingToken: (raw.paging_token as string) ?? "",
+                  ledgerClosedAt: (raw.ledger_closed_at as string) ?? '',
+                  txHash: (raw.tx_hash as string) ?? '',
+                  pagingToken: (raw.paging_token as string) ?? '',
                 };
 
                 await this.onEvent(ev);
@@ -100,7 +119,7 @@ export class SSEStream {
         if (!this.closed) this.scheduleReconnect();
       })
       .catch((err: Error) => {
-        if (err.name === "AbortError") return;
+        if (err.name === 'AbortError') return;
         this.onError?.(err);
         this.scheduleReconnect();
       });

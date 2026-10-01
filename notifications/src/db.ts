@@ -1,13 +1,15 @@
-import Database from "better-sqlite3";
-import { CONFIG } from "./config";
+import Database from 'better-sqlite3';
+import { createHash } from 'crypto';
+import { CONFIG } from './config';
 import type {
   ILNEventType,
   Invoice,
+  NotificationPayload,
   NotificationTrigger,
   Subscription,
   SubscriptionChannel,
   WebhookDeliveryLog,
-} from "./types";
+} from './types';
 
 type SQLiteDatabase = InstanceType<typeof Database>;
 
@@ -22,8 +24,8 @@ export function getDb(): SQLiteDatabase {
 
 export function createDb(path: string): SQLiteDatabase {
   const db = new Database(path);
-  db.pragma("journal_mode = WAL");
-  db.pragma("foreign_keys = ON");
+  db.pragma('journal_mode = WAL');
+  db.pragma('foreign_keys = ON');
   runMigrations(db);
   return db;
 }
@@ -32,7 +34,60 @@ export function setDb(db: SQLiteDatabase): void {
   _db = db;
 }
 
+/**
+ * Idempotently add a column to an existing table.
+ *
+ * SQLite has no `ALTER TABLE ... ADD COLUMN IF NOT EXISTS`, so existence is
+ * probed with `PRAGMA table_info` first. Called from {@link runMigrations}
+ * before the canonical `CREATE TABLE IF NOT EXISTS` block, which means:
+ * - a fresh database never reaches an ALTER (the table does not exist yet and
+ *   is created with every column by the block below), and
+ * - a database created by an older schema version is upgraded in place.
+ */
+function addColumnIfMissing(
+  db: SQLiteDatabase,
+  table: string,
+  column: string,
+  declaration: string
+): void {
+  const columns = db.prepare(`PRAGMA table_info(${table})`).all() as { name: string }[];
+  if (columns.length === 0) {
+    return; // table does not exist yet; created further down
+  }
+  if (columns.some((existing) => existing.name === column)) {
+    return;
+  }
+  db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${declaration}`);
+}
+
+/**
+ * Issue #1059: `dispatch_attempts` started life (on the in-flight feature
+ * branch) as a five-column queue with no dedup key and no failure counters.
+ * Backfill those columns so the at-least-once guarantees — the `dedup_key`
+ * UNIQUE index, the `attempts`/`last_error` observability and `delivered_at` —
+ * apply to databases that already exist, without a destructive rebuild.
+ *
+ * The added columns are nullable-with-defaults rather than `NOT NULL` because
+ * legacy rows cannot be given a meaningful dedup key after the fact; new rows
+ * always write one, and the UNIQUE index treats the legacy NULLs as distinct.
+ */
+function upgradeDispatchAttemptsTable(db: SQLiteDatabase): void {
+  addColumnIfMissing(db, 'dispatch_attempts', 'dedup_key', 'TEXT');
+  addColumnIfMissing(db, 'dispatch_attempts', 'invoice_id', 'INTEGER NOT NULL DEFAULT 0');
+  addColumnIfMissing(db, 'dispatch_attempts', 'trigger', "TEXT NOT NULL DEFAULT ''");
+  addColumnIfMissing(db, 'dispatch_attempts', 'recipient_address', "TEXT NOT NULL DEFAULT ''");
+  addColumnIfMissing(db, 'dispatch_attempts', 'channel', "TEXT NOT NULL DEFAULT ''");
+  addColumnIfMissing(db, 'dispatch_attempts', 'destination', "TEXT NOT NULL DEFAULT ''");
+  addColumnIfMissing(db, 'dispatch_attempts', 'event_id', "TEXT NOT NULL DEFAULT ''");
+  addColumnIfMissing(db, 'dispatch_attempts', 'attempts', 'INTEGER NOT NULL DEFAULT 0');
+  addColumnIfMissing(db, 'dispatch_attempts', 'last_error', 'TEXT');
+  addColumnIfMissing(db, 'dispatch_attempts', 'updated_at', 'INTEGER NOT NULL DEFAULT 0');
+  addColumnIfMissing(db, 'dispatch_attempts', 'delivered_at', 'INTEGER');
+}
+
 function runMigrations(db: SQLiteDatabase): void {
+  upgradeDispatchAttemptsTable(db);
+
   db.exec(`
     CREATE TABLE IF NOT EXISTS invoices (
       id            INTEGER PRIMARY KEY,
@@ -73,6 +128,37 @@ function runMigrations(db: SQLiteDatabase): void {
       created_at      INTEGER NOT NULL
     );
 
+    -- Issue #1059 at-least-once dispatch journal. One row per delivery intent,
+    -- written durably BEFORE the provider is contacted. dedup_key is the natural
+    -- identity of a notification (invoice + trigger + recipient + channel +
+    -- destination + event) and is enforced by the UNIQUE index below, so a
+    -- retried or duplicated enqueue collapses onto the existing row instead of
+    -- creating a second dispatch. Rows are never deleted on success: status
+    -- moves pending -> delivered, attempts/last_error record what the row cost,
+    -- and a row still pending is work the poller flush retries.
+    -- event_id uses '' (not NULL) when the notification is not tied to a chain
+    -- event, because NULL never collides in a SQLite UNIQUE index and would
+    -- silently disable dedup for scheduled triggers.
+    CREATE TABLE IF NOT EXISTS dispatch_attempts (
+      id                TEXT    PRIMARY KEY,
+      dedup_key         TEXT    NOT NULL,
+      invoice_id        INTEGER NOT NULL,
+      trigger           TEXT    NOT NULL,
+      recipient_address TEXT    NOT NULL,
+      channel           TEXT    NOT NULL,
+      destination       TEXT    NOT NULL,
+      event_id          TEXT    NOT NULL DEFAULT '',
+      subscription      TEXT    NOT NULL,
+      payload           TEXT    NOT NULL,
+      status            TEXT    NOT NULL DEFAULT 'pending'
+                        CHECK (status IN ('pending', 'delivered', 'failed')),
+      attempts          INTEGER NOT NULL DEFAULT 0,
+      last_error        TEXT,
+      created_at        INTEGER NOT NULL,
+      updated_at        INTEGER NOT NULL DEFAULT 0,
+      delivered_at      INTEGER
+    );
+
     CREATE TABLE IF NOT EXISTS sent_notifications (
       id                INTEGER PRIMARY KEY,
       invoice_id        INTEGER NOT NULL,
@@ -101,6 +187,26 @@ function runMigrations(db: SQLiteDatabase): void {
       FOREIGN KEY(subscription_id) REFERENCES subscriptions(id)
     );
 
+    -- Durable, queryable delivery-confirmation audit log. Independent of
+    -- transient dispatch-retry state (webhook_delivery_logs) and dedup table
+    -- (sent_notifications). One row per confirmed delivery outcome, whether
+    -- delivered or permanently failed, with attempt timestamps and final status.
+    CREATE TABLE IF NOT EXISTS delivery_audit_log (
+      id                 INTEGER PRIMARY KEY,
+      invoice_id         INTEGER NOT NULL,
+      trigger            TEXT    NOT NULL,
+      recipient_address  TEXT    NOT NULL,
+      channel            TEXT    NOT NULL CHECK (channel IN ('email', 'webhook', 'sms', 'websocket')),
+      destination        TEXT    NOT NULL,
+      event_id           TEXT,
+      status             TEXT    NOT NULL CHECK (status IN ('pending', 'delivered', 'failed')),
+      attempts           INTEGER NOT NULL,
+      last_error         TEXT,
+      attempt_timestamps TEXT    NOT NULL,
+      created_at         INTEGER NOT NULL,
+      updated_at         INTEGER NOT NULL
+    );
+
     CREATE INDEX IF NOT EXISTS idx_invoices_status     ON invoices(status);
     CREATE INDEX IF NOT EXISTS idx_invoices_freelancer ON invoices(freelancer);
     CREATE INDEX IF NOT EXISTS idx_invoices_payer      ON invoices(payer);
@@ -108,10 +214,25 @@ function runMigrations(db: SQLiteDatabase): void {
     CREATE INDEX IF NOT EXISTS idx_events_invoice_id   ON events(invoice_id);
     CREATE INDEX IF NOT EXISTS idx_subscriptions_address ON subscriptions(stellar_address);
     CREATE INDEX IF NOT EXISTS idx_sent_notifications_invoice ON sent_notifications(invoice_id);
+    -- The dedup key is the whole at-least-once story: enqueue uses INSERT OR
+    -- IGNORE, so a second enqueue of the same notification is a no-op rather
+    -- than a second dispatch. Runs after upgradeDispatchAttemptsTable() has
+    -- backfilled the column on pre-existing databases.
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_dispatch_attempts_dedup ON dispatch_attempts(dedup_key);
+    -- The pending work queue is read on every poll; keep the scan cheap and
+    -- deterministically ordered.
+    CREATE INDEX IF NOT EXISTS idx_dispatch_attempts_pending ON dispatch_attempts(status, created_at);
+    CREATE INDEX IF NOT EXISTS idx_dispatch_attempts_invoice ON dispatch_attempts(invoice_id);
+    CREATE INDEX IF NOT EXISTS idx_audit_recipient     ON delivery_audit_log(recipient_address);
+    CREATE INDEX IF NOT EXISTS idx_audit_event         ON delivery_audit_log(event_id);
+    CREATE INDEX IF NOT EXISTS idx_audit_created       ON delivery_audit_log(created_at);
+    CREATE INDEX IF NOT EXISTS idx_audit_trigger       ON delivery_audit_log(trigger);
+    CREATE INDEX IF NOT EXISTS idx_audit_channel       ON delivery_audit_log(channel);
+    CREATE INDEX IF NOT EXISTS idx_audit_status        ON delivery_audit_log(status);
 
     -- Issue #741 compliance: ensure one-click unsubscribe tokens are
     -- single-use. The nonce is recorded here on successful verify; a
-    -- replay attempts an INSERT OR IGNORE that returns `changes = 0`
+    -- replay attempts an INSERT OR IGNORE that returns changes = 0
     -- and is rejected with HTTP 409.
     CREATE TABLE IF NOT EXISTS redeemed_unsubscribe_tokens (
       nonce       TEXT    PRIMARY KEY,
@@ -120,9 +241,7 @@ function runMigrations(db: SQLiteDatabase): void {
   `);
 }
 
-export function upsertInvoice(
-  invoice: Omit<Invoice, "created_at" | "updated_at">,
-): void {
+export function upsertInvoice(invoice: Omit<Invoice, 'created_at' | 'updated_at'>): void {
   const now = Date.now();
   getDb()
     .prepare(
@@ -136,7 +255,7 @@ export function upsertInvoice(
          status    = excluded.status,
          funder    = excluded.funder,
          funded_at = excluded.funded_at,
-         updated_at = excluded.updated_at`,
+         updated_at = excluded.updated_at`
     )
     .run({
       ...invoice,
@@ -147,23 +266,14 @@ export function upsertInvoice(
     });
 }
 
-export function getInvoiceById(id: number): Invoice | undefined {
-  return getDb().prepare("SELECT * FROM invoices WHERE id = ?").get(id) as
-    | Invoice
-    | undefined;
-}
-
 export function queryInvoicesByStatus(status: string): Invoice[] {
   return getDb()
-    .prepare("SELECT * FROM invoices WHERE status = ? ORDER BY id ASC")
+    .prepare('SELECT * FROM invoices WHERE status = ? ORDER BY id ASC')
     .all(status) as Invoice[];
 }
 
 export function hasEvent(eventId: string): boolean {
-  return (
-    getDb().prepare("SELECT 1 FROM events WHERE event_id = ?").get(eventId) !==
-    undefined
-  );
+  return getDb().prepare('SELECT 1 FROM events WHERE event_id = ?').get(eventId) !== undefined;
 }
 
 export function insertEvent(event: {
@@ -179,15 +289,15 @@ export function insertEvent(event: {
       `INSERT OR IGNORE INTO events
          (event_id, event_type, invoice_id, ledger, ledger_closed_at, created_at)
        VALUES
-         (@event_id, @event_type, @invoice_id, @ledger, @ledger_closed_at, @created_at)`,
+         (@event_id, @event_type, @invoice_id, @ledger, @ledger_closed_at, @created_at)`
     )
     .run(event);
 }
 
 export function getCursorLedger(): number {
-  const row = getDb()
-    .prepare("SELECT last_ledger FROM cursor WHERE id = 1")
-    .get() as { last_ledger: number } | undefined;
+  const row = getDb().prepare('SELECT last_ledger FROM cursor WHERE id = 1').get() as
+    | { last_ledger: number }
+    | undefined;
   return row?.last_ledger ?? 0;
 }
 
@@ -198,20 +308,20 @@ export function setCursorLedger(ledger: number): void {
        VALUES (1, ?, ?)
        ON CONFLICT(id) DO UPDATE SET
          last_ledger = excluded.last_ledger,
-         updated_at  = excluded.updated_at`,
+         updated_at  = excluded.updated_at`
     )
     .run(ledger, Date.now());
 }
 
 export function createSubscription(
-  subscription: Omit<Subscription, "id" | "created_at">,
+  subscription: Omit<Subscription, 'id' | 'created_at'>
 ): Subscription {
   const now = Date.now();
   const result = getDb()
     .prepare(
       `INSERT INTO subscriptions
          (stellar_address, channel, destination, triggers, webhook_secret, created_at)
-       VALUES (?, ?, ?, ?, ?, ?)`,
+       VALUES (?, ?, ?, ?, ?, ?)`
     )
     .run(
       subscription.stellar_address,
@@ -219,7 +329,7 @@ export function createSubscription(
       subscription.destination,
       JSON.stringify(subscription.triggers),
       subscription.webhook_secret ?? null,
-      now,
+      now
     );
 
   return {
@@ -231,9 +341,7 @@ export function createSubscription(
 
 export function getSubscriptionsByAddress(address: string): Subscription[] {
   return getDb()
-    .prepare(
-      "SELECT * FROM subscriptions WHERE stellar_address = ? ORDER BY id ASC",
-    )
+    .prepare('SELECT * FROM subscriptions WHERE stellar_address = ? ORDER BY id ASC')
     .all(address)
     .map((row: any) => ({
       id: row.id,
@@ -247,9 +355,7 @@ export function getSubscriptionsByAddress(address: string): Subscription[] {
 }
 
 export function getSubscriptionById(id: number): Subscription | undefined {
-  const row = getDb()
-    .prepare("SELECT * FROM subscriptions WHERE id = ?")
-    .get(id) as any;
+  const row = getDb().prepare('SELECT * FROM subscriptions WHERE id = ?').get(id) as any;
 
   if (!row) {
     return undefined;
@@ -267,44 +373,17 @@ export function getSubscriptionById(id: number): Subscription | undefined {
 }
 
 export function deleteSubscriptionById(id: number): boolean {
-  const result = getDb()
-    .prepare("DELETE FROM subscriptions WHERE id = ?")
-    .run(id);
+  const result = getDb().prepare('DELETE FROM subscriptions WHERE id = ?').run(id);
   return result.changes > 0;
 }
 
 export function deleteSubscriptionByAddressAndDestination(
   address: string,
-  destination: string,
+  destination: string
 ): boolean {
   const result = getDb()
-    .prepare(
-      "DELETE FROM subscriptions WHERE stellar_address = ? AND destination = ?",
-    )
+    .prepare('DELETE FROM subscriptions WHERE stellar_address = ? AND destination = ?')
     .run(address, destination);
-  return result.changes > 0;
-}
-
-export function updateSubscription(
-  id: number,
-  updates: Partial<Pick<Subscription, "webhook_secret">>,
-): boolean {
-  const fields: string[] = [];
-  const params: any[] = [];
-
-  if (updates.webhook_secret !== undefined) {
-    fields.push("webhook_secret = ?");
-    params.push(updates.webhook_secret);
-  }
-
-  if (fields.length === 0) {
-    return false;
-  }
-
-  params.push(id);
-  const result = getDb()
-    .prepare(`UPDATE subscriptions SET ${fields.join(", ")} WHERE id = ?`)
-    .run(...params);
   return result.changes > 0;
 }
 
@@ -314,7 +393,7 @@ export function createWebhookDeliveryLog(log: {
   trigger: NotificationTrigger;
   invoice_id: number;
   recipient_address: string;
-  status: "pending" | "success" | "failed";
+  status: 'pending' | 'success' | 'failed';
   attempts: number;
   response_status: number | null;
   error: string | null;
@@ -325,7 +404,7 @@ export function createWebhookDeliveryLog(log: {
       `INSERT INTO webhook_delivery_logs
          (subscription_id, event_id, trigger, invoice_id, recipient_address,
           status, attempts, response_status, error, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     )
     .run(
       log.subscription_id,
@@ -338,7 +417,7 @@ export function createWebhookDeliveryLog(log: {
       log.response_status,
       log.error,
       now,
-      now,
+      now
     );
 
   return {
@@ -351,30 +430,25 @@ export function createWebhookDeliveryLog(log: {
 
 export function updateWebhookDeliveryLog(
   id: number,
-  updates: Partial<
-    Pick<
-      WebhookDeliveryLog,
-      "status" | "attempts" | "response_status" | "error"
-    >
-  >,
+  updates: Partial<Pick<WebhookDeliveryLog, 'status' | 'attempts' | 'response_status' | 'error'>>
 ): void {
   const fields: string[] = [];
   const params: any[] = [];
 
   if (updates.status !== undefined) {
-    fields.push("status = ?");
+    fields.push('status = ?');
     params.push(updates.status);
   }
   if (updates.attempts !== undefined) {
-    fields.push("attempts = ?");
+    fields.push('attempts = ?');
     params.push(updates.attempts);
   }
   if (updates.response_status !== undefined) {
-    fields.push("response_status = ?");
+    fields.push('response_status = ?');
     params.push(updates.response_status);
   }
   if (updates.error !== undefined) {
-    fields.push("error = ?");
+    fields.push('error = ?');
     params.push(updates.error);
   }
 
@@ -382,23 +456,19 @@ export function updateWebhookDeliveryLog(
     return;
   }
 
-  fields.push("updated_at = ?");
+  fields.push('updated_at = ?');
   params.push(Date.now());
   params.push(id);
 
   getDb()
-    .prepare(
-      `UPDATE webhook_delivery_logs SET ${fields.join(", ")} WHERE id = ?`,
-    )
+    .prepare(`UPDATE webhook_delivery_logs SET ${fields.join(', ')} WHERE id = ?`)
     .run(...params);
 }
 
-export function getWebhookDeliveryLogs(
-  subscriptionId: number,
-): WebhookDeliveryLog[] {
+export function getWebhookDeliveryLogs(subscriptionId: number): WebhookDeliveryLog[] {
   return getDb()
     .prepare(
-      "SELECT * FROM webhook_delivery_logs WHERE subscription_id = ? ORDER BY created_at DESC",
+      'SELECT * FROM webhook_delivery_logs WHERE subscription_id = ? ORDER BY created_at DESC'
     )
     .all(subscriptionId)
     .map((row: any) => ({
@@ -422,7 +492,7 @@ export function hasSentNotification(
   trigger: NotificationTrigger,
   recipientAddress: string,
   channel: SubscriptionChannel,
-  destination: string,
+  destination: string
 ): boolean {
   return (
     getDb()
@@ -432,10 +502,9 @@ export function hasSentNotification(
            AND trigger = ?
            AND recipient_address = ?
            AND channel = ?
-           AND destination = ?`,
+           AND destination = ?`
       )
-      .get(invoiceId, trigger, recipientAddress, channel, destination) !==
-    undefined
+      .get(invoiceId, trigger, recipientAddress, channel, destination) !== undefined
   );
 }
 
@@ -445,23 +514,15 @@ export function logSentNotification(
   recipientAddress: string,
   channel: SubscriptionChannel,
   destination: string,
-  eventId?: string,
+  eventId?: string
 ): void {
   getDb()
     .prepare(
       `INSERT OR IGNORE INTO sent_notifications
          (invoice_id, trigger, recipient_address, channel, destination, event_id, sent_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+       VALUES (?, ?, ?, ?, ?, ?, ?)`
     )
-    .run(
-      invoiceId,
-      trigger,
-      recipientAddress,
-      channel,
-      destination,
-      eventId ?? null,
-      Date.now(),
-    );
+    .run(invoiceId, trigger, recipientAddress, channel, destination, eventId ?? null, Date.now());
 }
 
 export interface DeliveryAnalytics {
@@ -472,15 +533,15 @@ export interface DeliveryAnalytics {
 
 export function getDeliveryAnalytics(): DeliveryAnalytics {
   const { count: total } = getDb()
-    .prepare("SELECT COUNT(*) as count FROM sent_notifications")
+    .prepare('SELECT COUNT(*) as count FROM sent_notifications')
     .get() as { count: number };
 
   const channelRows = getDb()
-    .prepare("SELECT channel, COUNT(*) as count FROM sent_notifications GROUP BY channel")
+    .prepare('SELECT channel, COUNT(*) as count FROM sent_notifications GROUP BY channel')
     .all() as { channel: string; count: number }[];
 
   const triggerRows = getDb()
-    .prepare("SELECT trigger, COUNT(*) as count FROM sent_notifications GROUP BY trigger")
+    .prepare('SELECT trigger, COUNT(*) as count FROM sent_notifications GROUP BY trigger')
     .all() as { trigger: string; count: number }[];
 
   const byChannel: Record<string, number> = {};
@@ -501,7 +562,7 @@ export interface ChannelComparisonRow {
 
 export function getChannelComparison(): ChannelComparisonRow[] {
   const sentRows = getDb()
-    .prepare("SELECT channel, COUNT(*) as sent FROM sent_notifications GROUP BY channel")
+    .prepare('SELECT channel, COUNT(*) as sent FROM sent_notifications GROUP BY channel')
     .all() as { channel: string; sent: number }[];
 
   const { count: failedWebhook } = getDb()
@@ -509,7 +570,7 @@ export function getChannelComparison(): ChannelComparisonRow[] {
     .get() as { count: number };
 
   return sentRows.map((row) => {
-    const failed = row.channel === "webhook" ? failedWebhook : 0;
+    const failed = row.channel === 'webhook' ? failedWebhook : 0;
     const successRate = row.sent > 0 ? (row.sent - failed) / row.sent : 1;
     return { channel: row.channel, sent: row.sent, failed, successRate };
   });
@@ -525,10 +586,563 @@ export function getTrendAnalytics(days: number): TrendRow[] {
   return getDb()
     .prepare(
       `SELECT date(sent_at / 1000, 'unixepoch') as date, COUNT(*) as count
-       FROM sent_notifications
-       WHERE sent_at >= ?
-       GROUP BY date
-       ORDER BY date ASC`,
+        FROM sent_notifications
+        WHERE sent_at >= ?
+        GROUP BY date
+        ORDER BY date ASC`
     )
     .all(cutoffMs) as TrendRow[];
+}
+
+// ─── Delivery audit log (durable, queryable, independent of retry state) ─────
+
+export interface DeliveryAuditRecord {
+  id: number;
+  invoice_id: number;
+  trigger: NotificationTrigger;
+  recipient_address: string;
+  channel: SubscriptionChannel;
+  destination: string;
+  event_id: string | null;
+  status: 'pending' | 'delivered' | 'failed';
+  attempts: number;
+  last_error: string | null;
+  attempt_timestamps: number[]; // decoded from JSON
+  created_at: number;
+  updated_at: number;
+}
+
+export interface DeliveryAuditFilter {
+  recipient?: string;
+  eventId?: string;
+  trigger?: string;
+  channel?: string;
+  status?: 'pending' | 'delivered' | 'failed';
+  startTime?: number; // ms epoch inclusive
+  endTime?: number; // ms epoch inclusive
+  limit?: number;
+  offset?: number;
+}
+
+export function createDeliveryAuditLog(entry: {
+  invoice_id: number;
+  trigger: NotificationTrigger;
+  recipient_address: string;
+  channel: SubscriptionChannel;
+  destination: string;
+  event_id?: string | null;
+  status: 'pending' | 'delivered' | 'failed';
+  attempts: number;
+  last_error?: string | null;
+  attempt_timestamps: number[];
+}): DeliveryAuditRecord {
+  const now = Date.now();
+  const result = getDb()
+    .prepare(
+      `INSERT INTO delivery_audit_log
+        (invoice_id, trigger, recipient_address, channel, destination, event_id, status, attempts, last_error, attempt_timestamps, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    )
+    .run(
+      entry.invoice_id,
+      entry.trigger,
+      entry.recipient_address,
+      entry.channel,
+      entry.destination,
+      entry.event_id ?? null,
+      entry.status,
+      entry.attempts,
+      entry.last_error ?? null,
+      JSON.stringify(entry.attempt_timestamps),
+      now,
+      now
+    );
+
+  return {
+    id: Number(result.lastInsertRowid),
+    invoice_id: entry.invoice_id,
+    trigger: entry.trigger,
+    recipient_address: entry.recipient_address,
+    channel: entry.channel,
+    destination: entry.destination,
+    event_id: entry.event_id ?? null,
+    status: entry.status,
+    attempts: entry.attempts,
+    last_error: entry.last_error ?? null,
+    attempt_timestamps: entry.attempt_timestamps,
+    created_at: now,
+    updated_at: now,
+  };
+}
+
+export function updateDeliveryAuditLog(
+  id: number,
+  updates: Partial<Pick<DeliveryAuditRecord, 'status' | 'attempts' | 'last_error' | 'attempt_timestamps'>>
+): void {
+  const fields: string[] = [];
+  const params: any[] = [];
+
+  if (updates.status !== undefined) {
+    fields.push('status = ?');
+    params.push(updates.status);
+  }
+  if (updates.attempts !== undefined) {
+    fields.push('attempts = ?');
+    params.push(updates.attempts);
+  }
+  if (updates.last_error !== undefined) {
+    fields.push('last_error = ?');
+    params.push(updates.last_error);
+  }
+  if (updates.attempt_timestamps !== undefined) {
+    fields.push('attempt_timestamps = ?');
+    params.push(JSON.stringify(updates.attempt_timestamps));
+  }
+
+  if (fields.length === 0) return;
+
+  fields.push('updated_at = ?');
+  params.push(Date.now());
+  params.push(id);
+
+  getDb()
+    .prepare(`UPDATE delivery_audit_log SET ${fields.join(', ')} WHERE id = ?`)
+    .run(...params);
+}
+
+export function getDeliveryAuditLogs(filter: DeliveryAuditFilter = {}): DeliveryAuditRecord[] {
+  const clauses: string[] = [];
+  const params: any[] = [];
+
+  if (filter.recipient) {
+    clauses.push('recipient_address = ?');
+    params.push(filter.recipient);
+  }
+  if (filter.eventId) {
+    clauses.push('event_id = ?');
+    params.push(filter.eventId);
+  }
+  if (filter.trigger) {
+    clauses.push('trigger = ?');
+    params.push(filter.trigger);
+  }
+  if (filter.channel) {
+    clauses.push('channel = ?');
+    params.push(filter.channel);
+  }
+  if (filter.status) {
+    clauses.push('status = ?');
+    params.push(filter.status);
+  }
+  if (filter.startTime !== undefined) {
+    clauses.push('created_at >= ?');
+    params.push(filter.startTime);
+  }
+  if (filter.endTime !== undefined) {
+    clauses.push('created_at <= ?');
+    params.push(filter.endTime);
+  }
+
+  const where = clauses.length > 0 ? `WHERE ${clauses.join(' AND ')}` : '';
+  const limit = filter.limit !== undefined ? Math.min(Math.max(filter.limit, 1), 1000) : 100;
+  const offset = filter.offset ?? 0;
+
+  const rows = getDb()
+    .prepare(
+      `SELECT * FROM delivery_audit_log
+       ${where}
+       ORDER BY created_at DESC
+       LIMIT ? OFFSET ?`
+    )
+    .all(...params, limit, offset) as any[];
+
+  return rows.map((row) => ({
+    id: row.id,
+    invoice_id: row.invoice_id,
+    trigger: row.trigger,
+    recipient_address: row.recipient_address,
+    channel: row.channel,
+    destination: row.destination,
+    event_id: row.event_id,
+    status: row.status,
+    attempts: row.attempts,
+    last_error: row.last_error,
+    attempt_timestamps: JSON.parse(row.attempt_timestamps),
+    created_at: row.created_at,
+    updated_at: row.updated_at,
+  }));
+}
+
+export function getDeliveryAuditLogById(id: number): DeliveryAuditRecord | undefined {
+  const row = getDb().prepare('SELECT * FROM delivery_audit_log WHERE id = ?').get(id) as any;
+  if (!row) return undefined;
+  return {
+    id: row.id,
+    invoice_id: row.invoice_id,
+    trigger: row.trigger,
+    recipient_address: row.recipient_address,
+    channel: row.channel,
+    destination: row.destination,
+    event_id: row.event_id,
+    status: row.status,
+    attempts: row.attempts,
+    last_error: row.last_error,
+    attempt_timestamps: JSON.parse(row.attempt_timestamps),
+    created_at: row.created_at,
+    updated_at: row.updated_at,
+  };
+}
+
+export function countDeliveryAuditLogs(filter: DeliveryAuditFilter = {}): number {
+  const clauses: string[] = [];
+  const params: any[] = [];
+
+  if (filter.recipient) {
+    clauses.push('recipient_address = ?');
+    params.push(filter.recipient);
+  }
+  if (filter.eventId) {
+    clauses.push('event_id = ?');
+    params.push(filter.eventId);
+  }
+  if (filter.trigger) {
+    clauses.push('trigger = ?');
+    params.push(filter.trigger);
+  }
+  if (filter.channel) {
+    clauses.push('channel = ?');
+    params.push(filter.channel);
+  }
+  if (filter.status) {
+    clauses.push('status = ?');
+    params.push(filter.status);
+  }
+  if (filter.startTime !== undefined) {
+    clauses.push('created_at >= ?');
+    params.push(filter.startTime);
+  }
+  if (filter.endTime !== undefined) {
+    clauses.push('created_at <= ?');
+    params.push(filter.endTime);
+  }
+
+  const where = clauses.length > 0 ? `WHERE ${clauses.join(' AND ')}` : '';
+
+  const row = getDb()
+    .prepare(`SELECT COUNT(*) as count FROM delivery_audit_log ${where}`)
+    .get(...params) as { count: number };
+  return row.count;
+}
+
+// ─── Dispatch attempts (issue #1059: at-least-once delivery journal) ─────────
+
+/** Lifecycle of a durable delivery intent. Only `pending` rows are work. */
+export type DispatchAttemptStatus = 'pending' | 'delivered' | 'failed';
+
+/**
+ * The subscription shape the processor and delivery layer actually pass around
+ * at runtime — the `subscriptions` DB row (`stellar_address`, `destination`,
+ * `triggers`, `webhook_secret`) rather than the service-layer projection
+ * declared in `src/types.ts`. The extra fields are optional so a plain
+ * `Subscription` stays assignable; {@link dispatchDestinationOf} resolves the
+ * destination whichever shape the caller had.
+ */
+export interface DispatchAttemptSubscription extends Omit<Subscription, 'id'> {
+  id?: string | number;
+  stellar_address?: string;
+  destination?: string;
+  triggers?: string[];
+  webhook_secret?: string;
+  created_at?: number;
+}
+
+/** A fully-typed, deserialised `dispatch_attempts` row. */
+export interface DispatchAttempt {
+  id: string;
+  dedup_key: string;
+  invoice_id: number;
+  trigger: NotificationTrigger;
+  recipient_address: string;
+  channel: SubscriptionChannel;
+  destination: string;
+  /** `null` when the notification is not tied to a chain event. */
+  event_id: string | null;
+  status: DispatchAttemptStatus;
+  attempts: number;
+  last_error: string | null;
+  created_at: number;
+  updated_at: number;
+  delivered_at: number | null;
+  /** Deserialised straight back into what `deliverNotification` expects. */
+  subscription: Subscription;
+  payload: NotificationPayload;
+}
+
+export interface EnqueuedDispatchAttempt {
+  id: string;
+  dedup_key: string;
+  status: DispatchAttemptStatus;
+  /** True when a row for this notification identity already existed. */
+  deduplicated: boolean;
+  /** True when that existing row was already delivered — there is nothing to send. */
+  alreadyDelivered: boolean;
+}
+
+/**
+ * The destination a delivery would physically use, in the same precedence the
+ * delivery layer does: the persisted row's `destination`, falling back to the
+ * service-layer fields. Exported so the flush records the exact tuple the send
+ * used — the dedup key must not depend on guesswork.
+ */
+export function dispatchDestinationOf(subscription: DispatchAttemptSubscription): string {
+  return subscription.destination ?? subscription.webhookUrl ?? subscription.email ?? '';
+}
+
+/**
+ * The natural identity of a notification: invoice + trigger + recipient +
+ * channel + destination + event. Serialised as a fixed-order JSON array so the
+ * fields cannot alias each other (a `|` inside a destination would collide two
+ * different tuples otherwise), and so scheduled notifications (no event id)
+ * still produce a stable key.
+ */
+export function dispatchDedupKey(input: {
+  invoiceId: number;
+  trigger: NotificationTrigger;
+  recipientAddress: string;
+  channel: SubscriptionChannel;
+  destination: string;
+  eventId?: string | null;
+}): string {
+  return JSON.stringify([
+    input.invoiceId,
+    input.trigger,
+    input.recipientAddress,
+    input.channel,
+    input.destination,
+    input.eventId ?? '',
+  ]);
+}
+
+function dispatchAttemptId(dedupKey: string): string {
+  return createHash('sha256').update(dedupKey).digest('hex');
+}
+
+/**
+ * Durably record the intent to deliver, BEFORE any provider is contacted
+ * (issue #1059). Idempotent by construction: `INSERT OR IGNORE` against the
+ * `dedup_key` UNIQUE index, so re-enqueueing the same notification — a retried
+ * poll, a duplicate event, a restart replaying its cursor — never creates a
+ * second dispatch and never throws.
+ *
+ * The caller uses the result to decide whether to attempt delivery now: only a
+ * `pending` row is work.
+ */
+export function enqueueDispatchAttempt(
+  subscription: DispatchAttemptSubscription,
+  payload: NotificationPayload
+): EnqueuedDispatchAttempt {
+  const destination = dispatchDestinationOf(subscription);
+  const dedupKey = dispatchDedupKey({
+    invoiceId: payload.invoice.id,
+    trigger: payload.trigger,
+    recipientAddress: payload.recipientAddress,
+    channel: subscription.channel,
+    destination,
+    eventId: payload.eventId,
+  });
+  const id = dispatchAttemptId(dedupKey);
+  const db = getDb();
+
+  const result = db
+    .prepare(
+      `INSERT OR IGNORE INTO dispatch_attempts
+         (id, dedup_key, invoice_id, trigger, recipient_address, channel, destination,
+          event_id, subscription, payload, status, attempts, last_error,
+          created_at, updated_at, delivered_at)
+       VALUES
+         (@id, @dedup_key, @invoice_id, @trigger, @recipient_address, @channel, @destination,
+          @event_id, @subscription, @payload, 'pending', 0, NULL,
+          @created_at, @created_at, NULL)`
+    )
+    .run({
+      id,
+      dedup_key: dedupKey,
+      invoice_id: payload.invoice.id,
+      trigger: payload.trigger,
+      recipient_address: payload.recipientAddress,
+      channel: subscription.channel,
+      destination,
+      event_id: payload.eventId ?? '',
+      subscription: JSON.stringify(subscription),
+      payload: JSON.stringify(payload),
+      created_at: Date.now(),
+    });
+
+  if (result.changes === 0) {
+    const existing = db
+      .prepare('SELECT status FROM dispatch_attempts WHERE id = ?')
+      .get(id) as { status: DispatchAttemptStatus } | undefined;
+    const status = existing?.status ?? 'pending';
+    return {
+      id,
+      dedup_key: dedupKey,
+      status,
+      deduplicated: true,
+      alreadyDelivered: status === 'delivered',
+    };
+  }
+
+  return { id, dedup_key: dedupKey, status: 'pending', deduplicated: false, alreadyDelivered: false };
+}
+
+function rowToDispatchAttempt(row: {
+  id: string;
+  dedup_key: string | null;
+  invoice_id: number;
+  trigger: string;
+  recipient_address: string;
+  channel: string;
+  destination: string;
+  event_id: string;
+  subscription: string;
+  payload: string;
+  status: string;
+  attempts: number;
+  last_error: string | null;
+  created_at: number;
+  updated_at: number;
+  delivered_at: number | null;
+}): DispatchAttempt | undefined {
+  try {
+    return {
+      id: row.id,
+      dedup_key: row.dedup_key ?? '',
+      invoice_id: row.invoice_id,
+      trigger: row.trigger as NotificationTrigger,
+      recipient_address: row.recipient_address,
+      channel: row.channel as SubscriptionChannel,
+      destination: row.destination,
+      event_id: row.event_id === '' ? null : row.event_id,
+      status: row.status as DispatchAttemptStatus,
+      attempts: row.attempts,
+      last_error: row.last_error,
+      created_at: row.created_at,
+      updated_at: row.updated_at,
+      delivered_at: row.delivered_at,
+      subscription: JSON.parse(row.subscription) as Subscription,
+      payload: JSON.parse(row.payload) as NotificationPayload,
+    };
+  } catch (error: any) {
+    // A row whose intent cannot be reconstructed stays pending and carries the
+    // reason, so it is visible to operators instead of vanishing from the queue.
+    recordDispatchAttemptFailure(row.id, `Unreadable dispatch attempt: ${error?.message ?? error}`);
+    return undefined;
+  }
+}
+
+/**
+ * The durable work queue: dispatch intents that were written but never confirmed
+ * delivered — including anything left over by a crash mid-dispatch. Ordered by
+ * arrival so a restart resumes in the original send order; `id` breaks ties
+ * deterministically because several rows can share a `created_at` millisecond.
+ */
+export function getPendingDispatchAttempts(limit = 500): DispatchAttempt[] {
+  const rows: any[] = getDb()
+    .prepare(
+      `SELECT * FROM dispatch_attempts
+       WHERE status = 'pending'
+       ORDER BY created_at ASC, id ASC
+       LIMIT ?`
+    )
+    .all(Math.max(1, Math.min(limit, 5000)));
+
+  return rows
+    .map((row) => rowToDispatchAttempt(row))
+    .filter((attempt): attempt is DispatchAttempt => attempt !== undefined);
+}
+
+/**
+ * Confirm the attempt reached its destination. The row is closed out, not
+ * deleted: the dispatch history and its `attempts` count stay queryable, and the
+ * `status <> 'delivered'` guard makes this the single winner if two flushes race
+ * (the loser gets `false` and must not log the notification as sent again).
+ */
+export function markDispatchAttemptDelivered(
+  id: string,
+  deliveredAt: number = Date.now()
+): boolean {
+  const result = getDb()
+    .prepare(
+      `UPDATE dispatch_attempts
+         SET status = 'delivered',
+             delivered_at = ?,
+             updated_at = ?,
+             attempts = attempts + 1,
+             last_error = NULL
+       WHERE id = ? AND status <> 'delivered'`
+    )
+    .run(deliveredAt, deliveredAt, id);
+  return result.changes > 0;
+}
+
+/**
+ * Record a failed provider call. The row stays `pending` so a later flush retries
+ * it — that is what makes the guarantee at-least-once rather than at-most-once —
+ * while `attempts` and `last_error` make repeated failures observable.
+ */
+export function recordDispatchAttemptFailure(id: string, error: string): void {
+  const now = Date.now();
+  getDb()
+    .prepare(
+      `UPDATE dispatch_attempts
+         SET status = 'pending',
+             attempts = attempts + 1,
+             last_error = ?,
+             updated_at = ?
+       WHERE id = ?`
+    )
+    .run(error, now, id);
+}
+
+/**
+ * Retention enforcement consistent with docs/privacy.md:
+ * - sent_notifications: 30 days (from sent_at)
+ * - webhook_delivery_logs: 90 days (from created_at)
+ * - delivery_audit_log: 90 days (from created_at) — matches webhook logs as the
+ *   durable counterpart independent of retry state.
+ * - dispatch_attempts: 90 days for TERMINAL (delivered) rows only. A `pending`
+ *   row is undelivered work, so purging it would silently drop the
+ *   notification and break the at-least-once guarantee (issue #1059).
+ *
+ * Returns counts of purged rows per table.
+ */
+export function purgeExpiredDeliveryLogs(nowMs: number = Date.now()): {
+  sentNotifications: number;
+  webhookLogs: number;
+  auditLogs: number;
+  dispatchAttempts: number;
+} {
+  const thirtyDaysMs = 30 * 24 * 60 * 60 * 1000;
+  const ninetyDaysMs = 90 * 24 * 60 * 60 * 1000;
+
+  const sentCutoff = nowMs - thirtyDaysMs;
+  const longCutoff = nowMs - ninetyDaysMs;
+
+  const sentRes = getDb().prepare('DELETE FROM sent_notifications WHERE sent_at < ?').run(sentCutoff);
+  const webhookRes = getDb()
+    .prepare('DELETE FROM webhook_delivery_logs WHERE created_at < ?')
+    .run(longCutoff);
+  const auditRes = getDb()
+    .prepare('DELETE FROM delivery_audit_log WHERE created_at < ?')
+    .run(longCutoff);
+  const dispatchRes = getDb()
+    .prepare("DELETE FROM dispatch_attempts WHERE status = 'delivered' AND created_at < ?")
+    .run(longCutoff);
+
+  return {
+    sentNotifications: sentRes.changes,
+    webhookLogs: webhookRes.changes,
+    auditLogs: auditRes.changes,
+    dispatchAttempts: dispatchRes.changes,
+  };
 }

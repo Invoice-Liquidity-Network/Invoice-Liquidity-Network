@@ -34,10 +34,7 @@ export interface ThemeProviderProps {
 }
 
 export const ThemeProvider: React.FC<ThemeProviderProps> = ({ theme, children }) => {
-  const merged = useMemo<ILNTheme>(
-    () => ({ ...DEFAULT_THEME, ...theme }),
-    [theme]
-  );
+  const merged = useMemo<ILNTheme>(() => ({ ...DEFAULT_THEME, ...theme }), [theme]);
 
   const cssVars = useMemo(
     () =>

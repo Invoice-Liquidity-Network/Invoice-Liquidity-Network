@@ -56,10 +56,7 @@ export function toMetaLabel(filename: string): string {
 export function isSandboxed(outputDir: string, filePath: string): boolean {
   const resolvedDir = path.resolve(outputDir);
   const resolvedFile = path.resolve(filePath);
-  return (
-    resolvedFile === resolvedDir ||
-    resolvedFile.startsWith(resolvedDir + path.sep)
-  );
+  return resolvedFile === resolvedDir || resolvedFile.startsWith(resolvedDir + path.sep);
 }
 
 /**
@@ -81,9 +78,7 @@ export function hasQualifyingDescription(reflection: {
   if (!summary || summary.length === 0) {
     return false;
   }
-  return summary.some(
-    (part) => part.kind === 'text' && /\S/.test(part.text),
-  );
+  return summary.some((part) => part.kind === 'text' && /\S/.test(part.text));
 }
 
 /**
@@ -99,9 +94,7 @@ export function buildMetaObject(mdxFiles: string[]): Record<string, string> {
   const result: Record<string, string> = {};
   for (const file of mdxFiles) {
     const basename = path.basename(file);
-    const stem = basename.endsWith('.mdx')
-      ? basename.slice(0, -'.mdx'.length)
-      : basename;
+    const stem = basename.endsWith('.mdx') ? basename.slice(0, -'.mdx'.length) : basename;
     result[stem] = toMetaLabel(stem);
   }
   return result;
@@ -164,7 +157,9 @@ export function validateSdkVersion(version: unknown): string {
   const result = semver.valid(version as string);
   if (!result) {
     process.stderr.write(
-      `Invalid SDK version: "${String(version)}" is not a valid semver string (expected format: MAJOR.MINOR.PATCH)\n`,
+      `Invalid SDK version: "${String(
+        version
+      )}" is not a valid semver string (expected format: MAJOR.MINOR.PATCH)\n`
     );
     process.exit(1);
   }
@@ -196,7 +191,7 @@ export function checkTypeScriptVersion(): void {
   } catch {
     process.stderr.write(
       'TypeScript version check failed: cannot find typescript/package.json in node_modules. ' +
-        'Ensure TypeScript is installed as a dependency.\n',
+        'Ensure TypeScript is installed as a dependency.\n'
     );
     process.exit(1);
   }
@@ -204,14 +199,14 @@ export function checkTypeScriptVersion(): void {
   const detectedVersion = tsPkgJson.version;
   if (!detectedVersion) {
     process.stderr.write(
-      'TypeScript version check failed: typescript/package.json does not contain a version field.\n',
+      'TypeScript version check failed: typescript/package.json does not contain a version field.\n'
     );
     process.exit(1);
   }
 
   if (semver.lt(detectedVersion, '4.6.0')) {
     process.stderr.write(
-      `TypeScript version check failed: detected ${detectedVersion}, minimum required is 4.6.0\n`,
+      `TypeScript version check failed: detected ${detectedVersion}, minimum required is 4.6.0\n`
     );
     process.exit(1);
   }
@@ -247,7 +242,7 @@ export function validateOutputPaths(outputDir: string, sandboxRoot: string): voi
 
   if (!isSandboxed(resolvedSandboxRoot, resolvedOutputDir)) {
     process.stderr.write(
-      `Output path validation failed: "${resolvedOutputDir}" is not within the expected sandbox root "${resolvedSandboxRoot}"\n`,
+      `Output path validation failed: "${resolvedOutputDir}" is not within the expected sandbox root "${resolvedSandboxRoot}"\n`
     );
     process.exit(1);
   }
@@ -267,12 +262,9 @@ export function validateOutputPaths(outputDir: string, sandboxRoot: string): voi
  * @param typedocConfigPath - Absolute path to the `typedoc.json` config file.
  */
 export async function buildReflectionTree(
-  typedocConfigPath: string,
+  typedocConfigPath: string
 ): Promise<{ app: Application; project: ProjectReflection }> {
-  const app = await Application.bootstrap(
-    { options: typedocConfigPath },
-    [new TypeDocReader()],
-  );
+  const app = await Application.bootstrap({ options: typedocConfigPath }, [new TypeDocReader()]);
 
   const project = app.convert();
   if (!project) {
@@ -355,15 +347,25 @@ export async function renderAndInjectFooters(
   app: Application,
   project: ProjectReflection,
   outputDir: string,
-  version: string,
+  version: string
 ): Promise<void> {
   // Step 7: Trigger the typedoc-plugin-markdown renderer to write .mdx files.
   await app.generateDocs(project, outputDir);
 
   // Step 8: Scan for written .mdx files and inject the version footer.
-  const footer = `\n\n---\n\n${formatFooter(new Date(), version)}\n`;
+  // Reproducible builds (issue #1078): derive the footer date from
+  // SOURCE_DATE_EPOCH when it is set (CI pins it to the commit timestamp) so
+  // regenerating docs for the same commit is byte-identical across machines.
+  const sourceDateEpoch = Number(process.env.SOURCE_DATE_EPOCH);
+  const footerDate =
+    Number.isFinite(sourceDateEpoch) && sourceDateEpoch > 0
+      ? new Date(sourceDateEpoch * 1000)
+      : new Date();
+  const footer = `\n\n---\n\n${formatFooter(footerDate, version)}\n`;
 
-  const entries = fs.readdirSync(outputDir);
+  // Sorted so the injected files are processed in a stable order regardless of
+  // filesystem readdir() ordering (issue #1078).
+  const entries = fs.readdirSync(outputDir).sort();
   const mdxFiles = entries.filter((entry) => entry.endsWith('.mdx'));
 
   for (const filename of mdxFiles) {
@@ -393,10 +395,17 @@ export async function renderAndInjectFooters(
  * // export default { classes: 'Classes', 'type-aliases': 'Type Aliases' } satisfies Record<string, string>
  */
 export function writeMetaFile(outputDir: string): void {
-  const entries = fs.readdirSync(outputDir);
+  // Sorted: readdir() ordering is filesystem-dependent, and _meta.ts key order
+  // follows insertion order — unsorted output is a reproducibility hazard
+  // (issue #1078).
+  const entries = fs.readdirSync(outputDir).sort();
   const mdxFiles = entries.filter((entry) => entry.endsWith('.mdx'));
   const metaObject = buildMetaObject(mdxFiles);
-  const content = `// This file is auto-generated by scripts/generate-docs.ts — do not edit manually\nexport default ${JSON.stringify(metaObject, null, 2)} satisfies Record<string, string>\n`;
+  const content = `// This file is auto-generated by scripts/generate-docs.ts — do not edit manually\nexport default ${JSON.stringify(
+    metaObject,
+    null,
+    2
+  )} satisfies Record<string, string>\n`;
   fs.writeFileSync(path.join(outputDir, '_meta.ts'), content, 'utf8');
 }
 
@@ -411,7 +420,12 @@ async function main(): Promise<void> {
 
   const scriptDir = path.dirname(fileURLToPath(import.meta.url));
   const typedocConfigPath = path.resolve(scriptDir, '..', 'typedoc.json');
-  const outputDir = path.resolve(scriptDir, '..', '..', 'packages/docs/content/sdk-reference/generated');
+  const outputDir = path.resolve(
+    scriptDir,
+    '..',
+    '..',
+    'packages/docs/content/sdk-reference/generated'
+  );
   const sandboxRoot = outputDir; // same dir in this case
 
   validateOutputPaths(outputDir, sandboxRoot);

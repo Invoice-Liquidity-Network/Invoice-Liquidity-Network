@@ -1,7 +1,7 @@
 export type {
   // Enums
   InvoiceStatus,
-  InvoiceState,         // @deprecated — alias for InvoiceStatus
+  InvoiceState, // @deprecated — alias for InvoiceStatus
   ProposalStatus,
   ProposalAction,
 
@@ -13,12 +13,25 @@ export type {
   ContractStats,
   LPStats,
 
+  // Dispute types
+  DisputeReasonCategory,
+  DisputeEvidence,
+  DisputeStatus,
+  DisputeResolutionDecision,
+  DisputeRecord,
+  DisputeAnalytics,
+
   // Canonical event types
   ContractEvent,
   InvoiceSubmittedEvent,
   InvoiceFundedEvent,
-  InvoicePaidEvent,
+  InvoicePaidEvent
+  ,
   InvoiceDefaultedEvent,
+  InvoiceDisputedEvent,
+  DisputeEvidenceSubmittedEvent,
+  DisputeResolvedEvent,
+  DisputeAutoResolvedEvent,
   GovernanceProposalCreatedEvent,
   VoteCastEvent,
   GovernanceProposalExecutedEvent,
@@ -34,4 +47,4 @@ export type {
   GovernanceProposalVotedEvent,
   TokenListedEvent,
   TokenDelistedEvent,
-} from "./types";
+} from './types';

@@ -70,9 +70,9 @@
  * | struct              | interface             |                                |
  */
 
-import { readFileSync, writeFileSync } from "fs";
-import { resolve, dirname } from "path";
-import { fileURLToPath } from "url";
+import { readFileSync, writeFileSync } from 'fs';
+import { resolve, dirname } from 'path';
+import { fileURLToPath } from 'url';
 
 // ─── CLI args ────────────────────────────────────────────────────────────────
 
@@ -83,22 +83,22 @@ function getArg(flag: string): string | undefined {
   return idx !== -1 ? args[idx + 1] : undefined;
 }
 
-const specPath = getArg("--spec");
-const outPath = getArg("--out");
-const dryRun = args.includes("--dry-run");
+const specPath = getArg('--spec');
+const outPath = getArg('--out');
+const dryRun = args.includes('--dry-run');
 
 if (!specPath) {
-  console.error("Usage: generate-shared-types.mts --spec <path> [--out <path>] [--dry-run]");
+  console.error('Usage: generate-shared-types.mts --spec <path> [--out <path>] [--dry-run]');
   process.exit(1);
 }
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const repoRoot = resolve(__dirname, "..");
+const repoRoot = resolve(__dirname, '..');
 
 // ─── Soroban spec types (subset we care about) ───────────────────────────────
 
 interface SorobanSpecEntry {
-  type: "FunctionV0" | "UdtStructV0" | "UdtUnionV0" | "UdtEnumV0" | "UdtErrorEnumV0";
+  type: 'FunctionV0' | 'UdtStructV0' | 'UdtUnionV0' | 'UdtEnumV0' | 'UdtErrorEnumV0';
   name?: string;
   fields?: SorobanSpecField[];
   cases?: SorobanSpecCase[];
@@ -113,47 +113,61 @@ interface SorobanSpecField {
 
 interface SorobanSpecCase {
   name: string;
-  type?: "Unit" | "Tuple";
+  type?: 'Unit' | 'Tuple';
   fields?: SorobanSpecField[];
   value?: number;
   doc?: string;
 }
 
 type SorobanType =
-  | { type: "U32" }
-  | { type: "U64" }
-  | { type: "I128" }
-  | { type: "Bool" }
-  | { type: "Address" }
-  | { type: "Bytes"; length?: number }
-  | { type: "BytesN"; n: number }
-  | { type: "String" }
-  | { type: "Symbol" }
-  | { type: "Option"; value: SorobanType }
-  | { type: "Vec"; element: SorobanType }
-  | { type: "Map"; key: SorobanType; value: SorobanType }
-  | { type: "Custom"; name: string }
-  | { type: "Void" };
+  | { type: 'U32' }
+  | { type: 'U64' }
+  | { type: 'I128' }
+  | { type: 'Bool' }
+  | { type: 'Address' }
+  | { type: 'Bytes'; length?: number }
+  | { type: 'BytesN'; n: number }
+  | { type: 'String' }
+  | { type: 'Symbol' }
+  | { type: 'Option'; value: SorobanType }
+  | { type: 'Vec'; element: SorobanType }
+  | { type: 'Map'; key: SorobanType; value: SorobanType }
+  | { type: 'Custom'; name: string }
+  | { type: 'Void' };
 
 // ─── Type mapping ─────────────────────────────────────────────────────────────
 
 function sorobanTypeToTs(t: SorobanType): string {
   switch (t.type) {
-    case "U32":     return "number";
-    case "U64":     return "bigint";
-    case "I128":    return "bigint";
-    case "Bool":    return "boolean";
-    case "Address": return "string";
-    case "String":
-    case "Symbol":  return "string";
-    case "BytesN":  return "Uint8Array";
-    case "Bytes":   return "Uint8Array";
-    case "Void":    return "void";
-    case "Option":  return `${sorobanTypeToTs(t.value)} | null`;
-    case "Vec":     return `Array<${sorobanTypeToTs(t.element)}>`;
-    case "Map":     return `Map<${sorobanTypeToTs(t.key)}, ${sorobanTypeToTs(t.value)}>`;
-    case "Custom":  return snakeToCamelType(t.name);
-    default:        return "unknown";
+    case 'U32':
+      return 'number';
+    case 'U64':
+      return 'bigint';
+    case 'I128':
+      return 'bigint';
+    case 'Bool':
+      return 'boolean';
+    case 'Address':
+      return 'string';
+    case 'String':
+    case 'Symbol':
+      return 'string';
+    case 'BytesN':
+      return 'Uint8Array';
+    case 'Bytes':
+      return 'Uint8Array';
+    case 'Void':
+      return 'void';
+    case 'Option':
+      return `${sorobanTypeToTs(t.value)} | null`;
+    case 'Vec':
+      return `Array<${sorobanTypeToTs(t.element)}>`;
+    case 'Map':
+      return `Map<${sorobanTypeToTs(t.key)}, ${sorobanTypeToTs(t.value)}>`;
+    case 'Custom':
+      return snakeToCamelType(t.name);
+    default:
+      return 'unknown';
   }
 }
 
@@ -163,9 +177,9 @@ function sorobanTypeToTs(t: SorobanType): string {
  */
 function snakeToCamelType(name: string): string {
   return name
-    .split("_")
+    .split('_')
     .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
-    .join("");
+    .join('');
 }
 
 /**
@@ -197,16 +211,16 @@ function generateFileHeader(): string {
 
 function generateEnum(entry: SorobanSpecEntry): string {
   const tsName = snakeToCamelType(entry.name!);
-  const doc = entry.doc ? `/** ${entry.doc} */\n` : "";
+  const doc = entry.doc ? `/** ${entry.doc} */\n` : '';
   const cases = (entry.cases ?? [])
-    .map((c) => `  | "${c.name}"${c.doc ? ` // ${c.doc}` : ""}`)
-    .join("\n");
+    .map((c) => `  | "${c.name}"${c.doc ? ` // ${c.doc}` : ''}`)
+    .join('\n');
   return `${doc}export type ${tsName} =\n${cases};\n`;
 }
 
 function generateStruct(entry: SorobanSpecEntry): string {
   const tsName = snakeToCamelType(entry.name!);
-  const doc = entry.doc ? `/** ${entry.doc} */\n` : "";
+  const doc = entry.doc ? `/** ${entry.doc} */\n` : '';
   const fields = (entry.fields ?? [])
     .map((f) => {
       const tsField = snakeToCamelField(f.name);
@@ -216,30 +230,30 @@ function generateStruct(entry: SorobanSpecEntry): string {
         : `  /** contract: ${f.name} */\n`;
       return `${fieldDoc}  ${tsField}: ${tsType};`;
     })
-    .join("\n");
+    .join('\n');
   return `${doc}export interface ${tsName} {\n${fields}\n}\n`;
 }
 
 function generateUnion(entry: SorobanSpecEntry): string {
   const tsName = snakeToCamelType(entry.name!);
-  const doc = entry.doc ? `/** ${entry.doc} */\n` : "";
+  const doc = entry.doc ? `/** ${entry.doc} */\n` : '';
   const cases = (entry.cases ?? []).map((c) => {
     const fields = c.fields ?? [];
-    if (c.type === "Unit" || fields.length === 0) {
+    if (c.type === 'Unit' || fields.length === 0) {
       return `  | { type: "${c.name}" }`;
     }
     const innerFields = fields
       .map((f) => `${snakeToCamelField(f.name)}: ${sorobanTypeToTs(f.type)}`)
-      .join("; ");
+      .join('; ');
     return `  | { type: "${c.name}"; ${innerFields} }`;
   });
-  return `${doc}export type ${tsName} =\n${cases.join("\n")};\n`;
+  return `${doc}export type ${tsName} =\n${cases.join('\n')};\n`;
 }
 
 // ─── Main generation ──────────────────────────────────────────────────────────
 
 function generate(specFilePath: string): string {
-  const raw = readFileSync(specFilePath, "utf-8");
+  const raw = readFileSync(specFilePath, 'utf-8');
   const spec: SorobanSpecEntry[] = JSON.parse(raw);
 
   const sections: string[] = [generateFileHeader()];
@@ -253,15 +267,15 @@ function generate(specFilePath: string): string {
     let block: string | null = null;
 
     switch (entry.type) {
-      case "UdtEnumV0":
+      case 'UdtEnumV0':
         block = generateEnum(entry);
         exportedTypes.push(snakeToCamelType(entry.name));
         break;
-      case "UdtStructV0":
+      case 'UdtStructV0':
         block = generateStruct(entry);
         exportedTypes.push(snakeToCamelType(entry.name));
         break;
-      case "UdtUnionV0":
+      case 'UdtUnionV0':
         block = generateUnion(entry);
         exportedTypes.push(snakeToCamelType(entry.name));
         break;
@@ -279,15 +293,15 @@ function generate(specFilePath: string): string {
   // Emit a generated index re-export block as a comment so the developer
   // can paste it into index.ts when regenerating.
   const indexComment = [
-    "// ─── Generated export list (paste into src/index.ts) ───────────────────────",
-    "// export type {",
+    '// ─── Generated export list (paste into src/index.ts) ───────────────────────',
+    '// export type {',
     ...exportedTypes.map((t) => `//   ${t},`),
     "// } from './types';",
-  ].join("\n");
+  ].join('\n');
 
-  sections.push(indexComment + "\n");
+  sections.push(indexComment + '\n');
 
-  return sections.join("\n");
+  return sections.join('\n');
 }
 
 // ─── Entry point ──────────────────────────────────────────────────────────────
@@ -298,7 +312,7 @@ let output: string;
 try {
   output = generate(resolvedSpec);
 } catch (err) {
-  if ((err as NodeJS.ErrnoException).code === "ENOENT") {
+  if ((err as NodeJS.ErrnoException).code === 'ENOENT') {
     console.error(
       `\nSpec file not found: ${resolvedSpec}\n\n` +
         `Build the contract first:\n` +
@@ -314,13 +328,13 @@ try {
 
 if (dryRun) {
   process.stdout.write(output);
-  console.error("\n[dry-run] Output written to stdout. No files changed.");
+  console.error('\n[dry-run] Output written to stdout. No files changed.');
 } else {
   if (!outPath) {
-    console.error("--out <path> is required when not using --dry-run");
+    console.error('--out <path> is required when not using --dry-run');
     process.exit(1);
   }
   const resolvedOut = resolve(repoRoot, outPath);
-  writeFileSync(resolvedOut, output, "utf-8");
+  writeFileSync(resolvedOut, output, 'utf-8');
   console.log(`Generated ${resolvedOut} from ${resolvedSpec}`);
 }

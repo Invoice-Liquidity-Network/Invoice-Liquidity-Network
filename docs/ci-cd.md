@@ -426,13 +426,13 @@ flowchart TD
 
 ### `cli-smoke.yml`
 
-- Trigger: `push` to `main` and `pull_request` (both scoped to `packages/cli/**`, `sdk/**`,
-  `packages/shared/**`, and the workflow file), plus manual `workflow_dispatch`.
+- Trigger: `push` to `main` and `pull_request` (both scoped to `cli/**`, `sdk/**`,
+  and the workflow file), plus manual `workflow_dispatch`.
 - Runners: GitHub-hosted matrix — `ubuntu-latest`, `macos-latest`, `windows-latest` (not the
   self-hosted `namespace-profile-nursca` profile), so the CLI is exercised on all three OSes.
 - Jobs:
-  - `cli-smoke`: builds `@iln/cli` and its workspace deps, packs the CLI together with its
-    unpublished workspace dependencies (`@iln/sdk`, `@iln/shared`), installs the tarballs
+  - `cli-smoke`: builds `@invoice-liquidity/cli` and its workspace deps, packs the CLI
+    together with its unpublished workspace dependency (`@iln/sdk`), installs the tarballs
     globally in a clean environment, and runs `iln --version` and `iln --help` as smoke
     tests. `fail-fast: false` so one OS failing still reports the others.
 - Required secrets: none.

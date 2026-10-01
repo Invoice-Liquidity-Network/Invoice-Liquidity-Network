@@ -1,0 +1,17 @@
+{
+  "description": "Canonical declaration of what the ILN documentation site describes. The docs site is single-track (it always documents the latest development version deployed to Stellar testnet) rather than versioned, so this file is the one place that records which contract/SDK release the prose is written against. It is rendered by the docs version banner and validated against the compatibility matrix in docs/cross-repo-dependencies.md by scripts/check-compatibility.ts.",
+  "docsTrack": "latest",
+  "network": "testnet",
+  "contract": {
+    "package": "invoice_liquidity",
+    "version": "0.1.0",
+    "contractId": "CCPASLHKRFBMVV5PZG3LKDGKFEDXZMB5U7DK42CVLUVWCMUCSRPVBIMO",
+    "versionMethod": "get_version"
+  },
+  "sdk": {
+    "package": "@invoice-liquidity/sdk",
+    "version": "0.1.0"
+  },
+  "compatibilityMatrix": "docs/cross-repo-dependencies.md",
+  "mirroredIn": ["packages/docs/lib/docs-version.ts"]
+}

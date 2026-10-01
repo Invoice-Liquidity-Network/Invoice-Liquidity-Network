@@ -59,7 +59,9 @@ describe('calculateRiskScore', () => {
 
   it('overall score is average of all factors', () => {
     const result = calculateRiskScore(100000000n, 30, 500);
-    const expected = Math.round((result.amountScore + result.durationScore + result.discountScore) / 3);
+    const expected = Math.round(
+      (result.amountScore + result.durationScore + result.discountScore) / 3
+    );
     expect(result.overallScore).toBe(expected);
   });
 });
@@ -97,9 +99,7 @@ describe('calculatePortfolioAllocation', () => {
   });
 
   it('handles Defaulted status as not deployed', () => {
-    const invoices = [
-      { amount: 100000000n, status: 'Defaulted', token: 'USDC' },
-    ];
+    const invoices = [{ amount: 100000000n, status: 'Defaulted', token: 'USDC' }];
     const result = calculatePortfolioAllocation(invoices);
     expect(result.totalDeployed).toBe(0n);
     expect(result.totalAvailable).toBe(0n);
@@ -146,7 +146,12 @@ describe('calculateHistoricalPerformance', () => {
     const events = [
       { type: 'submitted', amount: 100000000n, discountRate: 300, createdAt: now - 86400000 * 30 },
       { type: 'submitted', amount: 200000000n, discountRate: 500, createdAt: now - 86400000 * 60 },
-      { type: 'paid', amount: 100000000n, createdAt: now - 86400000 * 2, settledAt: now - 86400000 * 2 },
+      {
+        type: 'paid',
+        amount: 100000000n,
+        createdAt: now - 86400000 * 2,
+        settledAt: now - 86400000 * 2,
+      },
       { type: 'paid', amount: 200000000n, createdAt: now, settledAt: now },
     ];
     const result = calculateHistoricalPerformance(events);

@@ -4,9 +4,9 @@
  * Provides offline detection, transaction queuing, and auto-submit on reconnect.
  */
 
-import { createLogger } from "./logger";
+import { createLogger } from './logger';
 
-const logger = createLogger("offline");
+const logger = createLogger('offline');
 
 // ---------------------------------------------------------------------------
 // Types
@@ -19,7 +19,7 @@ export interface OfflineQueueItem {
   timestamp: number;
   retries: number;
   maxRetries: number;
-  status: "pending" | "submitting" | "failed" | "completed";
+  status: 'pending' | 'submitting' | 'failed' | 'completed';
   error?: string;
 }
 
@@ -63,7 +63,7 @@ export class OfflineQueuedError extends Error {
 
   constructor(item: OfflineQueueItem) {
     super(`Operation "${item.operation}" queued for submission when back online (id: ${item.id})`);
-    this.name = "OfflineQueuedError";
+    this.name = 'OfflineQueuedError';
     this.item = item;
   }
 }
@@ -72,12 +72,11 @@ export class OfflineQueuedError extends Error {
 // Default Configuration
 // ---------------------------------------------------------------------------
 
-const DEFAULT_CONFIG: Required<OfflineConfig> = {
+const DEFAULT_CONFIG: Omit<Required<OfflineConfig>, 'storage'> = {
   maxRetries: 3,
   retryDelayMs: 5000,
   maxQueueSize: 100,
-  storageKey: "iln_offline_queue",
-  storage: typeof localStorage !== "undefined" ? localStorage : createMemoryStorage(),
+  storageKey: 'iln_offline_queue',
 };
 
 function createMemoryStorage(): OfflineStorage {
@@ -96,13 +95,19 @@ function createMemoryStorage(): OfflineStorage {
 export class OfflineManager {
   private queue: OfflineQueueItem[] = [];
   private config: Required<OfflineConfig>;
-  private isOnline: boolean = typeof navigator !== "undefined" ? navigator.onLine : true;
+  private isOnline: boolean =
+    typeof navigator !== 'undefined' && typeof navigator.onLine === 'boolean'
+      ? navigator.onLine
+      : true;
   private listeners: Set<StateChangeCallback> = new Set();
   private submitCallback: SubmitCallback | null = null;
   private retryTimer: ReturnType<typeof setTimeout> | null = null;
 
   constructor(config: OfflineConfig = {}) {
-    this.config = { ...DEFAULT_CONFIG, ...config };
+    const storage =
+      config.storage ??
+      (typeof localStorage !== 'undefined' ? localStorage : createMemoryStorage());
+    this.config = { ...DEFAULT_CONFIG, storage, ...config };
     this.loadQueue();
     this.setupEventListeners();
   }
@@ -131,8 +136,8 @@ export class OfflineManager {
     return {
       isOnline: this.isOnline,
       queueSize: this.queue.length,
-      pendingCount: this.queue.filter((i) => i.status === "pending").length,
-      failedCount: this.queue.filter((i) => i.status === "failed").length,
+      pendingCount: this.queue.filter((i) => i.status === 'pending').length,
+      failedCount: this.queue.filter((i) => i.status === 'failed').length,
     };
   }
 
@@ -151,7 +156,7 @@ export class OfflineManager {
       timestamp: Date.now(),
       retries: 0,
       maxRetries: this.config.maxRetries,
-      status: "pending",
+      status: 'pending',
     };
 
     this.queue.push(item);
@@ -170,21 +175,21 @@ export class OfflineManager {
       return;
     }
 
-    const pending = this.queue.filter((i) => i.status === "pending");
+    const pending = this.queue.filter((i) => i.status === 'pending');
 
     for (const item of pending) {
       if (!this.isOnline) break;
 
-      item.status = "submitting";
+      item.status = 'submitting';
       this.notifyListeners();
 
       try {
         const success = await this.submitCallback(item);
         if (success) {
-          item.status = "completed";
+          item.status = 'completed';
           logger.debug(`Successfully submitted: ${item.operation} (id: ${item.id})`);
         } else {
-          this.handleFailedSubmission(item, "Submission returned false");
+          this.handleFailedSubmission(item, 'Submission returned false');
         }
       } catch (error) {
         this.handleFailedSubmission(item, String(error));
@@ -195,7 +200,7 @@ export class OfflineManager {
     }
 
     // Clean up completed items
-    this.queue = this.queue.filter((i) => i.status !== "completed");
+    this.queue = this.queue.filter((i) => i.status !== 'completed');
     this.saveQueue();
     this.notifyListeners();
   }
@@ -204,12 +209,12 @@ export class OfflineManager {
    * Retry a specific failed item.
    */
   async retryItem(id: string): Promise<void> {
-    const item = this.queue.find((i) => i.id === id && i.status === "failed");
+    const item = this.queue.find((i) => i.id === id && i.status === 'failed');
     if (!item) {
       throw new Error(`Item ${id} not found or not in failed state`);
     }
 
-    item.status = "pending";
+    item.status = 'pending';
     item.retries = 0;
     item.error = undefined;
     this.saveQueue();
@@ -264,17 +269,17 @@ export class OfflineManager {
     this.notifyListeners();
 
     if (online) {
-      logger.info("SDK is back online, processing queue...");
+      logger.info('SDK is back online, processing queue...');
       this.processQueue();
     } else {
-      logger.info("SDK is offline, operations will be queued");
+      logger.info('SDK is offline, operations will be queued');
     }
   }
 
   /**
    * Export queue data for persistence or debugging.
    */
-  exportData(): { queue: OfflineQueueItem[]; state: OfflineState } {
+  exportData(): { queue: ReadonlyArray<OfflineQueueItem>; state: OfflineState } {
     return {
       queue: this.getQueue(),
       state: this.getState(),
@@ -285,9 +290,9 @@ export class OfflineManager {
    * Cleanup resources.
    */
   destroy(): void {
-    if (typeof window !== "undefined") {
-      window.removeEventListener("online", this.handleOnline);
-      window.removeEventListener("offline", this.handleOffline);
+    if (typeof window !== 'undefined') {
+      window.removeEventListener('online', this.handleOnline);
+      window.removeEventListener('offline', this.handleOffline);
     }
     if (this.retryTimer) {
       clearTimeout(this.retryTimer);
@@ -306,9 +311,9 @@ export class OfflineManager {
   };
 
   private setupEventListeners(): void {
-    if (typeof window !== "undefined") {
-      window.addEventListener("online", this.handleOnline);
-      window.addEventListener("offline", this.handleOffline);
+    if (typeof window !== 'undefined') {
+      window.addEventListener('online', this.handleOnline);
+      window.addEventListener('offline', this.handleOffline);
     }
   }
 
@@ -317,10 +322,10 @@ export class OfflineManager {
     item.error = error;
 
     if (item.retries >= item.maxRetries) {
-      item.status = "failed";
+      item.status = 'failed';
       logger.error(`Failed to submit ${item.operation} after ${item.retries} retries: ${error}`);
     } else {
-      item.status = "pending";
+      item.status = 'pending';
       logger.warn(`Retry ${item.retries}/${item.maxRetries} for ${item.operation}: ${error}`);
 
       // Schedule retry

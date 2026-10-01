@@ -5,7 +5,7 @@
  * Each digest item represents one invoice event that occurred during the window.
  */
 
-import { emailShell, escapeHtml, formatAmount, formatDate, shortAddress } from "./helpers";
+import { emailShell, escapeHtml, formatAmount, formatDate, shortAddress } from './helpers';
 
 export interface DigestItem {
   invoiceId: number;
@@ -19,17 +19,17 @@ export interface DigestItem {
 
 export interface DigestTemplateVars {
   recipientAddress: string;
-  frequency: "daily" | "weekly";
+  frequency: 'daily' | 'weekly';
   items: DigestItem[];
   unsubscribeToken: string;
   periodLabel: string;
   dashboardUrl?: string;
 }
 
-export function buildDigestSubject(vars: Pick<DigestTemplateVars, "frequency" | "items">): string {
+export function buildDigestSubject(vars: Pick<DigestTemplateVars, 'frequency' | 'items'>): string {
   const { frequency, items } = vars;
   const count = items.length;
-  const period = frequency === "daily" ? "Daily" : "Weekly";
+  const period = frequency === 'daily' ? 'Daily' : 'Weekly';
   if (count === 0) return `Your ${period} Invoice Digest — No activity`;
   if (count === 1) return `Your ${period} Invoice Digest — 1 update`;
   return `Your ${period} Invoice Digest — ${count} updates`;
@@ -37,21 +37,31 @@ export function buildDigestSubject(vars: Pick<DigestTemplateVars, "frequency" | 
 
 function eventBadgeClass(eventType: string): string {
   switch (eventType) {
-    case "funded": return "badge-funded";
-    case "paid": return "badge-paid";
-    case "defaulted": return "badge-default";
-    case "due_date_warning": return "badge-warning";
-    default: return "badge-funded";
+    case 'funded':
+      return 'badge-funded';
+    case 'paid':
+      return 'badge-paid';
+    case 'defaulted':
+      return 'badge-default';
+    case 'due_date_warning':
+      return 'badge-warning';
+    default:
+      return 'badge-funded';
   }
 }
 
 function eventLabel(eventType: string): string {
   switch (eventType) {
-    case "funded": return "Funded";
-    case "paid": return "Paid";
-    case "defaulted": return "Defaulted";
-    case "due_date_warning": return "Due Soon";
-    default: return eventType;
+    case 'funded':
+      return 'Funded';
+    case 'paid':
+      return 'Paid';
+    case 'defaulted':
+      return 'Defaulted';
+    case 'due_date_warning':
+      return 'Due Soon';
+    default:
+      return eventType;
   }
 }
 
@@ -94,21 +104,22 @@ function renderEmptyState(): string {
 export function renderDigestEmail(vars: DigestTemplateVars): string {
   const { recipientAddress, frequency, items, unsubscribeToken, periodLabel, dashboardUrl } = vars;
 
-  const periodText = frequency === "daily" ? "Daily" : "Weekly";
-  const dashUrl = dashboardUrl ?? "https://iln.finance";
+  const periodText = frequency === 'daily' ? 'Daily' : 'Weekly';
+  const dashUrl = dashboardUrl ?? 'https://iln.finance';
   const unsubUrl = `https://iln.finance/unsubscribe?token=${encodeURIComponent(unsubscribeToken)}`;
   // The tokenized URL is also passed to the shell so the footer link is the
   // same one-click endpoint the body link hits. They are functionally the same
   // so users have two clearly-marked, working unsubscribe entry points.
   const recipient = escapeHtml(shortAddress(recipientAddress));
 
-  const tableRows = items.length > 0
-    ? items.map(renderDigestRow).join("")
-    : "";
+  const tableRows = items.length > 0 ? items.map(renderDigestRow).join('') : '';
 
-  const summaryLine = items.length === 0
-    ? "No activity to report for this period."
-    : `You have <strong>${items.length}</strong> invoice update${items.length !== 1 ? "s" : ""} during ${escapeHtml(periodLabel)}.`;
+  const summaryLine =
+    items.length === 0
+      ? 'No activity to report for this period.'
+      : `You have <strong>${items.length}</strong> invoice update${
+          items.length !== 1 ? 's' : ''
+        } during ${escapeHtml(periodLabel)}.`;
 
   const body = `
     <div class="header">
@@ -119,7 +130,10 @@ export function renderDigestEmail(vars: DigestTemplateVars): string {
       <h2>Hello, ${recipient}</h2>
       <p>${summaryLine}</p>
 
-      ${items.length === 0 ? renderEmptyState() : `
+      ${
+        items.length === 0
+          ? renderEmptyState()
+          : `
       <table style="width: 100%; border-collapse: collapse; margin: 24px 0;">
         <thead>
           <tr style="background-color: #f9fafb; border-bottom: 2px solid #e5e7eb;">
@@ -135,7 +149,8 @@ export function renderDigestEmail(vars: DigestTemplateVars): string {
           ${tableRows}
         </tbody>
       </table>
-      `}
+      `
+      }
 
       <div class="btn-wrap">
         <a href="${escapeHtml(dashUrl)}" class="btn">Go to Dashboard</a>
@@ -144,7 +159,9 @@ export function renderDigestEmail(vars: DigestTemplateVars): string {
       <p style="font-size: 13px; color: #9ca3af; margin-top: 32px;">
         You are receiving this ${periodText.toLowerCase()} digest because you have digest notifications enabled
         for address <strong>${recipient}</strong>.
-        <a href="${escapeHtml(unsubUrl)}" style="color: #6b7280;">Unsubscribe or change frequency</a>.
+        <a href="${escapeHtml(
+          unsubUrl
+        )}" style="color: #6b7280;">Unsubscribe or change frequency</a>.
       </p>
     </div>`;
 

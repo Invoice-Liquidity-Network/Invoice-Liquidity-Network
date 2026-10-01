@@ -2,9 +2,9 @@ name: Snyk Security Scanning
 
 on:
   push:
-    branches: [ "main" ]
+    branches: ['main']
   pull_request:
-    branches: [ "main" ]
+    branches: ['main']
   schedule:
     - cron: '0 3 * * 0' # Weekly scan at 3 AM on Sunday
 
@@ -19,7 +19,7 @@ concurrency:
 jobs:
   snyk:
     name: Snyk Vulnerability Scanner
-    runs-on: namespace-profile-nursca
+    runs-on: ubuntu-latest
     env:
       SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
     steps:
@@ -38,4 +38,12 @@ jobs:
 
       - name: Snyk test
         if: env.SNYK_TOKEN != ''
-        run: snyk test --all-projects --severity-threshold=high
+        run: |
+          # --all-projects auto-discovers every package.json in the
+          # workspace (oracle-service, indexer, notifications, sdk,
+          # cli, packages/*, examples/*, etc.).  Scan the root last
+          # so it covers any top-level devDependencies.
+          snyk test \
+            --all-projects \
+            --severity-threshold=high \
+            --prune-repeated-transitive-deps

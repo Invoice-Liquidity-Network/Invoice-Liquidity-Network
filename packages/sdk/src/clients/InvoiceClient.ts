@@ -112,10 +112,7 @@ export interface SignTransactionOptions {
  */
 export interface InvoiceTransactionSigner {
   getPublicKey(): Promise<string>;
-  signTransaction(
-    transactionXdr: string,
-    options: SignTransactionOptions,
-  ): Promise<string>;
+  signTransaction(transactionXdr: string, options: SignTransactionOptions): Promise<string>;
 }
 
 export interface RpcServerLike {
@@ -170,6 +167,33 @@ export interface MarkPaidInput {
   payer?: string;
   invoiceId: bigint | number | string;
   amount?: bigint | number | string;
+}
+
+export interface DisputeInvoiceInput {
+  disputer?: string;
+  invoiceId: bigint | number | string;
+  reasonCategory: 'quality' | 'timing' | 'amount' | 'other' | string;
+  evidenceCid: string;
+  reasonDescription?: string;
+}
+
+export interface SubmitDisputeEvidenceInput {
+  submitter?: string;
+  invoiceId: bigint | number | string;
+  evidenceCid: string;
+  description?: string;
+}
+
+export interface ResolveDisputeInput {
+  admin?: string;
+  invoiceId: bigint | number | string;
+  decision: 'favor_payer' | 'favor_freelancer';
+  notes?: string;
+}
+
+export interface AutoResolveDisputeInput {
+  caller?: string;
+  invoiceId: bigint | number | string;
 }
 
 export interface ContractEventResult {
@@ -264,9 +288,7 @@ export function exportTransactionsToCsv(records: TransactionRecord[]): string {
     return str;
   };
 
-  const rows = records.map((r) =>
-    headers.map((h) => escape(r[h])).join(','),
-  );
+  const rows = records.map((r) => headers.map((h) => escape(r[h])).join(','));
 
   return [headers.join(','), ...rows].join('\n');
 }
@@ -310,7 +332,7 @@ export class InvoiceClient {
   constructor(
     serverUrlOrConfig: string | InvoiceClientConfig,
     contractId?: string,
-    options: InvoiceClientOptions = {},
+    options: InvoiceClientOptions = {}
   ) {
     const config =
       typeof serverUrlOrConfig === 'string'
@@ -334,12 +356,8 @@ export class InvoiceClient {
       throw new Error('InvoiceClient requires an rpcUrl or rpcServer for contract writes.');
     }
 
-    this.server =
-      config.horizonServer ??
-      new Horizon.Server(config.horizonUrl ?? rpcUrl ?? '');
-    this.rpcServer =
-      config.rpcServer ??
-      new SorobanRpc.Server(rpcUrl ?? '');
+    this.server = config.horizonServer ?? new Horizon.Server(config.horizonUrl ?? rpcUrl ?? '');
+    this.rpcServer = config.rpcServer ?? new SorobanRpc.Server(rpcUrl ?? '');
     this.contractId = config.contractId;
     this.networkPassphrase =
       config.networkPassphrase ??
@@ -364,7 +382,7 @@ export class InvoiceClient {
     const transaction = await this.buildWriteTransaction(
       freelancer,
       'submit_invoice',
-      this.buildSubmitInvoiceArgs({ ...invoiceData, freelancer }),
+      this.buildSubmitInvoiceArgs({ ...invoiceData, freelancer })
     );
 
     const simulation = await this.simulate(transaction, 'submit_invoice');
@@ -383,7 +401,7 @@ export class InvoiceClient {
    */
   public async fundInvoice(
     invoiceIdOrInput: bigint | number | string | FundInvoiceInput,
-    amount?: bigint | number | string,
+    amount?: bigint | number | string
   ): Promise<ContractWriteResult> {
     const input =
       typeof invoiceIdOrInput === 'object'
@@ -403,15 +421,11 @@ export class InvoiceClient {
       throw new ContractCallError(
         'Invoice does not have any remaining balance to fund.',
         this.contractId,
-        'fund_invoice',
+        'fund_invoice'
       );
     }
 
-    const args = [
-      this.addressScVal(funder),
-      this.u64ScVal(invoiceId),
-      this.i128ScVal(fundAmount),
-    ];
+    const args = [this.addressScVal(funder), this.u64ScVal(invoiceId), this.i128ScVal(fundAmount)];
 
     if (input.requireOracleVerification !== undefined) {
       args.push(this.boolScVal(input.requireOracleVerification));
@@ -431,7 +445,7 @@ export class InvoiceClient {
    */
   public async markPaid(
     invoiceIdOrInput: bigint | number | string | MarkPaidInput,
-    amount?: bigint | number | string,
+    amount?: bigint | number | string
   ): Promise<ContractWriteResult> {
     const input =
       typeof invoiceIdOrInput === 'object'
@@ -458,7 +472,105 @@ export class InvoiceClient {
     return this.prepareSignAndSend(transaction, payer, 'mark_paid');
   }
 
-  private buildSubmitInvoiceArgs(input: SubmitInvoiceInput & { freelancer: string }): stellarXdr.ScVal[] {
+  /**
+   * Files a dispute on an invoice with reason category and evidence IPFS CID.
+   *
+   * @param input - Dispute filing payload.
+   * @returns The submitted transaction hash and parsed events.
+   */
+  public async disputeInvoice(input: DisputeInvoiceInput): Promise<ContractWriteResult> {
+    const disputer = input.disputer ?? (await this.requireSignerAddress());
+    await this.assertSignerMatches(disputer, 'disputeInvoice');
+
+    const invoiceId = this.toBigInt(input.invoiceId, 'invoiceId');
+    const args = [
+      this.addressScVal(disputer),
+      this.u64ScVal(invoiceId),
+      this.stringScVal(input.reasonCategory),
+      this.stringScVal(input.evidenceCid),
+    ];
+
+    const transaction = await this.buildWriteTransaction(disputer, 'dispute_invoice', args);
+    await this.simulate(transaction, 'dispute_invoice');
+    return this.prepareSignAndSend(transaction, disputer, 'dispute_invoice');
+  }
+
+  /**
+   * Submits supporting evidence (IPFS CID) for an active dispute.
+   *
+   * @param input - Evidence submission payload.
+   * @returns The submitted transaction hash and parsed events.
+   */
+  public async submitDisputeEvidence(
+    input: SubmitDisputeEvidenceInput
+  ): Promise<ContractWriteResult> {
+    const submitter = input.submitter ?? (await this.requireSignerAddress());
+    await this.assertSignerMatches(submitter, 'submitDisputeEvidence');
+
+    const invoiceId = this.toBigInt(input.invoiceId, 'invoiceId');
+    const args = [
+      this.addressScVal(submitter),
+      this.u64ScVal(invoiceId),
+      this.stringScVal(input.evidenceCid),
+    ];
+
+    const transaction = await this.buildWriteTransaction(
+      submitter,
+      'submit_dispute_evidence',
+      args
+    );
+    await this.simulate(transaction, 'submit_dispute_evidence');
+    return this.prepareSignAndSend(transaction, submitter, 'submit_dispute_evidence');
+  }
+
+  /**
+   * Resolves a dispute through admin arbitration.
+   *
+   * @param input - Arbitration resolution decision and memo.
+   * @returns The submitted transaction hash and parsed events.
+   */
+  public async resolveDispute(input: ResolveDisputeInput): Promise<ContractWriteResult> {
+    const admin = input.admin ?? (await this.requireSignerAddress());
+    await this.assertSignerMatches(admin, 'resolveDispute');
+
+    const invoiceId = this.toBigInt(input.invoiceId, 'invoiceId');
+    const args = [
+      this.addressScVal(admin),
+      this.u64ScVal(invoiceId),
+      this.stringScVal(input.decision),
+      this.stringScVal(input.notes ?? ''),
+    ];
+
+    const transaction = await this.buildWriteTransaction(admin, 'resolve_dispute', args);
+    await this.simulate(transaction, 'resolve_dispute');
+    return this.prepareSignAndSend(transaction, admin, 'resolve_dispute');
+  }
+
+  /**
+   * Auto-resolves a dispute once the evidence/dispute deadline has expired.
+   *
+   * @param input - Target invoice to auto-resolve.
+   * @returns The submitted transaction hash and parsed events.
+   */
+  public async autoResolveDispute(input: AutoResolveDisputeInput): Promise<ContractWriteResult> {
+    const caller = input.caller ?? (await this.requireSignerAddress());
+    await this.assertSignerMatches(caller, 'autoResolveDispute');
+
+    const invoiceId = this.toBigInt(input.invoiceId, 'invoiceId');
+    const args = [this.addressScVal(caller), this.u64ScVal(invoiceId)];
+
+    const transaction = await this.buildWriteTransaction(
+      caller,
+      'auto_resolve_dispute',
+      args
+    );
+    await this.simulate(transaction, 'auto_resolve_dispute');
+    return this.prepareSignAndSend(transaction, caller, 'auto_resolve_dispute');
+  }
+
+  private buildSubmitInvoiceArgs(
+    input: SubmitInvoiceInput & { freelancer: string }
+  ): stellarXdr.ScVal[] {
     const args = [
       this.addressScVal(input.freelancer),
       this.addressScVal(input.payer),
@@ -482,12 +594,10 @@ export class InvoiceClient {
   private async buildWriteTransaction(
     sourceAddress: string,
     method: string,
-    args: stellarXdr.ScVal[],
+    args: stellarXdr.ScVal[]
   ): Promise<BuiltTransaction> {
-    const sourceAccount = (await this.rpc(
-      'getAccount',
-      method,
-      () => this.rpcServer.getAccount(sourceAddress),
+    const sourceAccount = (await this.rpc('getAccount', method, () =>
+      this.rpcServer.getAccount(sourceAddress)
     )) as Account;
 
     return new TransactionBuilder(sourceAccount, {
@@ -500,7 +610,7 @@ export class InvoiceClient {
           contract: this.contractId,
           function: method,
           args,
-        }),
+        })
       )
       .setTimeout(DEFAULT_TIMEOUT_SECONDS)
       .build();
@@ -516,24 +626,22 @@ export class InvoiceClient {
           contract: this.contractId,
           function: method,
           args,
-        }),
+        })
       )
       .setTimeout(DEFAULT_TIMEOUT_SECONDS)
       .build();
   }
 
   private async simulate(transaction: BuiltTransaction, method: string): Promise<SimulationLike> {
-    const simulation = (await this.rpc(
-      'simulateTransaction',
-      method,
-      () => this.rpcServer.simulateTransaction(transaction),
+    const simulation = (await this.rpc('simulateTransaction', method, () =>
+      this.rpcServer.simulateTransaction(transaction)
     )) as SimulationLike;
 
     if (simulation.error) {
       throw new ContractCallError(
         `Simulation failed for ${method}: ${String(simulation.error)}`,
         this.contractId,
-        method,
+        method
       );
     }
 
@@ -543,34 +651,27 @@ export class InvoiceClient {
   private async prepareSignAndSend(
     transaction: BuiltTransaction,
     sourceAddress: string,
-    method: string,
+    method: string
   ): Promise<ContractWriteResult> {
     const signer = this.signer;
     if (!signer) {
       throw new ContractCallError(
         'A signer is required for state-changing contract calls.',
         this.contractId,
-        method,
+        method
       );
     }
 
-    const prepared = await this.rpc(
-      'prepareTransaction',
-      method,
-      () => this.rpcServer.prepareTransaction(transaction),
+    const prepared = await this.rpc('prepareTransaction', method, () =>
+      this.rpcServer.prepareTransaction(transaction)
     );
     const signedXdr = await signer.signTransaction(prepared.toXDR(), {
       address: sourceAddress,
       networkPassphrase: this.networkPassphrase,
     });
-    const signedTransaction = TransactionBuilder.fromXDR(
-      signedXdr,
-      this.networkPassphrase,
-    );
-    const response = (await this.rpc(
-      'sendTransaction',
-      method,
-      () => this.rpcServer.sendTransaction(signedTransaction),
+    const signedTransaction = TransactionBuilder.fromXDR(signedXdr, this.networkPassphrase);
+    const response = (await this.rpc('sendTransaction', method, () =>
+      this.rpcServer.sendTransaction(signedTransaction)
     )) as SendTransactionLike;
 
     if (!response.hash || !response.status) {
@@ -579,23 +680,23 @@ export class InvoiceClient {
 
     if (response.status !== 'PENDING' && response.status !== 'DUPLICATE') {
       throw new ContractCallError(
-        `Transaction submission failed with status ${response.status}. ${response.errorResultXdr ?? ''}`.trim(),
+        `Transaction submission failed with status ${response.status}. ${
+          response.errorResultXdr ?? ''
+        }`.trim(),
         this.contractId,
-        method,
+        method
       );
     }
 
-    const finalStatus = (await this.rpc(
-      'pollTransaction',
-      method,
-      () => this.rpcServer.pollTransaction(response.hash as string, { attempts: POLL_ATTEMPTS }),
+    const finalStatus = (await this.rpc('pollTransaction', method, () =>
+      this.rpcServer.pollTransaction(response.hash as string, { attempts: POLL_ATTEMPTS })
     )) as PollTransactionLike;
 
     if (finalStatus.status !== 'SUCCESS') {
       throw new ContractCallError(
         `Transaction did not succeed. Final status: ${String(finalStatus.status)}.`,
         this.contractId,
-        method,
+        method
       );
     }
 
@@ -610,31 +711,29 @@ export class InvoiceClient {
     remainingFunding: bigint;
     remainingPayment: bigint;
   }> {
-    const transaction = this.buildReadTransaction('get_invoice', [
-      this.u64ScVal(invoiceId),
-    ]);
+    const transaction = this.buildReadTransaction('get_invoice', [this.u64ScVal(invoiceId)]);
     const simulation = await this.simulate(transaction, 'get_invoice');
     const invoice = this.unwrapContractResult(
       this.extractRetval(simulation, 'get_invoice'),
-      'get_invoice',
+      'get_invoice'
     );
 
     if (!invoice || typeof invoice !== 'object') {
       throw new ContractCallError(
         'Contract returned an invalid invoice payload.',
         this.contractId,
-        'get_invoice',
+        'get_invoice'
       );
     }
 
     const total = this.toBigInt(this.invoiceField(invoice, 'amount'), 'invoice.amount');
     const funded = this.toBigInt(
       this.invoiceField(invoice, 'amount_funded', 'amountFunded') ?? 0n,
-      'invoice.amount_funded',
+      'invoice.amount_funded'
     );
     const paid = this.toBigInt(
       this.invoiceField(invoice, 'amount_paid', 'amountPaid') ?? 0n,
-      'invoice.amount_paid',
+      'invoice.amount_paid'
     );
 
     return {
@@ -666,7 +765,7 @@ export class InvoiceClient {
   private extractBigIntResult(simulation: SimulationLike, method: string): bigint {
     return this.toBigInt(
       this.unwrapContractResult(this.extractRetval(simulation, method), method),
-      `${method} result`,
+      `${method} result`
     );
   }
 
@@ -675,7 +774,7 @@ export class InvoiceClient {
       throw new ContractCallError(
         `Simulation for ${method} did not return a contract result.`,
         this.contractId,
-        method,
+        method
       );
     }
 
@@ -697,14 +796,14 @@ export class InvoiceClient {
       throw new ContractCallError(
         `Contract rejected ${method}: ${this.formatContractError((value as { err: unknown }).err)}`,
         this.contractId,
-        method,
+        method
       );
     }
     if ('Err' in value) {
       throw new ContractCallError(
         `Contract rejected ${method}: ${this.formatContractError((value as { Err: unknown }).Err)}`,
         this.contractId,
-        method,
+        method
       );
     }
 
@@ -741,7 +840,7 @@ export class InvoiceClient {
       throw new ContractCallError(
         'A signer is required for state-changing contract calls.',
         this.contractId,
-        method,
+        method
       );
     }
 
@@ -750,7 +849,7 @@ export class InvoiceClient {
       throw new ContractCallError(
         `${method} must be signed by ${address}.`,
         this.contractId,
-        method,
+        method
       );
     }
   }
@@ -759,18 +858,14 @@ export class InvoiceClient {
     if (!this.signer) {
       throw new ContractCallError(
         'A signer is required for state-changing contract calls.',
-        this.contractId,
+        this.contractId
       );
     }
 
     return this.signer.getPublicKey();
   }
 
-  private async rpc<T>(
-    operation: string,
-    method: string,
-    call: () => Promise<T>,
-  ): Promise<T> {
+  private async rpc<T>(operation: string, method: string, call: () => Promise<T>): Promise<T> {
     try {
       return await call();
     } catch (error) {
@@ -786,7 +881,7 @@ export class InvoiceClient {
 
       throw new NetworkError(
         `Network error during ${operation} for ${method}: ${message}`,
-        Number.isFinite(status) ? status : undefined,
+        Number.isFinite(status) ? status : undefined
       );
     }
   }
@@ -812,16 +907,21 @@ export class InvoiceClient {
   }
 
   private bytesScVal(value: Uint8Array | string): stellarXdr.ScVal {
-    const bytes =
-      typeof value === 'string'
-        ? this.stringToBytes(value)
-        : value;
+    const bytes = typeof value === 'string' ? this.stringToBytes(value) : value;
     return this.encodeScVal(nativeToScVal(bytes));
+  }
+
+  private stringScVal(value: string): stellarXdr.ScVal {
+    return this.encodeScVal(nativeToScVal(value, { type: 'string' }));
+  }
+
+  private symbolScVal(value: string): stellarXdr.ScVal {
+    return this.encodeScVal(nativeToScVal(value, { type: 'symbol' }));
   }
 
   private addressVecScVal(addresses: string[]): stellarXdr.ScVal {
     return this.encodeScVal(
-      stellarXdr.ScVal.scvVec(addresses.map((address) => new Address(address).toScVal())),
+      stellarXdr.ScVal.scvVec(addresses.map((address) => new Address(address).toScVal()))
     );
   }
 
@@ -837,8 +937,8 @@ export class InvoiceClient {
     if (/^[0-9a-fA-F]+$/.test(hex) && hex.length % 2 === 0) {
       return new Uint8Array(
         Array.from({ length: hex.length / 2 }, (_, index) =>
-          Number.parseInt(hex.slice(index * 2, index * 2 + 2), 16),
-        ),
+          Number.parseInt(hex.slice(index * 2, index * 2 + 2), 16)
+        )
       );
     }
 
@@ -858,7 +958,7 @@ export class InvoiceClient {
 
     throw new ContractCallError(
       `Expected bigint-compatible ${field}, received ${typeof value}.`,
-      this.contractId,
+      this.contractId
     );
   }
 
@@ -908,25 +1008,14 @@ export class InvoiceClient {
    */
   public async getTransactionHistory(
     accountId: string,
-    options: TransactionHistoryOptions = {},
+    options: TransactionHistoryOptions = {}
   ): Promise<TransactionHistoryPage> {
-    const {
-      type,
-      startDate,
-      endDate,
-      limit = 20,
-      cursor,
-      order = 'desc',
-    } = options;
+    const { type, startDate, endDate, limit = 20, cursor, order = 'desc' } = options;
 
     const clampedLimit = Math.min(Math.max(1, limit), 200);
     const horizonLimit = Math.min(clampedLimit * 3, 200);
 
-    let query = this.server
-      .payments()
-      .forAccount(accountId)
-      .limit(horizonLimit)
-      .order(order);
+    let query = this.server.payments().forAccount(accountId).limit(horizonLimit).order(order);
 
     if (cursor) {
       query = query.cursor(cursor);
@@ -943,24 +1032,18 @@ export class InvoiceClient {
 
     if (startDate) {
       const start = toDate(startDate).getTime();
-      records = records.filter(
-        (r) => new Date(r.createdAt).getTime() >= start,
-      );
+      records = records.filter((r) => new Date(r.createdAt).getTime() >= start);
     }
 
     if (endDate) {
       const end = toDate(endDate).getTime();
-      records = records.filter(
-        (r) => new Date(r.createdAt).getTime() <= end,
-      );
+      records = records.filter((r) => new Date(r.createdAt).getTime() <= end);
     }
 
     const page = records.slice(0, clampedLimit);
     const lastRaw = raw[raw.length - 1];
     const nextCursor =
-      raw.length > 0 && page.length === clampedLimit
-        ? lastRaw.paging_token
-        : undefined;
+      raw.length > 0 && page.length === clampedLimit ? lastRaw.paging_token : undefined;
 
     return {
       records: page,

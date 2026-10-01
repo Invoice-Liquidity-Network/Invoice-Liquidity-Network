@@ -20,8 +20,6 @@ jobs:
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
-        with:
-          version: 9
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -40,10 +38,10 @@ jobs:
         working-directory: indexer
         run: node dist/backup.js
         env:
-          BACKUP_ENABLED: "true"
+          BACKUP_ENABLED: 'true'
           BACKUP_DIR: /tmp/iln-backups
-          BACKUP_INTERVAL_MS: "86400000"
-          BACKUP_MAX_LOCAL: "7"
+          BACKUP_INTERVAL_MS: '86400000'
+          BACKUP_MAX_LOCAL: '7'
 
       - name: Upload backup artifact
         uses: actions/upload-artifact@v4

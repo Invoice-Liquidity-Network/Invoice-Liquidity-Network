@@ -6,21 +6,21 @@ const statsKeys = {
 };
 
 export interface UseContractStatsResult {
-  data: import('@invoice-liquidity/sdk').ContractStats | undefined;
+  data: import('@iln/sdk').ContractStats | undefined;
   isLoading: boolean;
   error: Error | null;
 }
 
 /**
  * Fetches global protocol statistics.
- * 
+ *
  * @returns {UseContractStatsResult} Protocol stats, loading state, and error
- * 
+ *
  * @example
  * ```tsx
  * function ProtocolStats() {
  *   const { data: stats } = useContractStats();
- *   
+ *
  *   return (
  *     <div>
  *       <Stat label="TVL" value={stats?.totalValueLocked} />

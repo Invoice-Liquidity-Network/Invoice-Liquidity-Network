@@ -1,18 +1,18 @@
-import { type rpc, scValToNative } from "@stellar/stellar-sdk";
-import { hasEvent, insertEvent, upsertInvoice } from "./db";
-import { eventsProcessedTotal, invoicesUpsertedTotal } from "./metrics";
-import { invalidateInvoiceCache } from "./cache";
-import { fetchInvoice } from "./rpc";
-import type { ILNEvent, ILNEventType } from "./types";
-import { pubsub, INVOICE_UPDATED, EVENT_STREAM } from "./graphql/pubsub";
-import { pubSub } from "./pubsub";
+import { type rpc, scValToNative } from '@stellar/stellar-sdk';
+import { hasEvent, insertEvent, upsertInvoice, getInvoiceById } from './db';
+import { eventsProcessedTotal, invoicesUpsertedTotal } from './metrics';
+import { invalidateInvoiceCache } from './cache';
+import { fetchInvoice } from './rpc';
+import type { ILNEvent, ILNEventType } from './types';
+import {
+  pubsub,
+  INVOICE_UPDATED,
+  EVENT_STREAM,
+  LEGACY_INVOICE_CREATED,
+  LEGACY_INVOICE_UPDATED,
+} from './graphql/pubsub';
 
-const KNOWN_EVENT_TYPES = new Set<ILNEventType>([
-  "submitted",
-  "funded",
-  "paid",
-  "defaulted",
-]);
+const KNOWN_EVENT_TYPES = new Set<ILNEventType>(['submitted', 'funded', 'paid', 'defaulted']);
 
 /**
  * Process a single Soroban contract event:
@@ -25,9 +25,7 @@ const KNOWN_EVENT_TYPES = new Set<ILNEventType>([
  * always have accurate state even if events are processed out-of-order or after
  * a re-org.
  */
-export async function processEvent(
-  event: rpc.Api.EventResponse
-): Promise<void> {
+export async function processEvent(event: rpc.Api.EventResponse): Promise<void> {
   // ── Deduplication ─────────────────────────────────────────────────────────
   if (hasEvent(event.id)) {
     return;
@@ -58,7 +56,9 @@ export async function processEvent(
   // Track processed events
   try {
     eventsProcessedTotal.inc();
-  } catch {}
+  } catch {
+    /* metrics failure is non-fatal */
+  }
 
   // ── Fetch latest invoice state and upsert ─────────────────────────────────
   // We always fetch the current state from the RPC regardless of event type.
@@ -69,17 +69,27 @@ export async function processEvent(
   //   • `defaulted`  → updates status=Defaulted
   const invoice = await fetchInvoice(invoiceId);
   if (invoice) {
-    upsertInvoice(invoice);
-    await invalidateInvoiceCache(invoiceId);
-try {
-      invoicesUpsertedTotal.inc();
-    } catch {}
+    const existing = getInvoiceById(invoiceId);
+    const isChanged = !existing || existing.status !== invoice.status || existing.funder !== (invoice.funder ?? null);
+
+    if (isChanged) {
+      upsertInvoice(invoice);
+      await invalidateInvoiceCache(invoiceId);
+      try {
+        invoicesUpsertedTotal.inc();
+      } catch {
+        /* metrics failure is non-fatal */
+      }
+    }
+    // Publish to the single shared pubsub. The modular WebSocket schema
+    // receives structured payloads, while the legacy Yoga schema receives
+    // the raw invoice on its own namespaced channels (see ./graphql/pubsub).
     pubsub.publish(INVOICE_UPDATED, { invoiceUpdated: invoice, triggeringEvent: ilnEvent });
     pubsub.publish(EVENT_STREAM, { eventStream: ilnEvent });
-    if (eventType === "submitted") {
-      pubSub.publish("INVOICE_CREATED", invoice);
+    if (eventType === 'submitted') {
+      pubsub.publish(LEGACY_INVOICE_CREATED, invoice);
     } else {
-      pubSub.publish("INVOICE_UPDATED", invoice);
+      pubsub.publish(LEGACY_INVOICE_UPDATED, invoice);
     }
   }
 }

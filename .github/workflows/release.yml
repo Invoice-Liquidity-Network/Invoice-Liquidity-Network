@@ -1,9 +1,21 @@
 # ==============================================================================
-# Release — Issue #247
+# Release — Issue #247 / #1077
 #
 # When changesets are merged into main, this workflow opens a "Version Packages"
 # PR that bumps versions and updates changelogs. Merging that PR triggers a
 # publish to npm.
+#
+# Issue #1077 — SLSA provenance. The workflow is split into three gated jobs:
+#   1. pack        — builds the SDK (`@iln/sdk`) and CLI (`@invoice-liquidity/cli`),
+#                    packs their release tarballs and computes subject digests;
+#   2. provenance  — generates SLSA Level 3 provenance for those tarballs via
+#                    slsa-framework/slsa-github-generator;
+#   3. release     — `needs: [pack, provenance]`, verifies the attestation covers
+#                    the packed artifacts, then runs the changesets publish and
+#                    records a GitHub Artifact Attestation for the same files.
+# A provenance failure therefore blocks the publish: releases never ship
+# unattested. The packed artifacts are also uploaded so auditors can download
+# exactly what was attested straight from the workflow run.
 # ==============================================================================
 
 name: Release
@@ -14,7 +26,7 @@ on:
       - main
   workflow_dispatch:
 
-# Least-privilege default; the release job elevates to
+# Least-privilege default; jobs elevate to
 # contents/pull-requests/id-token as needed.
 permissions:
   contents: read
@@ -22,15 +34,16 @@ permissions:
 concurrency: ${{ github.workflow }}-${{ github.ref }}
 
 jobs:
-  release:
-    name: Version Packages or Publish
-    runs-on: namespace-profile-nursca
-
-    permissions:
-      contents: write
-      pull-requests: write
-      id-token: write  # required for SLSA provenance attestation
-
+  # ----------------------------------------------------------------------------
+  # Build and pack the SDK + CLI release artifacts (issue #1077). This also fixes
+  # the pre-existing gap where the attestation step referenced sdk/dist/** and
+  # cli/dist/** without those directories ever being built.
+  # ----------------------------------------------------------------------------
+  pack:
+    name: Build and pack release artifacts
+    runs-on: ubuntu-latest
+    outputs:
+      hashes: ${{ steps.subjects.outputs.hashes }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -39,7 +52,7 @@ jobs:
 
       - uses: pnpm/action-setup@a15d269cd4658e1107c09f1fabf4cbd7bd1f308a # v4.4.0
         with:
-          version: "9.0.0"
+          version: '9.0.0'
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -51,19 +64,162 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Build SDK and CLI
+        shell: bash
+        run: |
+          set -euo pipefail
+          pnpm --filter @iln/sdk build
+          pnpm --filter @invoice-liquidity/cli build
+
+      - name: Pack release tarballs
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/artifacts"
+          (cd sdk && pnpm pack --pack-destination "$RUNNER_TEMP/artifacts")
+          (cd cli && pnpm pack --pack-destination "$RUNNER_TEMP/artifacts")
+          (cd "$RUNNER_TEMP/artifacts" && sha256sum ./*.tgz > checksums.txt)
+
+      - name: Generate attestation subjects
+        id: subjects
+        shell: bash
+        run: |
+          set -euo pipefail
+          # sha256sum output (relative names) base64-encoded, as required by
+          # slsa-framework/slsa-github-generator's generic workflow.
+          echo "hashes=$(cd "$RUNNER_TEMP/artifacts" && sha256sum ./*.tgz | sed 's| \./| |' | base64 -w0)" >> "$GITHUB_OUTPUT"
+
+      - name: Upload release artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-artifacts
+          path: ${{ runner.temp }}/artifacts/
+          if-no-files-found: error
+          retention-days: 14
+
+  # ----------------------------------------------------------------------------
+  # SLSA Level 3 provenance for the packed SDK/CLI tarballs (issue #1077).
+  # ----------------------------------------------------------------------------
+  provenance:
+    name: SLSA provenance generation
+    needs: pack
+    permissions:
+      actions: read # detect the GitHub Actions environment
+      id-token: write # sign the provenance
+      contents: write # release uploads
+    uses: slsa-framework/slsa-github-generator/.github/workflows/generator_generic_slsa3.yml@v2.1.0
+    with:
+      base64-subjects: "${{ needs.pack.outputs.hashes }}"
+      provenance-name: release.intoto.jsonl
+
+  # ----------------------------------------------------------------------------
+  # Version Packages PR or npm publish. Runs only when provenance generation
+  # succeeded (needs: provenance) and after re-verifying that the attestation
+  # covers the packed artifacts (issue #1077: fail rather than ship unattested).
+  # ----------------------------------------------------------------------------
+  release:
+    name: Version Packages or Publish
+    needs: [pack, provenance]
+
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: write
+      pull-requests: write
+      id-token: write # required for SLSA provenance attestation
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: pnpm/action-setup@a15d269cd4658e1107c09f1fabf4cbd7bd1f308a # v4.4.0
+        with:
+          version: '9.0.0'
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+          registry-url: 'https://registry.npmjs.org'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build packages
+        run: pnpm build
+
+      - name: Download packed release artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: release-artifacts
+          path: ${{ runner.temp }}/artifacts
+
+      - name: Download SLSA provenance attestation
+        uses: actions/download-artifact@v4
+        with:
+          name: release.intoto.jsonl
+          path: ${{ runner.temp }}/provenance
+
+      - name: Verify provenance covers the release artifacts
+        shell: bash
+        run: |
+          set -euo pipefail
+          prov="$RUNNER_TEMP/provenance/release.intoto.jsonl"
+          if [ ! -s "$prov" ]; then
+            echo "::error::SLSA provenance attestation missing — refusing to ship an unattested release (issue #1077)."
+            exit 1
+          fi
+
+          # The attestation is a DSSE-wrapped in-toto statement; the subject
+          # digests must cover every tarball we are about to publish.
+          if jq -e '.dsseEnvelope.payload' "$prov" >/dev/null 2>&1; then
+            subjects="$(jq -r '.dsseEnvelope.payload' "$prov" | base64 -d | jq -r '.subject[].digest.sha256')"
+          else
+            subjects="$(jq -r '.subject[].digest.sha256' "$prov")"
+          fi
+
+          status=0
+          for tgz in "$RUNNER_TEMP"/artifacts/*.tgz; do
+            digest="$(sha256sum "$tgz" | awk '{print $1}')"
+            if printf '%s\n' "$subjects" | grep -qx "$digest"; then
+              echo "attested: $(basename "$tgz") sha256:$digest"
+            else
+              echo "::error::$(basename "$tgz") (sha256:$digest) is not covered by the SLSA attestation."
+              status=1
+            fi
+          done
+          exit $status
+
+      - name: Check npm publish credentials
+        id: npm-auth
+        run: |
+          if [ -z "$NPM_TOKEN" ]; then
+            echo "available=false" >> "$GITHUB_OUTPUT"
+            echo "::warning::NPM_TOKEN secret is not configured — skipping Version Packages/Publish. Add the secret (or configure npm trusted publishing) to enable releases."
+          else
+            echo "available=true" >> "$GITHUB_OUTPUT"
+          fi
+        env:
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+
       - name: Create Release PR or Publish
+        if: steps.npm-auth.outputs.available == 'true'
         id: changesets
         uses: changesets/action@3841a0683d3cfa6dae0f9bb335290003010fe3f0 # v1.9.0
         with:
           # Opens a "Version Packages" PR when changesets are present.
           # Publishes to npm when the Version Packages PR is merged.
-          publish: pnpm changeset publish --provenance
+          publish: pnpm changeset publish
           version: pnpm changeset:version
           title: 'chore: version packages'
           commit: 'chore: version packages'
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.RELEASE_PAT }}
           NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+          NPM_CONFIG_PROVENANCE: 'true'
 
       - name: Attest build provenance
         if: steps.changesets.outputs.published == 'true'
@@ -72,3 +228,29 @@ jobs:
           subject-path: |
             sdk/dist/**
             cli/dist/**
+
+      - name: Record release audit log entry (issue #1096)
+        if: always() && steps.npm-auth.outputs.available == 'true'
+        run: |
+          if [ "${{ steps.changesets.outputs.published }}" = "true" ]; then
+            action="changesets-publish"
+          else
+            action="changesets-version-pr"
+          fi
+          node scripts/release-audit-log.mjs \
+            --action "$action" \
+            --actor "${{ github.actor }}" \
+            --ref "${{ github.sha }}" \
+            --outcome "${{ steps.changesets.outcome == 'success' && 'success' || 'failure' }}" \
+            --notes "publishedPackages=${{ steps.changesets.outputs.publishedPackages }}"
+
+      - name: Commit release audit log entry
+        if: always() && steps.npm-auth.outputs.available == 'true'
+        run: |
+          if ! git diff --quiet -- release-audit/log.jsonl; then
+            git config user.name "github-actions[bot]"
+            git config user.email "github-actions[bot]@users.noreply.github.com"
+            git add release-audit/log.jsonl
+            git commit -m "chore(release-audit): record changesets release outcome [skip ci]"
+            git push
+          fi
