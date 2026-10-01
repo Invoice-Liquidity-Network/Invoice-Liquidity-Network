@@ -15,8 +15,8 @@ const CONFIRMATION_DEPTH = 10;
  * - Advance the stored cursor to the highest ledger seen.
  *
  * Re-scanning the last processed ledger on every poll is intentional — it
- * provides resilience against ledger re-orgs without extra complexity.
- * The event deduplication layer in `processor.ts` ensures no duplicates.
+ * protects the ledger boundary against missed events. Deduplication avoids
+ * reprocessing unchanged events; removed events are not rolled back on re-org.
  */
 export async function pollOnce(): Promise<void> {
   const stored = getCursorLedger();

@@ -149,7 +149,11 @@ docker-compose up -d
 
 ### Option 4: Railway
 
-The project includes `railway.toml` for Railway deployment:
+The project includes [`indexer/railway.toml`](../../indexer/railway.toml) and
+[`indexer/Procfile`](../../indexer/Procfile) for Railway deployment. The TOML
+file is authoritative for Railway. It installs the filtered indexer workspace
+from the root `pnpm-lock.yaml`, builds it, and starts its `start` script. The
+Procfile's `web` process runs the same built entry point directly.
 
 ```bash
 # Install Railway CLI
@@ -170,69 +174,39 @@ railway variables set REDIS_URL=redis://your-redis:6379
 railway up
 ```
 
-#### Railway Production Configuration
+#### Production settings
 
-The `railway.toml` is pre-configured for production workloads:
+The Railway configuration intentionally runs **one replica**. The indexer
+stores its cursor and event state in SQLite, which has a single-writer
+constraint; adding replicas can create competing pollers and database locking.
+The service should use a Railway persistent volume mounted at `/data`, with
+`DB_PATH=/data/indexer.db`, so deploys and restarts do not replace the database.
+Keep automated backups enabled and store a copy outside the service volume.
+Configure a cloud backup provider/bucket for off-volume copies; local backups
+on the ephemeral application filesystem are not a production backup.
 
-| Setting | Value | Rationale |
-|---------|-------|-----------|
-| `restartPolicyMaxRetries` | 5 | Allows recovery from transient failures before marking the service as failed |
-| `restartPolicyMaxDelay` | 60 | Caps exponential backoff at 60 seconds between restarts |
-| `healthcheckPath` | `/health` | Checks both SQLite connectivity and sync freshness |
-| `healthcheckTimeout` | 10 seconds | Fails fast enough for Railway to trigger a restart |
-| `numReplicas` | 1 | Enforces single-instance deployment — SQLite single-writer constraint prevents horizontal scaling |
+Railway's Config as Code documentation currently marks TOML configuration as
+deprecated, with existing support scheduled to end on December 1, 2026. Keep
+this file working for the current deployment, but plan migration to Railway's
+supported infrastructure-as-code workflow before that date.
 
-##### Health Check Behavior
+Railway probes `/v1/health` and waits up to 120 seconds for startup. The
+versioned endpoint checks SQLite and returns `200` only when the database query
+succeeds; it returns `503` on a database failure. Both `/health` and
+`/v1/health` bypass public API rate limiting so the probe cannot be throttled.
+`on_failure` restarts the process, with three retries to avoid an endless
+restart storm.
 
-The `/health` endpoint returns:
-- `status: "ok"` — SQLite is accessible and the service is operational.
-- `status: "degraded"` — SQLite connectivity failed but the process is running.
-
-Railway marks the deployment as failed when the health check returns a non-2xx
-response or times out (configured at 10 seconds). A `degraded` status still
-returns 200 so Railway does not restart the service for transient DB issues —
-but monitoring should alert on it.
-
-##### Volume Mounting
-
-**Important**: Railway deployments are ephemeral — the SQLite database is lost on each deploy.
-For production use, mount a Railway Volume at the database path:
-
-```bash
-railway volume add -m /data
-railway variables set DB_PATH=/data/indexer.db
-```
-
-Without a volume, every deploy starts a fresh database and re-indexes from the configured `START_LEDGER`.
-
-##### Production Checklist
-
-Before deploying to production, ensure the following environment variables are set:
-
-```bash
-# Required
-railway variables set CONTRACT_ID=<your_contract_id>
-railway variables set RPC_URL=<your_rpc_url>
-railway variables set NETWORK_PASSPHRASE="Test SDF Network ; September 2015"  # or mainnet passphrase
-
-# Recommended for production
-railway variables set DB_PATH=/data/indexer.db
-railway variables set REDIS_URL=<your_redis_url>
-
-# Optional tuning
-railway variables set POLL_INTERVAL_MS=5000
-railway variables set RATE_LIMIT_WINDOW_MS=60000
-railway variables set RATE_LIMIT_MAX=100
-```
-
-##### Scaling Considerations
-
-The indexer is **designed for single-instance deployment only** due to:
-1. **SQLite single-writer constraint** — concurrent writes cause `SQLITE_BUSY`.
-2. **Cursor management** — multiple instances would race on the sync cursor.
-3. **Event deduplication** — the dedup layer is in-process, not shared.
-
-For high-traffic scenarios, use Redis for caching and consider read replicas for API queries.
+Railway CPU and memory are selected in the service's resource settings, not in
+`railway.toml`; do not assume a TOML resource limit is being enforced. The
+numeric load-test results from Issues #48 and #60 are not present in this
+checkout, so no fixed CPU/RAM size can honestly be claimed as validated from
+those findings. Before production, use those reports (or rerun the
+indexer-specific load test), choose resources that keep measured peak CPU and
+resident memory below the service plan limits with operational headroom, and
+repeat the test against the selected Railway plan. Revisit the single-replica
+decision only after replacing SQLite with a shared, multi-writer-safe storage
+design.
 
 ## Environment Variables
 

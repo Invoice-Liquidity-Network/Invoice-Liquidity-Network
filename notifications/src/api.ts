@@ -43,6 +43,37 @@ interface SubscribeRequest {
 }
 
 const rateLimiter = new RateLimiter({
+  perUserLimit: parseInt(process.env.RATE_LIMIT_PER_USER ?? "60", 10),
+  perRecipientLimit: parseInt(
+    process.env.RATE_LIMIT_PER_RECIPIENT ?? process.env.RATE_LIMIT_PER_CHANNEL ?? "200",
+    10,
+  ),
+  windowMs: parseInt(process.env.RATE_LIMIT_WINDOW_MS ?? "60000", 10),
+});
+
+function applyRateLimit(req: Request, res: Response, next: NextFunction): void {
+  const body =
+    typeof req.body === "object" && req.body !== null
+      ? (req.body as Record<string, unknown>)
+      : {};
+  const subscription =
+    req.path === "/test-webhook" && typeof body.id === "number"
+      ? getSubscriptionById(body.id)
+      : undefined;
+  const userId = (typeof body.stellar_address === "string" ? body.stellar_address : undefined)
+    ?? subscription?.stellar_address
+    ?? req.params.address
+    ?? req.ip
+    ?? "anonymous";
+  const channel =
+    (typeof body.channel === "string" ? body.channel : undefined)
+    ?? subscription?.channel
+    ?? "api";
+  const recipientId =
+    (typeof body.destination === "string" ? body.destination : undefined)
+    ?? subscription?.destination
+    ?? userId;
+  const result = rateLimiter.check(userId, channel, recipientId);
   perUserLimit: parseInt(process.env.RATE_LIMIT_PER_USER ?? '60', 10),
   perChannelLimit: parseInt(process.env.RATE_LIMIT_PER_CHANNEL ?? '200', 10),
   windowMs: parseInt(process.env.RATE_LIMIT_WINDOW_MS ?? '60000', 10),
