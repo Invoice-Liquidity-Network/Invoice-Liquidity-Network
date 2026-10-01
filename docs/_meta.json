@@ -82,6 +82,7 @@
   "load-test-harness": "Load Test Harness",
   "test-runtime-budgets": "Test Runtime Budgets",
   "sdk-integration-fixture-audit": "SDK Integration Fixture Audit",
+  "credential-least-privilege-audit": "Credential Least-Privilege Audit",
   "-- Contributing --": {
     "type": "separator",
     "title": "Contributing"
