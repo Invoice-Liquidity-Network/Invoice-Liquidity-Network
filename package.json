@@ -52,6 +52,7 @@
     "enforce:postmortem-sla": "node scripts/enforce-postmortem-sla.mjs",
     "test:postmortem-sla": "node --test scripts/__tests__/enforce-postmortem-sla.test.js",
     "validate:meta-nav": "node scripts/check-meta-nav.mjs",
+    "validate:commit-convention": "node scripts/check-commit-convention.mjs",
     "check:shared-types": "node scripts/check-no-duplicate-types.mjs",
     "drift:check": "node scripts/check-monorepo-map-drift.mjs",
     "test:drift": "node --test scripts/__tests__/check-monorepo-map-drift.test.mjs",
