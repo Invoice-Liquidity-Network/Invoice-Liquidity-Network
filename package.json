@@ -38,6 +38,10 @@
     "security:report": "node scripts/dependency-audit.js report",
     "syncpack:check": "syncpack list-mismatches",
     "validate:packages": "node scripts/validate-packages.mjs",
+    "check-monorepo-map": "node scripts/check-monorepo-map.mjs",
+    "validate:monorepo-map": "node scripts/check-monorepo-map.mjs",
+    "check-compatibility": "node --loader ts-node/esm scripts/check-compatibility.ts",
+    "check:compatibility": "node --loader ts-node/esm scripts/check-compatibility.ts",
     "validate:lockfiles": "node scripts/check-no-foreign-lockfiles.mjs",
     "validate:meta-nav": "node scripts/check-meta-nav.mjs"
   },

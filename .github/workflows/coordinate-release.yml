@@ -29,8 +29,16 @@ jobs:
       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       DRY_RUN: ${{ inputs.dry_run }}
       VERSION: ${{ inputs.version }}
+      RELEASE_TAGS_FILE: ${{ runner.temp }}/iln-release-tags.txt
 
     steps:
+      - name: Initialize release ledger
+        run: |
+          set -euo pipefail
+          rm -f "$RELEASE_TAGS_FILE"
+          touch "$RELEASE_TAGS_FILE"
+          echo "Release ledger initialized at $RELEASE_TAGS_FILE"
+
       - name: Validate version format
         run: |
           if [[ ! "${{ inputs.version }}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
@@ -65,11 +73,14 @@ jobs:
         run: |
           echo "🏗️  Tagging ILN-Smart-Contract with $VERSION..."
           if [[ "$DRY_RUN" != "true" ]]; then
-            gh api repos/Songu3020/ILN-Smart-Contract/git/refs \
+            if gh api repos/Songu3020/ILN-Smart-Contract/git/refs \
               -X POST \
               -f ref="refs/tags/$VERSION" \
-              -f sha="$(gh api repos/Songu3020/ILN-Smart-Contract/commits/main --jq '.sha')" || \
+              -f sha="$(gh api repos/Songu3020/ILN-Smart-Contract/commits/main --jq '.sha')"; then
+              echo "smart-contract:$VERSION" >> "$RELEASE_TAGS_FILE"
+            else
               echo "⚠️  Tag may already exist or API error occurred"
+            fi
           else
             echo "🔄 [DRY RUN] Would tag ILN-Smart-Contract with $VERSION"
           fi
@@ -126,11 +137,14 @@ jobs:
         run: |
           echo "🏷️  Tagging SDK release with $VERSION..."
           if [[ "$DRY_RUN" != "true" ]]; then
-            gh api repos/Songu3020/Invoice-Liquidity-Network/git/refs \
+            if gh api repos/Songu3020/Invoice-Liquidity-Network/git/refs \
               -X POST \
               -f ref="refs/tags/sdk-$VERSION" \
-              -f sha="$(gh api repos/Songu3020/Invoice-Liquidity-Network/commits/main --jq '.sha')" || \
+              -f sha="$(gh api repos/Songu3020/Invoice-Liquidity-Network/commits/main --jq '.sha')"; then
+              echo "sdk:$VERSION" >> "$RELEASE_TAGS_FILE"
+            else
               echo "⚠️  SDK tag may already exist"
+            fi
           else
             echo "🔄 [DRY RUN] Would tag SDK with sdk-$VERSION"
           fi
@@ -181,14 +195,47 @@ jobs:
         run: |
           echo "🏷️  Tagging frontend release with $VERSION..."
           if [[ "$DRY_RUN" != "true" ]]; then
-            gh api repos/Songu3020/ILN-Frontend/git/refs \
+            if gh api repos/Songu3020/ILN-Frontend/git/refs \
               -X POST \
               -f ref="refs/tags/frontend-$VERSION" \
-              -f sha="$(gh api repos/Songu3020/ILN-Frontend/commits/main --jq '.sha')" || \
+              -f sha="$(gh api repos/Songu3020/ILN-Frontend/commits/main --jq '.sha')"; then
+              echo "frontend:$VERSION" >> "$RELEASE_TAGS_FILE"
+            else
               echo "⚠️  Frontend tag may already exist"
+            fi
           else
             echo "🔄 [DRY RUN] Would tag frontend with frontend-$VERSION"
           fi
+
+      - name: Rollback partial release on failure
+        if: failure() && env.DRY_RUN != 'true'
+        continue-on-error: true
+        run: |
+          set +e
+          if [[ ! -s "$RELEASE_TAGS_FILE" ]]; then
+            echo "No release tags were created; nothing to roll back."
+            exit 0
+          fi
+
+          while IFS= read -r tag_record; do
+            [[ -z "$tag_record" ]] && continue
+            repo="${tag_record%%:*}"
+            tag="${tag_record#*:}"
+
+            case "$repo" in
+              smart-contract)
+                gh api "repos/Songu3020/ILN-Smart-Contract/git/refs/tags/$tag" -X DELETE || true
+                ;;
+              sdk)
+                gh api "repos/Songu3020/Invoice-Liquidity-Network/git/refs/tags/sdk-$tag" -X DELETE || true
+                ;;
+              frontend)
+                gh api "repos/Songu3020/ILN-Frontend/git/refs/tags/frontend-$tag" -X DELETE || true
+                ;;
+            esac
+          done < "$RELEASE_TAGS_FILE"
+
+          echo "✅ Partial release rollback attempted for created tags."
 
       - name: Send Discord notification
         if: always()

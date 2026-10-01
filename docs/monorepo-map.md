@@ -54,6 +54,9 @@ Every workspace in the ILN monorepo, its purpose, status, and key dependencies.
 | `examples/react-example/` | Next | React integration example using `@iln/react` hooks. |
 | `examples/submit-invoice/` | Next | Minimal invoice submission CLI helper. |
 | `examples/analytics-plugin/` | Experimental | Analytics data export plugin example. |
+| `examples/api-collection/` | Experimental | API collection and request examples for local integration testing. |
+| `examples/explorer-integration/` | Experimental | External explorer integration sample and API callbacks. |
+| `examples/grafana/` | Experimental | Grafana dashboards and monitoring examples for ILN services. |
 | `examples/governance-monitor/` | Experimental | Governance proposal monitoring example. |
 | `examples/lp-automation/` | Experimental | LP automation script — auto-fund eligible invoices. |
 | `examples/portfolio-report/` | Experimental | Portfolio reporting example — LP position snapshots. |
