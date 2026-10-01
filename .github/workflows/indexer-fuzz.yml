@@ -1,0 +1,89 @@
+name: Indexer Fuzz
+
+# Property-based fuzzing of the indexer's event-processing layer
+# (indexer/tests/processor.fuzz.test.ts) plus replay of the persisted
+# counterexample corpus (indexer/tests/fuzz-corpus/). Pull requests get a
+# short budget so the check stays fast; the nightly run uses a larger one.
+# See docs/indexer/fuzz-testing.md.
+
+on:
+  pull_request:
+    branches: [main, dev]
+    paths:
+      - 'indexer/**'
+      - '.github/workflows/indexer-fuzz.yml'
+  schedule:
+    - cron: '30 2 * * *'
+  workflow_dispatch:
+    inputs:
+      runs:
+        description: Runs per property
+        required: false
+        default: '5000'
+      seed:
+        description: fast-check seed to reproduce a run (optional)
+        required: false
+        default: ''
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: indexer-fuzz-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  fuzz:
+    name: Fuzz indexer event processing
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup pnpm with store cache
+        uses: ./.github/actions/setup-pnpm
+
+      - name: Build workspace dependencies of the indexer
+        run: pnpm --filter @iln/opentelemetry build
+
+      - name: Resolve fuzz budget
+        id: budget
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            echo "runs=300" >> "$GITHUB_OUTPUT"
+          elif [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "runs=${{ github.event.inputs.runs }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "runs=5000" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Replay the regression corpus and run the fuzz campaign
+        working-directory: indexer
+        env:
+          FUZZ_RUNS: ${{ steps.budget.outputs.runs }}
+          FUZZ_SEED: ${{ github.event.inputs.seed }}
+        run: |
+          echo "FUZZ_RUNS=$FUZZ_RUNS FUZZ_SEED=${FUZZ_SEED:-<random>}"
+          pnpm exec vitest run tests/processor.corpus.test.ts tests/processor.fuzz.test.ts tests/decode.test.ts \
+            --reporter=default --reporter=junit --outputFile=fuzz-results.xml
+
+      - name: Upload counterexamples and results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: indexer-fuzz-${{ github.run_id }}
+          path: |
+            indexer/tests/fuzz-corpus/
+            indexer/fuzz-results.xml
+          retention-days: 30
+
+      - name: Open a tracking issue on nightly failure
+        if: failure() && github.event_name == 'schedule'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh issue create \
+            --title "Indexer fuzz campaign failed @ $(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+            --body "The nightly property-based fuzz run found a counterexample. Download artifact indexer-fuzz-${{ github.run_id }} from ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}: the new tests/fuzz-corpus/fuzz-*.json file reproduces it. Triage per docs/indexer/fuzz-testing.md, set its expected outcome, and commit it as a regression test." \
+            --label "indexer,testing" || echo "issue creation skipped"

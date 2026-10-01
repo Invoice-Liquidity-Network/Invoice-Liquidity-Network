@@ -1,0 +1,23 @@
+{
+  "name": "topic-non-xdr-string",
+  "found": "2026-09-25",
+  "property": "single-outcome",
+  "finding": "processEvent threw TypeError (scv.switch is not a function) when topic[0] was a plain string",
+  "event": {
+    "id": "0000001234-0-1",
+    "ledger": 1000,
+    "ledgerClosedAt": "2024-01-01T00:00:00Z",
+    "topic": ["not-a-scval"],
+    "value": {
+      "$xdr": "AAAABQAAAAAAAAAH"
+    }
+  },
+  "invoice": {
+    "kind": "valid",
+    "status": "Pending"
+  },
+  "expect": {
+    "outcome": "malformed",
+    "reason": "topic_not_scval"
+  }
+}

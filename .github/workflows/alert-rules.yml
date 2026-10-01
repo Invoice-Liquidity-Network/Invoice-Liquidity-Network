@@ -1,0 +1,44 @@
+name: Alert Rules
+
+# Keeps monitoring/prometheus/ consistent with the incident ledger: every rule
+# must reference metrics a service emits, and every recorded incident must be
+# covered by a rule or carry an accepted gap. See docs/alert-rule-audit.md.
+
+on:
+  pull_request:
+    branches: [main, dev]
+    paths:
+      - 'monitoring/**'
+      - 'scripts/alert-audit.mjs'
+      - 'scripts/__tests__/alert-audit.test.mjs'
+      - '*/src/metrics.ts'
+      - 'docs/alert-rule-audit.md'
+      - '.github/workflows/alert-rules.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    name: Audit alert rules against the incident ledger
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Validate rule syntax with promtool
+        run: |
+          PROMETHEUS_VERSION=2.53.1
+          curl -sSL "https://github.com/prometheus/prometheus/releases/download/v${PROMETHEUS_VERSION}/prometheus-${PROMETHEUS_VERSION}.linux-amd64.tar.gz" | tar xz
+          "./prometheus-${PROMETHEUS_VERSION}.linux-amd64/promtool" check rules monitoring/prometheus/*alerts.yml
+
+      - name: Run the audit script tests
+        run: node --test scripts/__tests__/alert-audit.test.mjs
+
+      - name: Audit rules against the incident ledger
+        run: node scripts/alert-audit.mjs --check | tee -a "$GITHUB_STEP_SUMMARY"

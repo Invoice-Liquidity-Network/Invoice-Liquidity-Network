@@ -100,7 +100,7 @@ function collectDocumentedEntries(repoRoot) {
     const cleaned = value.replace(/\/$/, '');
     if (!cleaned || cleaned === 'Path') continue;
 
-    if (cleaned.includes('/') || cleaned === 'sdk' || cleaned === 'cli' || cleaned === 'indexer' || cleaned === 'notifications' || cleaned === 'docs') {
+    if (cleaned.includes('/') || cleaned === 'sdk' || cleaned === 'cli' || cleaned === 'indexer' || cleaned === 'notifications' || cleaned === 'oracle-service' || cleaned === 'docs') {
       entries.add(cleaned);
     }
   }

@@ -1,0 +1,27 @@
+{
+  "name": "id-empty",
+  "found": "2026-09-25",
+  "property": "no-crash",
+  "finding": "an empty id was accepted as an event_id, so every later empty-id event deduplicated against the first",
+  "event": {
+    "id": "",
+    "ledger": 1000,
+    "ledgerClosedAt": "2024-01-01T00:00:00Z",
+    "topic": [
+      {
+        "$xdr": "AAAADwAAAAlzdWJtaXR0ZWQAAAA="
+      }
+    ],
+    "value": {
+      "$xdr": "AAAABQAAAAAAAAAH"
+    }
+  },
+  "invoice": {
+    "kind": "valid",
+    "status": "Pending"
+  },
+  "expect": {
+    "outcome": "malformed",
+    "reason": "event_id_invalid"
+  }
+}

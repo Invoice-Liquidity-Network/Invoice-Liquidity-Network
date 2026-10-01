@@ -1,0 +1,26 @@
+{
+  "name": "value-u64-beyond-safe-integer",
+  "found": "2026-09-25",
+  "property": "integrity",
+  "finding": "u64 ids above 2^53 lost precision through Number() and were stored under a different id",
+  "event": {
+    "id": "0000001234-0-6",
+    "ledger": 1000,
+    "ledgerClosedAt": "2024-01-01T00:00:00Z",
+    "topic": [
+      {
+        "$xdr": "AAAADwAAAAZmdW5kZWQAAA=="
+      }
+    ],
+    "value": {
+      "$xdr": "AAAABRAAAAAAAAAA"
+    }
+  },
+  "invoice": {
+    "kind": "null"
+  },
+  "expect": {
+    "outcome": "malformed",
+    "reason": "invoice_id_invalid"
+  }
+}

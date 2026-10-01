@@ -1,0 +1,65 @@
+# Chaos overlay for the local/staging stack (docs/chaos-engineering.md).
+#
+#   docker compose -f docker-compose.yml -f tests/chaos/docker-compose.chaos.yml \
+#     up -d stellar-node redis toxiproxy indexer oracle-service notifications
+#
+# Every inter-service hop is re-pointed through Toxiproxy so the harness can
+# add latency, drop or reset connections, or partition a link entirely:
+#
+#   oracle-service ──INDEXER_BASE_URL──▶ toxiproxy:18001 ──▶ indexer:3001
+#   indexer        ──RPC_URL───────────▶ toxiproxy:18000 ──▶ stellar-node:8000
+#   notifications  ──NOTIFICATIONS_RPC_URL▶ toxiproxy:18002 ──▶ stellar-node:8000
+#
+# The Toxiproxy API is published on 8474 for tests/chaos/run.ts.
+services:
+  toxiproxy:
+    image: ghcr.io/shopify/toxiproxy:2.9.0
+    command: ['-host=0.0.0.0', '-config=/config/toxiproxy.json']
+    volumes:
+      - ./toxiproxy.json:/config/toxiproxy.json:ro
+    ports:
+      - '8474:8474'
+      - '18000:18000'
+      - '18001:18001'
+      - '18002:18002'
+    healthcheck:
+      test: ['CMD-SHELL', 'wget -qO- http://127.0.0.1:8474/version || exit 1']
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  indexer:
+    depends_on:
+      toxiproxy:
+        condition: service_healthy
+    environment:
+      RPC_URL: http://toxiproxy:18000/soroban/rpc
+
+  oracle-service:
+    depends_on:
+      toxiproxy:
+        condition: service_healthy
+    environment:
+      INDEXER_BASE_URL: http://toxiproxy:18001
+
+  notifications:
+    image: node:20-alpine
+    working_dir: /workspace
+    command: sh -lc "corepack enable && pnpm install --frozen-lockfile && pnpm --filter iln-notifications dev"
+    depends_on:
+      stellar-node:
+        condition: service_healthy
+      toxiproxy:
+        condition: service_healthy
+    volumes:
+      - .:/workspace
+    environment:
+      PORT: 4001
+      NOTIFICATIONS_DB_PATH: /workspace/.docker-output/notifications.chaos.sqlite
+      NOTIFICATIONS_RPC_URL: http://toxiproxy:18002/soroban/rpc
+      NOTIFICATIONS_CONTRACT_ID: ${CHAOS_CONTRACT_ID:-CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA}
+      NOTIFICATIONS_NETWORK_PASSPHRASE: 'Standalone Network ; February 2017'
+      NOTIFICATIONS_POLL_INTERVAL_MS: 5000
+      RESEND_API_KEY: chaos-harness-placeholder
+    ports:
+      - '4001:4001'

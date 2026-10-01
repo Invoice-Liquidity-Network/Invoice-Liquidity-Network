@@ -31,6 +31,13 @@ export const invoicesUpsertedTotal = new Counter({
   registers: [registry],
 });
 
+export const eventsDeadLetteredTotal = new Counter({
+  name: 'iln_events_dead_lettered_total',
+  help: 'Contract events routed to the dead-letter table because they could not be decoded or applied',
+  labelNames: ['reason'] as const,
+  registers: [registry],
+});
+
 export const lastProcessedLedger = new Gauge({
   name: 'iln_last_processed_ledger',
   help: 'Last processed ledger sequence number',

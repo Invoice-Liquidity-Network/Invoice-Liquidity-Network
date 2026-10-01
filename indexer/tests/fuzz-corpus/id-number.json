@@ -1,0 +1,27 @@
+{
+  "name": "id-number",
+  "found": "2026-09-25",
+  "property": "no-crash",
+  "finding": "a numeric id hit SQLite with 'datatype mismatch' after the topic and value had been decoded",
+  "event": {
+    "id": 42,
+    "ledger": 1000,
+    "ledgerClosedAt": "2024-01-01T00:00:00Z",
+    "topic": [
+      {
+        "$xdr": "AAAADwAAAAlzdWJtaXR0ZWQAAAA="
+      }
+    ],
+    "value": {
+      "$xdr": "AAAABQAAAAAAAAAq"
+    }
+  },
+  "invoice": {
+    "kind": "valid",
+    "status": "Pending"
+  },
+  "expect": {
+    "outcome": "malformed",
+    "reason": "event_id_invalid"
+  }
+}

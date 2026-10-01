@@ -61,7 +61,7 @@ const { transaction } = await sdk.buildWriteTransaction(...);
 - Detect the Freighter wallet via its published extension ID, not via duck-typing on `window.freighter`.
 - Do not trust wallet providers injected by unknown browser extensions.
 
-For the full SDK trust model — including trust assumptions, key management guidelines, threat model, and what the SDK validates vs. delegates — see [SDK Trust Model](../sdk-trust-model.md). This is the authoritative reference for SDK-level security and should be consulted before integrating the SDK into any application.
+For the full SDK trust model — including trust assumptions, key management guidelines, threat model, and what the SDK validates vs. delegates — see [SDK Trust Model](sdk-trust-model.md). This is the authoritative reference for SDK-level security and should be consulted before integrating the SDK into any application.
 
 **Dependency management**
 

@@ -1,7 +1,9 @@
 import { getDb, type InvoiceFilter } from './db';
 import type { Invoice, ILNEvent } from './types';
 
-let archiveAttached = false;
+// Attachment is tracked per connection: setDb() swaps the connection (tests, reindex) and the
+// new one needs its own ATTACH.
+const archiveAttached = new WeakSet<ReturnType<typeof getDb>>();
 
 /**
  * Return the database connection with the archive database attached.
@@ -9,7 +11,7 @@ let archiveAttached = false;
  */
 export function getArchiveDbConnection(): ReturnType<typeof getDb> {
   const db = getDb();
-  if (!archiveAttached) {
+  if (!archiveAttached.has(db)) {
     const archivePath = process.env.ARCHIVE_DB_PATH || 'archive.db';
 
     // Attach the archive database file
@@ -40,10 +42,10 @@ export function getArchiveDbConnection(): ReturnType<typeof getDb> {
         created_at       INTEGER NOT NULL
       );
 
-      CREATE INDEX IF NOT EXISTS idx_archive_invoices_created_at ON archive.invoices(created_at);
-      CREATE INDEX IF NOT EXISTS idx_archive_invoices_status ON archive.invoices(status);
-      CREATE INDEX IF NOT EXISTS idx_archive_events_invoice_id ON archive.events(invoice_id);
-      CREATE INDEX IF NOT EXISTS idx_archive_events_created_at ON archive.events(created_at);
+      CREATE INDEX IF NOT EXISTS archive.idx_archive_invoices_created_at ON invoices(created_at);
+      CREATE INDEX IF NOT EXISTS archive.idx_archive_invoices_status ON invoices(status);
+      CREATE INDEX IF NOT EXISTS archive.idx_archive_events_invoice_id ON events(invoice_id);
+      CREATE INDEX IF NOT EXISTS archive.idx_archive_events_created_at ON events(created_at);
 
       CREATE TABLE IF NOT EXISTS archive.archive_runs (
         id            INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -53,7 +55,7 @@ export function getArchiveDbConnection(): ReturnType<typeof getDb> {
       );
     `);
 
-    archiveAttached = true;
+    archiveAttached.add(db);
   }
   return db;
 }

@@ -1,0 +1,26 @@
+{
+  "name": "valid-event-processed",
+  "found": "2026-09-25",
+  "property": "integrity",
+  "finding": "baseline behaviour kept: a well-formed event is recorded together with its fetched state",
+  "event": {
+    "id": "0000001234-1-6",
+    "ledger": 1000,
+    "ledgerClosedAt": "2024-01-01T00:00:00Z",
+    "topic": [
+      {
+        "$xdr": "AAAADwAAAAZmdW5kZWQAAA=="
+      }
+    ],
+    "value": {
+      "$xdr": "AAAABQAAAAAAAAAH"
+    }
+  },
+  "invoice": {
+    "kind": "valid",
+    "status": "Funded"
+  },
+  "expect": {
+    "outcome": "processed"
+  }
+}

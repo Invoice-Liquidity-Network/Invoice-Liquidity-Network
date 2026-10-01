@@ -1,0 +1,25 @@
+{
+  "name": "rpc-throws-leaves-no-partial-state",
+  "found": "2026-09-25",
+  "property": "no-crash",
+  "finding": "when the RPC call rejected, the event row had already been inserted, so the retry on the next poll was deduplicated and the invoice never stored",
+  "event": {
+    "id": "0000001234-1-4",
+    "ledger": 1000,
+    "ledgerClosedAt": "2024-01-01T00:00:00Z",
+    "topic": [
+      {
+        "$xdr": "AAAADwAAAAlzdWJtaXR0ZWQAAAA="
+      }
+    ],
+    "value": {
+      "$xdr": "AAAABQAAAAAAAAAH"
+    }
+  },
+  "invoice": {
+    "kind": "throw"
+  },
+  "expect": {
+    "outcome": "throws"
+  }
+}

@@ -9,6 +9,7 @@ import {
   xdr,
 } from '@stellar/stellar-sdk';
 
+import { createResilientRpcServer } from './rpc-resilience';
 import type { RpcServerLike } from './types';
 import type {
   LPCoverage,
@@ -30,6 +31,17 @@ export interface InsuranceClientConfig {
   rpcUrl: string;
   networkPassphrase: string;
   server?: RpcServerLike;
+  /** Retry policy for RPC calls; `false` disables retries. Defaults to mainnet backoff. */
+  backoff?: import('./backoff').BackoffOptions | false;
+  /** Circuit breaker options or a shared `RpcCircuitBreaker`; `false` disables it. */
+  circuitBreaker?:
+    | import('./circuit-breaker').RpcCircuitBreakerOptions
+    | import('./circuit-breaker').RpcCircuitBreaker
+    | false;
+  /** Fallback per-attempt RPC timeout in milliseconds. */
+  timeoutMs?: number;
+  /** Per-operation RPC timeouts (read, write, simulation). */
+  timeouts?: Partial<import('./timeouts').RequestTimeouts>;
 }
 
 export class InsurancePoolClient {
@@ -40,7 +52,12 @@ export class InsurancePoolClient {
   constructor(config: InsuranceClientConfig) {
     this.contractId = config.contractId;
     this.networkPassphrase = config.networkPassphrase;
-    this.server = config.server ?? new rpc.Server(config.rpcUrl);
+    this.server = createResilientRpcServer(config.server ?? new rpc.Server(config.rpcUrl), {
+      backoff: config.backoff,
+      circuitBreaker: config.circuitBreaker,
+      timeoutMs: config.timeoutMs,
+      timeouts: config.timeouts,
+    });
   }
 
   private buildReadTransaction(method: string, args: xdr.ScVal[]): BuiltTransaction {

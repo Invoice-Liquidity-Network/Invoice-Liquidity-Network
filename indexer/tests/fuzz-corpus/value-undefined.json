@@ -1,0 +1,26 @@
+{
+  "name": "value-undefined",
+  "found": "2026-09-25",
+  "property": "no-crash",
+  "finding": "processEvent threw TypeError (reading 'switch') when value was missing",
+  "event": {
+    "id": "0000001234-0-3",
+    "ledger": 1000,
+    "ledgerClosedAt": "2024-01-01T00:00:00Z",
+    "topic": [
+      {
+        "$xdr": "AAAADwAAAAlzdWJtaXR0ZWQAAAA="
+      }
+    ],
+    "value": {
+      "$absent": true
+    }
+  },
+  "invoice": {
+    "kind": "null"
+  },
+  "expect": {
+    "outcome": "malformed",
+    "reason": "value_not_scval"
+  }
+}
