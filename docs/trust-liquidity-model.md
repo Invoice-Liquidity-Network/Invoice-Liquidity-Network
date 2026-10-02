@@ -13,6 +13,12 @@ This document represents the finalized Trust & Liquidity Model for the Invoice L
 - **Reviewer Question**: How will business identity and corporate risk be assessed at scale without bottlenecking liquidity?
 - **Final Decision**: We will integrate with an established, regulated external KYB provider. Their API provides the necessary corporate structure unrolling and ultimate beneficial owner (UBO) verification required by our initial Liquidity Providers, without storing sensitive PII natively on our infrastructure (see [Privacy Policy](./privacy.md)).
 
+#### 2.1 Provider Unavailability
+
+KYB is a required onboarding control for business borrowers; provider unavailability never counts as a pass. The oracle uses a **temporary hard block with caller-driven retry**: if the required KYB adapter is missing or throws/times out, the verification response is not approved and carries the `rejected-kyb-unavailable` outcome. The borrower remains unapproved and cannot proceed to liquidity onboarding until a successful provider result is available. Provider rejection remains a distinct negative verification result.
+
+The service does not silently fall back to heuristic-only approval, and there is no manual-review override in this contract. Callers should retry after provider health recovers, using bounded backoff. Production oracle wiring requires a live KYB result for approval and bypasses cached verdicts while this check is required; local/test deployments can explicitly opt into non-required KYB for fixtures only. A manual review route, if introduced later, must preserve the same KYB requirement and be separately approved and audited.
+
 ### 3. LP Cold-Start Posture
 - **Reviewer Question**: How do we guarantee initial liquidity before a proven track record is established?
 - **Final Decision**: We will deploy a "First-Loss Provision" managed via a dedicated treasury multi-sig during the cold-start phase. This provides a buffer for external LPs, ensuring that the first 5% of any default is absorbed by the protocol's treasury, drastically lowering the risk threshold for onboarding initial institutional capital.

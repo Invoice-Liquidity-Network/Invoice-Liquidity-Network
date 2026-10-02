@@ -503,6 +503,7 @@ export class OracleVerifier {
   private readonly historyProvider: OracleHistoryProvider;
   private readonly reputationProvider: OracleReputationProvider;
   private readonly kybProvider?: import('./types').VerificationProvider;
+  private readonly requireKyb: boolean;
   private readonly maxOracleAgeMs: number;
   private readonly externalProvider?: ExternalVerificationProvider;
   private readonly metrics?: OracleMetrics;
@@ -522,6 +523,7 @@ export class OracleVerifier {
     this.historyProvider = options.historyProvider;
     this.reputationProvider = options.reputationProvider;
     this.kybProvider = options.kybProvider;
+    this.requireKyb = options.requireKyb ?? false;
     this.maxOracleAgeMs = options.maxOracleAgeMs ?? 5 * 60 * 1000;
     this.externalProvider = options.externalProvider;
     this.metrics = options.metrics;
@@ -628,7 +630,7 @@ export class OracleVerifier {
     };
     const cacheKey = buildOracleCacheKey(normalizedRequest);
 
-    if (!normalizedRequest.forceRefresh) {
+    if (!normalizedRequest.forceRefresh && !this.requireKyb) {
       const cached = await this.cache?.get(cacheKey);
       if (cached) {
         return {
@@ -730,6 +732,9 @@ export class OracleVerifier {
     // verified — rather than inventing a fresh-looking answer. With no cache
     // to degrade to, fail loudly so callers halt price-dependent operations.
     if (historyFailed && reputationFailed) {
+      if (this.requireKyb) {
+        throw new OracleUnavailableError('Oracle sources unavailable; required KYB must be retried');
+      }
       const stale = await this.cache?.getStale(cacheKey);
       if (stale) {
         const ageMs = Math.max(0, nowMs - stale.generatedAtMs);
@@ -783,6 +788,23 @@ export class OracleVerifier {
       cacheHit: false,
     };
 
+    const kybUnavailable =
+      this.requireKyb &&
+      (!this.kybProvider || kybResult.status !== 'fulfilled' || !kybResult.value);
+    if (kybUnavailable) {
+      const rationale = 'Required KYB provider is unavailable; retry verification before onboarding.';
+      response = {
+        ...response,
+        isVerified: false,
+        evidence: [...response.evidence, rationale],
+        composition: {
+          ...response.composition,
+          outcome: 'rejected-kyb-unavailable',
+          rationale,
+        },
+      };
+    }
+
     response = this.applyDeltaBounds(response, request.payer, nowMs, {
       historyOk: historyResult.status === 'fulfilled',
       history,
@@ -810,7 +832,9 @@ export class OracleVerifier {
     }
 
     const publishStart = this.now();
-    await this.cache?.set(cacheKey, response, ttlSeconds);
+    if (!this.requireKyb) {
+      await this.cache?.set(cacheKey, response, ttlSeconds);
+    }
     this.observeStage('publish', this.now() - publishStart);
     return response;
   }

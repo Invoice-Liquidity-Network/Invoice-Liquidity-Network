@@ -384,6 +384,24 @@ describe('oracle verifier numeric normalization - property-based tests', () => {
 });
 
 describe('pluggable KYB provider integration (#868)', () => {
+  it('fails closed and asks the caller to retry when required KYB is unavailable', async () => {
+    const verifier = new OracleVerifier({
+      historyProvider: async () => healthyHistory,
+      reputationProvider: async () => reputation,
+      kybProvider: { name: 'unavailable', verifyPayer: async () => { throw new Error('timeout'); } },
+      requireKyb: true,
+      now: () => 1_701_000_100_000,
+    });
+
+    const response = await verifier.verify(request);
+
+    expect(response.isVerified).toBe(false);
+    expect(response.composition.outcome).toBe('rejected-kyb-unavailable');
+    expect(response.evidence).toContain(
+      'Required KYB provider is unavailable; retry verification before onboarding.'
+    );
+  });
+
   it('composes external KYB provider results into oracle verification', async () => {
     const { MockKYBProvider } = await import('./kyb/mockProvider');
     const mockKyb = new MockKYBProvider({

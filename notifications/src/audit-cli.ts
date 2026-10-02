@@ -39,9 +39,18 @@ async function main() {
   }
 
   if (hasFlag('purge')) {
-    const result = purgeExpiredDeliveryLogs();
-    console.log('Purged expired records:', result);
-    console.log('Retention: sent_notifications 30d, webhook_delivery_logs 90d, delivery_audit_log 90d');
+    const maxRowsArg = getArg('max-rows');
+    const maxRows = maxRowsArg === undefined ? undefined : Number(maxRowsArg);
+    if (maxRows !== undefined && (!Number.isInteger(maxRows) || maxRows < 0)) {
+      console.error('--max-rows must be a non-negative integer');
+      process.exit(1);
+    }
+    const result = purgeExpiredDeliveryLogs(Date.now(), {
+      dryRun: hasFlag('dry-run'),
+      maxRows,
+    });
+    console.log('Retention sweep:', result);
+    console.log('Per-category outcome recorded in retention_deletion_audit.');
     return;
   }
 
@@ -58,7 +67,9 @@ Options:
   --end <ISO>          End time (inclusive, ISO 8601)
   --limit <n>          Limit (default 100, max 1000)
   --offset <n>         Offset (default 0)
-  --purge              Purge expired records per retention policy (30d/90d) and exit
+  --purge              Run expired-record retention sweep and exit
+  --dry-run            With --purge, preview eligible records without deleting
+  --max-rows <n>       With --purge, alert and skip if eligible rows exceed n
   --help               Show this help
 
 Examples:

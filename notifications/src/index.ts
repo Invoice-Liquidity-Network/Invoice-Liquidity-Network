@@ -5,6 +5,7 @@ import { NotificationWebSocketServer } from './websocket';
 import { CONFIG } from './config';
 import { TemplateEngine } from './template-engine';
 import { startHealthChecks } from './provider-health';
+import { startRetentionScheduler } from './retention';
 
 const app = createApp();
 const server = http.createServer(app);
@@ -24,6 +25,7 @@ startPolling().catch((err) => {
 
 // Automatic provider health checking with fallback routing — probes every 30s
 startHealthChecks();
+startRetentionScheduler();
 
 export { app, server, wsServer, TemplateEngine };
 export type {

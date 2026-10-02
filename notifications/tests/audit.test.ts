@@ -13,6 +13,7 @@ import {
   countDeliveryAuditLogs,
   purgeExpiredDeliveryLogs,
   createSubscription,
+  deleteSubscriptionById,
   createDeliveryAuditLog,
 } from '../src/db';
 
@@ -436,6 +437,88 @@ describe('Delivery audit log — durable, queryable, retention-enforced', () => 
     expect(res.status).toBe(200);
     expect(res.body.purged.auditLogs).toBe(1);
     expect(res.body.retentionPolicy.auditLogsDays).toBe(90);
+  });
+
+  it('previews, guards, audits, and then deletes expired records without dropping pending work', async () => {
+    const now = Date.now();
+    const oldTime = now - 100 * 24 * 60 * 60 * 1000;
+    const db = (await import('../src/db')).getDb();
+    db.prepare(
+      `INSERT INTO sent_notifications (invoice_id, trigger, recipient_address, channel, destination, sent_at)
+       VALUES (1, 'invoice_paid', 'GOLD', 'email', 'old@example.com', ?)`
+    ).run(oldTime);
+    db.prepare(
+      `INSERT INTO redeemed_unsubscribe_tokens (nonce, redeemed_at) VALUES ('expired-token', ?)`
+    ).run(oldTime);
+    for (const status of ['failed', 'pending']) {
+      db.prepare(
+        `INSERT INTO dispatch_attempts
+          (id, dedup_key, invoice_id, trigger, recipient_address, channel, destination,
+           event_id, subscription, payload, status, attempts, created_at, updated_at)
+         VALUES (?, ?, 1, 'invoice_paid', 'GOLD', 'email', 'old@example.com', '', '{}', '{}', ?, 1, ?, ?)`
+      ).run(`attempt-${status}`, `dedup-${status}`, status, oldTime, oldTime);
+    }
+
+    const preview = purgeExpiredDeliveryLogs(now, { dryRun: true, maxRows: 10 });
+    expect(preview.totalEligible).toBe(3);
+    expect(preview.dryRun).toBe(true);
+    expect(preview.sentNotifications).toBe(0);
+    expect(db.prepare('SELECT COUNT(*) AS count FROM sent_notifications').get()).toMatchObject({ count: 1 });
+
+    const guarded = purgeExpiredDeliveryLogs(now, { maxRows: 2 });
+    expect(guarded.alertThresholdExceeded).toBe(true);
+    expect(guarded.sentNotifications).toBe(0);
+
+    const deleted = purgeExpiredDeliveryLogs(now, { maxRows: 3 });
+    expect(deleted.sentNotifications).toBe(1);
+    expect(deleted.dispatchAttempts).toBe(1);
+    expect(deleted.redeemedTokens).toBe(1);
+    expect(db.prepare("SELECT COUNT(*) AS count FROM dispatch_attempts WHERE status = 'pending'").get()).toMatchObject({ count: 1 });
+    expect(
+      db.prepare('SELECT run_mode, deleted_rows FROM retention_deletion_audit WHERE category = ? ORDER BY id')
+        .all('sent_notifications')
+    ).toEqual([
+      { run_mode: 'dry-run', deleted_rows: 0 },
+      { run_mode: 'alerted', deleted_rows: 0 },
+      { run_mode: 'deleted', deleted_rows: 1 },
+    ]);
+  });
+
+  it('unsubscribe removes retry data and queued destinations but preserves delivery audit history', async () => {
+    const db = (await import('../src/db')).getDb();
+    const sub = createSubscription({
+      stellar_address: 'GUNSUBSCRIBE',
+      channel: 'webhook',
+      destination: 'https://example.com/hook',
+      triggers: ['invoice_paid'],
+    });
+    db.prepare(
+      `INSERT INTO webhook_delivery_logs
+        (subscription_id, trigger, invoice_id, recipient_address, status, attempts, created_at, updated_at)
+       VALUES (?, 'invoice_paid', 1, 'GUNSUBSCRIBE', 'failed', 1, ?, ?)`
+    ).run(sub.id, Date.now(), Date.now());
+    db.prepare(
+      `INSERT INTO dispatch_attempts
+        (id, dedup_key, invoice_id, trigger, recipient_address, channel, destination,
+         event_id, subscription, payload, status, attempts, created_at, updated_at)
+       VALUES (?, ?, 1, 'invoice_paid', 'GUNSUBSCRIBE', 'webhook', ?, '', ?, '{}', 'pending', 0, ?, ?)`
+    ).run('unsubscribe-attempt', 'unsubscribe-dedup', sub.destination, JSON.stringify(sub), Date.now(), Date.now());
+    createDeliveryAuditLog({
+      invoice_id: 1,
+      trigger: 'invoice_paid',
+      recipient_address: 'GUNSUBSCRIBE',
+      channel: 'webhook',
+      destination: sub.destination,
+      status: 'delivered',
+      attempts: 1,
+      attempt_timestamps: [Date.now()],
+    });
+
+    expect(deleteSubscriptionById(sub.id)).toBe(true);
+    expect(db.prepare('SELECT COUNT(*) AS count FROM subscriptions WHERE id = ?').get(sub.id)).toMatchObject({ count: 0 });
+    expect(db.prepare('SELECT COUNT(*) AS count FROM webhook_delivery_logs WHERE subscription_id = ?').get(sub.id)).toMatchObject({ count: 0 });
+    expect(db.prepare('SELECT COUNT(*) AS count FROM dispatch_attempts WHERE id = ?').get('unsubscribe-attempt')).toMatchObject({ count: 0 });
+    expect(countDeliveryAuditLogs({ recipient: 'GUNSUBSCRIBE' })).toBe(1);
   });
 
   it('durability: audit log is independent of transient dispatch-retry state', async () => {

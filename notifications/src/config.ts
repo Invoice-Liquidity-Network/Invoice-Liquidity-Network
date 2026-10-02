@@ -47,6 +47,9 @@ export const CONFIG = {
   twilioFromNumber: process.env.TWILIO_FROM_NUMBER || '',
   smsRateLimitWindowMs: parseIntEnv('SMS_RATE_LIMIT_WINDOW_MS', 3600000),
   smsRateLimitMax: parseIntEnv('SMS_RATE_LIMIT_MAX', 10),
+  retentionSweepIntervalMs: parseIntEnv('RETENTION_SWEEP_INTERVAL_MS', 86400000),
+  retentionDryRun: process.env.NOTIFICATIONS_RETENTION_DRY_RUN !== 'false',
+  retentionMaxRows: parseIntEnv('RETENTION_MAX_DELETE_ROWS', 10000),
 };
 
 export function isValidEmail(email: string): boolean {

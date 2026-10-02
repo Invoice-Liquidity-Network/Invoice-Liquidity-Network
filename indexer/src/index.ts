@@ -24,7 +24,11 @@ async function main() {
   startReconciliationScheduler(3600000); // 1 hour interval
 
   if (CONFIG.archiveEnabled) {
-    startArchivalScheduler(CONFIG.archiveIntervalMs, CONFIG.archiveOlderThanDays);
+    startArchivalScheduler(
+      CONFIG.archiveIntervalMs,
+      CONFIG.archiveOlderThanDays,
+      CONFIG.archivePurgeOlderThanDays
+    );
   }
 
   // Start automated backups if enabled
