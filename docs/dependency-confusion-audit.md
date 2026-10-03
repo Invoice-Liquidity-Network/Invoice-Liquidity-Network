@@ -256,7 +256,7 @@ If a dependency confusion attack is detected:
 
 ## References
 
-- [Dependency Confusion: How I Hacked Into Apple, Microsoft and Dozens of Other Companies](https://medium.com/@alex.birsan/dependency-confusion-4a5d60fec610)
+- Dependency Confusion: How I Hacked Into Apple, Microsoft and Dozens of Other Companies
 - [npm Organizations Security Best Practices](https://docs.npmjs.com/organizations)
 - [pnpm Workspace Protocol](https://pnpm.io/workspaces#workspace-protocol-workspace)
 - [GitHub Actions OIDC with npm](https://docs.npmjs.com/generating-provenance-statements)

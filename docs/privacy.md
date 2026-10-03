@@ -102,7 +102,7 @@ Before onboarding residents of any launch country, record the exact countries an
 
 ## 7. Contact
 
-- Email: [security@invoiceliquidity.network](mailto:security@invoiceliquidity.network)
+- Email: security@invoiceliquidity.network
 - For data-export / deletion requests, please email the security contact.
 
 *Retention behavior described above reflects the code paths and deployment defaults in this repository. Provider-side processing, actual deployed regions, backup lifecycle configuration, and country-specific legal compliance require deployment evidence and review before launch.*

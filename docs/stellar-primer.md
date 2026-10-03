@@ -205,7 +205,7 @@ There is **no concept of gas limit exhaustion mid-execution** on Soroban — if 
 | Block | Ledger (~5s) | Block (~12s) |
 | Timestamp source | `env.ledger().timestamp()` | `block.timestamp` |
 | Block explorer | [Stellar Expert](https://stellar.expert) | Etherscan |
-| Testnet faucet | [Friendbot](https://friendbot.stellar.org) | Various faucets |
+| Testnet faucet | Friendbot | Various faucets |
 | Wallet (browser) | [Freighter](https://freighter.app) | MetaMask |
 
 ---

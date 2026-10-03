@@ -13,7 +13,7 @@ This file covers two things:
 |---|---|---|
 | Package name | `@invoice-liquidity/docs` | `@invoice-liquidity/docs-next` |
 | Framework | Nextra 2, Next.js 14, Pages Router | Nextra 3, Next.js 15, App Router |
-| Deployed? | **No** | **Yes — [docs.iln.finance](https://docs.iln.finance)** |
+| Deployed? | **No** | **Yes — docs.iln.finance** |
 | CNAME | — | `docs.iln.finance` |
 | Built by CI | `docs-deploy.yml` triggers build validation | `docs-deploy.yml` builds & deploys `packages/docs/dist` |
 | Changelog target | `docs/changelog.md` (auto-committed by `docs-changelog.yml`) | — |
