@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { readFileSync, existsSync } from 'fs';
-import { resolve, dirname, join } from 'path';
+import { resolve, dirname, join, sep } from 'path';
 import { readdir } from 'fs/promises';
 
 function extractLinks(text) {
@@ -11,6 +11,16 @@ function extractLinks(text) {
     links.push(m[2]);
   }
   return links;
+}
+
+function resolveSiteRoute(route, contentRoot) {
+  const routePath = resolve(contentRoot, `.${route}`);
+  if (routePath !== contentRoot && !routePath.startsWith(`${contentRoot}${sep}`)) return null;
+
+  const candidates = routePath === contentRoot
+    ? [join(contentRoot, 'index.mdx'), join(contentRoot, 'index.md')]
+    : [routePath, `${routePath}.mdx`, `${routePath}.md`, join(routePath, 'index.mdx'), join(routePath, 'index.md')];
+  return candidates.find(existsSync) ?? null;
 }
 
 async function checkFile(filePath, repoRoot) {
@@ -32,9 +42,13 @@ async function checkFile(filePath, repoRoot) {
           problems.push(`external ${url} -> ${String(err)}`);
         }
       } else {
-        // local file
-        const target = resolve(dirname(filePath), url.split('#')[0]);
-        if (!existsSync(target)) problems.push(`missing ${url}`);
+        const localPath = url.split('#')[0];
+        const contentRoot = resolve(repoRoot, 'packages/docs/content');
+        const isSiteRoute = localPath.startsWith('/') && filePath.startsWith(`${contentRoot}${sep}`);
+        const target = isSiteRoute
+          ? resolveSiteRoute(localPath, contentRoot)
+          : resolve(dirname(filePath), localPath);
+        if (!target || !existsSync(target)) problems.push(`missing ${url}`);
       }
     })
   );
