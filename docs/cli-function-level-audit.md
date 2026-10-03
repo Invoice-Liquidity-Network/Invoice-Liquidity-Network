@@ -98,3 +98,13 @@ implementation backed by shared client/format/config helpers, and the
 overlapping-sounding commands are intentionally distinct. No outstanding
 consolidation work remains from a code-duplication standpoint; this document
 closes the audit.
+
+## Follow-up completeness reconciliation (Issue #1120)
+
+The current repository has no `cli-next` package. The migration target described
+by Issue #1120 is therefore not present; this audit is consistent with
+[cli-vs-cli-next.md](cli-vs-cli-next.md), which records the actual
+`packages/cli` → `cli/` consolidation and removal. The canonical CLI command
+tree and formerly unique command tests are listed there. Its completeness
+statement is limited to the removed package's command surface and does not
+claim an individual runtime test for every option in the canonical CLI.
