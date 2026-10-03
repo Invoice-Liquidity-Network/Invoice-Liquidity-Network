@@ -169,6 +169,25 @@ reads (`getProposal`, `listProposals`, `getExecutionDelay`).
 
 See: [Governance Guide](governance-guide.md)
 
+## Quorum
+
+The minimum fraction of total voting power that must participate for a
+proposal to be considered valid. ILN governance uses a quorum threshold in
+basis points, currently documented as 1,000 bps (10%) under the default
+configuration. A proposal that fails to reach quorum is rejected without
+execution regardless of the vote split.
+
+See: [Governance Guide](governance-guide.md)
+
+## Timelock
+
+The mandatory delay between a proposal passing and its execution. Timelocks
+exist to give stakeholders time to check the final proposal payload, respond
+to disputes, or coordinate a veto or emergency response before a change is
+applied on-chain.
+
+See: [Governance Guide](governance-guide.md)
+
 ## Grace Period
 
 The interval after an invoice's `due_date` during which the payer can still

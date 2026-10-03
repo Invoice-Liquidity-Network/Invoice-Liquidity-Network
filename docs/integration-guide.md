@@ -15,6 +15,18 @@ This guide explains how third-party developers (accounting tools, ERP systems, D
 
 ---
 
+## Before you begin: cold-validation notes
+
+This guide was written to be followed by a developer with no prior ILN context. The most common friction points from a fresh external integration pass are:
+
+- package names and import paths must match the repo exactly (`@iln/sdk` rather than older naming variants);
+- a funded Stellar testnet account is required before invoking any contract call;
+- RPC endpoints and contract IDs must be verified against the current network target;
+- streaming event consumers need an event filter and a ledger cursor; and
+- the guide assumes the integrator has already configured a local or testnet secret key environment.
+
+The guidance below is structured to remove that ambiguity and should be followed in order from setup to event subscription to submission.
+
 ## 1. Authentication Patterns
 
 ILN supports two primary transaction signing models depending on the environment:
@@ -38,7 +50,7 @@ ILN supports two primary transaction signing models depending on the environment
 Use the `@invoice-liquidity/sdk` to query details of any invoice by ID:
 
 ```typescript
-import { ILNSdk, ILN_TESTNET } from "@invoice-liquidity/sdk";
+import { ILNSdk, ILN_TESTNET } from "@iln/sdk";
 
 // Initialize SDK
 const sdk = new ILNSdk({
@@ -95,7 +107,7 @@ Use the `@stellar/stellar-sdk` to stream event records matching the ILN contract
 
 ```typescript
 import { rpc } from "@stellar/stellar-sdk";
-import { ILN_TESTNET } from "@invoice-liquidity/sdk";
+import { ILN_TESTNET } from "@iln/sdk";
 
 const server = new rpc.Server(ILN_TESTNET.rpcUrl);
 
@@ -146,7 +158,7 @@ startEventStream();
 ### Client-Side (Freighter Wallet)
 
 ```typescript
-import { ILNSdk, ILN_TESTNET, createFreighterSigner } from "@invoice-liquidity/sdk";
+import { ILNSdk, ILN_TESTNET, createFreighterSigner } from "@iln/sdk";
 
 const sdk = new ILNSdk({
   ...ILN_TESTNET,
@@ -168,7 +180,7 @@ async function submitUserInvoice() {
 ### Server-Side (Keypair Signer)
 
 ```typescript
-import { ILNSdk, ILN_TESTNET, createKeypairSigner } from "@invoice-liquidity/sdk";
+import { ILNSdk, ILN_TESTNET, createKeypairSigner } from "@iln/sdk";
 
 const sdk = new ILNSdk({
   ...ILN_TESTNET,

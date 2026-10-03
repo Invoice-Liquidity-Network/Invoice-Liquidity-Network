@@ -259,7 +259,7 @@ Cross-check against [monorepo-map.md](monorepo-map.md).
 | `packages/test-utils/` | `@iln/test-utils` | `test`, `type-check` |
 | `packages/indexer/` | `@iln/indexer` | `build`, `test`, `lint` |
 | `packages/sdk/` | `@iln/sdk-next` | `build`, `build:browser`, `test`, `test:browser`, `test:mutation`, `docs:generate` |
-| `packages/docs/` | `@invoice-liquidity/docs-next` | `dev`, `build`, `start`, `lint` — the **deployed** site ([docs.iln.finance](https://docs.iln.finance)) |
+| `packages/docs/` | `@invoice-liquidity/docs-next` | `dev`, `build`, `start`, `lint` — the **deployed** site (docs.iln.finance) |
 | `packages/mock-backend/` | `@iln/mock-backend` | `build`, `type-check`, `test`, `test:coverage` |
 | `packages/react/` | `@iln/react` | `build`, `dev`, `test`, `type-check` (also `pnpm react:dev` / `react:build` / `react:test`) |
 | `packages/opentelemetry/` | `@iln/opentelemetry` | `build`, `test` |
