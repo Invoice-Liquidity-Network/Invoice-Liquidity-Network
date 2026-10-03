@@ -55,6 +55,27 @@ An accepted RFC becomes the source of truth for the implementation. The implemen
 
 ---
 
+## Retrospective RFCs and policy debt
+
+Not every material decision is recorded before it is merged. When a decision has already been made, but it is clearly policy- or governance-scale, maintainers may still open a retrospective RFC to document it after the fact. This is required when the change:
+
+- alters governance assumptions or threshold parameters;
+- creates a cross-repo authority or rollout policy;
+- changes canonical docs or standards that other teams rely on; or
+- would be costly to reverse, even if it was implemented as an operational patch.
+
+A retrospective RFC must state:
+
+1. what decision was made;
+2. why the normal RFC path was skipped;
+3. whether the decision was intended to be temporary or durable;
+4. what risk or trade-off was accepted; and
+5. what process tightening prevents recurrence.
+
+Maintainers should label such PRs as policy or governance changes, and reviewers should require either a linked RFC or an explicit retrospective RFC before approving material changes that affect broader protocol risk.
+
+---
+
 ## RFC index
 
 | Number | Title | Status | Tracking issues |

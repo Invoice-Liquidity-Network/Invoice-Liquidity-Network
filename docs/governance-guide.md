@@ -48,6 +48,36 @@ create_proposal()
 | Max delegation depth   | 10 hops      | Circuit breaker for transitive delegation chains |
 | Veto power             | Enabled      | Can be permanently disabled by governance vote |
 
+### Low-turnout quorum manipulation risk model
+
+The current default policy is a 10% quorum and a simple majority of cast votes. In a low-turnout environment, that can be abused by a concentrated coalition because the required coalition size is not much larger than the quorum threshold itself.
+
+Let:
+
+- q = required quorum fraction of total supply;
+- m = majority threshold of cast votes (currently 50% + 1 vote);
+- t = turnout fraction of total supply at the time of vote settlement;
+- s = attacker-controlled supply fraction.
+
+A successful proposal requires:
+
+- t >= q
+- s >= 0.5 * t when the coalition is the only active yes side and there is no meaningful opposition
+
+Therefore the minimum concentration needed to pass a proposal in a low-turnout scenario is approximately:
+
+- s_min ≈ max(q, 0.5 * t)
+
+Under the current 10% quorum default:
+
+| Turnout | Minimum yes-vote concentration | Interpretation |
+|--------|-------------------------------|----------------|
+| 10% | 10% | A single concentrated holder can pass if they hold at least quorum and no one opposes them |
+| 12% | 6% | A small coordinated coalition can pass with exactly half of the cast vote weight |
+| 20% | 10% | The coalition still only needs quorum-level concentration to win if the rest abstain |
+
+This is why low-turnout attack modeling is a real governance concern even when the rule looks safe on paper. For a governance system intended to resist capture, the recommended review posture is: keep the quorum floor conservative, require a larger buffer above the 50% yes threshold for high-impact changes, and treat any parameter change that affects execution, fee policy, or token access as requiring a formal RFC before implementation.
+
 ### Contract addresses
 
 | Network  | Contract ID                                              |
