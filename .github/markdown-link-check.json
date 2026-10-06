@@ -39,6 +39,10 @@
     {
       "comment": "w3.org returns 403 to non-browser user agents; the TR spec pages are valid (see docs/monitoring.md trace-context citation)",
       "pattern": "^https://www\\.w3\\.org/"
+    },
+    {
+      "comment": "medium.com returns 403 to automated clients even with a browser user agent; the dependency-confusion write-up cited in docs/dependency-confusion-audit.md is valid",
+      "pattern": "^https://medium\\.com/"
     }
   ],
   "aliveStatusCodes": [200, 206, 301, 302, 429],

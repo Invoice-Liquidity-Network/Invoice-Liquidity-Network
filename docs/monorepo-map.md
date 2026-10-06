@@ -21,6 +21,7 @@ Every workspace in the ILN monorepo, its purpose, status, and key dependencies.
 | `cli/` | `@invoice-liquidity/cli` | Stable | The single, canonical CLI for interacting with ILN contracts on Stellar (invoice submit/fund/pay/watch/export, protocol stats, reputation, network switching, wallets, and more). `packages/cli` was a duplicate and has been removed — see [cli-vs-cli-next.md](cli-vs-cli-next.md). | `@iln/sdk` |
 | `indexer/` | `iln-indexer` | Stable | Production event indexer service. Polls Soroban RPC for contract events, processes invoices, dispatches notifications. | `@iln/sdk`, `@iln/indexer` |
 | `notifications/` | `iln-notifications` | Next | Multi-channel notification service (email, webhook, SMS, WebSocket). Digest batching, subscription management, delivery retry. | `@iln/sdk` |
+| `oracle-service/` | `@iln/oracle-service` | Next | Off-chain payer verification oracle. Verifies payer reputation and invoice state for funders, with delta-bound checks, source failover and Prometheus metrics. | `@iln/opentelemetry` |
 | `docs/` | `@invoice-liquidity/docs` | Stable (content source of record) | Nextra 2 legacy docs source. Holds the large majority of actual documentation content (54 `.md` files) and is the current source of truth for anything not yet ported. **Not deprecated** — see the Resolution Plans section below. | — |
 
 ---
@@ -58,6 +59,16 @@ Every workspace in the ILN monorepo, its purpose, status, and key dependencies.
 | `examples/governance-monitor/` | Experimental | Governance proposal monitoring example. |
 | `examples/lp-automation/` | Experimental | LP automation script — auto-fund eligible invoices. |
 | `examples/portfolio-report/` | Experimental | Portfolio reporting example — LP position snapshots. |
+
+---
+
+## Test Packages (`tests/*`)
+
+Test suites that are workspace members so they can depend on workspace packages with `workspace:*`.
+
+| Path | Package | Status | Purpose | Dependencies |
+|------|---------|--------|---------|-------------|
+| `tests/sdk-integration/` | `@iln/sdk-integration-tests` | — | SDK integration fixtures and tests run against the canonical SDK; a workspace member so fixture and interface drift fails at typecheck time. Not published. | `@iln/sdk` |
 
 ---
 

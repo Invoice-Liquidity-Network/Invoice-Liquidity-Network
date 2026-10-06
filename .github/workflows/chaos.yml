@@ -1,0 +1,124 @@
+name: Chaos Suite
+
+# Network-partition / latency / connection-reset chaos tests between the
+# indexer, oracle-service and notifications (tests/chaos/, docs/chaos-engineering.md).
+# The harness unit tests run on every PR that touches it; the live suite runs
+# nightly against the docker compose stack with Toxiproxy between the services
+# and alerts on any regression in resilience behaviour.
+
+on:
+  pull_request:
+    branches: [main, dev]
+    paths:
+      - 'tests/chaos/**'
+      - '.github/workflows/chaos.yml'
+  schedule:
+    - cron: '0 3 * * *'
+  workflow_dispatch:
+    inputs:
+      scenarios:
+        description: Comma-separated scenario names (empty = all)
+        required: false
+        default: ''
+      time_scale:
+        description: Multiplier for every scenario duration
+        required: false
+        default: '1'
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: chaos-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  harness-unit:
+    name: Harness unit tests (no containers)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup pnpm with store cache
+        uses: ./.github/actions/setup-pnpm
+      - name: Run harness tests
+        run: pnpm test:chaos
+
+  live:
+    name: Live chaos scenarios (staging stack)
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      CHAOS_TOXIPROXY_URL: http://localhost:8474
+      CHAOS_ORACLE_URL: http://localhost:3010
+      CHAOS_INDEXER_URL: http://localhost:3001
+      CHAOS_NOTIFICATIONS_URL: http://localhost:4001
+      CHAOS_SCENARIOS: ${{ github.event.inputs.scenarios }}
+      CHAOS_TIME_SCALE: ${{ github.event.inputs.time_scale || '1' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Initialize submodules
+        run: git submodule update --init --recursive
+
+      - name: Setup pnpm with store cache
+        uses: ./.github/actions/setup-pnpm
+
+      - name: Start the stack with Toxiproxy between services
+        run: pnpm chaos:up
+
+      - name: Wait for services
+        run: |
+          wait_for() {
+            for i in $(seq 1 60); do
+              if curl -sf "$1" > /dev/null 2>&1; then echo "$2 ready"; return 0; fi
+              sleep 5
+            done
+            echo "$2 failed to become ready"; docker compose -f docker-compose.yml -f tests/chaos/docker-compose.chaos.yml logs "$3" | tail -100; return 1
+          }
+          wait_for http://localhost:8474/version toxiproxy toxiproxy
+          wait_for http://localhost:8000/friendbot stellar-node stellar-node
+          wait_for http://localhost:3001/health indexer indexer
+          wait_for http://localhost:3010/v1/health oracle-service oracle-service
+          wait_for http://localhost:4001/health notifications notifications
+
+      - name: Run chaos scenarios
+        id: chaos
+        run: pnpm chaos:run
+
+      - name: Publish report to the step summary
+        if: always()
+        run: cat .chaos/chaos-report.md >> "$GITHUB_STEP_SUMMARY" 2>/dev/null || echo "no report produced" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload report and service logs
+        if: always()
+        run: docker compose -f docker-compose.yml -f tests/chaos/docker-compose.chaos.yml logs --no-color > .chaos/services.log 2>&1 || true
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: chaos-report-${{ github.run_id }}
+          path: .chaos/
+          retention-days: 30
+
+      - name: Alert on resilience regression
+        if: failure() && github.event_name == 'schedule'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          gh issue create \
+            --title "Chaos suite regression @ $(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+            --body "A resilience scenario failed under injected network faults. Report and service logs: $RUN_URL (artifact chaos-report-${{ github.run_id }}). Triage per docs/chaos-engineering.md." \
+            --label "incident,chaos" || echo "issue creation skipped"
+          if [ -n "$DISCORD_WEBHOOK" ]; then
+            curl -s -H "Content-Type: application/json" -X POST \
+              -d "$(jq -n --arg url "$RUN_URL" '{ embeds: [{ title: "Chaos suite regression", description: ("A resilience scenario failed. [View run](" + $url + ")"), color: 15158332, timestamp: (now | todate) }] }')" \
+              "$DISCORD_WEBHOOK"
+          fi
+
+      - name: Tear down
+        if: always()
+        run: pnpm chaos:down

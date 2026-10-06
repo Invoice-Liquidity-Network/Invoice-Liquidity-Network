@@ -19,7 +19,7 @@ const CONFIRMATION_DEPTH = 10;
  * reprocessing unchanged events; removed events are not rolled back on re-org.
  */
 export async function pollOnce(): Promise<void> {
-  const stored = getCursorLedger();
+  let stored = getCursorLedger();
 
   // ── Determine start ledger ────────────────────────────────────────────────
   let startLedger: number;

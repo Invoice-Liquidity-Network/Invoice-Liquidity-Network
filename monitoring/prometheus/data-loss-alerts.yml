@@ -23,6 +23,7 @@ groups:
           description: >-
             Near-miss provenance: NM-2026-02. The indexer lagged or skipped ledger sequences,
             creating risk of missed Soroban contract event ingestion and unrecorded invoice state changes.
+          runbook_url: https://github.com/Invoice-Liquidity-Network/Invoice-Liquidity-Network/blob/main/docs/incident-response.md#ilnindexerledgersequencegapdetected
 
       # ── 2. State Snapshot Hash Drift / Database Mismatch ─────────────────────
       - alert: ILNStateSnapshotMismatchDetected
@@ -40,6 +41,7 @@ groups:
           description: >-
             Near-miss provenance: NM-2026-04. On-chain invoice storage state root hash differs from the indexed
             database state, signaling data corruption or unhandled reorg.
+          runbook_url: https://github.com/Invoice-Liquidity-Network/Invoice-Liquidity-Network/blob/main/docs/incident-response.md#ilnstatesnapshotmismatchdetected
 
       # ── 3. Oracle Payload Data Corruption & Timestamp Drift ──────────────────
       - alert: ILNOraclePayloadDataCorruption
@@ -57,6 +59,7 @@ groups:
           description: >-
             Near-miss provenance: NM-2026-05. Malformed payload or payload signature mismatch detected,
             preventing accurate invoice pricing verification.
+          runbook_url: https://github.com/Invoice-Liquidity-Network/Invoice-Liquidity-Network/blob/main/docs/incident-response.md#ilnoraclepayloaddatacorruption
 
       # ── 4. Unindexed Transaction Drop / Missing Event Records ────────────────
       - alert: ILNUnindexedContractEventDropRate
@@ -76,3 +79,4 @@ groups:
           description: >-
             Emitted Soroban events exceed persisted indexer events. Investigate database write queue backpressure
             and potential event loss.
+          runbook_url: https://github.com/Invoice-Liquidity-Network/Invoice-Liquidity-Network/blob/main/docs/incident-response.md#ilnunindexedcontracteventdroprate

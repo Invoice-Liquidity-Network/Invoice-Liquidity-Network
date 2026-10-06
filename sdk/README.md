@@ -130,6 +130,58 @@ try {
 
 Read timeouts apply to read-only contract queries, write timeouts apply to account loading, transaction preparation, submission, and polling, and simulation timeouts apply to pre-submit simulations.
 
+## Retries and circuit breaker
+
+Every Soroban RPC call the SDK makes (`ILNSdk`, `GovernanceClient`,
+`InsurancePoolClient`, and the helpers they use) goes through one resilience
+wrapper, `createResilientRpcServer`, so consumers do not need their own retry
+loops:
+
+- **Retry with exponential backoff and jitter.** Transient failures the node
+  returned quickly (connection resets, `429`, `5xx`) are retried with a fresh
+  request per attempt. Defaults (`MAINNET_RPC_BACKOFF`): 3 retries, 500 ms
+  base delay doubling to a 10 s cap, 25% jitter. Contract, validation and
+  other `ILNError`s are never retried.
+- **Timeouts are deadlines.** A hung attempt surfaces as `TimeoutError` after
+  the configured `timeouts` for its class and is not retried by default, so a
+  `readMs` of 10 s means the call is back in 10 s. Set `retryTimeouts: true` on
+  the wrapper to retry idempotent reads after a timeout.
+- **`sendTransaction` is only retried when the request provably never reached
+  the node** (connection refused, DNS failure, `429`), never after a timeout or
+  a reset mid-flight, because the transaction may already have been accepted.
+- **Circuit breaker.** A failure-rate breaker (`RpcCircuitBreaker`) opens after
+  at least 10 calls in a 60 s window fail at 50% or more, fails fast with
+  `RpcCircuitOpenError` for 30 s, then lets one trial call through. Timeouts
+  and transient errors count; contract errors do not. Defaults are
+  `MAINNET_CIRCUIT_BREAKER`.
+
+```ts
+import { ILNSdk, RpcCircuitBreaker, RpcCircuitOpenError } from '@iln/sdk';
+
+const sdk = new ILNSdk({
+  ...ILN_TESTNET,
+  backoff: { maxRetries: 5, baseDelayMs: 250 }, // or `false` to disable retries
+  circuitBreaker: { failureRateThreshold: 0.3, openDurationMs: 60_000 }, // or `false`
+});
+
+// Share one breaker across clients that hit the same node:
+const breaker = new RpcCircuitBreaker();
+const gov = new GovernanceClient({ ...GOVERNANCE_TESTNET, circuitBreaker: breaker });
+
+try {
+  await sdk.getInvoice(7n);
+} catch (err) {
+  if (err instanceof RpcCircuitOpenError) {
+    // err.retryAfterMs tells you when the breaker will probe the node again
+  }
+}
+```
+
+`getRpcResilience(server)` exposes the breaker and resolved policy of a
+wrapped server, which is useful for health endpoints and tests. The generic
+consecutive-failure `CircuitBreaker` and `withRetry` in `recovery.ts` remain
+available for wrapping your own operations; they are not applied to RPC calls.
+
 ## Token Amounts
 
 SDK methods accept token amounts as `bigint` base units. USDC and EURC use 6 decimals, while XLM uses 7 decimals through the native SAC wrapper. See the [multi-token support guide](../docs/tokens/multi-token-support.md) for supported tokens, trustlines, testnet acquisition, and token-aware parsing examples.

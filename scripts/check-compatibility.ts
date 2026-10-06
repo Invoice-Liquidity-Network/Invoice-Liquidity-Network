@@ -12,11 +12,11 @@
  * matrix below. See docs/versioning.md.
  *
  * Usage:
- *   npx ts-node --esm scripts/check-compatibility.ts
+ *   pnpm check-compatibility   (tsx scripts/check-compatibility.ts)
  *   pnpm check-compatibility
  */
 
-import { readFileSync } from 'fs';
+import { existsSync, readFileSync } from 'fs';
 import { resolve } from 'path';
 
 const ROOT = resolve(import.meta.dirname ?? __dirname, '..');
@@ -331,6 +331,22 @@ function main(): void {
 
   console.log('✅ Docs version banner matches the manifest and the compatibility matrix.\n');
 
+  // The second half reads the contract and frontend versions out of the git
+  // submodules. CI checks the monorepo out without them, as does a docs-only
+  // clone, so an absent submodule is reported and skipped rather than failed.
+  const submodulePaths = [
+    'backend/contracts/invoice_liquidity/Cargo.toml',
+    'frontend/package.json',
+  ];
+  const missing = submodulePaths.filter((p) => !existsSync(resolve(ROOT, p)));
+  if (missing.length > 0) {
+    console.log(
+      `ℹ️  Skipping the contract/SDK/frontend version check: ${missing.join(', ')} not found.\n` +
+        '   Run `git submodule update --init` to check the version combination locally.'
+    );
+    process.exit(0);
+  }
+
   const contractVersion = readContractVersion();
   const sdkVersion = readJsonVersion('sdk/package.json');
   const frontendVersion = readJsonVersion('frontend/package.json');
@@ -339,8 +355,6 @@ function main(): void {
   console.log(`  SDK (@invoice-liquidity/sdk): ${sdkVersion}`);
   console.log(`  Frontend (ILN-Frontend):      ${frontendVersion}`);
   console.log();
-
-  const matrix = parseCompatibilityMatrix();
 
   const result = validate(contractVersion, sdkVersion, frontendVersion, matrix);
 

@@ -51,6 +51,15 @@ This reference documents all structured error codes produced by the `@iln/sdk` p
 
 ---
 
+### `rpc_circuit_open`
+- **Class:** `RpcCircuitOpenError`
+- **Code:** `RPC_CIRCUIT_OPEN`
+- **Description:** Thrown when the SDK's RPC circuit breaker is open: recent calls to the configured RPC endpoint failed at a sustained rate (timeouts, connection errors, 429/5xx), so the SDK fails fast instead of queueing more retries against a degraded node. `retryAfterMs` says when the next trial call is allowed.
+- **Retryable:** `true` (after `retryAfterMs`)
+- **Remediation:** Wait for `retryAfterMs`, point `rpcUrl` at a healthy node, or relax the `circuitBreaker` options if the endpoint is expected to be flaky. See the SDK README, "Retries and circuit breaker".
+
+---
+
 ### `transaction_failed`
 - **Class:** `TransactionFailedError`
 - **Code:** `TRANSACTION_FAILED`

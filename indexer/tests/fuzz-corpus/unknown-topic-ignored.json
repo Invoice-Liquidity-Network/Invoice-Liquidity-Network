@@ -1,0 +1,26 @@
+{
+  "name": "unknown-topic-ignored",
+  "found": "2026-09-25",
+  "property": "single-outcome",
+  "finding": "baseline behaviour kept: unknown symbols are ignored without a dead-letter row",
+  "event": {
+    "id": "0000001234-1-5",
+    "ledger": 1000,
+    "ledgerClosedAt": "2024-01-01T00:00:00Z",
+    "topic": [
+      {
+        "$xdr": "AAAADwAAAAdyZW5hbWVkAA=="
+      }
+    ],
+    "value": {
+      "$xdr": "AAAABQAAAAAAAAAH"
+    }
+  },
+  "invoice": {
+    "kind": "valid",
+    "status": "Pending"
+  },
+  "expect": {
+    "outcome": "ignored"
+  }
+}

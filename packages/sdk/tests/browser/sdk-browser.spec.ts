@@ -34,18 +34,18 @@ test.describe('ILN SDK browser bundle', () => {
   });
 
   test('works inside a sandboxed iframe', async ({ page }) => {
+    // The listener lives in the page itself: the iframe can post its message
+    // while setContent is still loading, before a test-side listener exists.
     await page.setContent(`
+      <script>
+        window.addEventListener('message', (e) => { window.__iframeMessage = e.data; }, { once: true });
+      </script>
       <iframe
         sandbox="allow-scripts"
         srcdoc="<script>window.parent.postMessage(typeof crypto !== 'undefined' ? 'ok' : 'missing', '*')<\/script>"
       ></iframe>
     `);
-    const msg = await page.evaluate(
-      () =>
-        new Promise<string>((resolve) => {
-          window.addEventListener('message', (e) => resolve(e.data), { once: true });
-        })
-    );
-    expect(msg).toBe('ok');
+    const msg = await page.waitForFunction(() => (window as any).__iframeMessage);
+    expect(await msg.jsonValue()).toBe('ok');
   });
 });

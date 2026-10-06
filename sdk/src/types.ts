@@ -5,6 +5,7 @@
 import type { ContractStats, GovernanceProposal, Invoice, ReputationScore } from '@iln/shared';
 import type { CacheConfig } from './cache';
 import type { BackoffOptions } from './backoff';
+import type { RpcCircuitBreaker, RpcCircuitBreakerOptions } from './circuit-breaker';
 
 // Note: GovernanceProposal and ProposalStatus are intentionally NOT
 // re-exported here — the SDK's public API surfaces the SDK-specific
@@ -207,6 +208,14 @@ export interface ILNSdkConfig {
    * defaults to 3 retries with exponential backoff and jitter.
    */
   backoff?: BackoffOptions | false;
+  /**
+   * Circuit breaker for the RPC endpoint. Opens after a sustained failure rate
+   * and fails fast with `RpcCircuitOpenError` until the node recovers, instead
+   * of piling retries onto a degraded node. Pass a `RpcCircuitBreaker` instance to
+   * share one breaker across several clients, or `false` to disable.
+   * Defaults to `MAINNET_CIRCUIT_BREAKER`.
+   */
+  circuitBreaker?: RpcCircuitBreakerOptions | RpcCircuitBreaker | false;
   /**
    * Cache configuration for read operations.
    * Set to `{ enabled: false }` to disable caching.

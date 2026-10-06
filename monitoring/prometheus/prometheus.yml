@@ -5,6 +5,7 @@ global:
 rule_files:
   - /etc/prometheus/rules/slo-alerts.yml
   - /etc/prometheus/rules/oracle-service-alerts.yml
+  - /etc/prometheus/rules/availability-alerts.yml
 
 scrape_configs:
   - job_name: 'iln-indexer'

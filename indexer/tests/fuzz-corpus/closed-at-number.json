@@ -1,0 +1,27 @@
+{
+  "name": "closed-at-number",
+  "found": "2026-09-25",
+  "property": "no-crash",
+  "finding": "a numeric ledgerClosedAt raised SQLite 'datatype mismatch' on the TEXT column",
+  "event": {
+    "id": "0000001234-1-2",
+    "ledger": 1000,
+    "ledgerClosedAt": 7,
+    "topic": [
+      {
+        "$xdr": "AAAADwAAAAlzdWJtaXR0ZWQAAAA="
+      }
+    ],
+    "value": {
+      "$xdr": "AAAABQAAAAAAAAAH"
+    }
+  },
+  "invoice": {
+    "kind": "valid",
+    "status": "Pending"
+  },
+  "expect": {
+    "outcome": "malformed",
+    "reason": "ledger_closed_at_invalid"
+  }
+}

@@ -1,0 +1,26 @@
+{
+  "name": "value-string",
+  "found": "2026-09-25",
+  "property": "integrity",
+  "finding": "a string value produced invoice_id NaN and a corrupt events row",
+  "event": {
+    "id": "0000001234-0-7",
+    "ledger": 1000,
+    "ledgerClosedAt": "2024-01-01T00:00:00Z",
+    "topic": [
+      {
+        "$xdr": "AAAADwAAAARwYWlk"
+      }
+    ],
+    "value": {
+      "$xdr": "AAAADgAAAAVoZWxsbwAAAA=="
+    }
+  },
+  "invoice": {
+    "kind": "null"
+  },
+  "expect": {
+    "outcome": "malformed",
+    "reason": "invoice_id_invalid"
+  }
+}

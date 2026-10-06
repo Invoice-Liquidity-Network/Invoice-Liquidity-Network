@@ -180,40 +180,22 @@ export function createApp(): express.Application {
   const router = Router();
 
   // GET /health
-  router.get("/health", (_req: Request, res: Response) => {
-    let dbStatus: "ok" | "error" = "ok";
-    let updatedAt: number | null = null;
-    try {
-      getDb().prepare("SELECT 1").get();
-      updatedAt = getCursorUpdatedAt();
-    } catch {
-      dbStatus = "error";
-    }
-
-    res.status(dbStatus === "ok" ? 200 : 503).json({
-      status: dbStatus,
-      db: dbStatus,
-      lastSync: updatedAt === null ? null : new Date(updatedAt).toISOString(),
-      uptime: Date.now() - startTime,
-    });
   router.get('/health', (_req: Request, res: Response) => {
     let dbStatus: 'ok' | 'error' = 'ok';
+    let lastSyncMs: number | null = null;
     try {
       getDb().prepare('SELECT 1').get();
+      lastSyncMs = getCursorUpdatedAt();
     } catch {
       dbStatus = 'error';
     }
 
-    const lastSyncMs = getCursorUpdatedAt();
-    const uptime = Date.now() - startTime;
-    const status = dbStatus === 'ok' ? 'ok' : 'degraded';
-
     cacheControl(res, 'health');
-    res.json({
-      status,
+    res.status(dbStatus === 'ok' ? 200 : 503).json({
+      status: dbStatus,
       db: dbStatus,
       lastSync: lastSyncMs !== null ? new Date(lastSyncMs).toISOString() : null,
-      uptime,
+      uptime: Date.now() - startTime,
     });
   });
 

@@ -1,0 +1,22 @@
+{
+  "name": "topic-null-entry",
+  "found": "2026-09-25",
+  "property": "single-outcome",
+  "finding": "processEvent threw TypeError (reading 'switch') on a null topic entry; the poller logged the error and the whole batch stalled",
+  "event": {
+    "id": "0000001234-0-0",
+    "ledger": 1000,
+    "ledgerClosedAt": "2024-01-01T00:00:00Z",
+    "topic": [null],
+    "value": {
+      "$xdr": "AAAABQAAAAAAAAAH"
+    }
+  },
+  "invoice": {
+    "kind": "null"
+  },
+  "expect": {
+    "outcome": "malformed",
+    "reason": "topic_not_scval"
+  }
+}

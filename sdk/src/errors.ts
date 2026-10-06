@@ -143,6 +143,36 @@ export class NetworkError extends ILNError {
 }
 
 /**
+ * Thrown when the RPC circuit breaker is open: recent calls to the configured
+ * RPC endpoint failed at a sustained rate, so the SDK fails fast instead of
+ * queueing more retries against a degraded node.
+ */
+export class RpcCircuitOpenError extends ILNError {
+  /** Milliseconds until the breaker lets a trial call through. */
+  public readonly retryAfterMs: number;
+
+  constructor(
+    operation: string,
+    snapshot: { failureRate: number; calls: number; retryAfterMs: number; state: string }
+  ) {
+    super(
+      `${operation} rejected: the RPC circuit breaker is ${snapshot.state} (${Math.round(
+        snapshot.failureRate * 100
+      )}% of the last ${snapshot.calls} calls failed). Retry in ${snapshot.retryAfterMs}ms.`,
+      'RPC_CIRCUIT_OPEN',
+      'The RPC endpoint is degraded. Wait for `retryAfterMs`, point `rpcUrl` at a healthy node, or relax `circuitBreaker` options if the endpoint is expected to be flaky.',
+      {
+        docsUrl: withDocs('RPC_CIRCUIT_OPEN'),
+        context: { operation, ...snapshot },
+        retryable: true,
+      }
+    );
+    this.retryAfterMs = snapshot.retryAfterMs;
+    Object.setPrototypeOf(this, new.target.prototype);
+  }
+}
+
+/**
  * Thrown when a transaction fails to execute on-chain.
  */
 export class TransactionFailedError extends ILNError {

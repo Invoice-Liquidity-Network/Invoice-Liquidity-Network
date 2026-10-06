@@ -22,41 +22,32 @@ beforeEach(async () => {
 describe('Rate limiting', () => {
   it('allows requests up to the configured threshold', async () => {
     for (let i = 0; i < 3; i++) {
-      const res = await request(app).get("/dashboard");
-      const res = await request(app).get('/health');
+      const res = await request(app).get('/dashboard');
       expect(res.status).toBe(200);
     }
   });
 
   it('returns 429 once the threshold is exceeded', async () => {
     for (let i = 0; i < 3; i++) {
-      await request(app).get("/dashboard");
+      await request(app).get('/dashboard');
     }
-    const res = await request(app).get("/dashboard");
-      await request(app).get('/health');
-    }
-    const res = await request(app).get('/health');
+    const res = await request(app).get('/dashboard');
     expect(res.status).toBe(429);
     expect(res.body).toHaveProperty('error');
   });
 
   it('includes a Retry-After header on the 429 response', async () => {
     for (let i = 0; i < 3; i++) {
-      await request(app).get("/dashboard");
+      await request(app).get('/dashboard');
     }
-    const res = await request(app).get("/dashboard");
-      await request(app).get('/health');
-    }
-    const res = await request(app).get('/health');
+    const res = await request(app).get('/dashboard');
     expect(res.status).toBe(429);
     expect(res.headers).toHaveProperty('retry-after');
     expect(Number(res.headers['retry-after'])).toBeGreaterThan(0);
   });
 
-  it("includes rate limit headers on allowed responses", async () => {
-    const res = await request(app).get("/dashboard");
   it('includes rate limit headers on allowed responses', async () => {
-    const res = await request(app).get('/health');
+    const res = await request(app).get('/dashboard');
     expect(res.status).toBe(200);
     expect(res.headers).toHaveProperty('ratelimit-limit', '3');
     expect(res.headers).toHaveProperty('ratelimit-remaining');
@@ -66,20 +57,17 @@ describe('Rate limiting', () => {
   it('tracks separate counters per route within the same app instance', async () => {
     // Same IP, same app -> the limiter is shared across routes (by design:
     // it protects the whole API per IP, not per endpoint).
-    await request(app).get("/dashboard");
-    await request(app).get("/stats");
-    const res = await request(app).get("/dashboard");
-    await request(app).get('/health');
+    await request(app).get('/dashboard');
     await request(app).get('/stats');
-    const res = await request(app).get('/health');
+    const res = await request(app).get('/dashboard');
     expect(res.status).toBe(200);
     expect(res.headers['ratelimit-remaining']).toBe('0');
   });
 
-  it("keeps Railway health-check routes out of API rate limiting", async () => {
+  it('keeps Railway health-check routes out of API rate limiting', async () => {
     for (let i = 0; i < 5; i++) {
-      expect((await request(app).get("/health")).status).toBe(200);
-      expect((await request(app).get("/v1/health")).status).toBe(200);
+      expect((await request(app).get('/health')).status).toBe(200);
+      expect((await request(app).get('/v1/health')).status).toBe(200);
     }
   });
 });

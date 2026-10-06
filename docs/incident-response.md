@@ -103,6 +103,30 @@ The indexer parses Soroban event streams to populate the REST API (`/v1/invoice/
    pnpm exec tsx scripts/synthetic-canary.ts
    ```
 
+#### 3. Alert Reference
+
+The data-integrity alerts in `monitoring/prometheus/data-loss-alerts.yml` carry a `runbook_url` pointing at the matching heading below. `scripts/check-alert-runbook-links.mjs` fails CI if a new alert is added without one.
+
+#### ILNIndexerLedgerSequenceGapDetected
+- **Trigger**: the indexer's last processed ledger is more than 50 behind the Soroban RPC tip for 2m.
+- **Triage**: compare `indexer_last_processed_ledger` with the RPC's latest ledger; check poller logs for RPC 429s, timeouts, or a crash loop. A gap that is still growing means events are not being ingested at all.
+- **Action**: restart the poller if it is wedged; once it catches up, run the Restoration workflow above (step 5) to confirm no invoice state was skipped. Escalate to the Indexer Lead if the gap persists after a restart.
+
+#### ILNStateSnapshotMismatchDetected
+- **Trigger**: any on-chain state root hash that differs from the indexed database state (`iln_state_snapshot_hash_mismatch_total`). Still waiting on instrumentation; see `monitoring/alert-audit/incidents.json`.
+- **Triage**: identify the ledger range of the mismatch from the indexer logs and check for a reorg (`ILNIndexerLedgerSequenceGapDetected` firing around the same time points at a lag rather than corruption).
+- **Action**: treat as SEV-1 data corruption; stop downstream consumers (oracle verdicts, notifications) and restore from the last good backup per the Restoration workflow above.
+
+#### ILNOraclePayloadDataCorruption
+- **Trigger**: any malformed oracle payload or payload signature mismatch (`iln_oracle_payload_corrupt_counter`). Still waiting on instrumentation; see `monitoring/alert-audit/incidents.json`.
+- **Triage**: check whether one source or every source is producing corrupt payloads; one source points at an upstream outage, every source at a schema change or a compromised signing key.
+- **Action**: demote the corrupt source (Scenario D, Containment step 1); rotate the signing key if signatures fail on every source.
+
+#### ILNUnindexedContractEventDropRate
+- **Trigger**: emitted contract events outpace persisted indexer events by more than 0.05/s for 3m.
+- **Triage**: check `iln_db_errors_total` and SQLite lock status; dead-letter rows (`indexer/src/deadLetter.ts`) show whether events were malformed rather than dropped.
+- **Action**: clear the write backlog (disk space, `SQLITE_BUSY`), then replay the affected ledger range so every emitted event is persisted.
+
 ---
 
 ### Scenario C: Indexer Performance Degradation (Slow Queries / Ledger Cursor Stalled)
@@ -195,6 +219,50 @@ Deploy the following Prometheus alerting rules (located in `monitoring/prometheu
     description: "Ledger sync is stuck. Check slow queries, RPC connectivity, and service logs."
 ```
 
+#### 6. Alert Reference
+
+Every indexer alert in `monitoring/prometheus/availability-alerts.yml` and `monitoring/prometheus/slo-alerts.yml` carries a `runbook_url` pointing at the matching heading below. `scripts/check-alert-runbook-links.mjs` fails CI if a new alert is added without one.
+
+#### ServiceDown
+- **Trigger**: a Prometheus scrape target (`iln-*` or `oracle-service`) has not answered for 2m. The ratio-based SLO alerts cannot see this state.
+- **Triage**: check the process, its port and the network path from Prometheus; then the per-service triage in `docs/monitoring.md` section 8.
+- **Action**: restart the service if it crashed; if it is up but unreachable, fix the scrape path before anything else, since every other alert for that service is blind until the scrape recovers.
+
+#### IndexerCursorStale
+- **Trigger**: the indexer is up but `iln_cursor_updated_at` is more than 60s old for 5m (Signal 2 warning).
+- **Triage**: inspect the poller logs for RPC rate limiting (429) or timeouts and check SQLite lock status.
+- **Action**: follow the Detection & Diagnosis workflow above; if the RPC provider is throttling, fail over to the secondary RPC endpoint.
+
+#### IndexerCursorStaleCritical
+- **Trigger**: cursor lag above 300s for 5m (Signal 2 critical). Oracle verdicts and notifications are now serving stale state.
+- **Triage**: as for `IndexerCursorStale`; confirm the poller process is alive and whether it is looping on a single ledger.
+- **Action**: restart the poller or replay from the last cursor checkpoint (Containment & Recovery above); page the Indexer Lead.
+
+#### IndexerDatabaseErrors
+- **Trigger**: any increase in `iln_db_errors_total` over 10m. The health endpoint reports `db: error` for the same condition.
+- **Triage**: check disk space on the SQLite volume and `SQLITE_BUSY` in the logs; a burst that coincides with an export job points at lock contention rather than corruption.
+- **Action**: free disk or reduce concurrent writers; if errors continue with free disk, run an integrity check and restore from backup per Scenario B.
+
+#### IndexerAvailabilityFastBurn
+- **Trigger**: 14x burn rate on the 99.9% availability SLO over both 5m and 1h, which spends 2% of the monthly error budget per hour.
+- **Triage**: check `iln_http_errors_total` by route, Stellar RPC health, and DB lock status.
+- **Action**: treat as an outage; roll back the last indexer deploy if the burn started with it, otherwise follow Containment & Recovery above.
+
+#### IndexerAvailabilitySlowBurn
+- **Trigger**: 6x burn rate sustained over 30m and 6h; at this rate the monthly budget runs out in about five days.
+- **Triage**: usually a slow regression rather than an outage; compare error rates before and after recent deploys and check p95 latency.
+- **Action**: open an incident at SEV-3, bisect recent deploys, and fix forward within the budget window.
+
+#### IndexerLatencyFastBurn
+- **Trigger**: p95 read latency above 200ms over both 5m and 1h.
+- **Triage**: check `iln_db_query_duration_seconds` and RPC latency; the slow-query log identifies the query.
+- **Action**: follow the Detection & Diagnosis workflow above (missing index, lock contention, RPC provider).
+
+#### IndexerLatencySlowBurn
+- **Trigger**: p95 read latency above 200ms sustained over 30m and 6h.
+- **Triage**: check the DB query latency and event loop lag panels in the unified dashboard for a gradual drift (growing table without an index, cache hit rate decay).
+- **Action**: add or rebuild the index for the slow query; schedule a VACUUM if the database file has grown past the documented threshold.
+
 ---
 
 ### Scenario D: Oracle-Service Compromise or Malfunction
@@ -248,16 +316,6 @@ Every `oracle-service` paging alert (`monitoring/prometheus/oracle-service-alert
 - **Triage**: inspect the outcome breakdown — `rejected-stale-data` points at a broken indexer feed (Scenario B), `rejected-low-trust` at a reputation-lookup failure.
 - **Action**: treat as SEV-1; follow Containment steps 1–3 above (kill-switch, cache purge, contract fallback audit).
 
-#### OracleStaleResponsesRising
-- **Trigger**: any stale verdicts served over 10m.
-- **Triage**: compare against `ORACLE_MAX_ORACLE_AGE_MS`; check indexer sync lag and reputation-contract RPC reachability.
-- **Action**: if the indexer has fallen behind, follow Scenario B's resync procedure; if the reputation contract is unreachable, check Soroban RPC health.
-
-#### OracleVerificationLatencyHigh
-- **Trigger**: p95 verification latency >2s for 10m — callers time out before the oracle does.
-- **Triage**: check indexer response time and Soroban RPC latency; cross-reference `OracleCacheHitRateLow` below.
-- **Action**: if RPC-bound, check for provider degradation; if cache-bound, restore the cache backend.
-
 #### OracleCacheHitRateLow
 - **Trigger**: cache hit rate <20% for 15m.
 - **Triage**: expected briefly after a deploy or Redis restart; sustained low hit rate means the cache backend is unreachable and every request recomputes.
@@ -267,6 +325,56 @@ Every `oracle-service` paging alert (`monitoring/prometheus/oracle-service-alert
 - **Trigger**: >50% of external KYB lookups return `unknown` over 10m.
 - **Triage**: the provider is likely down; verdicts still resolve (unknown is treated as inert), so this degrades confidence rather than causing an outage.
 - **Action**: check the provider's status page; note reduced verdict confidence in the incident log if this coincides with a funding dispute.
+
+#### OracleDeltaHoldsNotDraining
+- **Trigger**: delta-bound updates have been held for review for more than 10m (`oracle_delta_holds_active > 0`). Funding still works on the last known-good verdict.
+- **Triage**: list the held updates at `GET /v1/oracle/delta-holds`; sustained holds usually mean the bound is too tight for a legitimately volatile payer, or an upstream source is stuck.
+- **Action**: resolve each hold (accept publishes the proposed score, reject restores the previous one); see `docs/oracle-source-failover-runbook.md`.
+
+#### OracleDeltaBoundViolationsElevated
+- **Trigger**: more than 0.05 bound violations per second per feed for 15m. Occasional holds are the guard working; a sustained rate means many subjects are moving past the bound at once.
+- **Triage**: a single feed points at a corrupted upstream; every feed at once points at a deliberate attempt to swing scores.
+- **Action**: demote the suspect source (Containment step 1 above); if it is an attack, escalate to the Security Lead and keep the holds unresolved until the feed is verified.
+
+#### OracleDeltaQuorumConfirmationsHigh
+- **Trigger**: independent sources are corroborating movements that breach the single-source bound (more than 0.05/s for 30m), so they publish without a hold.
+- **Triage**: expected during real reputation shifts; if it coincides with `OracleDeltaBoundViolationsElevated`, the widening is genuine.
+- **Action**: informational; record the shift in the incident log if a funding dispute follows.
+
+#### OracleSourceUnavailable
+- **Trigger**: the source health tracker has demoted a source out of rotation (`oracle_source_health_state >= 2`) for 5m.
+- **Triage**: if a fallback is configured, traffic has already moved and verdicts still resolve, but there is no second opinion until the source recovers. Check the upstream's status page and the error samples in the oracle logs.
+- **Action**: follow `docs/oracle-source-failover-runbook.md`; if no fallback exists, treat as SEV-1 since `fund_invoice()` verification is blocked.
+
+#### OracleSourceDegraded
+- **Trigger**: a source is above its error-rate or p95-latency threshold but still serving (`oracle_source_health_state == 1`) for 15m.
+- **Triage**: early warning rather than an incident; look at latency and error trends on the upstream before it escalates to `OracleSourceUnavailable`.
+- **Action**: raise with the provider; pre-warm the fallback source so a demotion does not cold-start it.
+
+#### OracleFailoverChurn
+- **Trigger**: more than three failover events in 30m, which beats the anti-flap recovery streak and cooldown.
+- **Triage**: a source is oscillating hard, or two sources are failing at once; compare the health state of every source over the window.
+- **Action**: pin routing to the healthier source until the flapping one is stable; widen the cooldown if the oscillation is a provider pattern rather than an outage.
+
+#### OracleFreshnessFastBurn
+- **Trigger**: 6x burn rate on the 99.5% freshness SLO over both 5m and 1h.
+- **Triage**: check indexer lag (`iln_cursor_updated_at`) and reputation-contract reachability; the Indexer Lag vs Oracle Stale Responses correlation panel shows which one moved first.
+- **Action**: if the indexer has fallen behind, follow Scenario C; if the reputation contract is unreachable, check Soroban RPC health and fail over the RPC endpoint.
+
+#### OracleFreshnessSlowBurn
+- **Trigger**: 3x burn rate on the freshness SLO sustained over 30m and 6h.
+- **Triage**: compare `ORACLE_MAX_ORACLE_AGE_MS` with the observed indexer sync lag; a slow drift usually follows a change to either.
+- **Action**: restore indexer sync health or correct the freshness threshold; do not widen the threshold to silence the alert without an incident note.
+
+#### OracleLatencyFastBurn
+- **Trigger**: p95 verification latency above 1s over both 5m and 1h, so callers time out before the oracle does.
+- **Triage**: check indexer response time and Soroban RPC latency; cross-reference `OracleCacheHitRateLow`.
+- **Action**: if RPC-bound, fail over the provider; if cache-bound, restore the cache backend.
+
+#### OracleLatencySlowBurn
+- **Trigger**: p95 verification latency above 1s sustained over 30m and 6h.
+- **Triage**: check cache hit rate and external provider latency for a gradual drift.
+- **Action**: restore cache capacity or raise with the external provider; roll back any recent heuristic change that added upstream calls.
 
 ---
 
@@ -297,6 +405,35 @@ The notifications service processes user subscriptions and dispatches webhooks, 
    ```
 4. **Flush Poisoned Job Queue**:
    Purge pending outbound notification jobs from the queue if spam amplification is detected.
+
+#### 3. Alert Reference
+
+Every notifications alert in `monitoring/prometheus/availability-alerts.yml` and `monitoring/prometheus/slo-alerts.yml` carries a `runbook_url` pointing at the matching heading below. `scripts/check-alert-runbook-links.mjs` fails CI if a new alert is added without one.
+
+#### NotificationsFallbackActive
+- **Trigger**: fallback deliveries have been flowing for 15m, so a primary provider is failing health checks. Deliveries still succeed and the delivery SLO stays green.
+- **Triage**: check `/health/providers` and the provider dashboards (Resend, Twilio) for the failing primary.
+- **Action**: fix or replace the primary provider credentials; keep an eye on fallback capacity, since `NotificationLatencyFastBurn` follows when it saturates.
+
+#### NotificationDeliveryFastBurn
+- **Trigger**: 14x burn rate on the 99.9% delivery SLO over both 5m and 1h.
+- **Triage**: check `iln_notifications_failures_total` by channel and reason, provider health at `/health/providers`, and the audit log at `/audit/deliveries`; the fallback deliveries panel shows whether degraded-mode routing is active.
+- **Action**: if one channel is failing, disable it and let the others continue; if webhooks are failing on SSRF rejections, follow the Containment workflow above.
+
+#### NotificationDeliverySlowBurn
+- **Trigger**: 6x burn rate sustained over 30m and 6h.
+- **Triage**: check webhook SSRF rejections and Resend/Twilio provider health for a slow degradation.
+- **Action**: rotate or repair the degraded provider; review recently added webhook subscriptions for hosts that are being rejected.
+
+#### NotificationLatencyFastBurn
+- **Trigger**: p95 delivery latency above 5s over both 5m and 1h for 10m.
+- **Triage**: check rate-limit rejections and fallback capacity; a saturated fallback provider queues deliveries.
+- **Action**: raise the fallback provider's capacity or restore the primary; shed digest batches if the queue keeps growing.
+
+#### NotificationLatencySlowBurn
+- **Trigger**: p95 delivery latency above 5s sustained over 30m and 6h.
+- **Triage**: the Oracle Latency vs Notification Volume correlation panel in the unified dashboard shows whether a cross-service cause (oracle verdict volume) is driving it.
+- **Action**: fix the upstream cause if cross-service; otherwise tune delivery concurrency or provider timeouts.
 
 ---
 

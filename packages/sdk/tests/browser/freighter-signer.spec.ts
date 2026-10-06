@@ -18,9 +18,14 @@ export const getNetworkDetails = async () => ({ networkPassphrase: 'Test SDF Net
 export const requestAccess = async () => ({ address: 'GABCDEF1234567890ABCDEF1234567890ABCDEF12' });
 export const signTransaction = async (xdr, opts) => ({ signedTxXdr: null, error: 'User rejected request', signerAddress: null });`;
 
+// Matches the module the dev server serves for `@stellar/freighter-api`
+// (/@fs/.../@stellar/freighter-api/build/index.min.js). A `**/*freighter-api**`
+// glob only matches the last path segment, so it never intercepted this URL.
+const FREIGHTER_MODULE = /\/@stellar\/freighter-api\//;
+
 test.describe('ILN SDK Freighter signer browser interaction', () => {
   test('createFreighterSigner is exported from browser bundle', async ({ page }) => {
-    await page.route('**/*freighter-api**', async (route) => {
+    await page.route(FREIGHTER_MODULE, async (route) => {
       await route.fulfill({ contentType: 'application/javascript', body: MOCK_FREIGHTER_MODULE });
     });
     await page.goto('/tests/browser/freighter-signer.html');
@@ -31,7 +36,7 @@ test.describe('ILN SDK Freighter signer browser interaction', () => {
   });
 
   test('getPublicKey resolves address from Freighter', async ({ page }) => {
-    await page.route('**/*freighter-api**', async (route) => {
+    await page.route(FREIGHTER_MODULE, async (route) => {
       await route.fulfill({ contentType: 'application/javascript', body: MOCK_FREIGHTER_MODULE });
     });
     await page.goto('/tests/browser/freighter-signer.html');
@@ -42,7 +47,7 @@ test.describe('ILN SDK Freighter signer browser interaction', () => {
   });
 
   test('signTransaction delegates to Freighter and returns signed XDR', async ({ page }) => {
-    await page.route('**/*freighter-api**', async (route) => {
+    await page.route(FREIGHTER_MODULE, async (route) => {
       await route.fulfill({ contentType: 'application/javascript', body: MOCK_FREIGHTER_MODULE });
     });
     await page.goto('/tests/browser/freighter-signer.html');
@@ -53,7 +58,7 @@ test.describe('ILN SDK Freighter signer browser interaction', () => {
   });
 
   test('throws when Freighter is connected to the wrong network', async ({ page }) => {
-    await page.route('**/*freighter-api**', async (route) => {
+    await page.route(FREIGHTER_MODULE, async (route) => {
       await route.fulfill({ contentType: 'application/javascript', body: MOCK_FREIGHTER_WRONG_NETWORK });
     });
     await page.goto('/tests/browser/freighter-signer.html');
@@ -64,7 +69,7 @@ test.describe('ILN SDK Freighter signer browser interaction', () => {
   });
 
   test('propagates Freighter signTransaction errors', async ({ page }) => {
-    await page.route('**/*freighter-api**', async (route) => {
+    await page.route(FREIGHTER_MODULE, async (route) => {
       await route.fulfill({ contentType: 'application/javascript', body: MOCK_FREIGHTER_SIGN_ERROR });
     });
     await page.goto('/tests/browser/freighter-signer.html');
