@@ -1,6 +1,6 @@
 {
-  "ignore": ["frontend/**", "backend/**", "oracle-service/**"],
-  "ignoreBinaries": ["playwright", "sqlite3", "sha256sum", "gsutil", "gitleaks", "less"],
+  "ignore": ["oracle-service/**"],
+  "ignoreBinaries": ["playwright", "gitleaks", "less"],
   "rules": {
     "optionalPeerDependencies": "off",
     "duplicates": "off"

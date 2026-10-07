@@ -14,6 +14,11 @@ const nextConfig: NextConfig = {
   images: {
     unoptimized: true,
   },
+  // The standalone lint workflow validates this package; Next's bundled lint runner
+  // passes options that are incompatible with the workspace's ESLint version.
+  eslint: {
+    ignoreDuringBuilds: true,
+  },
 };
 
 export default withNextra(nextConfig);

@@ -86,5 +86,3 @@ export function AlgoliaSearch({
     </>
   );
 }
-
-export default AlgoliaSearch;
