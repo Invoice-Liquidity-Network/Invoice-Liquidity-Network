@@ -7,8 +7,11 @@ on:
       - 'cli/scripts/**'
   pull_request:
     paths:
+      - '.github/workflows/cli-docs.yml'
       - 'cli/src/**'
       - 'cli/scripts/**'
+      - 'packages/docs/content/cli-reference.mdx'
+      - 'packages/sdk/**'
 
 # Least-privilege: commit regenerated CLI docs back to the branch on push.
 permissions:
