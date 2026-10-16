@@ -539,6 +539,28 @@ export async function createOracleApp(
     ));
   const reputationProvider =
     options.reputationProvider ?? (await createReputationProvider(resolved, sourceTracker));
+  const rawKybProvider = options.kybProvider;
+  const kybProvider = rawKybProvider
+    ? {
+        name: rawKybProvider.name,
+        verifyPayer: async (payerAddress: string, metadata?: Record<string, unknown>) => {
+          const start = Date.now();
+          try {
+            const result = await rawKybProvider.verifyPayer(payerAddress, metadata);
+            sourceTracker.noteAttempt('kyb', true, Date.now() - start);
+            return result;
+          } catch (error) {
+            sourceTracker.noteAttempt('kyb', false, Date.now() - start);
+            throw error;
+          }
+        },
+      }
+    : undefined;
+  const requireKyb = options.requireKyb ?? process.env.NODE_ENV === 'production';
+  if (requireKyb && !kybProvider) {
+    sourceTracker.noteAttempt('kyb', false, 0);
+  }
+
   const verifier = new OracleVerifier({
     cache: cache.cache,
     historyProvider,
@@ -546,8 +568,8 @@ export async function createOracleApp(
     // Absent until an external KYB provider is wired up; the composition
     // policy treats that as `unknown` and leaves confidence untouched.
     externalProvider: options.externalProvider,
-    kybProvider: options.kybProvider,
-    requireKyb: options.requireKyb ?? process.env.NODE_ENV === 'production',
+    kybProvider,
+    requireKyb,
     requirePayerSignature: options.requirePayerSignature ?? false,
     cacheTtlSeconds: resolved.cacheTtlSeconds,
     maxOracleAgeMs: resolved.maxOracleAgeMs,
@@ -951,6 +973,7 @@ export async function createOracleApp(
       degradedMode: degradedResponses > 0,
       degradedResponses,
       lastSuccessfulVerificationAt,
+      sources,
     };
   }
 
