@@ -263,6 +263,7 @@ export interface OracleServiceHealth {
     aggregate: number;
     publish: number;
   };
+  sources?: Record<string, SourceHealthState>;
 }
 
 export interface OracleServiceMetricsSnapshot {
