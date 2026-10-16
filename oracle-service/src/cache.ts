@@ -6,6 +6,7 @@ import type {
   OracleVerificationRequest,
   OracleVerificationResponse,
 } from './types';
+import { redactErrorMessage } from './redaction';
 
 export const DEFAULT_TTL_SECONDS = 300;
 
@@ -235,7 +236,9 @@ export async function createOracleCache(
 
   const client = createClient({ url: options.redisUrl });
   client.on('error', (error) => {
-    console.error('[oracle-cache] redis error', error);
+    // Redacted: a redis error can echo the key (which embeds the payer) back in
+    // its message (issue #1239).
+    console.error('[oracle-cache] redis error', redactErrorMessage(error));
   });
   await client.connect();
 
