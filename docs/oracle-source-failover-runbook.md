@@ -25,14 +25,23 @@ Related: alerting rules in
 
 ### 1.1 What each source is
 
-The verifier fetches four upstreams per verdict. Two of them are pairable with
-a fallback (the other two, external KYB and the on-chain KYB result, are not
+The verifier fetches four upstreams per verdict. Three of them are pairable with
+a fallback (the fourth, the external verification provider, is not
 failover-managed):
 
 | Feed            | Primary env var                       | Fallback env var                       | Tracker source ids                    |
 | --------------- | ------------------------------------- | -------------------------------------- | ------------------------------------- |
 | History indexer | `INDEXER_BASE_URL`                     | `ORACLE_INDEXER_FALLBACK_URL`           | `indexer-primary`, `indexer-fallback` |
 | Reputation RPC  | `ORACLE_REPUTATION_RPC_URL` (+ `ORACLE_REPUTATION_CONTRACT_ID`) | `ORACLE_REPUTATION_FALLBACK_RPC_URL` | `reputation-primary`, `reputation-fallback` |
+| KYB registry    | `kybProvider` (programmatic)           | `kybFallbackProvider` (programmatic)    | `kyb-primary`, `kyb-fallback`         |
+
+The indexer and reputation fallbacks are wired from env. The KYB fallback is
+wired programmatically (issue #1238) and follows the same tracker rules, but
+with a stronger safety property: a source is switched only when the primary
+*throws*. A primary that *answers* — even `isVerified: false` — has produced a
+verdict, so the fallback is never consulted; failover can rescue an unreachable
+registry but can never override a rejection. See the
+[payer/KYB incidents runbook](./runbooks/payer-kyb-incidents.md).
 
 **A fallback is only wired when its env var is set.** If
 `ORACLE_INDEXER_FALLBACK_URL` (or the reputation equivalent) is unset, the
@@ -79,7 +88,8 @@ that has never returned anything is judged on error rate, not staleness.
   `oracle_failover_events_total{source}`; `oracle_source_health_state{source}`
   is set to `0` healthy / `1` degraded / `2` unavailable on every transition.
 - **Health payload.** `GET /health` and `GET /v1/health` include a `sources`
-  map (`source id → state`) and flip `status` to `degraded` when any source is
+  map (`source id → state`), a `kyb` block (`{required, configured, failover}`,
+  issue #1240), and flip `status` to `degraded` when any source is
   `unavailable`.
 
 ### 1.4 Manual failover / failback
