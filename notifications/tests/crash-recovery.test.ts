@@ -36,6 +36,7 @@ import { tmpdir } from 'os';
 import { dirname, join } from 'path';
 import { fileURLToPath } from 'url';
 import { beforeAll, describe, expect, it } from 'vitest';
+import { tokenizeRecipient } from '../src/recipient-crypto';
 
 const testDir = dirname(fileURLToPath(import.meta.url));
 const packageRoot = join(testDir, '..');
@@ -60,9 +61,18 @@ const DESTINATION = 'http://8.8.8.8/hook';
  * row id is its sha256. Recomputed here byte for byte, so a key that silently
  * dropped a field — or drifted to a different order — fails this test instead of
  * quietly degrading the guarantee. Scheduled notifications carry no event id,
- * which the composition encodes as the empty string.
+ * which the composition encodes as the empty string. The destination is stored
+ * as its keyed token (issue #1280), never in the clear.
  */
-const EXPECTED_DEDUP_KEY = JSON.stringify([INVOICE_ID, TRIGGER, PAYER, CHANNEL, DESTINATION, '']);
+const DESTINATION_TOKEN = tokenizeRecipient(DESTINATION);
+const EXPECTED_DEDUP_KEY = JSON.stringify([
+  INVOICE_ID,
+  TRIGGER,
+  PAYER,
+  CHANNEL,
+  DESTINATION_TOKEN,
+  '',
+]);
 const EXPECTED_ATTEMPT_ID = createHash('sha256').update(EXPECTED_DEDUP_KEY).digest('hex');
 
 type ProviderEvent = 'in-flight' | 'delivered' | 'survived';
@@ -330,7 +340,7 @@ describe('dispatch crash recovery (issue #1059)', () => {
           trigger: TRIGGER,
           recipient_address: PAYER,
           channel: CHANNEL,
-          destination: DESTINATION,
+          destination: DESTINATION_TOKEN,
           event_id: '',
           status: 'pending',
           attempts: 0,
@@ -374,7 +384,7 @@ describe('dispatch crash recovery (issue #1059)', () => {
           invoice_id: INVOICE_ID,
           trigger: TRIGGER,
           channel: CHANNEL,
-          destination: DESTINATION,
+          destination: DESTINATION_TOKEN,
         });
         expect(afterResume.successfulWebhooks).toBe(1);
         expect(afterResume.failedWebhooks).toBe(0);

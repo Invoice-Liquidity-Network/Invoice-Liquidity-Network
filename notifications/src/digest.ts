@@ -16,6 +16,7 @@ import type { InvoiceEvent } from './types';
 import type { NotificationFrequency } from './preferences';
 import { renderDigestEmail, buildDigestSubject } from './templates/digest.template';
 import type { DigestItem } from './templates/digest.template';
+import { InvalidRecipientError, validateEmailRecipient } from './recipient';
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -108,8 +109,18 @@ export class DigestScheduler {
   /**
    * Register a user for digest delivery. Safe to call multiple times —
    * subsequent calls update the config without clearing the pending buffer.
+   *
+   * Issue #1279: `config.email` must pass {@link validateEmailRecipient}
+   * before anything is buffered for it. An invalid mailbox — including a
+   * Stellar wallet address (#1278) — throws {@link InvalidRecipientError} and
+   * leaves any existing registration untouched, so a bad update can never
+   * redirect an already-buffered digest.
    */
   register(config: DigestUserConfig): void {
+    const validation = validateEmailRecipient(config.email);
+    if (!validation.valid) {
+      throw new InvalidRecipientError(validation.reason, 'email');
+    }
     const existing = this.buffers.get(config.stellarAddress);
     if (existing) {
       existing.config = config;
