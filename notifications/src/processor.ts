@@ -13,7 +13,9 @@ import {
   markDispatchAttemptDelivered,
   recordDispatchAttemptFailure,
   dispatchDestinationOf,
+  getDispatchOutcomeSummary,
 } from './db';
+import type { DispatchAttemptSubscription, DispatchFailureReason } from './db';
 import { fetchInvoice } from './rpc';
 import { deliverNotification } from './delivery';
 import { deliverWithFallback } from './fallback';
@@ -22,6 +24,13 @@ import { digestScheduler, DigestScheduler } from './digest';
 import { preferencesService } from './preferences';
 import type { Invoice, ILNEventType, NotificationTrigger, InvoiceEvent } from './types';
 import { CONFIG } from './config';
+import { notificationsMetrics } from './metrics';
+import {
+  InvalidRecipientError,
+  maskRecipient,
+  resolveEmailRecipient,
+  validateEmailRecipient,
+} from './recipient';
 
 const KNOWN_EVENT_TYPES = new Set<ILNEventType>(['submitted', 'funded', 'paid', 'defaulted']);
 
@@ -92,7 +101,9 @@ export async function processScheduledNotifications(): Promise<void> {
  *   closed the row, and the caller then skips the "sent" bookkeeping.
  *
  * One failing delivery is logged and left pending; it never aborts the rest of
- * the flush.
+ * the flush. Retries are bounded (issue #1277): a row that exhausts
+ * `CONFIG.maxDispatchAttempts`, or fails permanently, moves to the terminal
+ * `failed` state with an `outcome_reason` and is no longer picked up here.
  */
 export async function flushPendingNotifications(): Promise<void> {
   const pending = getPendingDispatchAttempts();
@@ -106,9 +117,18 @@ export async function flushPendingNotifications(): Promise<void> {
       continue;
     }
 
+    // Rows enqueued before recipient validation shipped (#1279) may carry a
+    // mailbox the provider can never accept; close them out instead of
+    // spending the retry budget on guaranteed bounces.
+    const recipientError = recipientPreflight(attempt.subscription);
+    if (recipientError) {
+      recordFailure(attempt.id, channel, recipientError, 'flush');
+      continue;
+    }
+
     try {
       await deliverNotification(attempt.subscription, attempt.payload);
-      if (markDispatchAttemptDelivered(attempt.id)) {
+      if (recordDelivered(attempt.id, channel)) {
         logSentNotification(
           invoice.id,
           trigger,
@@ -118,10 +138,95 @@ export async function flushPendingNotifications(): Promise<void> {
           attempt.event_id ?? undefined
         );
       }
-    } catch (error: any) {
-      recordDispatchAttemptFailure(attempt.id, error?.message ?? String(error));
-      console.error(`[processor] Failed to deliver pending notification ${attempt.id}:`, error);
+    } catch (error: unknown) {
+      recordFailure(attempt.id, channel, error, 'flush');
     }
+  }
+  refreshDispatchQueueMetrics();
+}
+
+/**
+ * Close out a provider failure on the journal row and make the outcome
+ * visible (issue #1277). Errors flagged `retryable === false` (including
+ * {@link InvalidRecipientError}) end the row immediately; anything else is
+ * retried by the flush until `CONFIG.maxDispatchAttempts` is spent. Logs carry
+ * the attempt id, never the destination (#1280).
+ */
+function recordFailure(
+  attemptId: string,
+  channel: string,
+  error: unknown,
+  stage: 'dispatch' | 'flush',
+  message: string = errorMessage(error)
+): void {
+  const terminalReason = terminalReasonFor(error);
+  const outcome = recordDispatchAttemptFailure(attemptId, message, { terminalReason });
+  if (!outcome) {
+    // Another worker already delivered or dead-lettered this row.
+    return;
+  }
+  notificationsMetrics.recordFailure(channel, outcome.outcome_reason ?? 'transient');
+  if (outcome.terminal) {
+    notificationsMetrics.recordDispatchAttempt(channel, 'terminal');
+    notificationsMetrics.recordDispatchTerminal(channel, outcome.outcome_reason ?? 'unknown');
+    console.error(
+      `[processor] Dispatch attempt ${attemptId} reached terminal failure ` +
+        `(${outcome.outcome_reason}) after ${outcome.attempts} attempt(s) during ${stage}: ${message}`
+    );
+    return;
+  }
+  notificationsMetrics.recordDispatchAttempt(channel, 'retry');
+  console.warn(
+    `[processor] Dispatch attempt ${attemptId} failed during ${stage} ` +
+      `(attempt ${outcome.attempts}/${CONFIG.maxDispatchAttempts}); will retry: ${message}`
+  );
+}
+
+function recordDelivered(attemptId: string, channel: string): boolean {
+  const closed = markDispatchAttemptDelivered(attemptId);
+  if (closed) {
+    notificationsMetrics.recordDispatchAttempt(channel, 'delivered');
+    notificationsMetrics.recordDispatchTerminal(channel, 'delivered');
+  }
+  return closed;
+}
+
+function terminalReasonFor(error: unknown): DispatchFailureReason | undefined {
+  if (error instanceof InvalidRecipientError) return 'invalid_recipient';
+  if (
+    typeof error === 'object' &&
+    error !== null &&
+    (error as { retryable?: unknown }).retryable === false
+  ) {
+    return 'permanent_error';
+  }
+  return undefined;
+}
+
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
+/** Reject email destinations that cannot be delivered before any provider call. */
+function recipientPreflight(
+  subscription: DispatchAttemptSubscription
+): InvalidRecipientError | undefined {
+  if (subscription.channel !== 'email') return undefined;
+  const validation = validateEmailRecipient(dispatchDestinationOf(subscription));
+  return validation.valid ? undefined : new InvalidRecipientError(validation.reason, 'email');
+}
+
+function refreshDispatchQueueMetrics(): void {
+  try {
+    const summary = getDispatchOutcomeSummary();
+    const gauge = notificationsMetrics.dispatchQueue;
+    gauge.set({ status: 'pending' }, summary.pending);
+    gauge.set({ status: 'delivered' }, summary.delivered);
+    gauge.set({ status: 'failed' }, summary.failed);
+    gauge.set({ status: 'oldest_pending_age_seconds' }, (summary.oldestPendingAgeMs ?? 0) / 1000);
+    gauge.set({ status: 'max_pending_attempts' }, summary.maxPendingAttempts);
+  } catch (error) {
+    console.error('[processor] Failed to refresh dispatch queue metrics:', error);
   }
 }
 
@@ -265,6 +370,24 @@ async function dispatchNotifications(
     // Check user's digest preference — if daily or weekly, buffer instead of immediate send.
     const prefs = preferencesService.get(target.recipient);
     if (DigestScheduler.isDigestFrequency(prefs.frequency)) {
+      // Issue #1278: the wallet address identifies the user; the mailbox comes
+      // from the email subscription they registered. Issue #1279: it is
+      // validated before anything is buffered. No fallback to the wallet
+      // address — an unresolvable recipient is skipped and counted.
+      const resolution = resolveEmailRecipient(
+        target.recipient,
+        trigger,
+        getSubscriptionsByAddress(target.recipient)
+      );
+      if (!resolution.ok) {
+        notificationsMetrics.recordRecipientRejection('email', 'digest_enqueue', resolution.reason);
+        console.warn(
+          `[processor] Skipping ${prefs.frequency} digest item for invoice ${invoice.id} ` +
+            `(${trigger}) to ${maskRecipient(target.recipient)}: ${resolution.reason}`
+        );
+        continue;
+      }
+
       const invoiceEvent: InvoiceEvent = {
         eventId: eventId ?? `digest-${invoice.id}-${Date.now()}`,
         invoiceId: invoice.id,
@@ -276,14 +399,25 @@ async function dispatchNotifications(
         discountRate: invoice.discount_rate,
         funder: invoice.funder,
       };
-      digestScheduler.register({
-        stellarAddress: target.recipient,
-        email: target.recipient, // would use real email from user profile in production
-        frequency: prefs.frequency,
-        sendHour: 8,
-        sendDayOfWeek: 1,
-        unsubscribeToken: `${target.recipient}-unsub`,
-      });
+      try {
+        digestScheduler.register({
+          stellarAddress: target.recipient,
+          email: resolution.email,
+          frequency: prefs.frequency,
+          sendHour: 8,
+          sendDayOfWeek: 1,
+          unsubscribeToken: `${target.recipient}-unsub`,
+        });
+      } catch (error) {
+        if (!(error instanceof InvalidRecipientError)) throw error;
+        notificationsMetrics.recordRecipientRejection('email', 'digest_enqueue', error.reason);
+        console.warn(
+          `[processor] Digest registration refused for ${maskRecipient(target.recipient)}: ${
+            error.reason
+          }`
+        );
+        continue;
+      }
       digestScheduler.buffer(target.recipient, invoiceEvent);
       continue;
     }
@@ -305,6 +439,20 @@ async function dispatchNotifications(
         continue;
       }
 
+      const recipientError = recipientPreflight(subscription);
+      if (recipientError) {
+        notificationsMetrics.recordRecipientRejection(
+          subscription.channel,
+          'dispatch_enqueue',
+          recipientError.reason
+        );
+        console.warn(
+          `[processor] Not enqueuing ${trigger} for invoice ${invoice.id} on subscription ` +
+            `${subscription.id}: ${recipientError.reason}`
+        );
+        continue;
+      }
+
       const payload = {
         trigger,
         invoice,
@@ -322,8 +470,10 @@ async function dispatchNotifications(
       // on a UNIQUE dedup key, so a duplicated event or a replayed poll can
       // neither queue nor send a second copy of the same notification.
       const attempt = enqueueDispatchAttempt(subscription, payload);
-      if (attempt.alreadyDelivered) {
-        // Some earlier run already confirmed this exact notification.
+      if (attempt.status !== 'pending') {
+        // Some earlier run already confirmed this exact notification, or
+        // dead-lettered it (#1277) — a failed row is only retried after an
+        // operator re-queues it, never by a replayed or rescheduled trigger.
         continue;
       }
 
@@ -345,7 +495,7 @@ async function dispatchNotifications(
             }
             // The recipient was reached, just not on the primary channel: close
             // the primary attempt so the flush does not send it a second time.
-            markDispatchAttemptDelivered(attempt.id);
+            recordDelivered(attempt.id, subscription.channel);
             logSentNotification(
               invoice.id,
               trigger,
@@ -355,25 +505,28 @@ async function dispatchNotifications(
               eventId
             );
           } else if (!fbResult.capacityAllowed) {
-            recordDispatchAttemptFailure(
-              attempt.id,
-              fbResult.error ?? `fallback capacity exhausted for ${trigger}`
-            );
             console.warn(
-              `[processor] Fallback capacity exhausted for ${trigger} to ${target.recipient} (priority ${fbResult.priority}) — shedding low-priority notification`
+              `[processor] Fallback capacity exhausted for ${trigger} to ${maskRecipient(
+                target.recipient
+              )} (priority ${fbResult.priority}) — shedding low-priority notification`
+            );
+            recordFailure(
+              attempt.id,
+              subscription.channel,
+              fbResult.error ?? `fallback capacity exhausted for ${trigger}`,
+              'dispatch'
             );
           } else {
-            recordDispatchAttemptFailure(attempt.id, fbResult.error ?? 'fallback delivery failed');
-            console.error(
-              `[processor] Failed to deliver notification for invoice ${
-                invoice.id
-              } to ${dispatchDestinationOf(subscription)} via fallback:`,
-              fbResult.error
+            recordFailure(
+              attempt.id,
+              subscription.channel,
+              fbResult.error ?? 'fallback delivery failed',
+              'dispatch'
             );
           }
         } else {
           await deliverNotification(subscription, payload);
-          markDispatchAttemptDelivered(attempt.id);
+          recordDelivered(attempt.id, subscription.channel);
           logSentNotification(
             invoice.id,
             trigger,
@@ -397,7 +550,7 @@ async function dispatchNotifications(
               );
               if (fallbackSubs.length > 0) usedDestination = dispatchDestinationOf(fallbackSubs[0]);
             }
-            markDispatchAttemptDelivered(attempt.id);
+            recordDelivered(attempt.id, subscription.channel);
             logSentNotification(
               invoice.id,
               trigger,
@@ -407,32 +560,25 @@ async function dispatchNotifications(
               eventId
             );
           } else {
-            // Row stays pending: the poller flush owns the retry from here.
-            // The provider that refused the send is the actionable cause, so it
-            // is kept even when the fallback reports its own reason.
-            recordDispatchAttemptFailure(
+            // Unless the primary error was permanent, the row stays pending
+            // and the poller flush owns the retry from here. The provider that
+            // refused the send is the actionable cause, so it is kept even when
+            // the fallback reports its own reason.
+            recordFailure(
               attempt.id,
+              subscription.channel,
+              error,
+              'dispatch',
               fbResult.error ? `${primaryError} (fallback: ${fbResult.error})` : primaryError
-            );
-            console.error(
-              `[processor] Failed to deliver notification for invoice ${
-                invoice.id
-              } to ${dispatchDestinationOf(subscription)}:`,
-              error
             );
           }
         } catch (fallbackError) {
-          recordDispatchAttemptFailure(
+          recordFailure(
             attempt.id,
-            `${primaryError} (fallback: ${
-              fallbackError instanceof Error ? fallbackError.message : String(fallbackError)
-            })`
-          );
-          console.error(
-            `[processor] Failed to deliver notification for invoice ${
-              invoice.id
-            } to ${dispatchDestinationOf(subscription)}:`,
-            fallbackError
+            subscription.channel,
+            error,
+            'dispatch',
+            `${primaryError} (fallback: ${errorMessage(fallbackError)})`
           );
         }
       }

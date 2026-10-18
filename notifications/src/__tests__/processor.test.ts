@@ -16,6 +16,7 @@ import {
   markDispatchAttemptDelivered,
   dispatchDestinationOf,
 } from '../db';
+import { tokenizeRecipient } from '../recipient-crypto';
 import * as rpc from '../rpc';
 import * as delivery from '../delivery';
 import * as fallback from '../fallback';
@@ -163,7 +164,8 @@ describe('Notification processor', () => {
       trigger: 'invoice_funded',
       recipient_address: invoice.freelancer,
       channel: 'email',
-      destination: 'funded@example.com',
+      // Issue #1280: the journal stores a keyed token, not the mailbox.
+      destination: tokenizeRecipient('funded@example.com'),
       event_id: 'evt-persisted',
     });
     expect(dispatchAttemptRows(db)[0].delivered_at).not.toBeNull();

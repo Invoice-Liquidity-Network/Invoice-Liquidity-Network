@@ -6,6 +6,11 @@ import { CONFIG } from './config';
 import { TemplateEngine } from './template-engine';
 import { startHealthChecks } from './provider-health';
 import { startRetentionScheduler } from './retention';
+import { assertRecipientKeyConfigured } from './recipient-crypto';
+
+// Issue #1280: refuse to boot without a usable recipient key in production,
+// rather than failing on the first notification.
+assertRecipientKeyConfigured();
 
 const app = createApp();
 const server = http.createServer(app);

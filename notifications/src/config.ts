@@ -41,6 +41,9 @@ export const CONFIG = {
   resendFromEmail: process.env.RESEND_FROM_EMAIL || 'no-reply@invoice-liquidity.network',
   dueWarningHours: parseIntEnv('DUE_WARNING_HOURS', 48),
   maxWebhookRetry: 3,
+  // Issue #1277: total provider attempts per dispatch_attempts row before it is
+  // dead-lettered as `failed` / `max_attempts_exhausted`.
+  maxDispatchAttempts: parseIntEnv('NOTIFICATIONS_MAX_DISPATCH_ATTEMPTS', 8),
   webhookBackoffBaseMs: 500,
   twilioAccountSid: process.env.TWILIO_ACCOUNT_SID || '',
   twilioAuthToken: process.env.TWILIO_AUTH_TOKEN || '',

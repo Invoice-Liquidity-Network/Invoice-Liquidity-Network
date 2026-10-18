@@ -84,7 +84,7 @@ Each row describes one outbound subscription:
 These records support compliance investigations ("was this specific notification actually delivered, and when?") as a durable, queryable audit log. Three kinds of records exist:
 
 - **De-duplication state** (`sent_notifications`) and **webhook retry state** (`webhook_delivery_logs`).
-- **Durable dispatch journal** (`dispatch_attempts`) — pending work is retained until completed; terminal delivered/failed rows are purged after 90 days.
+- **Durable dispatch journal** (`dispatch_attempts`) — pending work is retained until completed; terminal delivered/failed rows are purged after 90 days. Destinations are stored only as keyed HMAC tokens and the subscription snapshot needed for retries is AES-256-GCM encrypted under `NOTIFICATIONS_RECIPIENT_KEY` (issue #1280). `sent_notifications.destination` is likewise tokenized. See `docs/runbooks/notifications-dispatch-outcomes.md` for key handling and rotation.
 - **Durable delivery-confirmation audit log** (`delivery_audit_log`) — one row per delivery outcome (whether `delivered` or `failed`), with attempt timestamps, channel, and final status. This table is the source of truth for `GET /audit/deliveries` (by recipient, event, or time range) and for the CLI `query-audit` tool.
 
 They are not visible to users by default but are included in the export endpoint.
