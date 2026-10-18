@@ -2,9 +2,9 @@
 
 Operational guide for indexer chain tip rewind reconciliation, fork replacement persistence, removed event rollback, and idempotent replay handling.
 
-- **Primary Owner**: Indexer Engineering Team (`@abdfatah02`, `@sublime247`)
-- **Applies to**: `iln-indexer` (`indexer/src/poller.ts`, `indexer/src/processor.ts`, `indexer/src/db.ts`)
-- **Relevant Issues**: #1257, #1258, #1259, #1260, #1262, #1263, #1264
+- **Primary Owner**: Indexer Engineering Team (`@AbdulHameedAnofi`, `@abdfatah02`, `@sublime247`)
+- **Applies to**: `iln-indexer` (`indexer/src/poller.ts`, `indexer/src/processor.ts`, `indexer/src/db.ts`, `indexer/src/policy.ts`)
+- **Relevant Issues**: #1257, #1258, #1259, #1260, #1261, #1262, #1263, #1264
 
 ---
 
@@ -38,6 +38,10 @@ Operational guide for indexer chain tip rewind reconciliation, fork replacement 
 - **Problem**: Static test suites may miss adversarial or non-deterministic edge cases across combinations of reorg depths, event interleavings, duplicate payloads, or crash timings.
 - **Control**: Comprehensive `fast-check` property tests in `indexer/tests/cursor-property.test.ts` continually prove cursor monotonicity across random increments, replay idempotency across shuffled and duplicated streams, bounded rollback invariants across arbitrary fork depths, and quarantine threshold triggers across failure sequences.
 
+### 8. Canonical-Ledger Confirmation Depth Policy (#1261)
+- **Problem**: Ingesting events directly at the unconfirmed chain tip leaves indexer state vulnerable to short-lived shallow reorganizations and transient ledger forks on the Soroban RPC node.
+- **Control**: The poller evaluates contract events against a configurable `CanonicalConfirmationPolicy` (`CONFIRMATION_DEPTH`, default: 10 ledgers). Events within the unconfirmed tip window (`latestKnownLedger - event.ledger < confirmationDepth`) are deferred until confirmed by subsequent chain progression. The cursor never advances beyond the canonical confirmed tip (`latestKnownLedger - confirmationDepth`), preventing unconfirmed state from corrupting the indexer database.
+
 ---
 
 ## Operational Metrics & Signals
@@ -54,6 +58,9 @@ The indexer exports the following Prometheus metrics:
 | `iln_reorg_quarantined_total` | Counter | - | Total count of corrupted or exhausted reorg recoveries quarantined |
 | `iln_reorg_quarantined_active` | Gauge | - | Current count of active quarantined reorg records requiring operator triage |
 | `iln_cursor_monotonicity_violations_total` | Counter | - | Count of rejected attempts to violate cursor monotonicity |
+| `iln_confirmation_depth` | Gauge | - | Configured canonical-ledger confirmation depth policy threshold |
+| `iln_unconfirmed_events_skipped_total` | Counter | - | Total number of unconfirmed events deferred by confirmation depth policy |
+| `iln_confirmed_tip_ledger` | Gauge | - | Highest confirmed canonical ledger tip sequence number |
 | `iln_duplicate_events_total` | Counter | - | Number of duplicate events safely deduplicated during replays |
 
 ---
@@ -101,13 +108,27 @@ The indexer exports the following Prometheus metrics:
      `[poller] Recovering pending fork replacement decision #<id> (from <from> to <to>)`
    - Verify that the cursor and invoice states align with the canonical chain.
 
+### Operator Tuning: Confirmation Depth Policy (`CONFIRMATION_DEPTH`)
+1. **Standard Finality**: Defaults to `10` ledgers (~50 seconds finality buffer on Stellar).
+2. **Network Turbulence / High Fork Frequency**:
+   - If `iln_reorg_rollbacks_total` spikes due to upstream RPC node instability or consensus delays, increase confirmation depth:
+     ```env
+     CONFIRMATION_DEPTH=20
+     ```
+3. **Fast-Sync / Local Sandbox Mode**:
+   - For local tests or mock environments requiring immediate zero-depth processing:
+     ```env
+     CONFIRMATION_DEPTH=0
+     ```
+
 ---
 
 ## Automated Verification
 
-Run targeted regression, property, and boundary tests:
+Run targeted regression, property, confirmation depth, and boundary tests:
 
 ```bash
-pnpm --filter iln-indexer test tests/quarantine.test.ts tests/cursor-monotonicity.test.ts tests/cursor-property.test.ts tests/reorg-idempotency.test.ts tests/poller.test.ts
+pnpm --filter iln-indexer test tests/confirmation-depth.test.ts tests/quarantine.test.ts tests/cursor-monotonicity.test.ts tests/cursor-property.test.ts tests/reorg-idempotency.test.ts tests/poller.test.ts
 ```
+
 

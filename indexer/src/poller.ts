@@ -9,13 +9,33 @@ import {
   incrementForkDecisionAttempts,
   quarantineForkDecision,
 } from './db';
-import { reorgAbortionsTotal, reorgRollbacksTotal } from './metrics';
+import {
+  reorgAbortionsTotal,
+  reorgRollbacksTotal,
+  unconfirmedEventsSkippedTotal,
+} from './metrics';
 import { invalidateInvoiceCache } from './cache';
 import { processEvent } from './processor';
 import { server } from './rpc';
+import { confirmationPolicy, type ConfirmationDepthPolicy } from './policy';
 
 const BATCH_SIZE = 200;
-const CONFIRMATION_DEPTH = 10;
+
+/** Default confirmation depth in ledgers if unspecified. */
+export const DEFAULT_CONFIRMATION_DEPTH = 10;
+export const CONFIRMATION_DEPTH = DEFAULT_CONFIRMATION_DEPTH;
+
+let _activeConfirmationPolicy: ConfirmationDepthPolicy = confirmationPolicy;
+
+/** Return active confirmation depth policy. */
+export function getConfirmationPolicy(): ConfirmationDepthPolicy {
+  return _activeConfirmationPolicy;
+}
+
+/** Set or override active confirmation depth policy (used for testing or runtime adjustment). */
+export function setConfirmationPolicy(policy: ConfirmationDepthPolicy): void {
+  _activeConfirmationPolicy = policy;
+}
 
 /**
  * Maximum number of same-cycle rollbacks accepted before the cycle is aborted.
@@ -173,7 +193,12 @@ export async function pollOnce(): Promise<void> {
     reorgsThisCycle = 0;
 
     for (const event of response.events) {
-      if (latestKnownLedger - event.ledger < CONFIRMATION_DEPTH) {
+      if (!_activeConfirmationPolicy.isConfirmed(event.ledger, latestKnownLedger)) {
+        try {
+          unconfirmedEventsSkippedTotal.inc();
+        } catch {
+          /* metrics failure is non-fatal */
+        }
         continue;
       }
       await processEvent(event);
@@ -195,9 +220,10 @@ export async function pollOnce(): Promise<void> {
   }
 
   // ── Advance cursor ────────────────────────────────────────────────────────
-  // Save up to (latestLedger - CONFIRMATION_DEPTH) so next poll starts from the confirmed tip,
+  // Save up to confirmed tip so next poll starts from the confirmed tip,
   // giving a small overlap window for any in-flight events.
-  const newCursor = Math.max(highestEventLedger, Math.max(0, latestKnownLedger - CONFIRMATION_DEPTH));
+  const confirmedTip = _activeConfirmationPolicy.getConfirmedTip(latestKnownLedger);
+  const newCursor = Math.max(highestEventLedger, confirmedTip);
   if (newCursor > stored) {
     setCursorLedger(newCursor);
   }
@@ -210,7 +236,7 @@ export async function pollOnce(): Promise<void> {
  */
 export async function startPolling(): Promise<void> {
   console.log(
-    `[poller] Starting — polling every ${CONFIG.pollIntervalMs}ms for contract ${CONFIG.contractId}`
+    `[poller] Starting — polling every ${CONFIG.pollIntervalMs}ms for contract ${CONFIG.contractId} (confirmation depth: ${_activeConfirmationPolicy.getDepth()})`
   );
 
   const tick = async () => {

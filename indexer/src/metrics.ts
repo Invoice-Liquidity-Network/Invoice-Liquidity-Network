@@ -92,6 +92,24 @@ export const cursorMonotonicityViolationsTotal = new Counter({
   registers: [registry],
 });
 
+export const confirmationDepthGauge = new Gauge({
+  name: 'iln_confirmation_depth',
+  help: 'Configured canonical-ledger confirmation depth policy threshold',
+  registers: [registry],
+});
+
+export const unconfirmedEventsSkippedTotal = new Counter({
+  name: 'iln_unconfirmed_events_skipped_total',
+  help: 'Total number of unconfirmed events deferred by confirmation depth policy',
+  registers: [registry],
+});
+
+export const confirmedTipLedger = new Gauge({
+  name: 'iln_confirmed_tip_ledger',
+  help: 'Highest confirmed canonical ledger tip sequence number',
+  registers: [registry],
+});
+
 export const cursorUpdatedAt = new Gauge({
   name: 'iln_cursor_updated_at',
   help: 'Timestamp (ms) when cursor was last updated',

@@ -281,6 +281,7 @@ CREATE TABLE IF NOT EXISTS reorg_quarantine (
 5. **Incomplete Reorg Quarantine**: In-progress fork decisions track `recovery_attempts`. If rollback fails or exhausts `MAX_REORG_RECOVERY_ATTEMPTS` (3), the decision is transitioned to `'quarantined'` and recorded in `reorg_quarantine`, preventing poller crash loops.
 6. **Cursor Monotonicity Invariants**: `setCursorLedger` guarantees that the stored cursor cannot regress during normal forward indexing. Rewinds are strictly rejected outside of authorized rollback operations.
 7. **Property-Based Verification**: Random property tests (`fast-check`) continuously verify cursor monotonicity, replay idempotency, rollback boundedness, and quarantine isolation under high permutations of inputs.
+8. **Canonical Confirmation Depth Policy**: Contract events within the unconfirmed chain tip window (`latestKnownLedger - event.ledger < confirmationDepth`) are deferred until confirmed by subsequent chain progression. The persisted cursor is bounded to the confirmed tip (`latestKnownLedger - confirmationDepth`), preventing unconfirmed state from corrupting the indexer database.
 
 ---
 
