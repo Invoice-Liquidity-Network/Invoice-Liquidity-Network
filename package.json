@@ -111,7 +111,9 @@
     "test:oncall-handoff": "node --test scripts/__tests__/oncall-escalation-handoff.test.mjs",
     "verify:ownership-matrix": "node scripts/operations/check-cross-repo-ownership.mjs",
     "test:ownership-matrix": "node --test scripts/__tests__/cross-repo-ownership.test.mjs",
-    "test:indexer-alerts": "node --test scripts/__tests__/indexer-operational-alerts.test.mjs"
+    "test:indexer-alerts": "node --test scripts/__tests__/indexer-operational-alerts.test.mjs",
+    "measure:notification-slo": "node scripts/operations/measure-notification-replay-slo.mjs",
+    "test:notification-slo": "node --test scripts/__tests__/measure-notification-replay-slo.test.mjs"
   },
   "devDependencies": {
     "@changesets/cli": "^2.31.0",
