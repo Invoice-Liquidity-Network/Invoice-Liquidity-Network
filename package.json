@@ -162,7 +162,9 @@
     "verify:audit-evidence": "node scripts/operations/verify-audit-evidence.mjs",
     "test:audit-evidence": "node --test scripts/__tests__/verify-audit-evidence.test.mjs",
     "verify:mainnet-evidence-gate": "node scripts/operations/mainnet-evidence-gate.mjs",
-    "test:mainnet-evidence-gate": "node --test scripts/__tests__/mainnet-evidence-gate.test.mjs"
+    "test:mainnet-evidence-gate": "node --test scripts/__tests__/mainnet-evidence-gate.test.mjs",
+    "check:doc-links:offline": "node scripts/check-doc-links.mjs --offline",
+    "test:doc-links": "node --test scripts/__tests__/check-doc-links.test.mjs"
   },
   "devDependencies": {
     "@changesets/cli": "^2.31.0",

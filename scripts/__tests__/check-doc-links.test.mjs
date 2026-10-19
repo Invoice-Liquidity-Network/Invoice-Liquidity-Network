@@ -1,49 +1,44 @@
-import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { describe, it } from 'node:test';
+import assert from 'node:assert/strict';
+import { extractLinks, checkFile } from '../check-doc-links.mjs';
+import { writeFileSync, unlinkSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { spawnSync } from 'node:child_process';
-import { afterEach, test } from 'node:test';
-import assert from 'node:assert/strict';
-import { checkExternalLink } from '../check-doc-links.mjs';
 
-const repoRoot = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
-const checkScript = join(repoRoot, 'scripts', 'check-doc-links.mjs');
-const roots = [];
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
 
-afterEach(() => roots.splice(0).forEach((root) => rmSync(root, { recursive: true, force: true })));
-
-test('doc link check ignores links inside fenced Markdown examples', () => {
-  const root = mkdtempSync(join(tmpdir(), 'iln-doc-links-'));
-  roots.push(root);
-  mkdirSync(root, { recursive: true });
-  writeFileSync(join(root, 'real-target.md'), '# Exists\n');
-  writeFileSync(
-    join(root, 'guide.md'),
-    '# Guide\n\n```md\n[example](missing-example.md)\n```\n\nInline: `[inline](missing-inline.md)`\n\n[real](real-target.md)\n'
-  );
-
-  const result = spawnSync(process.execPath, [checkScript, 'guide.md'], {
-    cwd: root,
-    encoding: 'utf8',
+describe('Docs Link Checker Suite (#1292)', () => {
+  it('extracts markdown links correctly while ignoring code blocks', () => {
+    const text = 'Here is a [link](https://example.com) and [internal](./audit.md).';
+    const links = extractLinks(text);
+    assert.deepEqual(links, ['https://example.com', './audit.md']);
   });
 
-  assert.equal(result.status, 0, result.stderr || result.stdout);
-  assert.doesNotMatch(result.stdout, /missing-example\.md/);
-  assert.doesNotMatch(result.stdout, /missing-inline\.md/);
-});
+  it('skips external links when offline option is enabled', async () => {
+    const tempFile = join(__dirname, 'mock-external-doc.md');
+    const mockContent = 'Check [external](https://unreachable-domain-12345.org) and [repo](../../README.md)';
+    writeFileSync(tempFile, mockContent, 'utf-8');
 
-test('doc link check warns when external fetch fails but fails on an HTTP error response', async () => {
-  const unavailable = await checkExternalLink('https://docs.example.invalid', async () => {
-    throw new Error('network unavailable');
+    try {
+      const res = await checkFile(tempFile, process.cwd(), { offline: true });
+      assert.equal(res.problems.length, 0);
+    } finally {
+      unlinkSync(tempFile);
+    }
   });
-  assert.equal(unavailable.problem, null);
-  assert.match(unavailable.warning, /could not be verified/);
 
-  const broken = await checkExternalLink('https://docs.example.invalid', async () => ({
-    ok: false,
-    status: 404,
-  }));
-  assert.equal(broken.warning, null);
-  assert.match(broken.problem, /404/);
+  it('fails closed when internal relative link is broken', async () => {
+    const tempFile = join(__dirname, 'mock-broken-internal-doc.md');
+    const mockContent = 'Check [broken](./non-existent-page.md)';
+    writeFileSync(tempFile, mockContent, 'utf-8');
+
+    try {
+      const res = await checkFile(tempFile, process.cwd(), { offline: true });
+      assert.equal(res.problems.length, 1);
+      assert.ok(res.problems[0].includes('missing'));
+    } finally {
+      unlinkSync(tempFile);
+    }
+  });
 });

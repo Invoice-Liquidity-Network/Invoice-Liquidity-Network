@@ -41,7 +41,8 @@ async function checkExternalLink(url, fetchImpl = fetch) {
   }
 }
 
-async function checkFile(filePath, repoRoot) {
+async function checkFile(filePath, repoRoot, options = {}) {
+  const skipExternal = options.offline ?? false;
   const content = readFileSync(filePath, 'utf8');
   // Fenced and inline code examples show markdown as text and should not be
   // checked as links from the file containing the example.
@@ -59,6 +60,7 @@ async function checkFile(filePath, repoRoot) {
       // strip title part: url "title"
       const url = link.split(/\s+/)[0];
       if (/^https?:\/\//i.test(url)) {
+        if (skipExternal) return;
         const result = await checkExternalLink(url);
         if (result.problem) problems.push(result.problem);
         if (result.warning) warnings.push(result.warning);
@@ -79,8 +81,12 @@ async function checkFile(filePath, repoRoot) {
 
 async function main() {
   const repoRoot = process.cwd();
-  const args = process.argv.slice(2);
-  const targets = args.length ? args : ['docs/**/*.md', 'packages/docs/content/**/*.mdx', 'README.md', 'CONTRIBUTING.md', 'SECURITY.md', 'DEPLOYMENT_GUIDE.md', 'CHANGELOG.md'];
+  const rawArgs = process.argv.slice(2);
+  const isOffline = rawArgs.includes('--offline') || rawArgs.includes('--skip-external');
+  const filteredArgs = rawArgs.filter((a) => !a.startsWith('--'));
+  const targets = filteredArgs.length
+    ? filteredArgs
+    : ['docs/**/*.md', 'packages/docs/content/**/*.mdx', 'README.md', 'CONTRIBUTING.md', 'SECURITY.md', 'DEPLOYMENT_GUIDE.md', 'CHANGELOG.md'];
 
   // expand globs to files (supports simple patterns like 'dir/**/*.ext')
   async function walkDir(dir, ext) {
@@ -129,7 +135,7 @@ async function main() {
   const results = [];
   for (const f of fileList) {
     try {
-      const r = await checkFile(resolve(repoRoot, f), repoRoot);
+      const r = await checkFile(resolve(repoRoot, f), repoRoot, { offline: isOffline });
       results.push(r);
     } catch (err) {
       results.push({ file: f, problems: [`error ${String(err)}`], warnings: [] });
@@ -152,4 +158,4 @@ async function main() {
 
 if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) main();
 
-export { checkExternalLink };
+export { checkExternalLink, checkFile, extractLinks };
