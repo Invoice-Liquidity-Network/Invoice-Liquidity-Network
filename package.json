@@ -117,7 +117,9 @@
     "measure:indexer-rto": "node scripts/operations/measure-indexer-rto.mjs",
     "test:indexer-rto": "node --test scripts/__tests__/measure-indexer-rto.test.mjs",
     "drill:indexer-rollback": "node scripts/drills/exercise-indexer-rollback-unpaused.mjs",
-    "test:indexer-rollback": "node --test scripts/__tests__/indexer-rollback-unpaused.test.mjs"
+    "test:indexer-rollback": "node --test scripts/__tests__/indexer-rollback-unpaused.test.mjs",
+    "drill:oracle-rollback": "node scripts/drills/exercise-oracle-rollback-recovery.mjs",
+    "test:oracle-rollback": "node --test scripts/__tests__/oracle-rollback-recovery.test.mjs"
   },
   "devDependencies": {
     "@changesets/cli": "^2.31.0",
