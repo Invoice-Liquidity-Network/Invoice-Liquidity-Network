@@ -98,7 +98,9 @@
     "validate:canonical-nav": "node scripts/check-meta-nav.mjs --canonical",
     "track:postmortem-actions": "node scripts/enforce-postmortem-sla.mjs --actions",
     "test:dependency-failure-injection": "node --test scripts/__tests__/service-dependency-failure-injection.test.mjs",
-    "test:emergency-disable": "node --test scripts/__tests__/emergency-feature-disable.test.mjs"
+    "test:emergency-disable": "node --test scripts/__tests__/emergency-feature-disable.test.mjs",
+    "validate:dashboard": "node scripts/validate-monitoring-dashboard.mjs",
+    "test:dashboard": "node --test scripts/__tests__/validate-monitoring-dashboard.test.mjs"
   },
   "devDependencies": {
     "@changesets/cli": "^2.31.0",
