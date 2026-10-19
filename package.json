@@ -113,7 +113,9 @@
     "test:ownership-matrix": "node --test scripts/__tests__/cross-repo-ownership.test.mjs",
     "test:indexer-alerts": "node --test scripts/__tests__/indexer-operational-alerts.test.mjs",
     "measure:notification-slo": "node scripts/operations/measure-notification-replay-slo.mjs",
-    "test:notification-slo": "node --test scripts/__tests__/measure-notification-replay-slo.test.mjs"
+    "test:notification-slo": "node --test scripts/__tests__/measure-notification-replay-slo.test.mjs",
+    "measure:indexer-rto": "node scripts/operations/measure-indexer-rto.mjs",
+    "test:indexer-rto": "node --test scripts/__tests__/measure-indexer-rto.test.mjs"
   },
   "devDependencies": {
     "@changesets/cli": "^2.31.0",
