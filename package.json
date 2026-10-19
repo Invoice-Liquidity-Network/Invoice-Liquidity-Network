@@ -115,7 +115,9 @@
     "measure:notification-slo": "node scripts/operations/measure-notification-replay-slo.mjs",
     "test:notification-slo": "node --test scripts/__tests__/measure-notification-replay-slo.test.mjs",
     "measure:indexer-rto": "node scripts/operations/measure-indexer-rto.mjs",
-    "test:indexer-rto": "node --test scripts/__tests__/measure-indexer-rto.test.mjs"
+    "test:indexer-rto": "node --test scripts/__tests__/measure-indexer-rto.test.mjs",
+    "drill:indexer-rollback": "node scripts/drills/exercise-indexer-rollback-unpaused.mjs",
+    "test:indexer-rollback": "node --test scripts/__tests__/indexer-rollback-unpaused.test.mjs"
   },
   "devDependencies": {
     "@changesets/cli": "^2.31.0",
