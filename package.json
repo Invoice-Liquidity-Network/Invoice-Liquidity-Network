@@ -106,7 +106,9 @@
     "test:mainnet-readiness": "node --test scripts/__tests__/operational-readiness-review.test.mjs",
     "test:drill-evidence": "node --test scripts/__tests__/retain-drill-evidence.test.mjs",
     "test:kyb-outage": "node --test scripts/__tests__/kyb-outage-rehearsal.test.mjs",
-    "test:tabletop": "node --test scripts/__tests__/mainnet-tabletop-decision.test.mjs"
+    "test:tabletop": "node --test scripts/__tests__/mainnet-tabletop-decision.test.mjs",
+    "verify:oncall-handoff": "node scripts/operations/check-oncall-handoff.mjs",
+    "test:oncall-handoff": "node --test scripts/__tests__/oncall-escalation-handoff.test.mjs"
   },
   "devDependencies": {
     "@changesets/cli": "^2.31.0",
