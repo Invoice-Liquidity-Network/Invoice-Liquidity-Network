@@ -13,7 +13,7 @@ Status values:
 
 | Item | Description | Owner | Status | Link |
 | --- | --- | --- | --- | --- |
-| External security audit | Complete an external audit of Soroban contracts, upgrade controls, SDK signing paths, indexer APIs, and notification webhooks. | Security lead | Done | [Auditor Onboarding Guide](./auditor-onboarding.md) |
+| External security audit | Complete an external audit of Soroban contracts, upgrade controls, SDK signing paths, indexer APIs, and notification webhooks. | Security lead | Done | [Audit Evidence Manifest](../.artifacts/audits/audit-evidence-manifest.json) |
 | Coverage thresholds met | Confirm contract, SDK, CLI, indexer, and notifications coverage thresholds pass in CI before release branch freeze. | QA lead | Done | [Coverage workflow](../.github/workflows/coverage.yml) |
 | Fuzz tests run | Run fuzz or property-based tests for invoice lifecycle, XDR encoding, amount math, and settlement state transitions. | Protocol lead | Done | [`sdk/src/xdr.test.ts`](../sdk/src/xdr.test.ts) and [`packages/sdk/src/xdr.test.ts`](../packages/sdk/src/xdr.test.ts) |
 | Unified security policy | Publish ecosystem-wide reporting, severity, safe-harbour, and response timeline policy across all repositories. | Security lead | Done | [`SECURITY.md`](../SECURITY.md) |

@@ -158,7 +158,9 @@
     "verify:launch-artifacts": "node scripts/operations/launch-row-artifact-mapping.mjs",
     "test:launch-artifacts": "node --test scripts/__tests__/launch-row-artifact-mapping.test.mjs",
     "verify:checklist-apis": "node scripts/operations/check-launch-checklist-api-references.mjs",
-    "test:checklist-apis": "node --test scripts/__tests__/check-launch-checklist-api-references.test.mjs"
+    "test:checklist-apis": "node --test scripts/__tests__/check-launch-checklist-api-references.test.mjs",
+    "verify:audit-evidence": "node scripts/operations/verify-audit-evidence.mjs",
+    "test:audit-evidence": "node --test scripts/__tests__/verify-audit-evidence.test.mjs"
   },
   "devDependencies": {
     "@changesets/cli": "^2.31.0",
