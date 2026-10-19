@@ -604,6 +604,8 @@ async function sendWebhookAttempt(
       'Content-Type': 'application/json',
       'X-ILN-Trigger': escapeHeaderValue(payload.trigger),
       'X-ILN-Recipient': escapeHeaderValue(payload.recipientAddress),
+      'Idempotency-Key': escapeHeaderValue(payload.eventId ?? `${payload.invoice.id}-${payload.trigger}-${payload.recipientAddress}`),
+      'X-ILN-Idempotency-Key': escapeHeaderValue(payload.eventId ?? `${payload.invoice.id}-${payload.trigger}-${payload.recipientAddress}`),
     };
 
     if (subscription.webhook_secret) {

@@ -34,6 +34,8 @@ import {
 
 const KNOWN_EVENT_TYPES = new Set<ILNEventType>(['submitted', 'funded', 'paid', 'defaulted']);
 
+export const inFlightEvents = new Set<string>();
+
 const EVENT_TO_TRIGGER: Record<ILNEventType, NotificationTrigger | null> = {
   submitted: null,
   funded: 'invoice_funded',
@@ -42,10 +44,12 @@ const EVENT_TO_TRIGGER: Record<ILNEventType, NotificationTrigger | null> = {
 };
 
 export async function processEvent(event: rpc.Api.EventResponse): Promise<void> {
-  if (hasEvent(event.id)) {
+  if (inFlightEvents.has(event.id) || hasEvent(event.id)) {
     notificationsMetrics.recordDuplicateSkipped('event', 'duplicate_event_id');
     return;
   }
+  inFlightEvents.add(event.id);
+  try {
 
   if (!event.topic || event.topic.length === 0) {
     return;
@@ -75,6 +79,9 @@ export async function processEvent(event: rpc.Api.EventResponse): Promise<void> 
   const trigger = EVENT_TO_TRIGGER[eventType as ILNEventType];
   if (trigger) {
     await dispatchNotifications(trigger, invoice, event.id as string);
+  }
+  } finally {
+    inFlightEvents.delete(event.id);
   }
 }
 
