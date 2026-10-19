@@ -150,7 +150,9 @@
     "drill:prelaunch-unresolved": "node scripts/drills/exercise-prelaunch-unresolved-checklist.mjs",
     "test:prelaunch-unresolved": "node --test scripts/__tests__/exercise-prelaunch-unresolved-checklist.test.mjs",
     "verify:checklist-evidence": "node scripts/operations/verify-checklist-evidence.mjs",
-    "test:checklist-evidence": "node --test scripts/__tests__/verify-checklist-evidence.test.mjs"
+    "test:checklist-evidence": "node --test scripts/__tests__/verify-checklist-evidence.test.mjs",
+    "verify:checklist-metadata": "node scripts/operations/check-checklist-freshness-metadata.mjs",
+    "test:checklist-metadata": "node --test scripts/__tests__/check-checklist-freshness-metadata.test.mjs"
   },
   "devDependencies": {
     "@changesets/cli": "^2.31.0",
