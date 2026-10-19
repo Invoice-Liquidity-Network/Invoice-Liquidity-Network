@@ -144,10 +144,31 @@ export class DigestScheduler {
    * Add an event to the digest buffer for a given address.
    * Silently ignored if the address has no digest registration.
    */
-  buffer(stellarAddress: string, event: InvoiceEvent): void {
+
+  /**
+   * Reconcile buffered digest items against incoming invoice events (Issue #1282).
+   * Deduplicates identical events for the same invoice, updates freshest event metadata,
+   * and returns true if an existing item was reconciled.
+   */
+  reconcile(stellarAddress: string, event: InvoiceEvent): boolean {
     const buf = this.buffers.get(stellarAddress);
-    if (!buf) return;
+    if (!buf) return false;
+
+    const existingIndex = buf.items.findIndex(
+      (item) => item.invoiceId === event.invoiceId && item.eventType === (event.type ?? 'unknown')
+    );
+
+    if (existingIndex !== -1) {
+      buf.items[existingIndex] = eventToDigestItem(event);
+      return true;
+    }
+
     buf.items.push(eventToDigestItem(event));
+    return false;
+  }
+
+  buffer(stellarAddress: string, event: InvoiceEvent): void {
+    this.reconcile(stellarAddress, event);
   }
 
   /**

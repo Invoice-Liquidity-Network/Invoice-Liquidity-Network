@@ -440,7 +440,10 @@ async function dispatchNotifications(
         );
         continue;
       }
-      digestScheduler.buffer(target.recipient, invoiceEvent);
+      const reconciled = digestScheduler.reconcile(target.recipient, invoiceEvent);
+      if (reconciled) {
+        notificationsMetrics.recordDigestReconciled();
+      }
       continue;
     }
 

@@ -17,6 +17,8 @@ export interface NotificationsMetrics {
   recipientRejectionsTotal: client.Counter<string>;
   duplicatesSkippedTotal: client.Counter<string>;
   recordDuplicateSkipped(channel: string, trigger: string): void;
+  digestReconciledTotal: client.Counter<string>;
+  recordDigestReconciled(): void;
   recordDispatchAttempt(channel: string, result: 'delivered' | 'retry' | 'terminal'): void;
   recordDispatchTerminal(channel: string, outcome: string): void;
   recordRecipientRejection(channel: string, stage: string, reason: string): void;
@@ -187,6 +189,8 @@ export function createNotificationsMetrics(): NotificationsMetrics {
     recipientRejectionsTotal,
     duplicatesSkippedTotal,
     recordDuplicateSkipped,
+    digestReconciledTotal,
+    recordDigestReconciled,
     recordDispatchAttempt,
     recordDispatchTerminal,
     recordRecipientRejection,
