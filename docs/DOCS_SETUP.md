@@ -53,7 +53,7 @@ page renders correctly on the deployed site.
 > [runbooks/sdk-package-names.md](runbooks/sdk-package-names.md).
 
 - [ ] Local development guide (`docs/local-development.md`)
-- [ ] CI/CD reference (`docs/ci-cd.md`)
+- [x] CI/CD reference (`docs/ci-cd.md` → `packages/docs/content/ci-cd.mdx`)
 - [x] Security guide (`docs/security-guide.md` → `packages/docs/content/security-guide.mdx`)
 - [x] Threat model (`docs/threat-model.md` → `packages/docs/content/threat-model.mdx`)
 - [ ] Glossary (`docs/glossary.md`)

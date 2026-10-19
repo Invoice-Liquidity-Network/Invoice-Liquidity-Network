@@ -175,7 +175,9 @@
     "verify:readiness-controls-doc": "node scripts/operations/verify-mainnet-readiness-controls-doc.mjs",
     "test:readiness-controls-doc": "node --test scripts/__tests__/verify-mainnet-readiness-controls-doc.test.mjs",
     "verify:security-docs-port": "node scripts/operations/verify-security-docs-port.mjs",
-    "test:security-docs-port": "node --test scripts/__tests__/verify-security-docs-port.test.mjs"
+    "test:security-docs-port": "node --test scripts/__tests__/verify-security-docs-port.test.mjs",
+    "verify:cicd-docs-port": "node scripts/operations/verify-cicd-docs-port.mjs",
+    "test:cicd-docs-port": "node --test scripts/__tests__/verify-cicd-docs-port.test.mjs"
   },
   "devDependencies": {
     "@changesets/cli": "^2.31.0",
