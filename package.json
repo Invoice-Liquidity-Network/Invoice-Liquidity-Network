@@ -144,7 +144,9 @@
     "verify:illiquid-queue": "node scripts/operations/illiquid-position-queue-handler.mjs",
     "test:illiquid-queue": "node --test scripts/__tests__/withdrawal-queue-illiquid-positions.test.mjs",
     "verify:launch-exception": "node scripts/operations/launch-readiness-exception-evaluator.mjs",
-    "test:launch-exception": "node --test scripts/__tests__/launch-readiness-exception.test.mjs"
+    "test:launch-exception": "node --test scripts/__tests__/launch-readiness-exception.test.mjs",
+    "verify:mainnet-signoff": "node scripts/operations/check-mainnet-signoff-gate.mjs",
+    "test:mainnet-signoff": "node --test scripts/__tests__/check-mainnet-signoff-gate.test.mjs"
   },
   "devDependencies": {
     "@changesets/cli": "^2.31.0",
