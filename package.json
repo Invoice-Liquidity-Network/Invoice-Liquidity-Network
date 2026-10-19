@@ -130,7 +130,9 @@
     "verify:accounting-isolation": "node scripts/operations/accounting-isolation-validator.mjs",
     "test:accounting-isolation": "node --test scripts/__tests__/accounting-isolation.test.mjs",
     "verify:circuit-breaker": "node scripts/operations/circuit-breaker-controller.mjs",
-    "test:circuit-breaker": "node --test scripts/__tests__/circuit-breaker-controller.test.mjs"
+    "test:circuit-breaker": "node --test scripts/__tests__/circuit-breaker-controller.test.mjs",
+    "verify:redemption-pricing": "node scripts/operations/redemption-pricing-guard.mjs",
+    "test:redemption-pricing": "node --test scripts/__tests__/redemption-pricing-guard.test.mjs"
   },
   "devDependencies": {
     "@changesets/cli": "^2.31.0",
