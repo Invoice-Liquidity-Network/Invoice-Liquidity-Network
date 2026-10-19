@@ -152,7 +152,9 @@
     "verify:checklist-evidence": "node scripts/operations/verify-checklist-evidence.mjs",
     "test:checklist-evidence": "node --test scripts/__tests__/verify-checklist-evidence.test.mjs",
     "verify:checklist-metadata": "node scripts/operations/check-checklist-freshness-metadata.mjs",
-    "test:checklist-metadata": "node --test scripts/__tests__/check-checklist-freshness-metadata.test.mjs"
+    "test:checklist-metadata": "node --test scripts/__tests__/check-checklist-freshness-metadata.test.mjs",
+    "verify:independent-signoff": "node scripts/operations/verify-independent-signoff-workflow.mjs",
+    "test:independent-signoff": "node --test scripts/__tests__/verify-independent-signoff-workflow.test.mjs"
   },
   "devDependencies": {
     "@changesets/cli": "^2.31.0",
