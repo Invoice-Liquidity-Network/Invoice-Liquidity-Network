@@ -148,7 +148,9 @@
     "verify:mainnet-signoff": "node scripts/operations/check-mainnet-signoff-gate.mjs",
     "test:mainnet-signoff": "node --test scripts/__tests__/check-mainnet-signoff-gate.test.mjs",
     "drill:prelaunch-unresolved": "node scripts/drills/exercise-prelaunch-unresolved-checklist.mjs",
-    "test:prelaunch-unresolved": "node --test scripts/__tests__/exercise-prelaunch-unresolved-checklist.test.mjs"
+    "test:prelaunch-unresolved": "node --test scripts/__tests__/exercise-prelaunch-unresolved-checklist.test.mjs",
+    "verify:checklist-evidence": "node scripts/operations/verify-checklist-evidence.mjs",
+    "test:checklist-evidence": "node --test scripts/__tests__/verify-checklist-evidence.test.mjs"
   },
   "devDependencies": {
     "@changesets/cli": "^2.31.0",
