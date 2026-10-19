@@ -132,7 +132,9 @@
     "verify:circuit-breaker": "node scripts/operations/circuit-breaker-controller.mjs",
     "test:circuit-breaker": "node --test scripts/__tests__/circuit-breaker-controller.test.mjs",
     "verify:redemption-pricing": "node scripts/operations/redemption-pricing-guard.mjs",
-    "test:redemption-pricing": "node --test scripts/__tests__/redemption-pricing-guard.test.mjs"
+    "test:redemption-pricing": "node --test scripts/__tests__/redemption-pricing-guard.test.mjs",
+    "verify:anchor-policy": "node scripts/operations/settlement-anchor-policy.mjs",
+    "test:anchor-policy": "node --test scripts/__tests__/settlement-anchor-policy.test.mjs"
   },
   "devDependencies": {
     "@changesets/cli": "^2.31.0",
