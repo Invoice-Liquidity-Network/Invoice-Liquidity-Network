@@ -146,7 +146,9 @@
     "verify:launch-exception": "node scripts/operations/launch-readiness-exception-evaluator.mjs",
     "test:launch-exception": "node --test scripts/__tests__/launch-readiness-exception.test.mjs",
     "verify:mainnet-signoff": "node scripts/operations/check-mainnet-signoff-gate.mjs",
-    "test:mainnet-signoff": "node --test scripts/__tests__/check-mainnet-signoff-gate.test.mjs"
+    "test:mainnet-signoff": "node --test scripts/__tests__/check-mainnet-signoff-gate.test.mjs",
+    "drill:prelaunch-unresolved": "node scripts/drills/exercise-prelaunch-unresolved-checklist.mjs",
+    "test:prelaunch-unresolved": "node --test scripts/__tests__/exercise-prelaunch-unresolved-checklist.test.mjs"
   },
   "devDependencies": {
     "@changesets/cli": "^2.31.0",
