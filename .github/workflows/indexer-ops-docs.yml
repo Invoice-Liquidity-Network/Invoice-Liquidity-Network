@@ -1,0 +1,124 @@
+name: Indexer Ops Docs
+
+# Blocking guard for the indexer operations documentation (#1288).
+#
+# Every operational claim in docs/indexer/*.md — environment variables and
+# defaults, endpoints, metric names, commands, /health statuses — and
+# indexer/railway.toml is checked against the indexer source. The JSON report
+# is uploaded on every run (pass or fail) as proof the control ran.
+# Owner: @Invoice-Liquidity-Network/indexer-team.
+# Recovery: docs/indexer/operations-checks.md
+#
+# The startup configuration validation that these docs describe is tested by
+# indexer/tests/config-validation.test.ts, which runs in the indexer test job
+# (coverage.yml) and in the second job below.
+
+on:
+  pull_request:
+    branches:
+      - main
+      - dev
+    paths:
+      - 'indexer/**'
+      - 'docs/indexer/**'
+      - 'docs/DOCS_SETUP.md'
+      - 'scripts/check-indexer-ops-docs.mjs'
+      - 'scripts/lib/indexer-ops-docs.mjs'
+      - 'scripts/__tests__/indexer-ops-docs.test.mjs'
+      - '.github/workflows/indexer-ops-docs.yml'
+  push:
+    branches:
+      - main
+      - dev
+    paths:
+      - 'indexer/**'
+      - 'docs/indexer/**'
+      - 'scripts/check-indexer-ops-docs.mjs'
+      - 'scripts/lib/indexer-ops-docs.mjs'
+      - '.github/workflows/indexer-ops-docs.yml'
+  schedule:
+    # Weekly sweep so the control stays visibly active between PRs.
+    - cron: '41 5 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  ops-docs:
+    name: indexer operations docs match the code
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Unit tests for the guard
+        run: node --test scripts/__tests__/indexer-ops-docs.test.mjs
+
+      - name: Check docs/indexer against the indexer source
+        run: node scripts/check-indexer-ops-docs.mjs --json="$RUNNER_TEMP/indexer-ops-docs-report.json"
+
+      - name: Upload report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: indexer-ops-docs-report
+          path: ${{ runner.temp }}/indexer-ops-docs-report.json
+          if-no-files-found: ignore
+          retention-days: 30
+
+  startup-validation:
+    name: indexer startup config validation
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm with store cache
+        uses: ./.github/actions/setup-pnpm
+        with:
+          install-args: --frozen-lockfile --filter iln-indexer...
+
+      # @iln/opentelemetry resolves to dist/ (package.json "main").
+      - name: Build workspace dependencies
+        run: pnpm --filter @iln/opentelemetry build
+
+      - name: Build the indexer (Railway build step)
+        run: pnpm --filter iln-indexer build
+
+      - name: Startup validation, restart/replay and runbook tests
+        working-directory: ./indexer
+        run: pnpm exec vitest run tests/config-validation.test.ts tests/runbook-recovery.test.ts
+
+      - name: Built entry point refuses invalid configuration
+        working-directory: ./indexer
+        run: |
+          set +e
+          NODE_ENV=production POLL_INTERVAL_MS=5s DB_PATH="$RUNNER_TEMP/indexer.db" \
+            node dist/index.js > "$RUNNER_TEMP/startup.out" 2> "$RUNNER_TEMP/startup.err"
+          code=$?
+          set -e
+          cat "$RUNNER_TEMP/startup.err"
+          {
+            echo "### Indexer startup validation"
+            echo ""
+            echo "Invalid configuration → exit code \`$code\` (expected 78)"
+            echo ""
+            echo '```'
+            cat "$RUNNER_TEMP/startup.err"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          test "$code" -eq 78
+          grep -q '\[config\] INVALID POLL_INTERVAL_MS' "$RUNNER_TEMP/startup.err"
+          ! grep -q '\[api\] Listening' "$RUNNER_TEMP/startup.out"

@@ -50,6 +50,34 @@ const MAX_REORG_RETRIES = 3;
  */
 export const MAX_REORG_RECOVERY_ATTEMPTS = 3;
 
+let _startLedgerIgnoredLogged = false;
+
+/** Number of ledgers before the tip that a fresh, auto-detecting indexer starts from. */
+export const AUTO_START_LOOKBACK = 1_000;
+
+/**
+ * Where a polling cycle starts reading events.
+ *
+ * - A stored cursor always wins: on restart or replay the indexer resumes from
+ *   (and re-scans) the last processed ledger, so START_LEDGER cannot rewind or
+ *   skip history on an existing database.
+ * - On an empty database, a positive START_LEDGER is used as-is.
+ * - Otherwise auto-detect: AUTO_START_LOOKBACK ledgers before the tip, never
+ *   below ledger 1.
+ */
+export function resolveStartLedger(
+  storedCursor: number,
+  configuredStart: number,
+  latestTip: number | null
+): number {
+  if (storedCursor > 0) return storedCursor;
+  if (configuredStart > 0) return configuredStart;
+  if (latestTip === null) {
+    throw new Error('[poller] Latest ledger is required to auto-detect the start ledger');
+  }
+  return Math.max(1, latestTip - AUTO_START_LOOKBACK);
+}
+
 /**
  * Run one full polling cycle:
  * - Reconcile any uncompleted fork replacement decision from a prior crashed run (#1258).
@@ -112,19 +140,14 @@ export async function pollOnce(): Promise<void> {
   }
 
   // ── Determine start ledger ────────────────────────────────────────────────
-  let startLedger: number;
-  if (stored === 0) {
-    if (CONFIG.startLedger > 0) {
-      startLedger = CONFIG.startLedger;
-    } else {
-      // Auto-detect: start 1 000 ledgers before the current tip (~83 minutes).
-      const latest = await server.getLatestLedger();
-      startLedger = Math.max(1, latest.sequence - 1_000);
-    }
-  } else {
-    // Re-scan from the last processed ledger so we never miss an event at the
-    // boundary, even if we crashed mid-batch.
-    startLedger = stored;
+  const latestTip =
+    stored === 0 && CONFIG.startLedger <= 0 ? (await server.getLatestLedger()).sequence : null;
+  let startLedger = resolveStartLedger(stored, CONFIG.startLedger, latestTip);
+  if (stored > 0 && CONFIG.startLedger > 0 && CONFIG.startLedger !== stored && !_startLedgerIgnoredLogged) {
+    _startLedgerIgnoredLogged = true;
+    console.warn(
+      `[poller] START_LEDGER=${CONFIG.startLedger} ignored: resuming from stored cursor ${stored} (START_LEDGER only applies to an empty database)`
+    );
   }
 
   // ── Page through events ───────────────────────────────────────────────────

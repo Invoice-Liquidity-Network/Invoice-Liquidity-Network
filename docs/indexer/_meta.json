@@ -5,5 +5,7 @@
   "deployment": "Deployment",
   "api-reference": "API Reference",
   "troubleshooting": "Troubleshooting",
-  "failover-plan": "Failover Plan"
+  "failover-plan": "Failover Plan",
+  "operations-checks": "Operations Checks",
+  "cursor-divergence-recovery": "Cursor Divergence Recovery"
 }
