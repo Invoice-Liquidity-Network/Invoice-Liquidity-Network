@@ -14,6 +14,7 @@
     "test:reproducible-builds": "node scripts/verify-reproducible-builds.mjs",
     "test:compatibility": "vitest run scripts/__tests__/check-compatibility.test.ts",
     "test:audit": "node --test scripts/__tests__/dependency-audit.test.js",
+    "test:docs-nav": "node --test scripts/__tests__/docs-nav.test.mjs scripts/__tests__/docs-migration.test.mjs",
     "test:load": "ts-node --esm scripts/load-test.ts",
     "test:load:indexer": "ts-node --esm scripts/load-test-indexer.ts",
     "test:load:notifications": "ts-node --esm scripts/load-test-notifications.ts",
@@ -94,7 +95,9 @@
     "check:react-peer-contract": "node scripts/check-react-peer-contract.mjs",
     "test:react-peer-contract": "node --test scripts/__tests__/check-react-peer-contract.test.mjs",
     "check:sdk-package-names": "node scripts/check-sdk-package-names.mjs",
-    "test:sdk-package-names": "node --test scripts/__tests__/check-sdk-package-names.test.mjs"
+    "test:sdk-package-names": "node --test scripts/__tests__/check-sdk-package-names.test.mjs",
+    "validate:canonical-nav": "node scripts/validate-canonical-nav.mjs",
+    "validate:docs-migration": "node scripts/check-docs-migration.mjs"
   },
   "devDependencies": {
     "@changesets/cli": "^2.31.0",

@@ -16,6 +16,7 @@ import {
   getDeliveryAuditLogById,
   countDeliveryAuditLogs,
   purgeExpiredDeliveryLogs,
+  markSubscriptionsOwnershipVerified,
 } from './db';
 import {
   ALLOWED_CHANNELS,
@@ -33,6 +34,14 @@ import { digestScheduler, DigestScheduler } from './digest';
 import { preferencesService } from './preferences';
 import { notificationsMetrics } from './metrics';
 import { getAllProviderHealth } from './provider-health';
+import { getDigestReconciliationMetrics } from './digest-reconciliation';
+import {
+  getOwnershipMetrics,
+  isOwnershipVerified,
+  isValidStellarAddress,
+  issueOwnershipChallenge,
+  verifyOwnershipProof,
+} from './ownership';
 
 interface SubscribeRequest {
   stellar_address: string;
@@ -40,6 +49,45 @@ interface SubscribeRequest {
   destination: string;
   triggers: unknown;
   webhook_secret?: string;
+  /** Nonce from POST /subscribe/challenge (#1281). */
+  challenge_nonce?: string;
+  /** Base64 ed25519 signature of the challenge message by stellar_address. */
+  signature?: string;
+}
+
+/**
+ * Verify the ownership proof in a request body. Responds and returns null on
+ * failure; a database error yields 503 so the request fails closed.
+ */
+function requireOwnershipProof(
+  body: { stellar_address?: unknown; challenge_nonce?: unknown; signature?: unknown },
+  res: Response
+): number | null {
+  if (!body.challenge_nonce || !body.signature) {
+    res.status(401).json({
+      error:
+        'ownership proof required: request a challenge from POST /subscribe/challenge and submit challenge_nonce and signature',
+      reason: 'missing_proof',
+    });
+    return null;
+  }
+
+  try {
+    const result = verifyOwnershipProof({
+      stellarAddress: body.stellar_address,
+      nonce: body.challenge_nonce,
+      signature: body.signature,
+    });
+    if (!result.ok) {
+      res.status(403).json({ error: 'ownership verification failed', reason: result.reason });
+      return null;
+    }
+    return result.verifiedAt;
+  } catch (error) {
+    console.error('[ownership] verification unavailable:', error);
+    res.status(503).json({ error: 'ownership verification unavailable' });
+    return null;
+  }
 }
 
 const rateLimiter = new RateLimiter({
@@ -121,11 +169,33 @@ export function createApp() {
     res.json({ providers: getAllProviderHealth() });
   });
 
+  app.post('/subscribe/challenge', applyRateLimit, (req: Request, res: Response) => {
+    const address = (req.body as { stellar_address?: unknown })?.stellar_address;
+    if (!isValidStellarAddress(address)) {
+      return res
+        .status(400)
+        .json({ error: 'stellar_address must be a valid Stellar public key (G...)' });
+    }
+
+    try {
+      return res.status(201).json({ challenge: issueOwnershipChallenge(address) });
+    } catch (error) {
+      console.error('[ownership] failed to issue challenge:', error);
+      return res.status(503).json({ error: 'ownership verification unavailable' });
+    }
+  });
+
   app.post('/subscribe', applyRateLimit, (req: Request, res: Response) => {
     const body = req.body as SubscribeRequest;
 
     if (!body?.stellar_address || typeof body.stellar_address !== 'string') {
       return res.status(400).json({ error: 'stellar_address is required' });
+    }
+
+    if (!isValidStellarAddress(body.stellar_address)) {
+      return res
+        .status(400)
+        .json({ error: 'stellar_address must be a valid Stellar public key (G...)' });
     }
 
     if (!validateChannel(body.channel)) {
@@ -163,6 +233,11 @@ export function createApp() {
         .json({ error: 'destination must be a valid E.164 phone number (e.g. +14155552671)' });
     }
 
+    const verifiedAt = requireOwnershipProof(body, res);
+    if (verifiedAt === null) {
+      return res;
+    }
+
     const subscription = createSubscription({
       stellar_address: body.stellar_address,
       channel: body.channel as 'email' | 'webhook' | 'sms',
@@ -174,9 +249,30 @@ export function createApp() {
             ? body.webhook_secret
             : randomBytes(32).toString('hex')
           : undefined,
+      ownership_verified_at: verifiedAt,
     });
 
     return res.status(201).json({ subscription });
+  });
+
+  // Recovery path for subscriptions created before #1281 (or whose owner
+  // wants to re-prove control): a fresh signed challenge marks every
+  // subscription for the address as verified.
+  app.post('/subscriptions/verify', applyRateLimit, (req: Request, res: Response) => {
+    const body = req.body as SubscribeRequest;
+    if (!isValidStellarAddress(body?.stellar_address)) {
+      return res
+        .status(400)
+        .json({ error: 'stellar_address must be a valid Stellar public key (G...)' });
+    }
+
+    const verifiedAt = requireOwnershipProof(body, res);
+    if (verifiedAt === null) {
+      return res;
+    }
+
+    const updated = markSubscriptionsOwnershipVerified(body.stellar_address, verifiedAt);
+    return res.json({ verified: updated, ownership_verified_at: verifiedAt });
   });
 
   app.delete('/unsubscribe', (req: Request, res: Response) => {
@@ -216,6 +312,7 @@ export function createApp() {
       channel: sub.channel,
       destination: sub.destination,
       triggers: sub.triggers,
+      ownership_verified: isOwnershipVerified(sub),
       created_at: sub.created_at,
     }));
     return res.json({ subscriptions });
@@ -277,6 +374,21 @@ export function createApp() {
 
       return res.json({ success: false, statusCode });
     }
+  });
+
+  // Operational evidence for #1281 / #1282: counters an operator can scrape
+  // to confirm both controls are active and see what they are rejecting.
+  app.get('/metrics/ownership', (_req: Request, res: Response) => {
+    try {
+      return res.json(getOwnershipMetrics());
+    } catch (error) {
+      console.error('[ownership] metrics unavailable:', error);
+      return res.status(503).json({ error: 'ownership metrics unavailable' });
+    }
+  });
+
+  app.get('/metrics/digest-reconciliation', (_req: Request, res: Response) => {
+    return res.json(getDigestReconciliationMetrics());
   });
 
   app.get('/analytics', (_req: Request, res: Response) => {

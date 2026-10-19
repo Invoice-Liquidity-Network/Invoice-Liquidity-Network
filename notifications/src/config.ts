@@ -53,6 +53,7 @@ export const CONFIG = {
   retentionSweepIntervalMs: parseIntEnv('RETENTION_SWEEP_INTERVAL_MS', 86400000),
   retentionDryRun: process.env.NOTIFICATIONS_RETENTION_DRY_RUN !== 'false',
   retentionMaxRows: parseIntEnv('RETENTION_MAX_DELETE_ROWS', 10000),
+  ownershipChallengeTtlMs: parseIntEnv('OWNERSHIP_CHALLENGE_TTL_MS', 600000),
 };
 
 export function isValidEmail(email: string): boolean {
