@@ -140,7 +140,9 @@
     "verify:pooled-guarantees": "node scripts/operations/pooled-share-redemption-policy.mjs",
     "test:pooled-guarantees": "node --test scripts/__tests__/pooled-share-redemption-guarantees.test.mjs",
     "verify:withdrawal-queue": "node scripts/operations/withdrawal-queue-state-model.mjs",
-    "test:withdrawal-queue": "node --test scripts/__tests__/withdrawal-queue-state-model.test.mjs"
+    "test:withdrawal-queue": "node --test scripts/__tests__/withdrawal-queue-state-model.test.mjs",
+    "verify:illiquid-queue": "node scripts/operations/illiquid-position-queue-handler.mjs",
+    "test:illiquid-queue": "node --test scripts/__tests__/withdrawal-queue-illiquid-positions.test.mjs"
   },
   "devDependencies": {
     "@changesets/cli": "^2.31.0",
