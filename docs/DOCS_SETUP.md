@@ -99,6 +99,17 @@ page renders correctly on the deployed site.
 
 ## Developer setup
 
+### Mainnet launch checklist control
+
+The launch checklist remains maintained in `docs/mainnet-launch-checklist.md`. Its readiness control is exercised locally with:
+
+```bash
+node scripts/check-mainnet-launch-readiness.mjs
+node scripts/check-mainnet-launch-readiness.mjs --rehearsal
+```
+
+The first command validates metadata and linked local evidence. The rehearsal additionally requires every launch row to be `Done` or `Launch exception accepted` and requires fresh, independent reviewer sign-offs. CI runs the structural check for checklist changes; maintainers dispatch the rehearsal before launch and retain the uploaded JSON report as operational evidence. Recovery is owned by the Release lead, who updates evidence and coordinates missing approvals.
+
 ### Canonical site — `packages/docs/` (deployed to `docs.iln.finance`)
 
 ```bash

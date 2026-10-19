@@ -2,12 +2,17 @@
 
 This checklist tracks the requirements that must be complete before ILN mainnet deployment. Each item has an owner, status, and link to the issue, PR, or document that proves completion.
 
+Checklist owner: Release lead
+Last reviewed: 2026-10-19
+Freshness window: 30 days
+
 Status values:
 
 - `Not started`
 - `In progress`
 - `Blocked`
 - `Done`
+- `Launch exception accepted`
 
 ## Security
 
@@ -58,17 +63,25 @@ Status values:
 
 The [`Mainnet Checklist Status`](../.github/workflows/mainnet-checklist-status.yml) workflow scans links in this file when an issue is closed or when maintainers run it manually. If a row links to a closed issue in this repository, the workflow changes that row's status to `Done` and opens a pull request with the generated update.
 
-Rows linked to documents, workflows, external repositories, or new-issue templates still require manual maintainer review.
+Rows linked to documents, workflows, external repositories, or new-issue templates are not automatically marked `Done`. The readiness check verifies that local document/workflow evidence paths exist; a maintainer still reviews the evidence and updates the status.
 
 ## Maintainer Sign-off
 
 Mainnet launch requires sign-off from the core maintainers below after every checklist item is `Done` or has an explicitly accepted launch exception.
 
-| Role | Maintainer | Signature | Date |
-| --- | --- | --- | --- |
-| Protocol lead | TBD |  |  |
-| Security lead | TBD |  |  |
-| Infrastructure lead | TBD |  |  |
-| SDK lead | TBD |  |  |
-| Release lead | TBD |  |  |
-| Community lead | TBD |  |  |
+| Role | Reviewer | Relationship | Sign-off | Date |
+| --- | --- | --- | --- | --- |
+| Protocol lead | TBD | Independent | Pending | TBD |
+| Security lead | TBD | Independent | Pending | TBD |
+| Infrastructure lead | TBD | Independent | Pending | TBD |
+| SDK lead | TBD | Independent | Pending | TBD |
+| Release lead | TBD | Independent | Pending | TBD |
+| Community lead | TBD | Independent | Pending | TBD |
+
+Reviewers must not own any checklist item. A sign-off is valid only when the reviewer is named, the relationship is `Independent`, the status is `Signed`, and its date is within the freshness window.
+
+## Readiness Control
+
+The `Mainnet Launch Readiness` workflow validates checklist owners, metadata freshness, local document/workflow evidence links, and reviewer independence. Pull requests run the structural check. A manual workflow dispatch runs the prelaunch rehearsal and fails closed if any row is unresolved, any required reviewer sign-off is missing or stale, or evidence is unavailable. The workflow uploads a JSON report and writes the result, accountable owner, findings, and recovery path to the run summary.
+
+Run the same checks locally with `node scripts/check-mainnet-launch-readiness.mjs`; add `--rehearsal` to enforce launch readiness. The check performs no network calls, so unavailable GitHub or third-party services cannot turn a missing local evidence file into a pass. Recovery owner: Release lead. Update the checklist and evidence, obtain independent sign-off, then rerun the workflow.
