@@ -177,7 +177,9 @@
     "verify:security-docs-port": "node scripts/operations/verify-security-docs-port.mjs",
     "test:security-docs-port": "node --test scripts/__tests__/verify-security-docs-port.test.mjs",
     "verify:cicd-docs-port": "node scripts/operations/verify-cicd-docs-port.mjs",
-    "test:cicd-docs-port": "node --test scripts/__tests__/verify-cicd-docs-port.test.mjs"
+    "test:cicd-docs-port": "node --test scripts/__tests__/verify-cicd-docs-port.test.mjs",
+    "verify:local-dev-docs-port": "node scripts/operations/verify-local-dev-docs-port.mjs",
+    "test:local-dev-docs-port": "node --test scripts/__tests__/verify-local-dev-docs-port.test.mjs"
   },
   "devDependencies": {
     "@changesets/cli": "^2.31.0",

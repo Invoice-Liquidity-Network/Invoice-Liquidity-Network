@@ -52,7 +52,7 @@ page renders correctly on the deployed site.
 > #1218 and can be ported as-is. See
 > [runbooks/sdk-package-names.md](runbooks/sdk-package-names.md).
 
-- [ ] Local development guide (`docs/local-development.md`)
+- [x] Local development guide (`docs/local-development.md` → `packages/docs/content/local-development.mdx`)
 - [x] CI/CD reference (`docs/ci-cd.md` → `packages/docs/content/ci-cd.mdx`)
 - [x] Security guide (`docs/security-guide.md` → `packages/docs/content/security-guide.mdx`)
 - [x] Threat model (`docs/threat-model.md` → `packages/docs/content/threat-model.mdx`)
