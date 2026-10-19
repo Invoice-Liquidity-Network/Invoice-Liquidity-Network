@@ -42,7 +42,7 @@ Status values:
 | --- | --- | --- | --- | --- |
 | Local development guide complete | Provide contributor setup for prerequisites, submodules, env vars, Docker Compose, service commands, tests, and OS troubleshooting. | Docs lead | Done | [#300](https://github.com/Invoice-Liquidity-Network/Invoice-Liquidity-Network/issues/300) |
 | Glossary complete | Define protocol terminology for DeFi, invoice factoring, Stellar, governance, security, and notifications. | Docs lead | Done | [#301](https://github.com/Invoice-Liquidity-Network/Invoice-Liquidity-Network/issues/301) |
-| API and SDK guides complete | Confirm SDK, CLI, indexer, and notification API docs match current package behavior. | SDK lead | Done | [SDK API reference](sdk-api-reference.md) |
+| API and SDK guides complete | Confirm @iln/sdk, @iln/cli, indexer, and notification API docs match current package behavior. | SDK lead | Done | [Canonical API References](sdk-api-reference.md#related-api-references) |
 | Mainnet checklist maintained | Keep this checklist linked from the root README and update statuses as referenced issues close. | Release lead | Done | [#298](https://github.com/Invoice-Liquidity-Network/Invoice-Liquidity-Network/issues/298) |
 
 ## Community

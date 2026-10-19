@@ -156,7 +156,9 @@
     "verify:independent-signoff": "node scripts/operations/verify-independent-signoff-workflow.mjs",
     "test:independent-signoff": "node --test scripts/__tests__/verify-independent-signoff-workflow.test.mjs",
     "verify:launch-artifacts": "node scripts/operations/launch-row-artifact-mapping.mjs",
-    "test:launch-artifacts": "node --test scripts/__tests__/launch-row-artifact-mapping.test.mjs"
+    "test:launch-artifacts": "node --test scripts/__tests__/launch-row-artifact-mapping.test.mjs",
+    "verify:checklist-apis": "node scripts/operations/check-launch-checklist-api-references.mjs",
+    "test:checklist-apis": "node --test scripts/__tests__/check-launch-checklist-api-references.test.mjs"
   },
   "devDependencies": {
     "@changesets/cli": "^2.31.0",
