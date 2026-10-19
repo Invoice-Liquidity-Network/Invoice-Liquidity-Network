@@ -142,7 +142,9 @@
     "verify:withdrawal-queue": "node scripts/operations/withdrawal-queue-state-model.mjs",
     "test:withdrawal-queue": "node --test scripts/__tests__/withdrawal-queue-state-model.test.mjs",
     "verify:illiquid-queue": "node scripts/operations/illiquid-position-queue-handler.mjs",
-    "test:illiquid-queue": "node --test scripts/__tests__/withdrawal-queue-illiquid-positions.test.mjs"
+    "test:illiquid-queue": "node --test scripts/__tests__/withdrawal-queue-illiquid-positions.test.mjs",
+    "verify:launch-exception": "node scripts/operations/launch-readiness-exception-evaluator.mjs",
+    "test:launch-exception": "node --test scripts/__tests__/launch-readiness-exception.test.mjs"
   },
   "devDependencies": {
     "@changesets/cli": "^2.31.0",
