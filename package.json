@@ -171,7 +171,9 @@
     "test:recorded-before-retrieved": "node --test scripts/__tests__/prevent-recorded-before-retrieved.test.mjs",
     "test:dead-letter-events": "node --test scripts/__tests__/dead-letter-unrecoverable-events.test.mjs",
     "verify:indexer-ops": "node scripts/operations/verify-indexer-operations.mjs",
-    "test:indexer-ops": "node --test scripts/__tests__/verify-indexer-operations.test.mjs"
+    "test:indexer-ops": "node --test scripts/__tests__/verify-indexer-operations.test.mjs",
+    "verify:readiness-controls-doc": "node scripts/operations/verify-mainnet-readiness-controls-doc.mjs",
+    "test:readiness-controls-doc": "node --test scripts/__tests__/verify-mainnet-readiness-controls-doc.test.mjs"
   },
   "devDependencies": {
     "@changesets/cli": "^2.31.0",
