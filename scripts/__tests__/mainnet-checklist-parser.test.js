@@ -48,6 +48,21 @@ describe('mainnet checklist parser', () => {
     );
   });
 
+  test('preserves verification artifacts when updating the expanded checklist table', () => {
+    const content = `
+| Item | Description | Owner | Status | Link | Verification artifact |
+| --- | --- | --- | --- | --- | --- |
+| Example | Verify behavior | QA lead | In progress | [#299](${repoUrl}299) | [Test report](../artifacts/report.json) |
+`;
+    const updated = updateChecklistContent({
+      content,
+      repoUrl,
+      closedIssues: new Set([299]),
+    });
+
+    assert.ok(updated.includes(`| Example | Verify behavior | QA lead | Done | [#299](${repoUrl}299) | [Test report](../artifacts/report.json) |`));
+  });
+
   test('preserves non-matching lines and non-table content unchanged', () => {
     const closedIssues = new Set([299]);
     const updated = updateChecklistContent({

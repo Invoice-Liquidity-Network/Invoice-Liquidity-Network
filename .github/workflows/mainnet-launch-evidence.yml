@@ -1,0 +1,42 @@
+name: Mainnet Launch Evidence
+
+on:
+  pull_request:
+    paths:
+      - 'docs/mainnet-launch-checklist.md'
+      - 'docs/evidence/**'
+      - 'docs/DOCS_SETUP.md'
+      - 'scripts/validate-mainnet-launch-evidence.mjs'
+      - 'scripts/__tests__/mainnet-launch-evidence.test.js'
+      - 'package.json'
+      - '.github/workflows/mainnet-launch-evidence.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  evidence-check:
+    name: Validate launch evidence
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run checklist evidence regression tests
+        run: node --test scripts/__tests__/mainnet-checklist-parser.test.js scripts/__tests__/mainnet-launch-evidence.test.js
+
+      - name: Validate checklist artifacts
+        if: github.event_name == 'pull_request'
+        run: node scripts/validate-mainnet-launch-evidence.mjs --report mainnet-launch-evidence.json
+
+      - name: Run fail-closed external audit launch gate
+        if: github.event_name == 'workflow_dispatch'
+        run: node scripts/validate-mainnet-launch-evidence.mjs --launch --report mainnet-launch-evidence.json
+
+      - name: Upload launch evidence report
+        if: always() && hashFiles('mainnet-launch-evidence.json') != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: mainnet-launch-evidence-${{ github.run_id }}
+          path: mainnet-launch-evidence.json
+          if-no-files-found: error
