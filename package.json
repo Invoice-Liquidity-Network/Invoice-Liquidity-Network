@@ -119,7 +119,9 @@
     "drill:indexer-rollback": "node scripts/drills/exercise-indexer-rollback-unpaused.mjs",
     "test:indexer-rollback": "node --test scripts/__tests__/indexer-rollback-unpaused.test.mjs",
     "drill:oracle-rollback": "node scripts/drills/exercise-oracle-rollback-recovery.mjs",
-    "test:oracle-rollback": "node --test scripts/__tests__/oracle-rollback-recovery.test.mjs"
+    "test:oracle-rollback": "node --test scripts/__tests__/oracle-rollback-recovery.test.mjs",
+    "verify:liquidity-disclosures": "node scripts/operations/check-liquidity-disclosures.mjs",
+    "test:liquidity-disclosures": "node --test scripts/__tests__/check-liquidity-disclosures.test.mjs"
   },
   "devDependencies": {
     "@changesets/cli": "^2.31.0",
