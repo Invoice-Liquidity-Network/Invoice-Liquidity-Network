@@ -106,9 +106,26 @@ export async function processScheduledNotifications(): Promise<void> {
  * `CONFIG.maxDispatchAttempts`, or fails permanently, moves to the terminal
  * `failed` state with an `outcome_reason` and is no longer picked up here.
  */
+
+export function computeBackoffDelay(
+  attempts: number,
+  baseMs: number = CONFIG.webhookBackoffBaseMs,
+  maxMs: number = CONFIG.maxDispatchBackoffMs ?? 30000
+): number {
+  if (attempts <= 0) return 0;
+  return Math.min(baseMs * Math.pow(2, attempts - 1), maxMs);
+}
+
 export async function flushPendingNotifications(): Promise<void> {
   const pending = getPendingDispatchAttempts();
+  const nowMs = Date.now();
   for (const attempt of pending) {
+    if (attempt.attempts > 0) {
+      const requiredDelay = computeBackoffDelay(attempt.attempts);
+      if (nowMs - attempt.updated_at < requiredDelay) {
+        continue;
+      }
+    }
     const { invoice, trigger, recipientAddress } = attempt.payload;
     const channel = attempt.subscription.channel;
     const destination = dispatchDestinationOf(attempt.subscription);

@@ -45,6 +45,7 @@ export const CONFIG = {
   // dead-lettered as `failed` / `max_attempts_exhausted`.
   maxDispatchAttempts: parseIntEnv('NOTIFICATIONS_MAX_DISPATCH_ATTEMPTS', 8),
   webhookBackoffBaseMs: 500,
+  maxDispatchBackoffMs: parseIntEnv('NOTIFICATIONS_MAX_DISPATCH_BACKOFF_MS', 30000),
   twilioAccountSid: process.env.TWILIO_ACCOUNT_SID || '',
   twilioAuthToken: process.env.TWILIO_AUTH_TOKEN || '',
   twilioFromNumber: process.env.TWILIO_FROM_NUMBER || '',
