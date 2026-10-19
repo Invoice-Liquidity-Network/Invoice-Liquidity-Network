@@ -103,7 +103,8 @@
     "test:dashboard": "node --test scripts/__tests__/validate-monitoring-dashboard.test.mjs",
     "test:rollback-criteria": "node --test scripts/__tests__/release-rollback-criteria.test.mjs",
     "verify:mainnet-readiness": "node scripts/operations/operational-readiness-review.mjs",
-    "test:mainnet-readiness": "node --test scripts/__tests__/operational-readiness-review.test.mjs"
+    "test:mainnet-readiness": "node --test scripts/__tests__/operational-readiness-review.test.mjs",
+    "test:drill-evidence": "node --test scripts/__tests__/retain-drill-evidence.test.mjs"
   },
   "devDependencies": {
     "@changesets/cli": "^2.31.0",
