@@ -1,0 +1,79 @@
+# Prometheus alerting rules for Liquidity Risk & Pool Solvency (#1311)
+#
+# Monitors liquidity pool utilization, idle capital depletion, redemption queue pressure,
+# and first-loss treasury absorption as defined in docs/trust-liquidity-model.md Section 6.
+
+groups:
+  - name: liquidity-risk-alerts
+    interval: 30s
+    rules:
+      # ── 1. Liquidity Pool Critical Utilization ─────────────────────────────────
+      - alert: ILNLiquidityPoolUtilizationCritical
+        expr: |
+          iln_liquidity_pool_utilization_ratio > 0.90
+        for: 5m
+        labels:
+          severity: critical
+          team: ops
+          component: liquidity-pool
+          domain: liquidity
+        annotations:
+          summary: >-
+            Liquidity pool utilization ratio is {{ $value | humanizePercentage }} (exceeds 90% threshold).
+          description: >-
+            Committed invoice capital exceeds 90% of total pool assets. New loan origination will stall
+            and incoming redemption requests risk entering queued states.
+          runbook_url: "https://github.com/Invoice-Liquidity-Network/Invoice-Liquidity-Network/blob/main/docs/runbooks/liquidity-stress-redemption-simulation.md"
+
+      # ── 2. Idle Cash Reserve Depletion ─────────────────────────────────────────
+      - alert: ILNStressedLiquidityIdleDepletion
+        expr: |
+          iln_liquidity_idle_ratio < 0.10
+        for: 3m
+        labels:
+          severity: critical
+          team: ops
+          component: liquidity-pool
+          domain: liquidity
+        annotations:
+          summary: >-
+            Available idle cash is under 10% on pool {{ $labels.instance }}.
+          description: >-
+            Idle unallocated capital has drained below the minimum 10% operational safety buffer.
+            Immediate redemptions cannot be fulfilled without debtor repayments.
+          runbook_url: "https://github.com/Invoice-Liquidity-Network/Invoice-Liquidity-Network/blob/main/docs/runbooks/liquidity-stress-redemption-simulation.md"
+
+      # ── 3. Redemption Queue Backlog Elevated ───────────────────────────────────
+      - alert: ILNRedemptionQueueBacklogElevated
+        expr: |
+          iln_liquidity_queued_redemptions_amount > (iln_liquidity_idle_cash_amount * 2)
+        for: 5m
+        labels:
+          severity: warning
+          team: ops
+          component: liquidity-pool
+          domain: redemption
+        annotations:
+          summary: >-
+            Queued LP redemption demand is more than 2x available idle liquidity.
+          description: >-
+            Simultaneous withdrawal stress observed. Redemption queue cannot clear in current cycle.
+          runbook_url: "https://github.com/Invoice-Liquidity-Network/Invoice-Liquidity-Network/blob/main/docs/runbooks/liquidity-stress-redemption-simulation.md"
+
+      # ── 4. Treasury First-Loss Provision Depleted ───────────────────────────────
+      - alert: ILNTreasuryFirstLossDepleted
+        expr: |
+          iln_treasury_first_loss_absorbed_ratio > 0.80
+        for: 2m
+        labels:
+          severity: critical
+          team: ops
+          component: treasury
+          domain: credit-protection
+        annotations:
+          summary: >-
+            Treasury First-Loss buffer is {{ $value | humanizePercentage }} exhausted.
+          description: >-
+            Over 80% of the 5% first-loss credit reserve has been consumed absorbing borrower defaults.
+            Further defaults will begin haircutting LP principal.
+          runbook_url: "https://github.com/Invoice-Liquidity-Network/Invoice-Liquidity-Network/blob/main/docs/investor-liquidity-disclosures.md"

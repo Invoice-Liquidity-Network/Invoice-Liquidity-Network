@@ -3,6 +3,7 @@ global:
   evaluation_interval: 15s
 
 rule_files:
+  - /etc/prometheus/rules/liquidity-risk-alerts.yml
   - /etc/prometheus/rules/indexer-operational-alerts.yml
   - /etc/prometheus/rules/slo-alerts.yml
   - /etc/prometheus/rules/oracle-service-alerts.yml
