@@ -113,6 +113,7 @@
   "vulnerability-disclosure": "Vulnerability Disclosure",
   "scf-technical-narrative": "SCF Technical Narrative",
   "secrets-baseline-audit": "Secrets Baseline Audit",
+  "credential-least-privilege-audit": "Credential Least-Privilege Audit",
   "privacy": "Privacy & Data Retention",
   "next.config": "Next Config",
   "theme.config": "Theme Config",

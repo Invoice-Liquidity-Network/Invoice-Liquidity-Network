@@ -87,8 +87,10 @@ function readMeta(dir) {
   try {
     return JSON.parse(readFileSync(metaPath, 'utf-8'));
   } catch (err) {
+    // Fail closed: an unparseable _meta.json must not pass as an empty one.
     console.error(`  ERROR: failed to parse ${metaPath}: ${err.message}`);
-    return {};
+    totalParseErrors += 1;
+    return null;
   }
 }
 
@@ -141,6 +143,7 @@ function getNavigableKeys(dir) {
 
 let totalOrphaned = 0;
 let totalUndiscoverable = 0;
+let totalParseErrors = 0;
 
 /**
  * Checks a single directory: compares its _meta.json against its file tree.
@@ -149,6 +152,7 @@ let totalUndiscoverable = 0;
 function checkDir(dir, docsRoot) {
   const relDir = relative(docsRoot, dir) || '.';
   const meta = readMeta(dir);
+  if (meta === null) return;
   const navigable = getNavigableKeys(dir);
 
   // Keys declared in _meta.json (excluding separators)
@@ -210,12 +214,12 @@ checkDir(docsDir, docsDir);
 
 // ─── Summary ─────────────────────────────────────────────────────────────────
 
-if (totalOrphaned === 0 && totalUndiscoverable === 0) {
+if (totalOrphaned === 0 && totalUndiscoverable === 0 && totalParseErrors === 0) {
   console.log('✓ All _meta.json files are in sync with the file tree.');
   process.exit(0);
 } else {
   console.error(
-    `\n✗ Found ${totalOrphaned} orphaned and ${totalUndiscoverable} undiscoverable entries.`
+    `\n✗ Found ${totalParseErrors} unparseable _meta.json file(s), ${totalOrphaned} orphaned and ${totalUndiscoverable} undiscoverable entries.`
   );
   console.error(
     '  Fix by updating the relevant _meta.json file(s) or running:\n' + '    pnpm validate:meta-nav'

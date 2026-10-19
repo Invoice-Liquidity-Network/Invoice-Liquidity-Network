@@ -39,4 +39,9 @@ export default {
     title: 'Analytics Plugin Guide',
     type: 'page',
   },
+  // Linked from the version banner rather than the navbar.
+  versioning: {
+    title: 'Versioning',
+    display: 'hidden',
+  },
 };

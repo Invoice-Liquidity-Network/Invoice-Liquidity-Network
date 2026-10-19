@@ -213,6 +213,7 @@ describe('#1277 dispatch attempts reach a terminal outcome', () => {
         channel: 'webhook',
         destination: 'https://example.com/dead',
         triggers: ['invoice_overdue'],
+        ownership_verified_at: Date.now(),
       });
       stubNoFallback();
       vi.spyOn(console, 'error').mockImplementation(() => {});
@@ -419,6 +420,7 @@ describe('#1278 wallet identity is never used as a notification address', () => 
       channel: 'webhook',
       destination: 'https://example.com/hook',
       triggers: ['invoice_funded'],
+      ownership_verified_at: Date.now(),
     });
     vi.spyOn(console, 'warn').mockImplementation(() => {});
     const register = vi.spyOn(digestScheduler, 'register');
@@ -545,6 +547,7 @@ describe('#1279 email recipients are validated before enqueue', () => {
       channel: 'email',
       destination: 'victim@example.com\r\nBcc: attacker@example.com',
       triggers: ['invoice_funded'],
+      ownership_verified_at: Date.now(),
     });
     const deliverySpy = deliverNotification.mockResolvedValue();
 
@@ -562,6 +565,7 @@ describe('#1279 email recipients are validated before enqueue', () => {
       channel: 'email',
       destination: invoice.freelancer, // the #1278 shape, journaled before the fix
       triggers: ['invoice_funded'],
+      ownership_verified_at: Date.now(),
     });
     const attempt = enqueueDispatchAttempt(subscription, samplePayload(invoice));
     vi.spyOn(console, 'error').mockImplementation(() => {});
@@ -589,6 +593,7 @@ describe('#1280 recipient data is tokenized or encrypted at rest', () => {
       channel: 'sms',
       destination: '+15551234567',
       triggers: ['invoice_funded'],
+      ownership_verified_at: Date.now(),
     });
     const deliverySpy = deliverNotification.mockResolvedValue();
 
@@ -799,6 +804,7 @@ function emailSubscription(address: string, destination: string) {
     channel: 'email',
     destination,
     triggers: ['invoice_funded'],
+    ownership_verified_at: Date.now(),
   });
 }
 

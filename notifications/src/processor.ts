@@ -31,15 +31,10 @@ import {
   resolveEmailRecipient,
   validateEmailRecipient,
 } from './recipient';
+import { EVENT_TO_TRIGGER, getNotificationTargets } from './targets';
+import { isOwnershipVerified, recordBlockedDelivery } from './ownership';
 
 const KNOWN_EVENT_TYPES = new Set<ILNEventType>(['submitted', 'funded', 'paid', 'defaulted']);
-
-const EVENT_TO_TRIGGER: Record<ILNEventType, NotificationTrigger | null> = {
-  submitted: null,
-  funded: 'invoice_funded',
-  paid: 'invoice_paid',
-  defaulted: 'invoice_defaulted',
-};
 
 export async function processEvent(event: rpc.Api.EventResponse): Promise<void> {
   if (hasEvent(event.id)) {
@@ -257,43 +252,6 @@ async function notifyOverdue(): Promise<void> {
   }
 }
 
-function getNotificationTargets(
-  trigger: NotificationTrigger,
-  invoice: Invoice
-): Array<{ recipient: string; actor: 'freelancer' | 'lp' | 'payer' }> {
-  switch (trigger) {
-    case 'invoice_funded':
-      return [
-        { recipient: invoice.freelancer, actor: 'freelancer' },
-        { recipient: invoice.payer, actor: 'payer' },
-      ];
-    case 'invoice_paid': {
-      const targets: Array<{
-        recipient: string;
-        actor: 'freelancer' | 'lp' | 'payer';
-      }> = [{ recipient: invoice.freelancer, actor: 'freelancer' }];
-      if (invoice.funder) {
-        targets.push({ recipient: invoice.funder, actor: 'lp' });
-      }
-      return targets;
-    }
-    case 'invoice_defaulted':
-      if (!invoice.funder) {
-        return [];
-      }
-      return [{ recipient: invoice.funder, actor: 'lp' }];
-    case 'invoice_due_soon':
-      if (!invoice.funder) {
-        return [];
-      }
-      return [{ recipient: invoice.funder, actor: 'lp' }];
-    case 'invoice_overdue':
-      return [{ recipient: invoice.payer, actor: 'payer' }];
-    default:
-      return [];
-  }
-}
-
 function formatPayload(
   trigger: NotificationTrigger,
   invoice: Invoice,
@@ -369,17 +327,27 @@ async function dispatchNotifications(
   for (const target of targets) {
     // Check user's digest preference — if daily or weekly, buffer instead of immediate send.
     const prefs = preferencesService.get(target.recipient);
+    const subscriptions = getSubscriptionsByAddress(target.recipient);
     if (DigestScheduler.isDigestFrequency(prefs.frequency)) {
       // Issue #1278: the wallet address identifies the user; the mailbox comes
       // from the email subscription they registered. Issue #1279: it is
       // validated before anything is buffered. No fallback to the wallet
       // address — an unresolvable recipient is skipped and counted.
+      // Issue #1281: only subscriptions whose owner proved control of the
+      // address are eligible.
       const resolution = resolveEmailRecipient(
         target.recipient,
         trigger,
-        getSubscriptionsByAddress(target.recipient)
+        subscriptions.filter(isOwnershipVerified)
       );
       if (!resolution.ok) {
+        if (
+          subscriptions.some(
+            (subscription) => subscription.channel === 'email' && !isOwnershipVerified(subscription)
+          )
+        ) {
+          recordBlockedDelivery('digest_without_verified_email', target.recipient);
+        }
         notificationsMetrics.recordRecipientRejection('email', 'digest_enqueue', resolution.reason);
         console.warn(
           `[processor] Skipping ${prefs.frequency} digest item for invoice ${invoice.id} ` +
@@ -389,7 +357,9 @@ async function dispatchNotifications(
       }
 
       const invoiceEvent: InvoiceEvent = {
-        eventId: eventId ?? `digest-${invoice.id}-${Date.now()}`,
+        // Scheduled triggers have no chain event; a deterministic id lets the
+        // digest dedupe repeats from each scheduler pass (#1282).
+        eventId: eventId ?? `${trigger}:${invoice.id}`,
         invoiceId: invoice.id,
         type: triggerToEventType(trigger) ?? trigger,
         amount: invoice.amount,
@@ -422,7 +392,6 @@ async function dispatchNotifications(
       continue;
     }
 
-    const subscriptions = getSubscriptionsByAddress(target.recipient);
     const matchingSubscriptions = subscriptions.filter((subscription) =>
       subscription.triggers.includes(trigger)
     );
@@ -436,6 +405,15 @@ async function dispatchNotifications(
         dispatchDestinationOf(subscription)
       );
       if (alreadySent) {
+        continue;
+      }
+
+      if (!isOwnershipVerified(subscription)) {
+        recordBlockedDelivery(
+          'unverified_subscription',
+          target.recipient,
+          maskRecipient(subscription.destination)
+        );
         continue;
       }
 

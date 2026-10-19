@@ -8,6 +8,11 @@ on:
       - 'docs/**'
       - 'packages/docs/**'
       - '.github/workflows/docs-deploy.yml'
+      - 'scripts/check-meta-nav.mjs'
+      - 'scripts/validate-canonical-nav.mjs'
+      - 'scripts/check-docs-migration.mjs'
+      - 'scripts/lib/docs-*.mjs'
+      - 'scripts/__tests__/docs-*.test.mjs'
   pull_request:
     branches:
       - main
@@ -15,6 +20,11 @@ on:
       - 'docs/**'
       - 'packages/docs/**'
       - '.github/workflows/docs-deploy.yml'
+      - 'scripts/check-meta-nav.mjs'
+      - 'scripts/validate-canonical-nav.mjs'
+      - 'scripts/check-docs-migration.mjs'
+      - 'scripts/lib/docs-*.mjs'
+      - 'scripts/__tests__/docs-*.test.mjs'
 
 jobs:
   deploy-docs:
@@ -33,6 +43,19 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '20'
+
+      # Issues #1283 / #1284: parse-validate the canonical
+      # packages/docs/content/**/_meta.ts navigation and verify the migration
+      # checklist in docs/DOCS_SETUP.md. Dependency-free Node; each writes its
+      # results to the job summary as CI evidence the controls ran.
+      - name: Test docs navigation and migration validators
+        run: node --test scripts/__tests__/docs-nav.test.mjs scripts/__tests__/docs-migration.test.mjs
+
+      - name: Parse-validate canonical _meta.ts navigation
+        run: node scripts/validate-canonical-nav.mjs
+
+      - name: Check docs migration checklist
+        run: node scripts/check-docs-migration.mjs
 
       - name: Check _meta.json vs file tree
         run: node scripts/check-meta-nav.mjs

@@ -99,6 +99,10 @@ function upgradeDispatchAttemptsTable(db: SQLiteDatabase): void {
 
 function runMigrations(db: SQLiteDatabase): void {
   upgradeDispatchAttemptsTable(db);
+  // Issue #1281: databases created before ownership verification lack this
+  // column. Existing rows stay NULL (unverified) so they are not delivered to
+  // until the owner re-verifies.
+  addColumnIfMissing(db, 'subscriptions', 'ownership_verified_at', 'INTEGER');
 
   db.exec(`
     CREATE TABLE IF NOT EXISTS invoices (
@@ -137,6 +141,7 @@ function runMigrations(db: SQLiteDatabase): void {
       destination     TEXT    NOT NULL,
       triggers        TEXT    NOT NULL,
       webhook_secret  TEXT,
+      ownership_verified_at INTEGER,
       created_at      INTEGER NOT NULL
     );
 
@@ -309,6 +314,46 @@ function runMigrations(db: SQLiteDatabase): void {
       BEFORE DELETE ON compliance_audit_chain BEGIN
         SELECT RAISE(ABORT, 'compliance audit chain is append-only');
       END;
+
+    -- Issue #1281: single-use challenges a subscriber signs with the Stellar
+    -- key behind stellar_address to prove they own it. consumed_at is set
+    -- atomically on successful verification so a replayed proof is rejected.
+    CREATE TABLE IF NOT EXISTS ownership_challenges (
+      nonce           TEXT    PRIMARY KEY,
+      stellar_address TEXT    NOT NULL,
+      message         TEXT    NOT NULL,
+      expires_at      INTEGER NOT NULL,
+      consumed_at     INTEGER,
+      created_at      INTEGER NOT NULL
+    );
+
+    -- Issue #1282: durable digest watermark and delivery ledger used to
+    -- reconcile buffered digest items against persisted invoice events.
+    CREATE TABLE IF NOT EXISTS digest_state (
+      stellar_address TEXT    PRIMARY KEY,
+      config          TEXT    NOT NULL,
+      registered_at   INTEGER NOT NULL,
+      last_flushed_at INTEGER
+    );
+
+    CREATE TABLE IF NOT EXISTS digest_pending (
+      stellar_address TEXT    NOT NULL,
+      event_id        TEXT    NOT NULL,
+      item            TEXT    NOT NULL,
+      buffered_at     INTEGER NOT NULL,
+      PRIMARY KEY (stellar_address, event_id)
+    );
+
+    CREATE TABLE IF NOT EXISTS digest_deliveries (
+      stellar_address TEXT    NOT NULL,
+      event_id        TEXT    NOT NULL,
+      invoice_id      INTEGER NOT NULL,
+      event_type      TEXT    NOT NULL,
+      delivered_at    INTEGER NOT NULL,
+      PRIMARY KEY (stellar_address, event_id)
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_events_created_at ON events(created_at);
   `);
 }
 
@@ -492,8 +537,9 @@ export function createSubscription(
   const result = getDb()
     .prepare(
       `INSERT INTO subscriptions
-         (stellar_address, channel, destination, triggers, webhook_secret, created_at)
-       VALUES (?, ?, ?, ?, ?, ?)`
+         (stellar_address, channel, destination, triggers, webhook_secret,
+          ownership_verified_at, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`
     )
     .run(
       subscription.stellar_address,
@@ -501,6 +547,7 @@ export function createSubscription(
       subscription.destination,
       JSON.stringify(subscription.triggers),
       subscription.webhook_secret ?? null,
+      subscription.ownership_verified_at ?? null,
       now
     );
 
@@ -522,6 +569,7 @@ export function getSubscriptionsByAddress(address: string): Subscription[] {
       destination: row.destination,
       triggers: JSON.parse(row.triggers),
       webhook_secret: row.webhook_secret ?? undefined,
+      ownership_verified_at: row.ownership_verified_at ?? null,
       created_at: row.created_at,
     })) as Subscription[];
 }
@@ -540,8 +588,23 @@ export function getSubscriptionById(id: number): Subscription | undefined {
     destination: row.destination,
     triggers: JSON.parse(row.triggers),
     webhook_secret: row.webhook_secret ?? undefined,
+    ownership_verified_at: row.ownership_verified_at ?? null,
     created_at: row.created_at,
   } as Subscription;
+}
+
+export function markSubscriptionsOwnershipVerified(address: string, verifiedAt: number): number {
+  const result = getDb()
+    .prepare('UPDATE subscriptions SET ownership_verified_at = ? WHERE stellar_address = ?')
+    .run(verifiedAt, address);
+  return result.changes;
+}
+
+export function countUnverifiedSubscriptions(): number {
+  const row = getDb()
+    .prepare('SELECT COUNT(*) as count FROM subscriptions WHERE ownership_verified_at IS NULL')
+    .get() as { count: number };
+  return row.count;
 }
 
 export function deleteSubscriptionById(id: number): boolean {
