@@ -81,15 +81,89 @@ function isSeparatorValue(value) {
 /**
  * Reads and parses a _meta.json file. Returns {} if the file does not exist.
  */
-function readMeta(dir) {
-  const metaPath = join(dir, '_meta.json');
-  if (!existsSync(metaPath)) return {};
-  try {
-    return JSON.parse(readFileSync(metaPath, 'utf-8'));
-  } catch (err) {
-    console.error(`  ERROR: failed to parse ${metaPath}: ${err.message}`);
-    return {};
+export function parseMetaCode(code, filePath) {
+  const meta = {};
+  const stripped = code.replace(/\/\*[\s\S]*?\*\/|\/\/.*/g, '');
+  const exportMatch = stripped.match(/export\s+default\s*\{([\s\S]*)\}/);
+  if (!exportMatch) {
+    return meta;
   }
+  const body = exportMatch[1];
+  let depth = 0;
+  let inString = false;
+  let stringChar = '';
+  let currentToken = '';
+
+  for (let i = 0; i < body.length; i++) {
+    const char = body[i];
+    if (inString) {
+      if (char === stringChar && body[i - 1] !== '\\') {
+        inString = false;
+      } else {
+        currentToken += char;
+      }
+      continue;
+    }
+
+    if (char === "'" || char === '"' || char === '`') {
+      inString = true;
+      stringChar = char;
+      currentToken = '';
+      continue;
+    }
+
+    if (char === '{' || char === '[' || char === '(') {
+      depth++;
+      continue;
+    }
+    if (char === '}' || char === ']' || char === ')') {
+      depth--;
+      continue;
+    }
+
+    if (depth === 0) {
+      if (char === ':') {
+        const key = currentToken.trim();
+        if (key) {
+          meta[key] = true;
+        }
+        currentToken = '';
+      } else if (char === ',') {
+        currentToken = '';
+      } else if (char !== ' ' && char !== '\t' && char !== '\r' && char !== '\n') {
+        currentToken += char;
+      }
+    }
+  }
+
+  return meta;
+}
+
+function readMeta(dir) {
+  const jsonPath = join(dir, '_meta.json');
+  if (existsSync(jsonPath)) {
+    try {
+      return JSON.parse(readFileSync(jsonPath, 'utf-8'));
+    } catch (err) {
+      console.error(`  ERROR: failed to parse ${jsonPath}: ${err.message}`);
+      return {};
+    }
+  }
+
+  for (const metaFileName of ['_meta.ts', '_meta.js', '_meta.mjs']) {
+    const codePath = join(dir, metaFileName);
+    if (existsSync(codePath)) {
+      try {
+        const rawCode = readFileSync(codePath, 'utf-8');
+        return parseMetaCode(rawCode, codePath);
+      } catch (err) {
+        console.error(`  ERROR: failed to parse ${codePath}: ${err.message}`);
+        return {};
+      }
+    }
+  }
+
+  return {};
 }
 
 /**
@@ -187,7 +261,7 @@ function checkDir(dir, docsRoot) {
   for (const entry of entries) {
     if (EXCLUDED_DIRS.has(entry)) continue;
     const fullPath = join(dir, entry);
-    if (statSync(fullPath).isDirectory() && existsSync(join(fullPath, '_meta.json'))) {
+    if (statSync(fullPath).isDirectory() && (existsSync(join(fullPath, '_meta.json')) || existsSync(join(fullPath, '_meta.ts')) || existsSync(join(fullPath, '_meta.js')))) {
       checkDir(fullPath, docsRoot);
     }
   }
@@ -196,8 +270,11 @@ function checkDir(dir, docsRoot) {
 // ─── CLI ─────────────────────────────────────────────────────────────────────
 
 const args = process.argv.slice(2);
-const docsDirArg = args[args.indexOf('--docs-dir') + 1];
-const docsDir = docsDirArg ? resolve(process.cwd(), docsDirArg) : resolve(repoRoot, 'docs');
+const isCanonical = args.includes('--canonical');
+const docsDirIndex = args.indexOf('--docs-dir');
+const docsDirArg = docsDirIndex !== -1 ? args[docsDirIndex + 1] : undefined;
+const defaultDocsDir = isCanonical ? resolve(repoRoot, 'packages', 'docs', 'content') : resolve(repoRoot, 'docs');
+const docsDir = docsDirArg ? resolve(process.cwd(), docsDirArg) : defaultDocsDir;
 
 if (!existsSync(docsDir)) {
   console.error(`docs directory not found: ${docsDir}`);

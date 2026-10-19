@@ -39,4 +39,8 @@ export default {
     title: 'Analytics Plugin Guide',
     type: 'page',
   },
+  versioning: {
+    title: 'Versioning & Migration',
+    type: 'page',
+  },
 };
