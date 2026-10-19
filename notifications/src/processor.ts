@@ -17,7 +17,7 @@ import {
 } from './db';
 import type { DispatchAttemptSubscription, DispatchFailureReason } from './db';
 import { fetchInvoice } from './rpc';
-import { deliverNotification } from './delivery';
+import { deliverNotification, pushDeadLetter } from './delivery';
 import { deliverWithFallback } from './fallback';
 import { getProviderHealth } from './provider-health';
 import { digestScheduler, DigestScheduler } from './digest';

@@ -191,7 +191,7 @@ function newDeadLetterId(): string {
   return `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
-function pushDeadLetter(entry: Omit<DeadLetterEntry, 'id' | 'timestamp'>): DeadLetterEntry {
+export function pushDeadLetter(entry: Omit<DeadLetterEntry, 'id' | 'timestamp'>): DeadLetterEntry {
   const full: DeadLetterEntry = { ...entry, id: newDeadLetterId(), timestamp: Date.now() };
   deadLetterQueue.push(full);
   checkDlqAlertThreshold();

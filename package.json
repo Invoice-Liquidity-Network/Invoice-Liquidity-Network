@@ -168,7 +168,8 @@
     "verify:no-stale-docs-refs": "node scripts/operations/check-no-stale-legacy-site-refs.mjs",
     "test:no-stale-docs-refs": "node --test scripts/__tests__/check-no-stale-legacy-site-refs.test.mjs",
     "test:notifications-idempotency": "node --test scripts/__tests__/notification-idempotency.test.mjs",
-    "test:recorded-before-retrieved": "node --test scripts/__tests__/prevent-recorded-before-retrieved.test.mjs"
+    "test:recorded-before-retrieved": "node --test scripts/__tests__/prevent-recorded-before-retrieved.test.mjs",
+    "test:dead-letter-events": "node --test scripts/__tests__/dead-letter-unrecoverable-events.test.mjs"
   },
   "devDependencies": {
     "@changesets/cli": "^2.31.0",
