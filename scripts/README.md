@@ -55,6 +55,7 @@ Tests mock `spawnSync` to avoid network access and verify argument construction,
 | `check-no-foreign-lockfiles.mjs` | Ensures only pnpm lockfiles are present (no npm/yarn). |
 | `validate-packages.mjs` | Validates package.json fields across the monorepo. |
 | `mainnet-checklist-parser.js` | Parses the mainnet launch checklist markdown and updates issue statuses. |
+| `validate-mainnet-launch-evidence.mjs` | Validates per-row artifact links and, in launch mode, downloads and verifies current independent external audit evidence. |
 | `generate-types.ts` | Generates shared TypeScript types from contract specs. |
 | `deploy.ts` | Deployment orchestration for Soroban contracts. |
 | `migrate.ts` | Database migration runner. |

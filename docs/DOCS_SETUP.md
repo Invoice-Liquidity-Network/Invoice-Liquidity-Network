@@ -99,6 +99,14 @@ page renders correctly on the deployed site.
 
 ## Developer setup
 
+### Mainnet launch evidence
+
+Run `node scripts/validate-mainnet-launch-evidence.mjs` to check that every launch checklist row links to a repository-local verification artifact and that no legacy SDK API reference remains. Pull-request CI runs this structural check and the evidence regression tests.
+
+Before launch, dispatch the `Mainnet Launch Evidence` workflow. It requires a complete independent external audit covering the manifest's required scope, no unresolved findings (or documented accepted findings), completion within the last 365 days, and a downloadable HTTPS report whose SHA-256 matches `docs/evidence/external-security-audit.json`. A missing dependency, stale audit, failed download, or digest mismatch fails closed. The Release lead owns manifest updates and recovery; the workflow summary and JSON artifact record the outcome.
+
+This control changes no adjacent service API or cross-repository package contract; it consumes existing repository documentation and CI artifacts only.
+
 ### Canonical site — `packages/docs/` (deployed to `docs.iln.finance`)
 
 ```bash
