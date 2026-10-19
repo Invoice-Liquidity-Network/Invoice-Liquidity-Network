@@ -227,8 +227,12 @@ function errorMessage(error: unknown): string {
 
 /** Reject email destinations that cannot be delivered before any provider call. */
 function recipientPreflight(
-  subscription: DispatchAttemptSubscription
+  subscription: DispatchAttemptSubscription,
+  expectedAddress?: string
 ): InvalidRecipientError | undefined {
+  if (expectedAddress && subscription.address && subscription.address !== expectedAddress) {
+    return new InvalidRecipientError('unverified_ownership', subscription.channel);
+  }
   if (subscription.channel !== 'email') return undefined;
   const validation = validateEmailRecipient(dispatchDestinationOf(subscription));
   return validation.valid ? undefined : new InvalidRecipientError(validation.reason, 'email');

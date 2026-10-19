@@ -34,6 +34,7 @@ export type RecipientRejectionReason =
   | 'control_characters'
   | 'wallet_address'
   | 'malformed'
+  | 'unverified_ownership'
   | 'no_email_subscription';
 
 export type EmailValidationResult =
@@ -111,6 +112,7 @@ export interface RecipientSubscription {
   destination?: string;
   email?: string;
   triggers?: string[];
+  address?: string;
 }
 
 export type EmailResolution =
@@ -185,4 +187,21 @@ export function maskRecipient(value: string | undefined | null): string {
     return `${value.slice(0, 3)}***${value.slice(-2)}`;
   }
   return `${value.slice(0, 2)}***`;
+}
+
+
+/**
+ * Issue #1281: Verify that a notification subscription address matches the target recipient wallet identity.
+ */
+export function verifyNotificationAddressOwnership(
+  targetAddress: string,
+  subscriptionAddress?: string
+): { verified: boolean; reason?: RecipientRejectionReason } {
+  if (!targetAddress || !isStellarAddress(targetAddress)) {
+    return { verified: false, reason: 'malformed' };
+  }
+  if (subscriptionAddress && subscriptionAddress !== targetAddress) {
+    return { verified: false, reason: 'unverified_ownership' };
+  }
+  return { verified: true };
 }
