@@ -164,7 +164,9 @@
     "verify:mainnet-evidence-gate": "node scripts/operations/mainnet-evidence-gate.mjs",
     "test:mainnet-evidence-gate": "node --test scripts/__tests__/mainnet-evidence-gate.test.mjs",
     "check:doc-links:offline": "node scripts/check-doc-links.mjs --offline",
-    "test:doc-links": "node --test scripts/__tests__/check-doc-links.test.mjs"
+    "test:doc-links": "node --test scripts/__tests__/check-doc-links.test.mjs",
+    "verify:no-stale-docs-refs": "node scripts/operations/check-no-stale-legacy-site-refs.mjs",
+    "test:no-stale-docs-refs": "node --test scripts/__tests__/check-no-stale-legacy-site-refs.test.mjs"
   },
   "devDependencies": {
     "@changesets/cli": "^2.31.0",
