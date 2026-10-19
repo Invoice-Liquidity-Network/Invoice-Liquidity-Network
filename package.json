@@ -169,7 +169,9 @@
     "test:no-stale-docs-refs": "node --test scripts/__tests__/check-no-stale-legacy-site-refs.test.mjs",
     "test:notifications-idempotency": "node --test scripts/__tests__/notification-idempotency.test.mjs",
     "test:recorded-before-retrieved": "node --test scripts/__tests__/prevent-recorded-before-retrieved.test.mjs",
-    "test:dead-letter-events": "node --test scripts/__tests__/dead-letter-unrecoverable-events.test.mjs"
+    "test:dead-letter-events": "node --test scripts/__tests__/dead-letter-unrecoverable-events.test.mjs",
+    "verify:indexer-ops": "node scripts/operations/verify-indexer-operations.mjs",
+    "test:indexer-ops": "node --test scripts/__tests__/verify-indexer-operations.test.mjs"
   },
   "devDependencies": {
     "@changesets/cli": "^2.31.0",
