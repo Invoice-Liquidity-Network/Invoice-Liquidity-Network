@@ -43,6 +43,7 @@ const EVENT_TO_TRIGGER: Record<ILNEventType, NotificationTrigger | null> = {
 
 export async function processEvent(event: rpc.Api.EventResponse): Promise<void> {
   if (hasEvent(event.id)) {
+    notificationsMetrics.recordDuplicateSkipped('event', 'duplicate_event_id');
     return;
   }
 
@@ -436,6 +437,7 @@ async function dispatchNotifications(
         dispatchDestinationOf(subscription)
       );
       if (alreadySent) {
+        notificationsMetrics.recordDuplicateSkipped(subscription.channel, trigger);
         continue;
       }
 
@@ -470,10 +472,10 @@ async function dispatchNotifications(
       // on a UNIQUE dedup key, so a duplicated event or a replayed poll can
       // neither queue nor send a second copy of the same notification.
       const attempt = enqueueDispatchAttempt(subscription, payload);
-      if (attempt.status !== 'pending') {
-        // Some earlier run already confirmed this exact notification, or
-        // dead-lettered it (#1277) — a failed row is only retried after an
-        // operator re-queues it, never by a replayed or rescheduled trigger.
+      if (attempt.status !== 'pending' || attempt.deduplicated) {
+        if (attempt.deduplicated) {
+          notificationsMetrics.recordDuplicateSkipped(subscription.channel, trigger);
+        }
         continue;
       }
 

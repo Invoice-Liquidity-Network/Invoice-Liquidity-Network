@@ -15,6 +15,8 @@ export interface NotificationsMetrics {
   dispatchTerminalTotal: client.Counter<string>;
   dispatchQueue: client.Gauge<string>;
   recipientRejectionsTotal: client.Counter<string>;
+  duplicatesSkippedTotal: client.Counter<string>;
+  recordDuplicateSkipped(channel: string, trigger: string): void;
   recordDispatchAttempt(channel: string, result: 'delivered' | 'retry' | 'terminal'): void;
   recordDispatchTerminal(channel: string, outcome: string): void;
   recordRecipientRejection(channel: string, stage: string, reason: string): void;
@@ -156,6 +158,18 @@ export function createNotificationsMetrics(): NotificationsMetrics {
     fallbackDeliveriesTotal.inc({ primary, fallback, priority });
   }
 
+  // Issue #1276: count duplicate notifications skipped to prove idempotency controls are active.
+  const duplicatesSkippedTotal = new client.Counter({
+    name: 'iln_notifications_duplicates_skipped_total',
+    help: 'Total duplicate notifications skipped by channel and trigger',
+    labelNames: ['channel', 'trigger'] as const,
+    registers: [registry],
+  });
+
+  function recordDuplicateSkipped(channel: string, trigger: string): void {
+    duplicatesSkippedTotal.inc({ channel, trigger });
+  }
+
   return {
     registry,
     dispatchesTotal,
@@ -171,6 +185,8 @@ export function createNotificationsMetrics(): NotificationsMetrics {
     dispatchTerminalTotal,
     dispatchQueue,
     recipientRejectionsTotal,
+    duplicatesSkippedTotal,
+    recordDuplicateSkipped,
     recordDispatchAttempt,
     recordDispatchTerminal,
     recordRecipientRejection,
