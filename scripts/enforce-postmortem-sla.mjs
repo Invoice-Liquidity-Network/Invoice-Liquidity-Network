@@ -8,7 +8,7 @@
  * and escalates to incident response owners to prevent institutional knowledge loss.
  */
 
-import { existsSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { resolve, join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -92,8 +92,114 @@ export function auditPostmortemSla(
   };
 }
 
+export function parseActionItemsTable(markdownContent, fileName = 'unknown') {
+  const lines = markdownContent.split('\n');
+  const actionItems = [];
+  let inTable = false;
+  let headerSeen = false;
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i].trim();
+    if (line.match(/^##+\s+.*Action Items/i)) {
+      inTable = true;
+      headerSeen = false;
+      continue;
+    }
+
+    if (inTable) {
+      if (line.startsWith('#') && !line.match(/^##+\s+.*Action Items/i)) {
+        break; // Reached next section
+      }
+      if (!line.startsWith('|')) {
+        continue;
+      }
+      if (!headerSeen) {
+        if (line.includes('Action Item') && line.includes('Owner')) {
+          headerSeen = true;
+        }
+        continue;
+      }
+      if (line.match(/^\|[\s-:|]+$/)) {
+        continue; // delimiter row
+      }
+
+      const cols = line.split('|').map((c) => c.trim()).filter((_, idx, arr) => idx > 0 && idx < arr.length - 1);
+      if (cols.length >= 6) {
+        actionItems.push({
+          sourceFile: fileName,
+          item: cols[0],
+          type: cols[1],
+          owner: cols[2],
+          targetRepo: cols[3].replace(/`/g, ''),
+          dueDate: cols[4],
+          status: cols[5].toUpperCase(),
+        });
+      }
+    }
+  }
+
+  return actionItems;
+}
+
+export function auditPostmortemActions(
+  postmortemsDir = resolve(__dirname, '../docs/postmortems'),
+  nowTimestampMs = Date.now()
+) {
+  
+
+  const files = existsSync(postmortemsDir)
+    ? readdirSync(postmortemsDir).filter((f) => f.endsWith('.md') && f !== 'README.md' && f !== 'TEMPLATE.md')
+    : [];
+
+  const allActions = [];
+  for (const file of files) {
+    const fullPath = join(postmortemsDir, file);
+    try {
+      const content = readFileSync(fullPath, 'utf-8');
+      const items = parseActionItemsTable(content, file);
+      allActions.push(...items);
+    } catch (e) {}
+  }
+
+  const nowDateStr = new Date(nowTimestampMs).toISOString().slice(0, 10);
+  const enrichedActions = allActions.map((action) => {
+    const isCompleted = action.status === 'DONE' || action.status === 'COMPLETED';
+    const isOverdue = !isCompleted && action.dueDate && action.dueDate < nowDateStr;
+    return {
+      ...action,
+      isCompleted,
+      isOverdue,
+      trackingStatus: isCompleted ? 'RESOLVED' : isOverdue ? 'ACTION_OVERDUE' : 'IN_PROGRESS_ON_TRACK',
+    };
+  });
+
+  const totalActions = enrichedActions.length;
+  const completedCount = enrichedActions.filter((a) => a.isCompleted).length;
+  const overdueCount = enrichedActions.filter((a) => a.isOverdue).length;
+  const pendingCount = totalActions - completedCount;
+
+  return {
+    timestamp: new Date(nowTimestampMs).toISOString(),
+    totalActions,
+    completedCount,
+    pendingCount,
+    overdueCount,
+    completionRatePercent: totalActions > 0 ? Math.round((completedCount / totalActions) * 100) : 100,
+    actions: enrichedActions,
+    overdueActions: enrichedActions.filter((a) => a.isOverdue),
+  };
+}
+
 if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
-  console.log('Executing Postmortem Filing SLA Audit (#1106)...');
-  const report = auditPostmortemSla();
-  console.log(JSON.stringify(report, null, 2));
+  const args = process.argv.slice(2);
+  const showActions = args.includes('--actions') || args.includes('-a');
+  console.log('Executing Postmortem SLA & Action Items Audit (#1106, #1326)...');
+  const slaReport = auditPostmortemSla();
+  const actionReport = auditPostmortemActions();
+  console.log('=== SLA REPORT ===');
+  console.log(JSON.stringify(slaReport, null, 2));
+  if (showActions) {
+    console.log('=== ACTION ITEMS TRACKING ===');
+    console.log(JSON.stringify(actionReport, null, 2));
+  }
 }

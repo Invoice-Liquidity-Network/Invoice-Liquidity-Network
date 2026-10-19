@@ -1,6 +1,6 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { auditPostmortemSla, POSTMORTEM_SLA_HOURS } from '../enforce-postmortem-sla.mjs';
+import { auditPostmortemSla, auditPostmortemActions, parseActionItemsTable, POSTMORTEM_SLA_HOURS } from '../enforce-postmortem-sla.mjs';
 
 describe('Postmortem Filing SLA Enforcement Suite (#1106)', () => {
   it('correctly identifies filed postmortems and reports 100% compliance', () => {
@@ -36,5 +36,28 @@ describe('Postmortem Filing SLA Enforcement Suite (#1106)', () => {
     assert.equal(report.escalationsRequired[0].incidentId, 'INC-OLD-UNFILED');
     assert.equal(report.escalationsRequired[0].status, 'OVERDUE_ESCALATE');
     assert.equal(report.results.find((r) => r.incidentId === 'INC-RECENT-UNFILED').status, 'PENDING_WITHIN_SLA');
+  });
+it('parses and tracks postmortem action items correctly (#1326)', () => {
+    const sampleTable = `
+## 6. Action Items (Corrective & Preventative)
+
+| Action Item | Type | Assigned Owner | Target Repo | Due Date | Status |
+|---|---|---|---|---|---|
+| Fix cache | Preventative | @dev1 | ILN | 2026-09-01 | DONE |
+| Update UI | Corrective | @dev2 | ILN-Frontend | 2026-09-05 | IN_PROGRESS |
+`;
+    const parsed = parseActionItemsTable(sampleTable, 'test.md');
+    assert.equal(parsed.length, 2);
+    assert.equal(parsed[0].owner, '@dev1');
+    assert.equal(parsed[0].status, 'DONE');
+    assert.equal(parsed[1].owner, '@dev2');
+    assert.equal(parsed[1].status, 'IN_PROGRESS');
+  });
+
+  it('audits existing postmortem action items and flags tracking metrics (#1326)', () => {
+    const report = auditPostmortemActions();
+    assert.ok(report.totalActions >= 4);
+    assert.ok(report.completedCount >= 2);
+    assert.ok(typeof report.completionRatePercent === 'number');
   });
 });

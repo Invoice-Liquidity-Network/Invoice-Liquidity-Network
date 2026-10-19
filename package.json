@@ -95,7 +95,8 @@
     "test:react-peer-contract": "node --test scripts/__tests__/check-react-peer-contract.test.mjs",
     "check:sdk-package-names": "node scripts/check-sdk-package-names.mjs",
     "test:sdk-package-names": "node --test scripts/__tests__/check-sdk-package-names.test.mjs",
-    "validate:canonical-nav": "node scripts/check-meta-nav.mjs --canonical"
+    "validate:canonical-nav": "node scripts/check-meta-nav.mjs --canonical",
+    "track:postmortem-actions": "node scripts/enforce-postmortem-sla.mjs --actions"
   },
   "devDependencies": {
     "@changesets/cli": "^2.31.0",
