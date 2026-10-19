@@ -217,11 +217,11 @@ the `check-meta-nav` job of `docs-deploy.yml`). The check fails when:
 
 ## Developer setup
 
-### Mainnet launch evidence
+### Mainnet launch readiness and evidence
 
-Run `node scripts/validate-mainnet-launch-evidence.mjs` to check that every launch checklist row links to a repository-local verification artifact and that no legacy SDK API reference remains. Pull-request CI runs this structural check and the evidence regression tests.
+Run `node scripts/check-mainnet-launch-readiness.mjs` to validate owner metadata, freshness, reviewer independence, and local evidence links. Run `node scripts/validate-mainnet-launch-evidence.mjs` to verify every checklist row has a repository-local verification artifact and no legacy SDK API reference remains. Pull-request CI runs both structural checks and their regression tests.
 
-Before launch, dispatch the `Mainnet Launch Evidence` workflow. It requires a complete independent external audit covering the manifest's required scope, no unresolved findings (or documented accepted findings), completion within the last 365 days, and a downloadable HTTPS report whose SHA-256 matches `docs/evidence/external-security-audit.json`. A missing dependency, stale audit, failed download, or digest mismatch fails closed. The Release lead owns manifest updates and recovery; the workflow summary and JSON artifact record the outcome.
+Before launch, dispatch the `Mainnet Launch Readiness` workflow for the checklist rehearsal and the `Mainnet Launch Evidence` workflow for the audit gate. The rehearsal requires every checklist row to be `Done` or `Launch exception accepted` and fresh independent reviewer sign-offs. The audit gate requires a complete independent external audit covering the manifest's required scope, no unresolved findings (or documented accepted findings), completion within the last 365 days, and a downloadable HTTPS report whose SHA-256 matches `docs/evidence/external-security-audit.json`. Both gates fail closed and publish JSON/summary evidence. The Release lead owns checklist and manifest updates and recovery.
 
 This control changes no adjacent service API or cross-repository package contract; it consumes existing repository documentation and CI artifacts only.
 
