@@ -129,5 +129,8 @@ export async function createGraphQLServer(
   const apolloServer = new ApolloServer({ schema });
   await apolloServer.start();
 
-  return expressMiddleware(apolloServer);
+  // @apollo/server/express4 is typed against @types/express@4 while this
+  // package's devDependency is @types/express@5; the runtime is express@4, so
+  // the middleware is compatible. Bridge the type mismatch explicitly.
+  return expressMiddleware(apolloServer) as unknown as RequestHandler;
 }
