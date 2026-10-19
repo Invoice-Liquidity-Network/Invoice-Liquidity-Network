@@ -126,7 +126,9 @@
     "test:liquidity-stress": "node --test scripts/__tests__/simulate-stressed-liquidity-redemption.test.mjs",
     "verify:trust-reconciliation": "node scripts/operations/reconcile-trust-model-contract.mjs",
     "test:trust-reconciliation": "node --test scripts/__tests__/reconcile-trust-model-contract.test.mjs",
-    "test:liquidity-alerts": "node --test scripts/__tests__/liquidity-risk-alerts.test.mjs"
+    "test:liquidity-alerts": "node --test scripts/__tests__/liquidity-risk-alerts.test.mjs",
+    "verify:accounting-isolation": "node scripts/operations/accounting-isolation-validator.mjs",
+    "test:accounting-isolation": "node --test scripts/__tests__/accounting-isolation.test.mjs"
   },
   "devDependencies": {
     "@changesets/cli": "^2.31.0",
