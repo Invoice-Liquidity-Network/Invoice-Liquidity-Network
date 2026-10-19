@@ -1,0 +1,81 @@
+{
+  "version": 1,
+  "control": "cross-repository-incident-ownership",
+  "last_updated": "2026-10-19T10:15:00Z",
+  "repositories": [
+    {
+      "id": "Invoice-Liquidity-Network",
+      "role": "Main Microservices & SDK Core",
+      "lead": "@backend-lead",
+      "channel": "#iln-core-dev"
+    },
+    {
+      "id": "ILN-Smart-Contract",
+      "role": "Soroban Smart Contracts & Liquidity Pools",
+      "lead": "@Greymantron",
+      "channel": "#iln-contracts"
+    },
+    {
+      "id": "ILN-Frontend",
+      "role": "Next.js Web dApp & User Portal",
+      "lead": "@frontend-lead",
+      "channel": "#iln-frontend"
+    }
+  ],
+  "failure_domains": [
+    {
+      "domain": "Contract Logic & State Revert",
+      "primary_repo": "ILN-Smart-Contract",
+      "primary_owner": "@contract-oncall",
+      "escalation_repo": "Invoice-Liquidity-Network",
+      "escalation_owner": "@Greymantron",
+      "sla_minutes": 15,
+      "runbook": "docs/emergency-pause-rehearsal.md"
+    },
+    {
+      "domain": "Indexer Ingestion & Cursor Divergence",
+      "primary_repo": "Invoice-Liquidity-Network",
+      "primary_owner": "@indexer-oncall",
+      "escalation_repo": "ILN-Smart-Contract",
+      "escalation_owner": "@infra-lead",
+      "sla_minutes": 30,
+      "runbook": "docs/indexer/cursor-divergence-recovery.md"
+    },
+    {
+      "domain": "Oracle Verification & KYB Gating",
+      "primary_repo": "Invoice-Liquidity-Network",
+      "primary_owner": "@oracle-oncall",
+      "escalation_repo": "ILN-Frontend",
+      "escalation_owner": "@sec-commander",
+      "sla_minutes": 15,
+      "runbook": "docs/drills/kyb-outage-containment-rehearsal.md"
+    },
+    {
+      "domain": "Notification Webhooks & Queue Processing",
+      "primary_repo": "Invoice-Liquidity-Network",
+      "primary_owner": "@notifications-oncall",
+      "escalation_repo": "Invoice-Liquidity-Network",
+      "escalation_owner": "@backend-lead",
+      "sla_minutes": 30,
+      "runbook": "docs/runbooks/on-call-escalation-handoff.md"
+    },
+    {
+      "domain": "dApp Rendering & Wallet Connection",
+      "primary_repo": "ILN-Frontend",
+      "primary_owner": "@frontend-oncall",
+      "escalation_repo": "Invoice-Liquidity-Network",
+      "escalation_owner": "@frontend-lead",
+      "sla_minutes": 30,
+      "runbook": "docs/runbooks/incident-response.md"
+    },
+    {
+      "domain": "Cross-Repo Protocol Compatibility Drift",
+      "primary_repo": "Invoice-Liquidity-Network",
+      "primary_owner": "@sec-commander",
+      "escalation_repo": "ILN-Smart-Contract",
+      "escalation_owner": "@Greymantron",
+      "sla_minutes": 15,
+      "runbook": "docs/cross-repo-incident-escalation-drill.md"
+    }
+  ]
+}

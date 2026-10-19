@@ -108,7 +108,9 @@
     "test:kyb-outage": "node --test scripts/__tests__/kyb-outage-rehearsal.test.mjs",
     "test:tabletop": "node --test scripts/__tests__/mainnet-tabletop-decision.test.mjs",
     "verify:oncall-handoff": "node scripts/operations/check-oncall-handoff.mjs",
-    "test:oncall-handoff": "node --test scripts/__tests__/oncall-escalation-handoff.test.mjs"
+    "test:oncall-handoff": "node --test scripts/__tests__/oncall-escalation-handoff.test.mjs",
+    "verify:ownership-matrix": "node scripts/operations/check-cross-repo-ownership.mjs",
+    "test:ownership-matrix": "node --test scripts/__tests__/cross-repo-ownership.test.mjs"
   },
   "devDependencies": {
     "@changesets/cli": "^2.31.0",
