@@ -1,0 +1,61 @@
+# Prometheus alerting rules for Indexer Operational Monitoring (#1319)
+#
+# Covers slow database queries, ledger cursor stalls, and database error spikes
+# as specified in docs/incident-response.md (Scenario C) and docs/monitoring.md.
+
+groups:
+  - name: indexer-operational-alerts
+    interval: 30s
+    rules:
+      # ── 1. Indexer Slow Query Warning ──────────────────────────────────────────
+      - alert: ILNIndexerSlowQueryDurationHigh
+        expr: |
+          histogram_quantile(0.95, sum(rate(iln_db_query_duration_seconds_bucket[5m])) by (le)) > 2.0
+        for: 2m
+        labels:
+          severity: warning
+          team: ops
+          component: indexer
+          domain: database
+        annotations:
+          summary: >-
+            Indexer database p95 query duration is exceeding 2 seconds on {{ $labels.instance }}.
+          description: >-
+            Database query latency has degraded. Polling throughput is constrained and may lead
+            to ledger cursor ingestion delays if left unmitigated.
+          runbook_url: "https://github.com/Invoice-Liquidity-Network/Invoice-Liquidity-Network/blob/main/docs/incident-response.md#scenario-c-indexer-performance-degradation-slow-queries--ledger-cursor-stalled"
+
+      # ── 2. Indexer Ledger Cursor Stall Critical Alert ──────────────────────────
+      - alert: ILNIndexerLedgerCursorStalled
+        expr: |
+          (time() - (iln_cursor_updated_at / 1000)) > 120
+        for: 2m
+        labels:
+          severity: critical
+          team: ops
+          component: indexer
+          domain: ingestion
+        annotations:
+          summary: >-
+            Indexer ledger cursor has stalled for over 120 seconds on {{ $labels.instance }}.
+          description: >-
+            The indexer is not advancing its cursor ledger against the Stellar network.
+            Frontends and query clients are receiving stale protocol state.
+          runbook_url: "https://github.com/Invoice-Liquidity-Network/Invoice-Liquidity-Network/blob/main/docs/incident-response.md#scenario-c-indexer-performance-degradation-slow-queries--ledger-cursor-stalled"
+
+      # ── 3. Indexer Database Error Rate Elevated ────────────────────────────────
+      - alert: ILNIndexerDatabaseErrorRateElevated
+        expr: |
+          rate(iln_db_errors_total[5m]) > 0.05
+        for: 2m
+        labels:
+          severity: critical
+          team: ops
+          component: indexer
+          domain: database
+        annotations:
+          summary: >-
+            Indexer SQLite database error rate exceeds 0.05 errors/sec on {{ $labels.instance }}.
+          description: >-
+            Persistent database transaction or locking errors observed in indexer ingestion loop.
+          runbook_url: "https://github.com/Invoice-Liquidity-Network/Invoice-Liquidity-Network/blob/main/docs/incident-response.md#scenario-c-indexer-performance-degradation-slow-queries--ledger-cursor-stalled"
