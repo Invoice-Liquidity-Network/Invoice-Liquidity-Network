@@ -2,6 +2,10 @@
 
 This checklist tracks the requirements that must be verified before ILN mainnet deployment. Each item has an owner, a planning status, a context link, and a repository-local verification artifact. Status alone never establishes launch readiness.
 
+Checklist owner: Release lead
+Last reviewed: 2026-10-19
+Freshness window: 30 days
+
 Status values:
 
 - `Not started`
@@ -73,6 +77,17 @@ Mainnet launch requires completed evidence for every checklist row, a current in
 | SDK lead | @Greymantron | Confirmed | August 30, 2026 |
 | Release lead | @Greymantron | Confirmed | August 30, 2026 |
 | Community lead | @Greymantron | Confirmed | August 30, 2026 |
+
+Independent reviewer sign-off is separate from maintainer attestation. Reviewers must not own checklist items; the readiness rehearsal requires each review area to have a named independent reviewer with a current `Signed` decision.
+
+| Role | Reviewer | Relationship | Sign-off | Date |
+| --- | --- | --- | --- | --- |
+| Protocol lead | TBD | Independent | Pending | TBD |
+| Security lead | TBD | Independent | Pending | TBD |
+| Infrastructure lead | TBD | Independent | Pending | TBD |
+| SDK lead | TBD | Independent | Pending | TBD |
+| Release lead | TBD | Independent | Pending | TBD |
+| Community lead | TBD | Independent | Pending | TBD |
 
 ## Launch Evidence Gate
 

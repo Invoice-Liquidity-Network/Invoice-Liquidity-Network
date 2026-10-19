@@ -1,0 +1,40 @@
+name: Mainnet Launch Readiness
+
+on:
+  pull_request:
+    paths:
+      - 'docs/mainnet-launch-checklist.md'
+      - 'docs/DOCS_SETUP.md'
+      - 'scripts/check-mainnet-launch-readiness.mjs'
+      - 'scripts/__tests__/mainnet-launch-readiness.test.js'
+      - '.github/workflows/mainnet-launch-readiness.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  readiness:
+    name: Validate checklist and rehearse launch gate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate checklist control tests
+        run: node --test scripts/__tests__/mainnet-checklist-parser.test.js scripts/__tests__/mainnet-launch-readiness.test.js
+
+      - name: Validate checklist metadata and evidence
+        if: github.event_name == 'pull_request'
+        run: node scripts/check-mainnet-launch-readiness.mjs --report mainnet-checklist-readiness.json
+
+      - name: Run fail-closed prelaunch rehearsal
+        if: github.event_name == 'workflow_dispatch'
+        run: node scripts/check-mainnet-launch-readiness.mjs --rehearsal --report mainnet-checklist-readiness.json
+
+      - name: Upload readiness evidence
+        if: always() && hashFiles('mainnet-checklist-readiness.json') != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: mainnet-checklist-readiness-${{ github.run_id }}
+          path: mainnet-checklist-readiness.json
+          if-no-files-found: error
