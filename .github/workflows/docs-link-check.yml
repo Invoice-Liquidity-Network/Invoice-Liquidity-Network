@@ -10,6 +10,9 @@ on:
       - 'docs/**'
       - 'packages/docs/content/**'
       - '*.md'
+      - 'scripts/check-doc-links.mjs'
+      - 'scripts/__tests__/check-doc-links.test.mjs'
+      - 'package.json'
       - '.github/markdown-link-check.json'
       - '.github/workflows/docs-link-check.yml'
   push:
@@ -19,7 +22,11 @@ on:
       - 'docs/**'
       - 'packages/docs/content/**'
       - '*.md'
+      - 'scripts/check-doc-links.mjs'
+      - 'scripts/__tests__/check-doc-links.test.mjs'
+      - 'package.json'
       - '.github/markdown-link-check.json'
+      - '.github/workflows/docs-link-check.yml'
   schedule:
     # Catch external link rot (moved or removed third-party pages) even on
     # weeks with no doc changes.
@@ -47,32 +54,38 @@ jobs:
         with:
           node-version: '20'
 
-      - name: Check links in docs/
-        run: |
-          node scripts/check-doc-links.mjs 'docs/**/*.md'
+      - name: Test documentation link-check guard
+        run: node --test scripts/__tests__/check-doc-links.test.mjs
 
-      - name: Check links in packages/docs/content/
+      - name: Check all documentation links and assert coverage
         run: |
-          node scripts/check-doc-links.mjs 'packages/docs/content/**/*.mdx'
+          set -euo pipefail
+          check_scope() {
+            local label="$1"
+            local expected="$2"
+            shift 2
+            local output checked
+            output=$(node scripts/check-doc-links.mjs "$@")
+            printf '%s\n' "$output"
+            checked=$(printf '%s\n' "$output" | sed -n 's/^Checked \([0-9][0-9]*\) files,.*/\1/p')
+            if [ "$checked" != "$expected" ]; then
+              echo "Coverage mismatch for $label: checker scanned ${checked:-none}, expected $expected" >&2
+              exit 2
+            fi
+            echo "| $label | $checked | passed |" >> "$GITHUB_STEP_SUMMARY"
+          }
 
-      - name: Check links in root markdown files
-        run: |
-          node scripts/check-doc-links.mjs README.md CONTRIBUTING.md SECURITY.md DEPLOYMENT_GUIDE.md CHANGELOG.md
-
-      - name: Assert expected doc coverage
-        run: |
-          # Fail if the number of files checked drops unexpectedly.
-          # This check intentionally uses only the runner's built-in tools;
-          # the link-check job does not install project dependencies.
-          COUNT=$(find docs -type f -name '*.md' | wc -l)
-          COUNT=$((COUNT + $(find packages/docs/content -type f -name '*.mdx' | wc -l)))
+          docs_count=$(find docs -type f -name '*.md' | wc -l | tr -d ' ')
+          content_count=$(find packages/docs/content -type f -name '*.mdx' | wc -l | tr -d ' ')
+          root_count=0
           for file in README.md CONTRIBUTING.md SECURITY.md DEPLOYMENT_GUIDE.md CHANGELOG.md; do
-            if [ -f "$file" ]; then COUNT=$((COUNT + 1)); fi
+            if [ -f "$file" ]; then root_count=$((root_count + 1)); fi
           done
-          echo "Docs files checked: $COUNT"
-          # Current tree has 133 checked files; allow moderate pruning while
-          # still detecting a broad accidental drop from the docs surface.
-          if [ "$COUNT" -lt 130 ]; then
-            echo "Unexpected drop in docs coverage: $COUNT < 130" >&2
-            exit 2
-          fi
+
+          echo '### Documentation link check' >> "$GITHUB_STEP_SUMMARY"
+          echo 'Owner: Docs lead. Recovery: inspect the failed path or HTTP status, repair the destination, and rerun this workflow. Network-unavailable external links are reported as warnings by the checker.' >> "$GITHUB_STEP_SUMMARY"
+          echo '| Scope | Files checked | Result |' >> "$GITHUB_STEP_SUMMARY"
+          echo '|---|---:|---|' >> "$GITHUB_STEP_SUMMARY"
+          check_scope 'docs/' "$docs_count" 'docs/**/*.md'
+          check_scope 'packages/docs/content/' "$content_count" 'packages/docs/content/**/*.mdx'
+          check_scope 'root Markdown' "$root_count" README.md CONTRIBUTING.md SECURITY.md DEPLOYMENT_GUIDE.md CHANGELOG.md

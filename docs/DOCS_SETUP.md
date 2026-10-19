@@ -1,21 +1,21 @@
 # Docs Setup and Migration Guide
 
 This file covers two things:
-1. **Migration checklist** — tracking progress from `docs/` (Nextra 2) to
-   `packages/docs/` (Nextra 3 / App Router), which is the canonical deployed site.
+1. **Migration checklist** — tracking content from the legacy `docs/` source
+   into `packages/docs/` (Nextra 3 / App Router), the canonical deployed site.
 2. **Developer setup** — how to run each site locally and how CI/deploy works.
 
 ---
 
-## Canonical vs. legacy sites at a glance
+## Canonical site and legacy content source
 
-| | `docs/` | `packages/docs/` |
+| | `docs/` (legacy content source) | `packages/docs/` (canonical site) |
 |---|---|---|
 | Package name | `@invoice-liquidity/docs` | `@invoice-liquidity/docs-next` |
-| Framework | Nextra 2, Next.js 14, Pages Router | Nextra 3, Next.js 15, App Router |
+| Framework | Nextra 2, Next.js 14, Pages Router (local preview only) | Nextra 3, Next.js 15, App Router |
 | Deployed? | **No** | **Yes — docs.iln.finance** |
 | CNAME | — | `docs.iln.finance` |
-| Built by CI | `docs-deploy.yml` triggers build validation | `docs-deploy.yml` builds & deploys `packages/docs/dist` |
+| Built by CI | Not built or deployed as a site | `docs-deploy.yml` builds & deploys `packages/docs/dist` |
 | Changelog target | `docs/changelog.md` (auto-committed by `docs-changelog.yml`) | — |
 | Content source | `docs/*.md` | `packages/docs/content/*.mdx` |
 | Navigation | `_meta.json` — checked by `scripts/check-meta-nav.mjs` | `_meta.ts` — parse-validated by `scripts/validate-canonical-nav.mjs` |
@@ -78,8 +78,8 @@ the `check-meta-nav` job of `docs-deploy.yml`). The check fails when:
 - [ ] Threat model (`docs/threat-model.md`)
 - [ ] Glossary (`docs/glossary.md`)
 - [ ] Changelog page (`docs/changelog.md`)
-- [ ] SDK migration guide (`docs/sdk-migration-guide.md`)
-- [ ] SDK E2E testing guide (`docs/sdk-e2e.md`)
+- [x] SDK migration guide (`docs/sdk-migration-guide.md` → `packages/docs/content/sdk-reference/migration-guide.mdx`)
+- [x] SDK E2E testing guide (`docs/sdk-e2e.md` → `packages/docs/content/sdk-reference/e2e-testing.mdx`)
 - [ ] SDK trust model (`docs/sdk-trust-model.md`)
 - [ ] SDK next migration notes (`docs/sdk-next-migration.md`)
 - [ ] Release process (`docs/release-process.md`)
@@ -117,6 +117,7 @@ the `check-meta-nav` job of `docs-deploy.yml`). The check fails when:
 - [ ] Monorepo map (`docs/monorepo-map.md`)
 - [ ] Release runbook (`docs/release-runbook.md`)
 - [ ] Project board (`docs/project-board.md`)
+- [x] Launch communications evidence (`docs/evidence/launch-communications.md` → `packages/docs/content/launch-communications.mdx`)
 - [ ] E2E test scope (`docs/e2e-test-scope.md`)
 - [ ] Flaky test quarantine (`docs/flaky-test-quarantine.md`)
 - [ ] Load test harness (`docs/load-test-harness.md`)
@@ -219,9 +220,9 @@ the `check-meta-nav` job of `docs-deploy.yml`). The check fails when:
 
 ### Mainnet launch readiness and evidence
 
-Run `node scripts/check-mainnet-launch-readiness.mjs` to validate owner metadata, freshness, reviewer independence, and local evidence links. Run `node scripts/validate-mainnet-launch-evidence.mjs` to verify every checklist row has a repository-local verification artifact and no legacy SDK API reference remains. Pull-request CI runs both structural checks and their regression tests.
+Run [`check-mainnet-launch-readiness.mjs`](../scripts/check-mainnet-launch-readiness.mjs) to validate owner metadata, freshness, reviewer independence, and local evidence links. Run [`validate-mainnet-launch-evidence.mjs`](../scripts/validate-mainnet-launch-evidence.mjs) to verify every checklist row has a repository-local verification artifact and no legacy SDK API reference remains. Pull-request CI runs both structural checks and their regression tests in the [Mainnet Launch Readiness workflow](../.github/workflows/mainnet-launch-readiness.yml); the independent audit gate runs in the [Mainnet Launch Evidence workflow](../.github/workflows/mainnet-launch-evidence.yml).
 
-Before launch, dispatch the `Mainnet Launch Readiness` workflow for the checklist rehearsal and the `Mainnet Launch Evidence` workflow for the audit gate. The rehearsal requires every checklist row to be `Done` or `Launch exception accepted` and fresh independent reviewer sign-offs. The audit gate requires a complete independent external audit covering the manifest's required scope, no unresolved findings (or documented accepted findings), completion within the last 365 days, and a downloadable HTTPS report whose SHA-256 matches `docs/evidence/external-security-audit.json`. Both gates fail closed and publish JSON/summary evidence. The Release lead owns checklist and manifest updates and recovery.
+Before launch, dispatch the [Mainnet Launch Readiness workflow](../.github/workflows/mainnet-launch-readiness.yml) for the checklist rehearsal and the [Mainnet Launch Evidence workflow](../.github/workflows/mainnet-launch-evidence.yml) for the audit gate. The rehearsal requires every checklist row to be `Done` or `Launch exception accepted` and fresh independent reviewer sign-offs. The audit gate requires a complete independent external audit covering the manifest's required scope, no unresolved findings (or documented accepted findings), completion within the last 365 days, and a downloadable HTTPS report whose SHA-256 matches [`docs/evidence/external-security-audit.json`](evidence/external-security-audit.json). Both gates fail closed and publish JSON/summary evidence. The Release lead owns checklist and manifest updates and recovery.
 
 This control changes no adjacent service API or cross-repository package contract; it consumes existing repository documentation and CI artifacts only.
 
@@ -236,15 +237,16 @@ pnpm --filter @invoice-liquidity/docs-next build
 # Produces packages/docs/dist/ — same bundle CI deploys
 ```
 
-### Legacy site — `docs/` (not deployed, content source)
+### Legacy local preview — `docs/` (not deployed)
 
 ```bash
 # From repo root
 pnpm --filter @invoice-liquidity/docs dev
+# Optional local preview of the legacy source; not the deployed documentation site.
 # Runs at http://localhost:3000
 
 pnpm --filter @invoice-liquidity/docs build
-# Build-validates the Nextra 2 site locally
+# Optional local validation of the Nextra 2 source
 ```
 
 ---

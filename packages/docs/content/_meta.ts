@@ -15,6 +15,10 @@ export default {
     title: 'SDK Reference',
     type: 'page',
   },
+  'launch-communications': {
+    title: 'Launch Communications Evidence',
+    type: 'page',
+  },
   'frontend-guide': {
     title: 'Frontend Guide',
     type: 'page',

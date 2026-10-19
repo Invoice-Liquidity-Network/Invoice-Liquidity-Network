@@ -57,7 +57,7 @@ Status values:
 | CONTRIBUTING current | Confirm contribution workflow, branch expectations, tests, and security reporting guidance are current. | Maintainers | Done | [`CONTRIBUTING.md`](../CONTRIBUTING.md) | [Contribution guide](../CONTRIBUTING.md) |
 | SECURITY current | Confirm root security policy and docs security page are aligned. | Security lead | Done | [`SECURITY.md`](../SECURITY.md) | [Security policy](../SECURITY.md) |
 | CHANGELOG current | Confirm release notes describe mainnet readiness changes and any breaking changes. | Release lead | Done | [`CHANGELOG.md`](../CHANGELOG.md) | [Changelog](../CHANGELOG.md) |
-| Community announcement prepared | Prepare launch announcement, support channels, incident contact, and maintainer availability plan. | Community lead | Done | [Community announcement](community-announcement.md) | [Community announcement](community-announcement.md) |
+| Community announcement prepared | Prepare launch announcement, support channels, incident contact, and maintainer availability plan. | Community lead | In progress | [Community announcement](community-announcement.md) | [Launch communications evidence](evidence/launch-communications.md) |
 
 ## Automatic Status Updates
 
@@ -91,7 +91,7 @@ Independent reviewer sign-off is separate from maintainer attestation. Reviewers
 
 ## Launch Evidence Gate
 
-Run `node scripts/validate-mainnet-launch-evidence.mjs` to verify checklist artifact links and canonical API references. Before launch, dispatch the `Mainnet Launch Evidence` workflow. It downloads the independent auditor's HTTPS report, enforces the 365-day freshness limit and required audit scope, verifies its SHA-256 digest, and fails closed on unavailable or mismatched evidence. CI uploads a JSON report and writes findings, owner, and recovery instructions to the workflow summary.
+Run [`validate-mainnet-launch-evidence.mjs`](../scripts/validate-mainnet-launch-evidence.mjs) to verify checklist artifact links and canonical API references. Before launch, dispatch the [Mainnet Launch Evidence workflow](../.github/workflows/mainnet-launch-evidence.yml). It downloads the independent auditor's HTTPS report, enforces the 365-day freshness limit and required audit scope, verifies its SHA-256 digest, and fails closed on unavailable or mismatched evidence. CI uploads a JSON report and writes findings, owner, and recovery instructions to the workflow summary.
 
 The Release lead owns recovery. Complete `docs/evidence/external-security-audit.json` only after the independent audit is published; record the completion date, full required scope, finding disposition, immutable HTTPS artifact URL, and SHA-256 digest. Do not mark the audit complete using a placeholder or a test artifact.
 
