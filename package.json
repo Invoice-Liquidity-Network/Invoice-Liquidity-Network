@@ -4,7 +4,7 @@
   "scripts": {
     "test": "turbo run test",
     "test:coverage": "turbo run test:coverage",
-    "test:e2e": "vitest run tests/e2e/*.test.ts",
+    "test:e2e": "vitest run --config vitest.e2e.config.ts",
     "e2e:provision-contract": "node scripts/provision-e2e-contract.mjs",
     "check:e2e-coverage": "node scripts/check-e2e-coverage.mjs --report=.artifacts/e2e-results.json",
     "test:e2e-guards": "node --test scripts/__tests__/check-e2e-coverage.test.mjs scripts/__tests__/provision-e2e-contract.test.mjs scripts/__tests__/provision-e2e-node.test.mjs scripts/__tests__/wait-for-stellar-rpc.test.mjs",
