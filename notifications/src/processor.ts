@@ -61,6 +61,18 @@ export async function processEvent(event: rpc.Api.EventResponse): Promise<void> 
   }
 
   const invoiceId = Number(scValToNative(event.value) as bigint);
+
+  // Issue #1274: Retrieve invoice BEFORE recording event in database.
+  // If fetchInvoice fails or returns null (RPC/indexer lag), do not record the event,
+  // so subsequent polls can retry the event without being treated as a duplicate.
+  const invoice = await fetchInvoice(invoiceId);
+  if (!invoice) {
+    console.warn(
+      `[processor] Could not retrieve invoice ${invoiceId} for event ${event.id}; skipping event record to allow retry`
+    );
+    return;
+  }
+
   insertEvent({
     event_id: event.id,
     event_type: eventType as ILNEventType,
@@ -69,11 +81,6 @@ export async function processEvent(event: rpc.Api.EventResponse): Promise<void> 
     ledger_closed_at: event.ledgerClosedAt,
     created_at: Date.now(),
   });
-
-  const invoice = await fetchInvoice(invoiceId);
-  if (!invoice) {
-    return;
-  }
 
   upsertInvoice(invoice);
   const trigger = EVENT_TO_TRIGGER[eventType as ILNEventType];
