@@ -54,8 +54,8 @@ page renders correctly on the deployed site.
 
 - [ ] Local development guide (`docs/local-development.md`)
 - [ ] CI/CD reference (`docs/ci-cd.md`)
-- [ ] Security guide (`docs/security-guide.md`)
-- [ ] Threat model (`docs/threat-model.md`)
+- [x] Security guide (`docs/security-guide.md` → `packages/docs/content/security-guide.mdx`)
+- [x] Threat model (`docs/threat-model.md` → `packages/docs/content/threat-model.mdx`)
 - [ ] Glossary (`docs/glossary.md`)
 - [ ] Changelog page (`docs/changelog.md`)
 - [ ] SDK migration guide (`docs/sdk-migration-guide.md`)

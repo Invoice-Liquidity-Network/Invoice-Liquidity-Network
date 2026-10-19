@@ -173,7 +173,9 @@
     "verify:indexer-ops": "node scripts/operations/verify-indexer-operations.mjs",
     "test:indexer-ops": "node --test scripts/__tests__/verify-indexer-operations.test.mjs",
     "verify:readiness-controls-doc": "node scripts/operations/verify-mainnet-readiness-controls-doc.mjs",
-    "test:readiness-controls-doc": "node --test scripts/__tests__/verify-mainnet-readiness-controls-doc.test.mjs"
+    "test:readiness-controls-doc": "node --test scripts/__tests__/verify-mainnet-readiness-controls-doc.test.mjs",
+    "verify:security-docs-port": "node scripts/operations/verify-security-docs-port.mjs",
+    "test:security-docs-port": "node --test scripts/__tests__/verify-security-docs-port.test.mjs"
   },
   "devDependencies": {
     "@changesets/cli": "^2.31.0",
