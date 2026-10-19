@@ -100,7 +100,8 @@
     "test:dependency-failure-injection": "node --test scripts/__tests__/service-dependency-failure-injection.test.mjs",
     "test:emergency-disable": "node --test scripts/__tests__/emergency-feature-disable.test.mjs",
     "validate:dashboard": "node scripts/validate-monitoring-dashboard.mjs",
-    "test:dashboard": "node --test scripts/__tests__/validate-monitoring-dashboard.test.mjs"
+    "test:dashboard": "node --test scripts/__tests__/validate-monitoring-dashboard.test.mjs",
+    "test:rollback-criteria": "node --test scripts/__tests__/release-rollback-criteria.test.mjs"
   },
   "devDependencies": {
     "@changesets/cli": "^2.31.0",
