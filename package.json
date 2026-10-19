@@ -134,7 +134,9 @@
     "verify:redemption-pricing": "node scripts/operations/redemption-pricing-guard.mjs",
     "test:redemption-pricing": "node --test scripts/__tests__/redemption-pricing-guard.test.mjs",
     "verify:anchor-policy": "node scripts/operations/settlement-anchor-policy.mjs",
-    "test:anchor-policy": "node --test scripts/__tests__/settlement-anchor-policy.test.mjs"
+    "test:anchor-policy": "node --test scripts/__tests__/settlement-anchor-policy.test.mjs",
+    "verify:anchor-evidence": "node scripts/drills/verify-anchor-enforcement-evidence.mjs",
+    "test:anchor-evidence": "node --test scripts/__tests__/settlement-anchor-enforcement-evidence.test.mjs"
   },
   "devDependencies": {
     "@changesets/cli": "^2.31.0",
