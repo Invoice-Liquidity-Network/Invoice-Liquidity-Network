@@ -190,7 +190,9 @@
     "test:react-sdk-alignment": "node --test scripts/__tests__/verify-react-sdk-alignment.test.mjs",
     "verify:sdk-examples": "node scripts/operations/verify-sdk-examples-alignment.mjs",
     "test:sdk-examples": "node --test scripts/__tests__/verify-sdk-examples-alignment.test.mjs",
-    "test:deprecated-sdk-warnings": "node --test scripts/__tests__/deprecated-sdk-warnings.test.mjs"
+    "test:deprecated-sdk-warnings": "node --test scripts/__tests__/deprecated-sdk-warnings.test.mjs",
+    "verify:consumer-install": "node scripts/operations/test-consumer-install-resolution.mjs",
+    "test:consumer-install": "node --test scripts/__tests__/test-consumer-install-resolution.test.mjs"
   },
   "devDependencies": {
     "@changesets/cli": "^2.31.0",
