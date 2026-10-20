@@ -95,3 +95,36 @@ test('doc link check warns when external fetch fails but fails on an HTTP error 
   assert.equal(broken.warning, null);
   assert.match(broken.problem, /404/);
 });
+
+test('doc link check treats rate limiting and server errors as unverified, not broken', async () => {
+  for (const status of [429, 500, 502, 503, 504]) {
+    const result = await checkExternalLink('https://docs.example.invalid', async () => ({
+      ok: false,
+      status,
+    }));
+    assert.equal(result.problem, null, `HTTP ${status}`);
+    assert.match(result.warning, new RegExp(`HTTP ${status}`));
+  }
+  const gone = await checkExternalLink('https://docs.example.invalid', async () => ({
+    ok: false,
+    status: 410,
+  }));
+  assert.match(gone.problem, /410/);
+});
+
+test('doc link check retries HEAD rejections with GET before judging the link', async () => {
+  for (const status of [403, 405, 501]) {
+    const methods = [];
+    const ok = await checkExternalLink('https://docs.example.invalid', async (_url, init) => {
+      methods.push(init.method);
+      return init.method === 'HEAD' ? { ok: false, status } : { ok: true, status: 200 };
+    });
+    assert.deepEqual(methods, ['HEAD', 'GET']);
+    assert.deepEqual(ok, { problem: null, warning: null });
+  }
+  const forbidden = await checkExternalLink('https://docs.example.invalid', async () => ({
+    ok: false,
+    status: 403,
+  }));
+  assert.match(forbidden.problem, /403/);
+});
