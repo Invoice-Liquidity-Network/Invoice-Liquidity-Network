@@ -14,6 +14,8 @@
     "test:reproducible-builds": "node scripts/verify-reproducible-builds.mjs",
     "test:compatibility": "vitest run scripts/__tests__/check-compatibility.test.ts",
     "test:audit": "node --test scripts/__tests__/dependency-audit.test.js",
+    "check:security-docs": "node scripts/check-security-docs.mjs",
+    "test:security-docs": "node --test scripts/__tests__/security-docs.test.mjs",
     "test:docs-nav": "node --test scripts/__tests__/docs-nav.test.mjs scripts/__tests__/docs-migration.test.mjs",
     "test:load": "ts-node --esm scripts/load-test.ts",
     "test:load:indexer": "ts-node --esm scripts/load-test-indexer.ts",

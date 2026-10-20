@@ -35,6 +35,10 @@ export default {
     title: 'API Reference',
     type: 'page',
   },
+  security: {
+    title: 'Security',
+    type: 'page',
+  },
   tutorials: {
     title: 'Tutorials',
     type: 'page',
