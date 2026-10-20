@@ -24,16 +24,29 @@ function resolveSiteRoute(route, contentRoot) {
   return candidates.find(existsSync) ?? null;
 }
 
+// HTTP statuses that say "the site would not answer this client right now",
+// not "the page is gone": rate limiting and server errors. They are reported
+// as warnings, like network failures, so a busy or bot-blocking site cannot
+// fail an unrelated pull request. 404/410 and other client errors still fail.
+const TRANSIENT_STATUSES = new Set([429, 500, 502, 503, 504]);
+// Some servers reject HEAD (405/501) or bot-like HEAD requests (403) while
+// serving the page to GET; those are retried once with GET before judging.
+const RETRY_WITH_GET = new Set([403, 405, 501]);
+
 async function checkExternalLink(url, fetchImpl = fetch) {
   try {
-    const response = await fetchImpl(url, {
-      method: 'HEAD',
-      redirect: 'follow',
-      signal: AbortSignal.timeout(5000),
-    });
-    return response.ok
-      ? { problem: null, warning: null }
-      : { problem: `external ${url} -> ${response.status}`, warning: null };
+    const request = (method) =>
+      fetchImpl(url, { method, redirect: 'follow', signal: AbortSignal.timeout(5000) });
+    let response = await request('HEAD');
+    if (!response.ok && RETRY_WITH_GET.has(response.status)) response = await request('GET');
+    if (response.ok) return { problem: null, warning: null };
+    if (TRANSIENT_STATUSES.has(response.status)) {
+      return {
+        problem: null,
+        warning: `external ${url} could not be verified: HTTP ${response.status} (transient)`,
+      };
+    }
+    return { problem: `external ${url} -> ${response.status}`, warning: null };
   } catch (error) {
     // Network failures mean the link could not be verified; they do not prove
     // the destination is broken. Keep HTTP error responses as hard failures.
