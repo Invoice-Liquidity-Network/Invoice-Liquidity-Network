@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { readFileSync, existsSync } from 'fs';
-import { resolve, dirname, join, sep } from 'path';
+import { resolve, dirname, join, relative, sep } from 'path';
 import { readdir } from 'fs/promises';
 import { pathToFileURL } from 'url';
 
@@ -154,7 +154,14 @@ async function main() {
     if (r.problems.length) {
       failed++;
       console.error(`\nProblems in ${r.file}:`);
-      for (const p of r.problems) console.error(` - ${p}`);
+      for (const p of r.problems) {
+        console.error(` - ${p}`);
+        // Surface each broken link as a GitHub annotation so it is visible on
+        // the check run without opening the raw log.
+        if (process.env.GITHUB_ACTIONS === 'true') {
+          console.log(`::error file=${relative(repoRoot, r.file)}::${p.replace(/\r?\n/g, ' ')}`);
+        }
+      }
     }
     for (const warning of r.warnings ?? []) console.warn(`⚠️ ${r.file}: ${warning}`);
   }
