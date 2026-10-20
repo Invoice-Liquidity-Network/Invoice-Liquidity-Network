@@ -864,44 +864,6 @@ export function recordForkDecision(
   return Number(info.lastInsertRowid);
 }
 
-/** Complete a fork replacement decision after rollback and state reconciliation. */
-export function completeForkDecision(
-  id: number,
-  eventsRemoved: number,
-  invoicesAffected: number
-): void {
-  const db = getDb();
-  db.prepare(
-    `UPDATE fork_decisions
-     SET status = 'completed',
-         events_removed = ?,
-         invoices_affected = ?,
-         resolved_at = ?
-     WHERE id = ?`
-  ).run(eventsRemoved, invoicesAffected, Date.now(), id);
-
-  try {
-    reorgForkDecisionsTotal.inc({ status: 'completed' });
-    reorgPendingDecisions.dec();
-  } catch {}
-}
-
-/** Abort a fork replacement decision if the cycle aborts due to unstable reorg. */
-export function abortForkDecision(id: number): void {
-  const db = getDb();
-  db.prepare(
-    `UPDATE fork_decisions
-     SET status = 'aborted',
-         resolved_at = ?
-     WHERE id = ?`
-  ).run(Date.now(), id);
-
-  try {
-    reorgForkDecisionsTotal.inc({ status: 'aborted' });
-    reorgPendingDecisions.dec();
-  } catch {}
-}
-
 /** Return any pending in-progress fork decision from a prior crashed run. */
 export function getPendingForkDecision(): ForkDecision | undefined {
   const db = getDb();
