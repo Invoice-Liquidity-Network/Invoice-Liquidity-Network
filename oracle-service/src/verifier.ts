@@ -414,7 +414,7 @@ export function assessOracleRequest(input: OracleAssessmentInput): OracleAssessm
   let kybPassed = true;
   if (input.kybResult) {
     computed.evidence.push(
-      `KYB verification (${input.kybResult.provider}): ${input.kybResult.isVerified ? 'VERIFIED' : 'UNVERIFIED'} - Business: ${input.kybResult.businessName || 'N/A'}`
+      sanitizeKybEvidenceString(`KYB verification (${input.kybResult.provider}): ${input.kybResult.isVerified ? 'VERIFIED' : 'UNVERIFIED'} - Business: ${input.kybResult.businessName || 'N/A'}`)
     );
     if (input.kybResult.signals && input.kybResult.signals.length > 0) {
       computed.evidence.push(`KYB signals: ${input.kybResult.signals.join('; ')}`);

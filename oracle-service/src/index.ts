@@ -496,7 +496,7 @@ async function createHistoryProvider(
       // Log the error for monitoring but don't fail the entire verification
       const errorMessage = error instanceof Error ? error.message : String(error);
       // eslint-disable-next-line no-console
-      console.warn(`[oracle] indexer unavailable for payer ${payer}: ${errorMessage}`);
+      console.warn(`[oracle] indexer unavailable for payer ${maskPayerAddress(payer)}: ${errorMessage}`);
       throw error;
     }
   };
