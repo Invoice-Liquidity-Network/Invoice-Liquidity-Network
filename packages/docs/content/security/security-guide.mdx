@@ -13,11 +13,11 @@ For package provenance verification, see [Package provenance](#package-provenanc
 
 ILN protects three classes of assets:
 
-| Asset | Protection mechanism |
-|---|---|
-| On-chain funds (XLM, USDC) | Smart contract authorization; only the designated account can sign |
-| Transaction integrity | Transactions are built, simulated, and submitted from the same validated object |
-| Off-chain service data | Rate limiting, request timeouts, pagination caps, and input validation at API boundaries |
+| Asset                      | Protection mechanism                                                                     |
+| -------------------------- | ---------------------------------------------------------------------------------------- |
+| On-chain funds (XLM, USDC) | Smart contract authorization; only the designated account can sign                       |
+| Transaction integrity      | Transactions are built, simulated, and submitted from the same validated object          |
+| Off-chain service data     | Rate limiting, request timeouts, pagination caps, and input validation at API boundaries |
 
 **Trust model:**
 
@@ -75,6 +75,7 @@ npm audit signatures
 ```
 
 Expected output for the installed SDK:
+
 ```
 1 package has a verified registry signature
 1 package has a verified attestation
@@ -101,14 +102,14 @@ RATE_LIMIT_WHITELIST=10.0.0.5,10.0.0.6
 The indexer and oracle APIs send these headers on every response — successes,
 404s, 429s and errors alike — and do not advertise `X-Powered-By`:
 
-| Header | Value |
-|---|---|
-| `X-Frame-Options` | `DENY` |
-| `Content-Security-Policy` | `frame-ancestors 'none'; base-uri 'none'; form-action 'self'; object-src 'none'` |
-| `X-Content-Type-Options` | `nosniff` |
-| `Referrer-Policy` | `no-referrer` |
-| `Cross-Origin-Resource-Policy` | `same-site` |
-| `Strict-Transport-Security` | `max-age=31536000; includeSubDomains` — HTTPS requests only, via the trusted proxy |
+| Header                         | Value                                                                              |
+| ------------------------------ | ---------------------------------------------------------------------------------- |
+| `X-Frame-Options`              | `DENY`                                                                             |
+| `Content-Security-Policy`      | `frame-ancestors 'none'; base-uri 'none'; form-action 'self'; object-src 'none'`   |
+| `X-Content-Type-Options`       | `nosniff`                                                                          |
+| `Referrer-Policy`              | `no-referrer`                                                                      |
+| `Cross-Origin-Resource-Policy` | `same-site`                                                                        |
+| `Strict-Transport-Security`    | `max-age=31536000; includeSubDomains` — HTTPS requests only, via the trusted proxy |
 
 No service sends `Access-Control-Allow-Origin`, so browsers do not let other
 origins read API responses. The CSP restricts framing, plugins and form targets
@@ -257,6 +258,7 @@ GitHub Release as the npm tarball.
 **Format:** CycloneDX JSON (`sbom.json`), version `1.4`.
 
 **How to consume it:**
+
 1. Download `sbom.json` from the GitHub Release assets page.
 2. Use any CycloneDX-compatible tool to inspect it:
    - [`cyclonedx-cli`](https://github.com/CycloneDX/cyclonedx-cli): `cyclonedx-cli view --input sbom.json`
