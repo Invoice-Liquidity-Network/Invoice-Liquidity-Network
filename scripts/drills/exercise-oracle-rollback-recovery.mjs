@@ -199,3 +199,8 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
   console.log(JSON.stringify(outcome.evidenceBundle, null, 2));
   console.log(`Evidence bundle persisted to: ${outcome.evidencePath}`);
 }
+
+export function runOracleRollbackDrill() {
+  const sim = new OracleRollbackRehearsalSimulator();
+  return sim.runFullRehearsal();
+}
