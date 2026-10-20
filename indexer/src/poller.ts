@@ -21,10 +21,6 @@ import { confirmationPolicy, type ConfirmationDepthPolicy } from './policy';
 
 const BATCH_SIZE = 200;
 
-/** Default confirmation depth in ledgers if unspecified. */
-export const DEFAULT_CONFIRMATION_DEPTH = 10;
-export const CONFIRMATION_DEPTH = DEFAULT_CONFIRMATION_DEPTH;
-
 let _activeConfirmationPolicy: ConfirmationDepthPolicy = confirmationPolicy;
 
 /** Return active confirmation depth policy. */
