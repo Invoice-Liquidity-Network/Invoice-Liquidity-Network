@@ -1,3 +1,6 @@
+// Re-export canonical SDK types for React consumers (#1221)
+export type { ILNClient } from '@iln/sdk';
+
 // Context
 export { ILNProvider, useILNClient, ILNContext, ILNProviderNotFoundError } from './context';
 export type { ILNProviderProps } from './context';
