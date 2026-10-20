@@ -14,6 +14,47 @@ Status values:
 - `Done`
 - `Launch exception accepted`
 
+## Launch Readiness Exception Process
+
+The `Launch exception accepted` status is a formal, auditable mechanism for acknowledging that a specific checklist item cannot be completed before launch but the residual risk is understood, documented, and approved by the responsible leads. This status must not be used as a substitute for completing the work.
+
+### Exception Request
+
+1. **Initiation**: The checklist item owner opens a GitHub issue using the [Launch Exception Request template](.github/ISSUE_TEMPLATE/launch-exception-request.yml) (to be created) with:
+   - Checklist item reference (section and row)
+   - Reason the item cannot be completed before launch
+   - Risk assessment: impact, likelihood, and mitigation if the exception is granted
+   - Proposed compensating controls or post-launch remediation plan with target date
+   - Evidence that all reasonable alternatives were exhausted
+
+2. **Review**: The exception request is reviewed by:
+   - The checklist item owner (confirms the gap and proposed mitigation)
+   - The Release lead (assesses cross-cutting impact and launch timeline)
+   - At least one independent reviewer for the relevant domain (Protocol, Security, Infrastructure, SDK, or Community)
+   - The review must be completed within 5 business days of request
+
+3. **Approval**: An exception is granted only when:
+   - All required reviewers have signed off with `Approved` in the issue
+   - The Release lead records the approval in this checklist with `Launch exception accepted` status
+   - The exception issue is linked in the checklist row's `Link` column
+   - A verification artifact documenting the exception rationale, mitigations, and post-launch remediation target is created at `docs/evidence/launch-exceptions/<item-slug>.md`
+
+### Exception Tracking
+
+- All granted exceptions are listed in the [Launch Exceptions Register](evidence/launch-exceptions.md)
+- Each exception entry includes: item reference, exception issue number, approval date, reviewers, risk summary, compensating controls, and post-launch remediation target date
+- Exceptions expire at the stated remediation target date; they must be re-requested if the work remains incomplete
+- The Release lead owns the register and reviews it monthly
+
+### Verification Artifact
+
+The exception process itself is verified by the existence of:
+- The exception request issue template (`.github/ISSUE_TEMPLATE/launch-exception-request.yml`)
+- The launch exceptions register (`docs/evidence/launch-exceptions.md`)
+- At least one completed exception entry (if any exceptions have been granted)
+
+---
+
 ## Security
 
 | Item | Description | Owner | Status | Link | Verification artifact |
@@ -49,6 +90,7 @@ Status values:
 | Glossary complete | Define protocol terminology for DeFi, invoice factoring, Stellar, governance, security, and notifications. | Docs lead | Done | [#301](https://github.com/Invoice-Liquidity-Network/Invoice-Liquidity-Network/issues/301) | [Glossary](glossary.md) |
 | API and SDK guides complete | Confirm SDK, CLI, indexer, and notification API docs match current package behavior. | SDK lead | Done | [Canonical SDK API reference](../packages/docs/content/sdk-reference/api-reference.mdx) | [Canonical SDK API reference](../packages/docs/content/sdk-reference/api-reference.mdx) |
 | Mainnet checklist maintained | Keep this checklist linked from the root README and update statuses as referenced issues close. | Release lead | Done | [#298](https://github.com/Invoice-Liquidity-Network/Invoice-Liquidity-Network/issues/298) | [Checklist status workflow](../.github/workflows/mainnet-checklist-status.yml) |
+| Launch exception process published | Document and implement the launch readiness exception request, review, approval, and tracking process with issue template and register. | Release lead | Done | [Exception process](./mainnet-launch-checklist.md#launch-readiness-exception-process) | [Launch exceptions register](evidence/launch-exceptions.md) |
 
 ## Community
 
