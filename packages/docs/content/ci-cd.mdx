@@ -10,7 +10,7 @@ This repository uses GitHub Actions workflows to cover code quality, security sc
 > `.github/workflows/`, when the pinned-actions table drifts, or when this page names a
 > workflow that does not exist. `actionlint` validates every workflow in the same job.
 > See `docs/runbooks/workflow-policy.md`.
-This repository uses GitHub Environments to protect deployment secrets and ensure audit control over network deployments. Shared CI steps for Stellar testnet and pnpm are provided as **reusable workflows** (`workflow_call`) so the main repo, [ILN-Smart-Contract](https://github.com/Invoice-Liquidity-Network/ILN-Smart-Contract), and [ILN-Frontend](https://github.com/Invoice-Liquidity-Network/ILN-Frontend) can reuse the same logic.
+> This repository uses GitHub Environments to protect deployment secrets and ensure audit control over network deployments. Shared CI steps for Stellar testnet and pnpm are provided as **reusable workflows** (`workflow_call`) so the main repo, [ILN-Smart-Contract](https://github.com/Invoice-Liquidity-Network/ILN-Smart-Contract), and [ILN-Frontend](https://github.com/Invoice-Liquidity-Network/ILN-Frontend) can reuse the same logic.
 
 ## Token permissions (least privilege)
 
@@ -35,18 +35,18 @@ declared scope.
 
 **Scope-by-workflow summary**
 
-| Scope | Workflows |
-| ----- | --------- |
-| `contents: read` only | `codeql` (top-level), `coverage`, `e2e`, `e2e-nightly`, `knip`, `pr-title-lint`, `snyk`, `sdk-browser-tests`, `sdk-e2e-local-node`, `docs-deploy` (default), `deploy` (default), `cross-repo-sync`, `indexer-migrations`, `reusable-cache-pnpm`, `reusable-stellar-setup`; read-only top-level default on `release`, `sdk-release` |
-| `permissions: {}` (none) | `reusable-testnet-health` (HTTP probe only) |
-| `contents: write` | `cli-docs`, `docs-changelog` (commit regenerated docs) |
-| `contents: write` + `pull-requests: write` | `mainnet-checklist-status` (open checklist PR) |
-| `contents: write` + `actions: write` | `coordinate-release` (tag sibling repos, trigger their workflows) |
-| `contents: read` + `pull-requests: write` | `ci`, `changeset-check` (comment status on PRs) |
-| `security-events: write` (job-level) | `codeql` analyze jobs (upload results) |
-| `pages: write` + `id-token: write` (job-level) | `docs-deploy` `deploy` job (OIDC Pages deploy); its `check-meta-nav` and `build` jobs add `pull-requests: write` for failure comments, and `build` `pages: read` for `configure-pages` |
-| `contents: write` + `id-token: write` (job-level) | `release`, `sdk-release` publish jobs (GitHub Release + npm provenance) |
-| `issues: write` | `project-board` (move cards; falls back to `PROJECT_PAT`) |
+| Scope                                             | Workflows                                                                                                                                                                                                                                                                                                                          |
+| ------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `contents: read` only                             | `codeql` (top-level), `coverage`, `e2e`, `e2e-nightly`, `knip`, `pr-title-lint`, `snyk`, `sdk-browser-tests`, `sdk-e2e-local-node`, `docs-deploy` (default), `deploy` (default), `cross-repo-sync`, `indexer-migrations`, `reusable-cache-pnpm`, `reusable-stellar-setup`; read-only top-level default on `release`, `sdk-release` |
+| `permissions: {}` (none)                          | `reusable-testnet-health` (HTTP probe only)                                                                                                                                                                                                                                                                                        |
+| `contents: write`                                 | `cli-docs`, `docs-changelog` (commit regenerated docs)                                                                                                                                                                                                                                                                             |
+| `contents: write` + `pull-requests: write`        | `mainnet-checklist-status` (open checklist PR)                                                                                                                                                                                                                                                                                     |
+| `contents: write` + `actions: write`              | `coordinate-release` (tag sibling repos, trigger their workflows)                                                                                                                                                                                                                                                                  |
+| `contents: read` + `pull-requests: write`         | `ci`, `changeset-check` (comment status on PRs)                                                                                                                                                                                                                                                                                    |
+| `security-events: write` (job-level)              | `codeql` analyze jobs (upload results)                                                                                                                                                                                                                                                                                             |
+| `pages: write` + `id-token: write` (job-level)    | `docs-deploy` `deploy` job (OIDC Pages deploy); its `check-meta-nav` and `build` jobs add `pull-requests: write` for failure comments, and `build` `pages: read` for `configure-pages`                                                                                                                                             |
+| `contents: write` + `id-token: write` (job-level) | `release`, `sdk-release` publish jobs (GitHub Release + npm provenance)                                                                                                                                                                                                                                                            |
+| `issues: write`                                   | `project-board` (move cards; falls back to `PROJECT_PAT`)                                                                                                                                                                                                                                                                          |
 
 The table groups the common shapes; the [workflow inventory](#workflow-inventory-generated)
 lists every workflow's exact top-level permissions and is regenerated from the files.
@@ -72,21 +72,21 @@ party `actions/*` actions are trusted and left on major-version tags.
 
 **Currently pinned third-party actions**
 
-| Action | Pinned version |
-| ------ | -------------- |
-| `pnpm/action-setup` | v4.4.0 (v3.0.0 in `weekly-observability-digest`) |
-| `dorny/paths-filter` | v3.0.3 |
-| `dorny/test-reporter` | v2.7.0 |
-| `codecov/codecov-action` | v5.5.5 |
-| `github/codeql-action` (`init` + `analyze`) | v3.37.3 |
-| `taiki-e/install-action` | v2.85.1 (with `tool: cargo-llvm-cov`) |
-| `softprops/action-gh-release` | v2.6.2 |
-| `changesets/action` | v1.9.0 |
-| `peter-evans/create-pull-request` | v6.1.0 |
-| `dtolnay/rust-toolchain` | `stable` branch @ `2c7215f` (with explicit `toolchain: stable`) |
-| `upptime/uptime-monitor` | `master` @ `c540f23` |
-| `snyk/actions/setup` | `master` @ `8e119fb` |
-| `CycloneDX/gh-node-module-generatebom` | v1.0.3 (`sdk-release` SBOM; previously referenced as `1.4.0`, a tag that never existed) |
+| Action                                      | Pinned version                                                                          |
+| ------------------------------------------- | --------------------------------------------------------------------------------------- |
+| `pnpm/action-setup`                         | v4.4.0 (v3.0.0 in `weekly-observability-digest`)                                        |
+| `dorny/paths-filter`                        | v3.0.3                                                                                  |
+| `dorny/test-reporter`                       | v2.7.0                                                                                  |
+| `codecov/codecov-action`                    | v5.5.5                                                                                  |
+| `github/codeql-action` (`init` + `analyze`) | v3.37.3                                                                                 |
+| `taiki-e/install-action`                    | v2.85.1 (with `tool: cargo-llvm-cov`)                                                   |
+| `softprops/action-gh-release`               | v2.6.2                                                                                  |
+| `changesets/action`                         | v1.9.0                                                                                  |
+| `peter-evans/create-pull-request`           | v6.1.0                                                                                  |
+| `dtolnay/rust-toolchain`                    | `stable` branch @ `2c7215f` (with explicit `toolchain: stable`)                         |
+| `upptime/uptime-monitor`                    | `master` @ `c540f23`                                                                    |
+| `snyk/actions/setup`                        | `master` @ `8e119fb`                                                                    |
+| `CycloneDX/gh-node-module-generatebom`      | v1.0.3 (`sdk-release` SBOM; previously referenced as `1.4.0`, a tag that never existed) |
 
 **Exemptions.** The only way to use a third-party reference that is not a commit SHA is an
 entry in [`.github/workflow-policy.json`](https://github.com/Invoice-Liquidity-Network/Invoice-Liquidity-Network/blob/dev/.github/workflow-policy.json) naming the exact
@@ -108,11 +108,11 @@ Renovate propose the update so the version comment stays accurate. See
 
 ## Reusable workflow templates
 
-| Workflow | File | Purpose |
-| -------- | ---- | ------- |
-| Stellar setup | `.github/workflows/reusable-stellar-setup.yml` | Install Stellar CLI, configure testnet, create a funded identity |
-| pnpm cache | `.github/workflows/reusable-cache-pnpm.yml` | Warm the pnpm store with lockfile-scoped cache keys |
-| Testnet health | `.github/workflows/reusable-testnet-health.yml` | Probe Horizon testnet and expose a `healthy` flag |
+| Workflow       | File                                            | Purpose                                                          |
+| -------------- | ----------------------------------------------- | ---------------------------------------------------------------- |
+| Stellar setup  | `.github/workflows/reusable-stellar-setup.yml`  | Install Stellar CLI, configure testnet, create a funded identity |
+| pnpm cache     | `.github/workflows/reusable-cache-pnpm.yml`     | Warm the pnpm store with lockfile-scoped cache keys              |
+| Testnet health | `.github/workflows/reusable-testnet-health.yml` | Probe Horizon testnet and expose a `healthy` flag                |
 
 ### `reusable-stellar-setup.yml`
 
@@ -120,23 +120,23 @@ Installs the Stellar CLI via `cargo install`, registers the public testnet endpo
 
 **Inputs**
 
-| Input | Default | Description |
-| ----- | ------- | ----------- |
-| `identity-name` | `ci-test` | CLI identity alias |
-| `network` | `testnet` | Network alias (`stellar network use`) |
-| `fund-identity` | `true` | Fund via Friendbot when `true` |
-| `horizon-url` | `https://horizon-testnet.stellar.org` | Used for custom testnet registration |
-| `rpc-url` | `https://soroban-testnet.stellar.org` | Soroban RPC for testnet registration |
-| `network-passphrase` | `Test SDF Network ; September 2015` | Testnet passphrase |
-| `stellar-cli-features` | `opt` | Cargo features for `stellar-cli` |
+| Input                  | Default                               | Description                           |
+| ---------------------- | ------------------------------------- | ------------------------------------- |
+| `identity-name`        | `ci-test`                             | CLI identity alias                    |
+| `network`              | `testnet`                             | Network alias (`stellar network use`) |
+| `fund-identity`        | `true`                                | Fund via Friendbot when `true`        |
+| `horizon-url`          | `https://horizon-testnet.stellar.org` | Used for custom testnet registration  |
+| `rpc-url`              | `https://soroban-testnet.stellar.org` | Soroban RPC for testnet registration  |
+| `network-passphrase`   | `Test SDF Network ; September 2015`   | Testnet passphrase                    |
+| `stellar-cli-features` | `opt`                                 | Cargo features for `stellar-cli`      |
 
 **Outputs**
 
-| Output | Description |
-| ------ | ----------- |
+| Output          | Description                              |
+| --------------- | ---------------------------------------- |
 | `identity-name` | Identity alias written to the CLI config |
-| `public-key` | `G…` address for the identity |
-| `network` | Network alias in use |
+| `public-key`    | `G…` address for the identity            |
+| `network`       | Network alias in use                     |
 
 **Example (same repository)**
 
@@ -174,19 +174,19 @@ Checks out the repo, restores or populates the pnpm store cache, and optionally 
 
 **Inputs**
 
-| Input | Default | Description |
-| ----- | ------- | ----------- |
-| `node-version` | `20` | Node.js version |
-| `pnpm-version` | `9` | pnpm version |
-| `lockfile-path` | `pnpm-lock.yaml` | Lockfile hashed into the cache key |
-| `cache-key-prefix` | `iln` | Prefix for `actions/cache` keys |
-| `install-dependencies` | `false` | Run `pnpm install` when `true` |
-| `install-args` | `--frozen-lockfile` | Arguments for `pnpm install` |
+| Input                  | Default             | Description                        |
+| ---------------------- | ------------------- | ---------------------------------- |
+| `node-version`         | `20`                | Node.js version                    |
+| `pnpm-version`         | `9`                 | pnpm version                       |
+| `lockfile-path`        | `pnpm-lock.yaml`    | Lockfile hashed into the cache key |
+| `cache-key-prefix`     | `iln`               | Prefix for `actions/cache` keys    |
+| `install-dependencies` | `false`             | Run `pnpm install` when `true`     |
+| `install-args`         | `--frozen-lockfile` | Arguments for `pnpm install`       |
 
 **Outputs**
 
-| Output | Description |
-| ------ | ----------- |
+| Output      | Description                               |
+| ----------- | ----------------------------------------- |
 | `cache-hit` | `true` when the primary cache key matched |
 
 **Cache key format**
@@ -221,9 +221,9 @@ The composite action [`.github/actions/setup-pnpm`](https://github.com/Invoice-L
 
 This repo provides **two** shared setup mechanisms for pnpm:
 
-| Mechanism | File | Runs as | When to use |
-| --------- | ---- | ------- | ----------- |
-| Composite action | `.github/actions/setup-pnpm/action.yml` | A step inside a job | Default choice for most jobs. Use when you need pnpm + Node + store cache inside an existing job. |
+| Mechanism         | File                                        | Runs as                  | When to use                                                                                                                                                                     |
+| ----------------- | ------------------------------------------- | ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Composite action  | `.github/actions/setup-pnpm/action.yml`     | A step inside a job      | Default choice for most jobs. Use when you need pnpm + Node + store cache inside an existing job.                                                                               |
 | Reusable workflow | `.github/workflows/reusable-cache-pnpm.yml` | A separate top-level job | Use when you want to pre-warm the pnpm store in an **early job** so later jobs in the same workflow hit the cache. The reusable workflow calls the composite action internally. |
 
 **Guidelines:**
@@ -239,16 +239,16 @@ Requests `/.well-known/stellar.json` from Horizon and sets `healthy` to `true` w
 
 **Inputs**
 
-| Input | Default | Description |
-| ----- | ------- | ----------- |
-| `horizon-url` | `https://horizon-testnet.stellar.org` | Horizon base URL |
-| `max-attempts` | `3` | Retry count |
-| `retry-delay-seconds` | `5` | Delay between attempts |
+| Input                 | Default                               | Description            |
+| --------------------- | ------------------------------------- | ---------------------- |
+| `horizon-url`         | `https://horizon-testnet.stellar.org` | Horizon base URL       |
+| `max-attempts`        | `3`                                   | Retry count            |
+| `retry-delay-seconds` | `5`                                   | Delay between attempts |
 
 **Outputs**
 
-| Output | Description |
-| ------ | ----------- |
+| Output    | Description                |
+| --------- | -------------------------- |
 | `healthy` | `true` or `false` (string) |
 
 **Example — gate testnet integration**
@@ -286,14 +286,14 @@ concurrency:
 
 **Workflows with `cancel-in-progress: false`** (should not be interrupted):
 
-| Workflow | Reason |
-| -------- | ------ |
-| `release.yml` | Publishing to npm must complete (uses the short-form `concurrency:` string, so `cancel-in-progress` defaults to false) |
-| `sdk-release.yml` | Publishing to npm must complete |
-| `docs-deploy.yml` | Pages deployment must complete (group `pages`) |
-| `e2e-nightly.yml` | Scheduled nightly run — no benefit to cancelling |
-| `sdk-e2e-local-node.yml` | Push-only on main — no concurrent runs expected |
-| `upptime.yml` | Scheduled uptime monitoring — no benefit to cancelling |
+| Workflow                 | Reason                                                                                                                 |
+| ------------------------ | ---------------------------------------------------------------------------------------------------------------------- |
+| `release.yml`            | Publishing to npm must complete (uses the short-form `concurrency:` string, so `cancel-in-progress` defaults to false) |
+| `sdk-release.yml`        | Publishing to npm must complete                                                                                        |
+| `docs-deploy.yml`        | Pages deployment must complete (group `pages`)                                                                         |
+| `e2e-nightly.yml`        | Scheduled nightly run — no benefit to cancelling                                                                       |
+| `sdk-e2e-local-node.yml` | Push-only on main — no concurrent runs expected                                                                        |
+| `upptime.yml`            | Scheduled uptime monitoring — no benefit to cancelling                                                                 |
 
 **Workflows excluded from concurrency groups** (no overlapping runs):
 
@@ -542,15 +542,15 @@ flowchart TD
 
 ### E2E Scope Split Summary
 
-| Aspect | `e2e.yml` (PR/push) | `e2e-nightly.yml` (scheduled) |
-| ------ | ------------------- | ----------------------------- |
-| Trigger | Push and PR to `main`/`dev` touching E2E paths | Daily at 00:00 UTC |
-| Gate | None — fail-closed: unreachable RPC or missing contract fails the run | Always runs |
-| Submodules | Not initialized | Initialized |
-| Contract deploy | Yes — a real contract via `scripts/provision-e2e-contract.mjs` | Yes (contract-deployer + account-seeder) |
-| Frontend tests | No (runs at repo root) | Yes (Playwright in `frontend/`) |
-| Test artifacts | `e2e-coverage-evidence-<run_id>` (results, coverage verdict, evidence bundle) | Playwright report uploaded |
-| Purpose | Cross-package integration gate with an evidence bundle | Full user-journey regression |
+| Aspect          | `e2e.yml` (PR/push)                                                           | `e2e-nightly.yml` (scheduled)            |
+| --------------- | ----------------------------------------------------------------------------- | ---------------------------------------- |
+| Trigger         | Push and PR to `main`/`dev` touching E2E paths                                | Daily at 00:00 UTC                       |
+| Gate            | None — fail-closed: unreachable RPC or missing contract fails the run         | Always runs                              |
+| Submodules      | Not initialized                                                               | Initialized                              |
+| Contract deploy | Yes — a real contract via `scripts/provision-e2e-contract.mjs`                | Yes (contract-deployer + account-seeder) |
+| Frontend tests  | No (runs at repo root)                                                        | Yes (Playwright in `frontend/`)          |
+| Test artifacts  | `e2e-coverage-evidence-<run_id>` (results, coverage verdict, evidence bundle) | Playwright report uploaded               |
+| Purpose         | Cross-package integration gate with an evidence bundle                        | Full user-journey regression             |
 
 **Why the split exists:** the PR/push run is the fail-closed integration gate for
 `tests/e2e/` against a locally provisioned contract, scoped by path filters so it only runs
@@ -785,6 +785,7 @@ touches a workflow. "Concurrency" is `cancel superseded` (`cancel-in-progress: t
 3. Check repository secrets and environment protection if the job touches deployment, Snyk, or Codecov.
 4. Confirm the backend submodule is initialized if any Rust step fails unexpectedly.
 5. For issues that only happen on `main`, compare the branch history against the PR branch for lockfile or generated-file drift.
+
 - Environment settings cannot be committed to the repository; they must be created in the GitHub UI.
 - If `mainnet` is selected, GitHub will block the deployment until required reviewers approve the workflow run.
 - Sibling repos should pin reusable workflow refs (`@main` or a release tag) rather than floating branches in production CI.
@@ -798,6 +799,7 @@ The 4 pipelines: `build`, `test`, `lint`, `type-check`.
 How to enable remote caching with Vercel: run `pnpm dlx turbo login` then `pnpm dlx turbo link`.
 
 Expected cache hit rates:
+
 - First run: 0% (cold cache, everything runs)
 - Subsequent runs with no changes: ~90-100% (full cache hit)
 - Typical CI runs with partial changes: ~60-80%
