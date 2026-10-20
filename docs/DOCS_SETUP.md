@@ -72,7 +72,7 @@ the `check-meta-nav` job of `docs-deploy.yml`). The check fails when:
 > #1218 and can be ported as-is. See
 > [runbooks/sdk-package-names.md](runbooks/sdk-package-names.md).
 
-- [ ] Local development guide (`docs/local-development.md`)
+- [x] Local development guide (`docs/local-development.md` → `packages/docs/content/local-development.mdx`)
 - [ ] CI/CD reference (`docs/ci-cd.md`)
 - [ ] Security guide (`docs/security-guide.md`)
 - [ ] Threat model (`docs/threat-model.md`)
@@ -175,6 +175,7 @@ the `check-meta-nav` job of `docs-deploy.yml`). The check fails when:
 - [ ] Indexer Reorg Reconciliation & Event Idempotency Runbook (`docs/runbooks/indexer-reorg-reconciliation.md`)
 - [ ] Runbook: notification dispatch outcomes and recipient protection (`docs/runbooks/notifications-dispatch-outcomes.md`)
 - [ ] Payer Authorization Failures Runbook (`docs/runbooks/payer-authorization-failures.md`)
+- [ ] Runbook: Local Development Guide Check (`docs/runbooks/local-dev-docs.md`)
 - [ ] Runbook: Payer Cryptographic Signature Verification (`docs/runbooks/payer-signature-verification.md`)
 - [ ] Runbook: Payer Substitution Rejection Across Lifecycle States (`docs/runbooks/payer-substitution-rejection.md`)
 - [ ] Runbook: @iln/react Peer-Dependency Contract (`docs/runbooks/react-peer-contract.md`)

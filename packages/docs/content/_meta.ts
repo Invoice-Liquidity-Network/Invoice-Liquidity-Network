@@ -3,6 +3,10 @@ export default {
     title: 'Getting Started',
     type: 'page',
   },
+  'local-development': {
+    title: 'Local Development',
+    type: 'page',
+  },
   'protocol-overview': {
     title: 'Protocol Overview',
     type: 'page',
