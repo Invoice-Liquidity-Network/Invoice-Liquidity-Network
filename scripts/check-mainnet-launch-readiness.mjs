@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import process from 'node:process';
+import { parseChecklist, validateChecklist, listLegacyPages } from './lib/docs-migration.mjs';
 
 const args = process.argv.slice(2);
 const rehearsal = args.includes('--rehearsal');
@@ -11,6 +12,7 @@ const valueFor = (flag, fallback) => {
 const checklistPath = path.resolve(valueFor('--checklist', 'docs/mainnet-launch-checklist.md'));
 const asOfValue = valueFor('--as-of', new Date().toISOString().slice(0, 10));
 const reportPath = valueFor('--report', null);
+const repoRoot = path.resolve(path.dirname(checklistPath), '..');
 const errors = [];
 
 function parseDate(value, label) {
@@ -154,6 +156,32 @@ try {
       }
     }
     if (signedAreas.size === 0) errors.push('Prelaunch rehearsal requires at least one independent reviewer sign-off.');
+
+    // Validate docs migration checklist is complete (no pending items)
+    const docsSetupPath = path.join(repoRoot, 'docs', 'DOCS_SETUP.md');
+    if (fs.existsSync(docsSetupPath)) {
+      try {
+        const docsSetupContent = fs.readFileSync(docsSetupPath, 'utf8');
+        const migrationChecklist = parseChecklist(docsSetupContent);
+        const validation = validateChecklist(migrationChecklist, repoRoot);
+        if (validation.summary.pending > 0) {
+          errors.push(`Prelaunch rehearsal blocked: docs migration checklist has ${validation.summary.pending} pending pages not yet ported to the canonical site.`);
+        }
+        if (validation.errors.length > 0) {
+          for (const err of validation.errors) {
+            errors.push(`Prelaunch rehearsal blocked: docs migration checklist validation error at line ${err.line}: ${err.message}`);
+          }
+        }
+      } catch (err) {
+        if (err.name === 'ChecklistParseError') {
+          errors.push(`Prelaunch rehearsal blocked: docs migration checklist parse error: ${err.message}`);
+        } else {
+          throw err;
+        }
+      }
+    } else {
+      errors.push('Prelaunch rehearsal blocked: docs/DOCS_SETUP.md migration checklist not found.');
+    }
   }
 
   const report = {
