@@ -159,7 +159,9 @@ async function main() {
         // Surface each broken link as a GitHub annotation so it is visible on
         // the check run without opening the raw log.
         if (process.env.GITHUB_ACTIONS === 'true') {
-          console.log(`::error file=${relative(repoRoot, r.file)}::${p.replace(/\r?\n/g, ' ')}`);
+          // stderr: the workflow captures stdout with $(…) and exits before
+          // printing it when the check fails.
+          console.error(`::error file=${relative(repoRoot, r.file)}::${p.replace(/\r?\n/g, ' ')}`);
         }
       }
     }
