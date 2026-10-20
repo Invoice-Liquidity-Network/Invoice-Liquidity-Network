@@ -288,12 +288,15 @@ pub enum WithdrawalState {
 
 ### 7.8 Monitoring and Runbook References
 
+The runbooks below are planned but not yet written; until they exist, page the
+protocol on-call through the [Incident Response Runbook](incident-response.md).
+
 | Metric / Alert | Threshold | Runbook |
 |----------------|-----------|---------|
-| `liquidity_coverage_ratio` | < 0.5 for 2 consecutive epochs | [Liquidity Crisis Runbook](runbooks/liquidity-crisis.md) |
-| `oldest_queued_request_age` | > 28 days | [Stale Withdrawal Investigation](runbooks/stale-withdrawal.md) |
-| `circuit_breaker_active` | Any trigger active | [Funding Pause Response](runbooks/funding-pause.md) |
-| `partial_fill_rate` | > 50% of requests in epoch | [Partial Fill Analysis](runbooks/partial-fill-analysis.md) |
+| `liquidity_coverage_ratio` | < 0.5 for 2 consecutive epochs | Liquidity Crisis Runbook (`docs/runbooks/liquidity-crisis.md`, not yet written) |
+| `oldest_queued_request_age` | > 28 days | Stale Withdrawal Investigation (`docs/runbooks/stale-withdrawal.md`, not yet written) |
+| `circuit_breaker_active` | Any trigger active | Funding Pause Response (`docs/runbooks/funding-pause.md`, not yet written) |
+| `partial_fill_rate` | > 50% of requests in epoch | Partial Fill Analysis (`docs/runbooks/partial-fill-analysis.md`, not yet written) |
 
 ### 7.9 Governance Parameters
 
