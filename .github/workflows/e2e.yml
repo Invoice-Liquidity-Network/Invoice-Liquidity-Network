@@ -103,6 +103,7 @@ jobs:
           # forbidden on CI, and check-e2e-coverage.mjs fails the run if it is set.
 
       - name: Enforce E2E coverage gate (no skips, every suite executed, no placeholders)
+        id: coverage
         if: always()
         run: |
           node scripts/check-e2e-coverage.mjs \
