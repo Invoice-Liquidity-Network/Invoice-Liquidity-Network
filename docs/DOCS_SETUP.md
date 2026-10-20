@@ -200,6 +200,7 @@ the `check-meta-nav` job of `docs-deploy.yml`). The check fails when:
 - `docs/DOCS_SETUP.md` — this maintainer guide; removed with the legacy site
 - `docs/CHANGELOG_IMPLEMENTATION.md` — implementation notes for the changelog workflow, not reader-facing
 - `docs/security.md` — redirect stub to the root `SECURITY.md`
+- `docs/evidence/launch-exceptions.md` — launch exceptions register; evidence artifact, not reader-facing content
 
 ### Post-migration cleanup
 

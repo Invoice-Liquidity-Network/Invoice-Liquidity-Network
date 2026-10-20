@@ -1,0 +1,88 @@
+name: Launch Exception Request
+description: Request a launch readiness exception for a checklist item that cannot be completed before mainnet launch
+title: "[Launch Exception] <Checklist Section> - <Item Name>"
+labels: ["launch-exception", "mainnet", "wave-9"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Use this template to request a `Launch exception accepted` status for a mainnet launch checklist item. Exceptions are granted only when the residual risk is understood, documented, and approved by the responsible leads.
+
+  - type: input
+    id: checklist-section
+    attributes:
+      label: Checklist Section
+      description: The section in the mainnet launch checklist (e.g., Security, Contracts, Infrastructure, Documentation, Community)
+      placeholder: Security
+    validations:
+      required: true
+
+  - type: input
+    id: checklist-item
+    attributes:
+      label: Checklist Item
+      description: The exact item name from the checklist
+      placeholder: External security audit
+    validations:
+      required: true
+
+  - type: textarea
+    id: reason
+    attributes:
+      label: Reason for Exception
+      description: Why this item cannot be completed before launch. Be specific about blockers, dependencies, or constraints.
+      placeholder: The independent external audit is scheduled for completion on 2026-11-15, which is after the planned launch date of 2026-11-01. All internal audit work is complete and no critical findings remain open.
+    validations:
+      required: true
+
+  - type: textarea
+    id: risk-assessment
+    attributes:
+      label: Risk Assessment
+      description: Describe the impact, likelihood, and any mitigations if the exception is granted.
+      placeholder: |
+        Impact: High - without an external audit, there is reduced confidence in the security posture.
+        Likelihood: Medium - internal audits have found no critical issues, but external validation is pending.
+        Mitigation: Internal security review completed 2026-10-15 with zero critical findings. Audit firm engaged and on track for 2026-11-15 completion.
+    validations:
+      required: true
+
+  - type: textarea
+    id: compensating-controls
+    attributes:
+      label: Compensating Controls
+      description: What controls are in place to mitigate the risk until the item is completed?
+      placeholder: Internal security review completed; all automated security gates (coverage, fuzz tests, dependency scanning) passing; audit firm engaged with fixed schedule.
+    validations:
+      required: true
+
+  - type: textarea
+    id: remediation-plan
+    attributes:
+      label: Post-Launch Remediation Plan
+      description: Concrete plan with target date to complete the checklist item after launch.
+      placeholder: External audit report delivery by 2026-11-15. Findings will be resolved or formally accepted within 10 business days of report delivery. Checklist status will be updated to Done upon completion.
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives Exhausted
+      description: Evidence that all reasonable alternatives to complete the item before launch were considered and why they are not feasible.
+      placeholder: Considered accelerating audit timeline - not possible due to auditor availability. Considered delaying launch - would impact committed partner integrations and regulatory timeline.
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: acknowledgments
+    attributes:
+      label: Acknowledgments
+      description: Confirm the following before submitting
+      options:
+        - label: I am the checklist item owner or have been delegated by the owner
+          required: true
+        - label: I have reviewed the exception process in docs/mainnet-launch-checklist.md
+          required: true
+        - label: This exception will expire at the remediation target date and must be re-requested if work remains incomplete
+          required: true
