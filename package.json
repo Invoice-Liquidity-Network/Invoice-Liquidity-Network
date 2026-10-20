@@ -184,7 +184,8 @@
     "test:sdk-docs-port": "node --test scripts/__tests__/verify-sdk-docs-port.test.mjs",
     "verify:payer-kyb-runbook": "node scripts/operations/verify-payer-kyb-runbook.mjs",
     "test:payer-kyb-runbook": "node --test scripts/__tests__/verify-payer-kyb-runbook.test.mjs",
-    "test:payer-kyb-privacy": "node --test scripts/__tests__/protect-payer-kyb-evidence.test.mjs"
+    "test:payer-kyb-privacy": "node --test scripts/__tests__/protect-payer-kyb-evidence.test.mjs",
+    "test:kyb-failover": "node --test scripts/__tests__/test-kyb-failover-enforcement.test.mjs"
   },
   "devDependencies": {
     "@changesets/cli": "^2.31.0",
