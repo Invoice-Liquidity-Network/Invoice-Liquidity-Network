@@ -37,6 +37,8 @@ fi
 WASM_FILE=""
 if [ -f "invoice-liquidity-network/target/wasm32v1-none/release/invoice_liquidity.wasm" ]; then
     WASM_FILE="invoice-liquidity-network/target/wasm32v1-none/release/invoice_liquidity.wasm"
+elif [ -f "backend/target/wasm32v1-none/release/invoice_liquidity.wasm" ]; then
+    WASM_FILE="backend/target/wasm32v1-none/release/invoice_liquidity.wasm"
 elif [ -f "backend/target/wasm32-unknown-unknown/release/invoice_liquidity.wasm" ]; then
     WASM_FILE="backend/target/wasm32-unknown-unknown/release/invoice_liquidity.wasm"
 elif [ -f "target/wasm32v1-none/release/invoice_liquidity.wasm" ]; then
