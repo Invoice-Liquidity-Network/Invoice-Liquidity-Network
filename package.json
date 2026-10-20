@@ -187,7 +187,9 @@
     "test:payer-kyb-privacy": "node --test scripts/__tests__/protect-payer-kyb-evidence.test.mjs",
     "test:kyb-failover": "node --test scripts/__tests__/test-kyb-failover-enforcement.test.mjs",
     "verify:react-sdk-alignment": "node scripts/operations/verify-react-sdk-alignment.mjs",
-    "test:react-sdk-alignment": "node --test scripts/__tests__/verify-react-sdk-alignment.test.mjs"
+    "test:react-sdk-alignment": "node --test scripts/__tests__/verify-react-sdk-alignment.test.mjs",
+    "verify:sdk-examples": "node scripts/operations/verify-sdk-examples-alignment.mjs",
+    "test:sdk-examples": "node --test scripts/__tests__/verify-sdk-examples-alignment.test.mjs"
   },
   "devDependencies": {
     "@changesets/cli": "^2.31.0",
