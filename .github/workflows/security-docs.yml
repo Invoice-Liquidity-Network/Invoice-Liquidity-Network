@@ -1,0 +1,101 @@
+name: Security Docs
+
+# Blocking guard for the security guide and threat model (#1287).
+#
+# Every mitigation in docs/threat-model.md must be enforced (code + test or
+# workflow that exist), external (linked), or an owned gap; every claim in
+# docs/security-guide.md must point at a file that contains it; and the API
+# services must keep sending the security headers both documents describe.
+# The JSON report is uploaded on every run (pass or fail) as proof the control
+# ran. Owner: @Invoice-Liquidity-Network/security-lead.
+# Recovery: docs/runbooks/security-docs.md
+
+on:
+  pull_request:
+    branches:
+      - main
+      - dev
+    paths:
+      - 'docs/security-guide.md'
+      - 'docs/threat-model.md'
+      - 'docs/runbooks/security-docs.md'
+      - 'packages/docs/content/security/**'
+      - 'indexer/src/**'
+      - 'oracle-service/src/**'
+      - 'packages/sdk/src/**'
+      - 'scripts/check-security-docs.mjs'
+      - 'scripts/lib/security-docs.mjs'
+      - 'scripts/__tests__/security-docs.test.mjs'
+      - '.github/CODEOWNERS'
+      - '.github/workflows/**'
+      - 'package.json'
+      - 'codecov.yml'
+  push:
+    branches:
+      - main
+      - dev
+  schedule:
+    # Weekly sweep so the control stays visibly active between PRs.
+    - cron: '53 5 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  security-docs:
+    name: security docs match the repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Unit tests for the guard
+        run: node --test scripts/__tests__/security-docs.test.mjs
+
+      - name: Check security guide and threat model
+        run: node scripts/check-security-docs.mjs --json="$RUNNER_TEMP/security-docs-report.json"
+
+      - name: Upload report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: security-docs-report
+          path: ${{ runner.temp }}/security-docs-report.json
+          if-no-files-found: ignore
+          retention-days: 30
+
+  security-headers:
+    name: API security headers
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm with store cache
+        uses: ./.github/actions/setup-pnpm
+        with:
+          install-args: --frozen-lockfile --filter @iln/oracle-service... --filter iln-indexer...
+
+      # @iln/opentelemetry resolves to dist/ (package.json "main").
+      - name: Build workspace dependencies
+        run: pnpm --filter @iln/opentelemetry build
+
+      - name: Oracle — headers through createOracleApp
+        working-directory: ./oracle-service
+        run: pnpm exec vitest run src/security-headers.test.ts
+
+      - name: Indexer — headers module
+        working-directory: ./indexer
+        run: pnpm exec vitest run tests/security-headers.test.ts

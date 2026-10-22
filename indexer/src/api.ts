@@ -1,4 +1,5 @@
 import express, { Request, Response, Router, RequestHandler } from 'express';
+import { applySecurityHeaders } from './securityHeaders';
 import swaggerUi from 'swagger-ui-express';
 import crypto from 'crypto';
 import { traceMiddleware, withSpan } from '@iln/opentelemetry';
@@ -60,6 +61,8 @@ export function createApp(): express.Application {
   // Trust the first hop's X-Forwarded-For (e.g. Railway's proxy) so
   // per-IP rate limiting sees real client IPs rather than the proxy's.
   app.set('trust proxy', 1);
+  // First, so every response — 404, 429, errors — carries the headers (#1287).
+  applySecurityHeaders(app);
   // Distributed tracing — W3C traceparent propagation across indexer/oracle/notifications
   app.use(traceMiddleware('indexer'));
   app.use(createApiRateLimiter());
