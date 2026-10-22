@@ -4,6 +4,11 @@ on:
   issues:
     types: [labeled, closed, reopened]
 
+# Issues are created in sibling repositories with CROSS_REPO_SYNC_TOKEN; this
+# repository's GITHUB_TOKEN is only read (event payload), so it gets nothing more.
+permissions:
+  contents: read
+
 jobs:
   sync-issue:
     runs-on: ubuntu-latest

@@ -73,7 +73,7 @@ the `check-meta-nav` job of `docs-deploy.yml`). The check fails when:
 > [runbooks/sdk-package-names.md](runbooks/sdk-package-names.md).
 
 - [ ] Local development guide (`docs/local-development.md`)
-- [ ] CI/CD reference (`docs/ci-cd.md`)
+- [x] CI/CD reference (`docs/ci-cd.md` → `packages/docs/content/ci-cd.mdx`)
 - [ ] Security guide (`docs/security-guide.md`)
 - [ ] Threat model (`docs/threat-model.md`)
 - [ ] Glossary (`docs/glossary.md`)
@@ -171,6 +171,7 @@ the `check-meta-nav` job of `docs-deploy.yml`). The check fails when:
 - [ ] Runbook: E2E release evidence bundle (`docs/runbooks/e2e-release-evidence.md`)
 - [ ] Runbook: Example SDK Resolution (`docs/runbooks/example-sdk-resolution.md`)
 - [ ] Runbook: Generated-Client Drift Detection (`docs/runbooks/generated-client-drift.md`)
+- [ ] Runbook: GitHub Actions Workflow Policy (`docs/runbooks/workflow-policy.md`)
 - [ ] Cross-Repo Incident Response Runbook (`docs/runbooks/incident-response.md`)
 - [ ] Indexer Reorg Reconciliation & Event Idempotency Runbook (`docs/runbooks/indexer-reorg-reconciliation.md`)
 - [ ] Runbook: notification dispatch outcomes and recipient protection (`docs/runbooks/notifications-dispatch-outcomes.md`)
