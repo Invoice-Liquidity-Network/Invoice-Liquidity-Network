@@ -35,9 +35,13 @@ else
   fi
 fi
 # Duplicate Rust check removed
-# 2. Add proper WASM target
-echo "Adding wasm32-unknown-unknown target..."
-rustup target add wasm32-unknown-unknown || rustup target add wasm32-unknown-unknown --toolchain stable
+# 2. Add the WASM targets. `stellar contract build`, CI and `make deploy-local`
+# use wasm32v1-none; wasm32-unknown-unknown is kept for older toolchains and the
+# legacy path contract-deployer/deploy.sh still accepts.
+for target in wasm32v1-none wasm32-unknown-unknown; do
+  echo "Adding $target target..."
+  rustup target add "$target" || rustup target add "$target" --toolchain stable
+done
 # Wait for a moment to ensure cargo is accessible
 export PATH="$HOME/.cargo/bin:$PATH"
 # 3. Check/Install Stellar CLI

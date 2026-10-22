@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import { describe, it } from 'node:test';
 import { NodeProvisionError, provisionE2ENode } from '../provision-e2e-node.mjs';
 
@@ -62,5 +63,15 @@ describe('provisionE2ENode (#1248)', () => {
       }),
       NodeProvisionError
     );
+  });
+
+  it('starts quickstart on the local standalone network the suites expect', () => {
+    const compose = readFileSync(
+      new URL('../../tests/e2e/docker-compose.yml', import.meta.url),
+      'utf8'
+    );
+    // quickstart defaults to testnet when no network flag is given.
+    assert.match(compose, /^\s*command:.*--local\b/m);
+    assert.match(compose, /^\s*command:.*--enable\s+\S*\brpc\b/m);
   });
 });

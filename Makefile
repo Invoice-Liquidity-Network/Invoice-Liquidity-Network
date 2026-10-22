@@ -1,11 +1,14 @@
 .PHONY: setup build deploy-local seed test clean
 
+# The Soroban contracts live in the `backend/` submodule (ILN-Smart-Contract).
+# Run `git submodule update --init backend` before `make build`/`deploy-local`/`test`.
+
 setup:
 	@chmod +x scripts/dev-setup.sh
 	@./scripts/dev-setup.sh
 
 build:
-	@cd invoice-liquidity-network && stellar contract build
+	@cd backend && stellar contract build
 
 deploy-local:
 	@echo "Starting local Stellar node (soroban-quickstart)..."
@@ -18,7 +21,7 @@ deploy-local:
 	@echo "Funding admin account..."
 	@stellar keys fund admin --network local || true
 	@echo "Deploying contract to local network..."
-	@cd invoice-liquidity-network && stellar contract deploy \
+	@cd backend && stellar contract deploy \
 		--wasm target/wasm32v1-none/release/invoice_liquidity.wasm \
 		--source admin \
 		--network local \
@@ -33,7 +36,7 @@ seed:
 	@./scripts/seed.sh
 
 test:
-	@cd invoice-liquidity-network && cargo test
+	@cd backend && cargo test
 
 clean:
 	@echo "Stopping local Stellar node..."
