@@ -343,17 +343,19 @@ railway up
 railway logs --follow
 
 # Look for common causes:
-# - Missing environment variables (CONTRACT_ID, RPC_URL)
+# - "[config] INVALID ..." lines: the process exited with code 78 because
+#   the configuration is invalid (see operations-checks.md) — restarting
+#   cannot fix this, so Railway stops after restartPolicyMaxRetries (3)
 # - SQLite database not writable
 # - Port mismatch
-# - Health endpoint returning "degraded" (DB unreachable)
+# - Health endpoint returning 503 {"status": "error"} (DB unreachable)
 ```
 
-**Solution**: Ensure all required environment variables are set and the
-database path is writable. The health endpoint returns `{ "status": "ok" }`
-when SQLite is accessible and `{ "status": "degraded" }` when the DB check fails.
+**Solution**: Fix every `[config] INVALID` line, ensure the database path is
+writable, then redeploy. The health endpoint returns `200 { "status": "ok" }`
+when SQLite is accessible and `503 { "status": "error" }` when the DB check fails.
 
-#### Health check returns degraded
+#### Health check returns 503
 
 **Cause**: The SQLite database is not accessible or corrupted, but the Node.js
 process is still running.
@@ -363,7 +365,7 @@ process is still running.
 # Check health endpoint
 curl http://localhost:3001/health
 
-# If status is "degraded", check the database file
+# If it returns 503 with "status": "error", check the database file
 ls -la $DB_PATH
 
 # Verify the directory is writable

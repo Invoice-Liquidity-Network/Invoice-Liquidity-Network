@@ -29,11 +29,11 @@ export function createApiRateLimiter(): RateLimitRequestHandler {
     standardHeaders: 'draft-6',
     legacyHeaders: false,
     skip: (req: Request) => {
-      if (req.path === "/health" || req.path === "/v1/health") return true;
-      const ip = req.ip ?? "";
-      // Normalize ::ffff:x.x.x.x (IPv4-mapped IPv6) and ::1 to their IPv4 equivalents
-      const normalized = ip.startsWith("::ffff:") ? ip.slice(7) : ip === "::1" ? "127.0.0.1" : ip;
-      return CONFIG.rateLimitWhitelist.includes(ip) || CONFIG.rateLimitWhitelist.includes(normalized);
+      // Health probes must never be throttled, or the orchestrator restarts a
+      // healthy instance under load (docs/indexer/deployment.md).
+      if (req.path === '/health' || req.path === '/v1/health') return true;
+      // Normalize ::ffff:x.x.x.x (IPv4-mapped IPv6) and ::1 to their IPv4
+      // equivalents, then require a real IP before matching the whitelist.
       const normalized = normalizeIp(req.ip ?? '');
       return isIP(normalized) !== 0 && CONFIG.rateLimitWhitelist.includes(normalized);
     },

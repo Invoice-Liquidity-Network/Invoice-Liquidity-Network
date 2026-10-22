@@ -93,6 +93,7 @@ the `check-meta-nav` job of `docs-deploy.yml`). The check fails when:
 - [ ] Indexer configuration (`docs/indexer/configuration.md`)
 - [ ] Indexer deployment (`docs/indexer/deployment.md`)
 - [ ] Indexer troubleshooting (`docs/indexer/troubleshooting.md`)
+- [ ] Indexer operations checks (`docs/indexer/operations-checks.md`)
 - [ ] Contract governance (`docs/contracts/governance-contract.md`)
 - [ ] Contract reputation (`docs/contracts/reputation-contract.md`)
 - [ ] Mainnet launch checklist (`docs/mainnet-launch-checklist.md`)
@@ -226,6 +227,27 @@ Run [`check-mainnet-launch-readiness.mjs`](../scripts/check-mainnet-launch-readi
 Before launch, dispatch the [Mainnet Launch Readiness workflow](../.github/workflows/mainnet-launch-readiness.yml) for the checklist rehearsal and the [Mainnet Launch Evidence workflow](../.github/workflows/mainnet-launch-evidence.yml) for the audit gate. The rehearsal requires every checklist row to be `Done` or `Launch exception accepted` and fresh independent reviewer sign-offs. The audit gate requires a complete independent external audit covering the manifest's required scope, no unresolved findings (or documented accepted findings), completion within the last 365 days, and a downloadable HTTPS report whose SHA-256 matches [`docs/evidence/external-security-audit.json`](evidence/external-security-audit.json). Both gates fail closed and publish JSON/summary evidence. The Release lead owns checklist and manifest updates and recovery.
 
 This control changes no adjacent service API or cross-repository package contract; it consumes existing repository documentation and CI artifacts only.
+
+### Indexer operations docs are executable
+
+The indexer operator pages (`docs/indexer/*.md`) are checked against the
+indexer source by [`check-indexer-ops-docs.mjs`](../scripts/check-indexer-ops-docs.mjs):
+every environment variable and default in `docs/indexer/configuration.md`,
+every endpoint, metric name, `pnpm`/`npm` command and `/health` status
+mentioned in any indexer page, and `indexer/railway.toml`. When you port an
+indexer page to `packages/docs/`, keep `docs/indexer/` as the checked source
+until the check is pointed at the new location.
+
+```bash
+node scripts/check-indexer-ops-docs.mjs
+node --test scripts/__tests__/indexer-ops-docs.test.mjs
+```
+
+The [Indexer Ops Docs workflow](../.github/workflows/indexer-ops-docs.yml) runs
+both on every PR and weekly, uploads a JSON report, and fails closed. The
+indexer team owns the control; the recovery path is in
+[indexer/operations-checks.md](indexer/operations-checks.md). It changes no
+adjacent service API or cross-repository contract.
 
 ### Canonical site — `packages/docs/` (deployed to `docs.iln.finance`)
 

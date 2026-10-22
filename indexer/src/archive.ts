@@ -1,7 +1,13 @@
 import { getDb, type InvoiceFilter } from './db';
 import type { Invoice, ILNEvent } from './types';
 
-let archiveAttached = false;
+/**
+ * Connections that already have the archive database attached. Tracked per
+ * connection (not a module-level boolean) so a replaced connection — e.g.
+ * after `setDb()` — gets the archive attached instead of failing with
+ * "no such table: archive.invoices".
+ */
+const attachedConnections = new WeakSet<object>();
 
 /**
  * Return the database connection with the archive database attached.
@@ -9,7 +15,7 @@ let archiveAttached = false;
  */
 export function getArchiveDbConnection(): ReturnType<typeof getDb> {
   const db = getDb();
-  if (!archiveAttached) {
+  if (!attachedConnections.has(db)) {
     const archivePath = process.env.ARCHIVE_DB_PATH || 'archive.db';
 
     // Attach the archive database file
@@ -40,10 +46,10 @@ export function getArchiveDbConnection(): ReturnType<typeof getDb> {
         created_at       INTEGER NOT NULL
       );
 
-      CREATE INDEX IF NOT EXISTS idx_archive_invoices_created_at ON archive.invoices(created_at);
-      CREATE INDEX IF NOT EXISTS idx_archive_invoices_status ON archive.invoices(status);
-      CREATE INDEX IF NOT EXISTS idx_archive_events_invoice_id ON archive.events(invoice_id);
-      CREATE INDEX IF NOT EXISTS idx_archive_events_created_at ON archive.events(created_at);
+      CREATE INDEX IF NOT EXISTS archive.idx_archive_invoices_created_at ON invoices(created_at);
+      CREATE INDEX IF NOT EXISTS archive.idx_archive_invoices_status ON invoices(status);
+      CREATE INDEX IF NOT EXISTS archive.idx_archive_events_invoice_id ON events(invoice_id);
+      CREATE INDEX IF NOT EXISTS archive.idx_archive_events_created_at ON events(created_at);
 
       CREATE TABLE IF NOT EXISTS archive.archive_runs (
         id            INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -53,7 +59,7 @@ export function getArchiveDbConnection(): ReturnType<typeof getDb> {
       );
     `);
 
-    archiveAttached = true;
+    attachedConnections.add(db);
   }
   return db;
 }
