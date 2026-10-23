@@ -15,6 +15,9 @@ export interface NotificationsMetrics {
   dispatchTerminalTotal: client.Counter<string>;
   dispatchQueue: client.Gauge<string>;
   recipientRejectionsTotal: client.Counter<string>;
+  eventIngestTotal: client.Counter<string>;
+  eventInbox: client.Gauge<string>;
+  recordEventIngest(result: 'processed' | 'retry' | 'dead_lettered' | 'duplicate', reason?: string): void;
   recordDispatchAttempt(channel: string, result: 'delivered' | 'retry' | 'terminal'): void;
   recordDispatchTerminal(channel: string, outcome: string): void;
   recordRecipientRejection(channel: string, stage: string, reason: string): void;
@@ -124,6 +127,28 @@ export function createNotificationsMetrics(): NotificationsMetrics {
     registers: [registry],
   });
 
+  // Issues #1273-#1276: chain-event ingestion outcomes and inbox depth.
+  const eventIngestTotal = new client.Counter({
+    name: 'iln_notifications_event_ingest_total',
+    help: 'Chain events by ingestion result (processed, retry, dead_lettered, duplicate) and reason',
+    labelNames: ['result', 'reason'] as const,
+    registers: [registry],
+  });
+
+  const eventInbox = new client.Gauge({
+    name: 'iln_notifications_event_inbox',
+    help: 'Event inbox rows by status, plus oldest_pending_age_seconds and max_pending_attempts',
+    labelNames: ['status'] as const,
+    registers: [registry],
+  });
+
+  function recordEventIngest(
+    result: 'processed' | 'retry' | 'dead_lettered' | 'duplicate',
+    reason = 'none'
+  ): void {
+    eventIngestTotal.inc({ result, reason });
+  }
+
   function recordDispatchAttempt(channel: string, result: 'delivered' | 'retry' | 'terminal'): void {
     dispatchAttemptsTotal.inc({ channel, result });
   }
@@ -171,6 +196,9 @@ export function createNotificationsMetrics(): NotificationsMetrics {
     dispatchTerminalTotal,
     dispatchQueue,
     recipientRejectionsTotal,
+    eventIngestTotal,
+    eventInbox,
+    recordEventIngest,
     recordDispatchAttempt,
     recordDispatchTerminal,
     recordRecipientRejection,
