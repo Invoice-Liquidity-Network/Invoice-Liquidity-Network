@@ -86,6 +86,7 @@ This installs every workspace listed in `pnpm-workspace.yaml`:
 - Top-level service packages: `sdk/`, `cli/`, `indexer/`, `notifications/`, `oracle-service/`, `docs/`
 - `packages/*` — shared libraries and the deployed docs site
 - `examples/*` — example applications
+- `tests/sdk-integration` — test helper package that type-checks the SDK fixtures against `@iln/sdk` (`workspace:*`)
 
 Do **not** run `npm ci`/`npm install`/`yarn` inside a subpackage — it creates a
 foreign lockfile that CI rejects. Use `pnpm --filter <package> …` or the root
@@ -114,34 +115,53 @@ with none set.
 
 ### Indexer Variables
 
-| Variable | Description |
-| --- | --- |
-| `CONTRACT_ID` | Soroban contract ID whose events the indexer reads. Use `.docker-output/contract-id.txt` after local deployment. |
-| `NETWORK_PASSPHRASE` | Stellar network passphrase. Local standalone uses `Standalone Network ; February 2017`; testnet uses `Test SDF Network ; September 2015`. |
-| `RPC_URL` | Soroban RPC endpoint. Local Docker uses `http://stellar-node:8000/soroban/rpc` inside the compose network, or `http://localhost:8000/soroban/rpc` from the host. |
-| `REDIS_URL` | Optional Redis connection string for distributed caching. The compose stack sets `redis://redis:6379`. |
-| `DB_PATH` | SQLite database path for indexed data. |
-| `POLL_INTERVAL_MS` | Polling interval for new ledgers and contract events. |
-| `PORT` | REST API port, read as `CONFIG.apiPort`. Default `3001`. |
-| `START_LEDGER` | First ledger to index. `0` lets the service choose a recent starting point. |
-| `RATE_LIMIT_WINDOW_MS` | Rate limit window length in milliseconds. |
-| `RATE_LIMIT_MAX` | Maximum requests per IP per window. |
-| `RATE_LIMIT_WHITELIST` | Comma-separated IPs exempt from public API rate limiting. |
-| `BACKUP_ENABLED` | Enables automated indexer backups when set to `true`. |
-| `BACKUP_INTERVAL_MS` | Backup cadence in milliseconds. |
-| `BACKUP_DIR` | Local backup output directory. |
-| `BACKUP_MAX_LOCAL` | Number of local backups to retain. |
-| `BACKUP_CLOUD_PROVIDER` | Optional cloud backup provider: `s3`, `gcs`, or `azure`. |
-| `BACKUP_CLOUD_BUCKET` | Cloud bucket name when cloud backups are enabled. |
-| `BACKUP_CLOUD_PREFIX` | Optional folder or key prefix for cloud backups. |
-| `BACKUP_CLOUD_REGION` | Region for the cloud backup bucket. |
+Defaults are the values `indexer/src/` falls back to when the variable is unset.
+The compose `indexer` service overrides `PORT`, `DB_PATH`, `RPC_URL`,
+`REDIS_URL` and `NETWORK_PASSPHRASE` (standalone), and exports `CONTRACT_ID`
+from `.docker-output/contract-id.txt`.
+
+| Variable | Default | Description |
+| --- | --- | --- |
+| `CONTRACT_ID` | testnet ILN contract | Soroban contract ID whose events the indexer reads. Locally, use `.docker-output/contract-id.txt` (the compose service does this for you). |
+| `NETWORK_PASSPHRASE` | `Test SDF Network ; September 2015` | Stellar network passphrase. Local standalone uses `Standalone Network ; February 2017`. It must match the node `RPC_URL` points at. |
+| `RPC_URL` | `https://soroban-testnet.stellar.org` | Soroban RPC endpoint. Local Docker uses `http://stellar-node:8000/soroban/rpc` inside the compose network, or `http://localhost:8000/soroban/rpc` from the host. |
+| `REDIS_URL` | (unset) | Optional Redis connection string for distributed caching; caching is disabled when unset. The compose stack sets `redis://redis:6379`. |
+| `DB_PATH` | `indexer.db` | SQLite database path for indexed data. |
+| `POLL_INTERVAL_MS` | `5000` | Polling interval for new ledgers and contract events. |
+| `PORT` | `3001` | REST/GraphQL API port, read as `CONFIG.apiPort`. |
+| `START_LEDGER` | `0` | First ledger to index. `0` starts about 1,000 ledgers before the current tip. |
+| `CONFIRMATION_DEPTH` | `10` | Ledgers an event must be behind the tip before it is treated as final. |
+| `RATE_LIMIT_WINDOW_MS` | `60000` | Rate limit window length in milliseconds. |
+| `RATE_LIMIT_MAX` | `100` | Maximum requests per IP per window. |
+| `RATE_LIMIT_WHITELIST` | (empty) | Comma-separated IPs exempt from public API rate limiting. |
+| `SUBSCRIPTION_AUTH_TOKEN` | (unset) | Bearer token required on GraphQL WebSocket subscriptions; unset means public. |
+| `SUBSCRIPTION_MAX_CONNECTIONS` | `100` | Max concurrent GraphQL WebSocket connections (`0` disables the cap). |
+| `SUBSCRIPTION_MAX_CONNECTIONS_PER_IP` | `10` | Max GraphQL WebSocket connections per client IP (`0` disables the cap). |
+| `ANALYTICS_DB_PATH` | (unset) | Optional read-only SQLite replica for analytics queries; the primary database is used when unset. |
+| `ANALYTICS_QUERY_BUDGET_MS` | `5000` | Analytics query duration above which a query is flagged. |
+| `ARCHIVE_ENABLED` | `true` | Background archival scheduler; set `false` to disable. |
+| `ARCHIVE_DB_PATH` | `archive.db` | SQLite database archived rows are moved to. |
+| `ARCHIVE_INTERVAL_MS` | `86400000` | Archival cadence. |
+| `ARCHIVE_OLDER_THAN_DAYS` | `90` | Age after which rows are archived. |
+| `ARCHIVE_PURGE_OLDER_THAN_DAYS` | `2555` | Age after which archived rows are deleted (7 years). |
+| `BACKUP_ENABLED` | `false` | Enables automated indexer backups when set to `true`. |
+| `BACKUP_INTERVAL_MS` | 24 hours | Backup cadence in milliseconds. |
+| `BACKUP_DIR` | `./backups` | Local backup output directory. |
+| `BACKUP_MAX_LOCAL` | `30` | Number of local backups to retain. |
+| `BACKUP_CLOUD_PROVIDER` | (unset) | Optional cloud backup provider: `s3`, `gcs`, or `azure`. |
+| `BACKUP_CLOUD_BUCKET` | (unset) | Cloud bucket name when cloud backups are enabled. |
+| `BACKUP_CLOUD_PREFIX` | (unset) | Optional folder or key prefix for cloud backups. |
+| `BACKUP_CLOUD_REGION` | (unset) | Region for the cloud backup bucket. |
+| `EXPORT_JOB_MAX` / `EXPORT_JOB_TTL_SECONDS` | `1000` / `1800` | Async export job cap and job lifetime. |
+| `EXPORT_PAGE_MAX_ROWS` | `5000` | Maximum rows per export page. |
+| `EXPORT_SESSION_MAX_ROWS` / `EXPORT_SESSION_MAX_BYTES` / `EXPORT_SESSION_MAX_SECONDS` | `200000` / `100000000` / `300` | Per-session export limits. |
 
 ### Notifications Variables
 
 | Variable | Required | Default | Description |
 | --- | --- | --- | --- |
 | `RESEND_API_KEY` | Yes | — | Resend API key for email delivery. Use a test key when only running non-delivery tests. |
-| `NOTIFICATIONS_RPC_URL` | Yes | — | Stellar/Soroban RPC endpoint used to poll invoice events. |
+| `NOTIFICATIONS_RPC_URL` | Yes | — | Soroban RPC endpoint used to poll invoice events. Locally `http://localhost:8000/soroban/rpc` (the bare `http://localhost:8000` is Horizon, not RPC). |
 | `NOTIFICATIONS_CONTRACT_ID` | Yes | — | Contract ID to monitor. Use `.docker-output/contract-id.txt` locally. |
 | `NOTIFICATIONS_NETWORK_PASSPHRASE` | Yes | — | Stellar network passphrase for the monitored network. |
 | `NOTIFICATIONS_DB_PATH` | No | `notifications.sqlite` | SQLite database path for notification state and preferences. |
@@ -150,7 +170,13 @@ with none set.
 | `NOTIFICATIONS_START_LEDGER` | No | `0` | First ledger to poll. `0` means start from the service default. |
 | `DUE_WARNING_HOURS` | No | `48` | Number of hours before due date to send warnings. |
 | `PORT` | No | `4001` | HTTP port for notification APIs. The WebSocket server runs on `PORT + 1` (`4002`). |
-| `RATE_LIMIT_PER_USER` / `RATE_LIMIT_PER_CHANNEL` / `RATE_LIMIT_WINDOW_MS` | No | `60` / `200` / `60000` | API rate limits. |
+| `RATE_LIMIT_PER_USER` / `RATE_LIMIT_WINDOW_MS` | No | `60` / `60000` | API requests per user per window. |
+| `RATE_LIMIT_PER_RECIPIENT` | No | `RATE_LIMIT_PER_CHANNEL`, then 200 | Deliveries per recipient per window. |
+| `RATE_LIMIT_PER_CHANNEL` | No | `200` | Legacy name for the per-recipient/channel limit. |
+| `OWNERSHIP_CHALLENGE_TTL_MS` | No | `600000` | Lifetime of a subscription ownership challenge. |
+| `NOTIFICATIONS_MAX_DISPATCH_ATTEMPTS` | No | `8` | Provider attempts per journal row before it is dead-lettered. |
+| `NOTIFICATIONS_RECIPIENT_KEY` | In production | — | 32-byte hex key (`openssl rand -hex 32`) encrypting recipient data at rest. Required when `NODE_ENV=production`. |
+| `NOTIFICATIONS_RECIPIENT_KEY_PREVIOUS` | No | — | Previous recipient key, accepted for decryption during rotation. |
 | `TWILIO_ACCOUNT_SID` / `TWILIO_AUTH_TOKEN` / `TWILIO_FROM_NUMBER` | No | — | SMS delivery via Twilio. |
 
 ### Oracle Service Variables
@@ -200,11 +226,15 @@ docker compose up --build -d
 | --- | --- | --- | --- |
 | `stellar-node` | Standalone Stellar Quickstart node with Soroban RPC. | `8000`, `11626` | `curl -s http://localhost:8000/friendbot` returns JSON with `"status": 400`. |
 | `redis` | Cache backend shared by the indexer and oracle service. | `6379` | `docker compose ps redis` shows `running`. |
-| `contract-deployer` | Builds/deploys the local contract, or writes a dummy ID when no compiled WASM exists. | — | `docker compose ps contract-deployer` shows `exited (0)`. |
+| `contract-deployer` | Deploys the built contract WASM (`backend/target/wasm32v1-none/release/invoice_liquidity.wasm`) and writes `.docker-output/contract-id.txt`. Fails closed — exits `1`, no placeholder ID — when no WASM is built and `EXISTING_CONTRACT_ID` is unset. | — | `docker compose ps contract-deployer` shows `exited (0)`. |
 | `account-seeder` | Creates funded test accounts, mock assets, and `.docker-output/*` files after the deployer completes. | — | `docker compose ps account-seeder` shows `exited (0)`. |
-| `indexer` | Runs `pnpm dev -w iln-indexer` against the local node. | `3001` | `curl http://localhost:3001/health` (or `/v1/health`). |
+| `indexer` | Runs `pnpm --filter iln-indexer dev` against the local node, after `contract-deployer` succeeds, with `CONTRACT_ID` read from `.docker-output/contract-id.txt` and the standalone passphrase. | `3001` | `curl http://localhost:3001/v1/health`. |
 | `oracle-service` | Runs `pnpm oracle:dev`; depends on `stellar-node`, `indexer`, and `redis`. | `3010` | `curl http://localhost:3010/v1/health`. |
 
+> Build the contract before the first `up` (`git submodule update --init backend`,
+> then `make build`), or pass `EXISTING_CONTRACT_ID=<id>`: the deployer refuses to
+> publish a placeholder ID, and the indexer waits for it.
+>
 > The `indexer` and `oracle-service` containers run `pnpm install --frozen-lockfile`
 > on start against a bind-mount of the repo, so the first `up` is slow. For fast
 > iteration on those two, run only the infra services in Docker
@@ -224,7 +254,7 @@ Expected files:
 | File | Contents |
 | --- | --- |
 | `.docker-output/accounts.json` | Test account public keys, secret keys, mock asset IDs, and contract ID. |
-| `.docker-output/contract-id.txt` | Local contract ID or dummy ID. |
+| `.docker-output/contract-id.txt` | Deployed local contract ID (or `EXISTING_CONTRACT_ID`). |
 | `.docker-output/usdc-id.txt` | Mock USDC asset ID. |
 | `.docker-output/eurc-id.txt` | Mock EURC asset ID. |
 
@@ -393,7 +423,7 @@ pnpm --filter @iln/sdk-next docs:generate   # → packages/docs/content/sdk-refe
 | `@iln/sdk-next` | `pnpm --filter @iln/sdk-next test` |
 | `@iln/react` | `pnpm react:test` |
 | `@iln/shared` / `@iln/mock-backend` / `@iln/indexer` / `@iln/upgrade-tests` | `pnpm --filter <package> test` |
-| Contracts (submodule) | `cd backend && cargo test` |
+| Contracts (submodule) | `make test` (runs `cd backend && cargo test`) |
 | Load test indexer | `pnpm test:load:indexer` |
 | Load test notifications | `pnpm test:load:notifications` |
 | License scan | `pnpm licence:check` |
@@ -407,13 +437,15 @@ pnpm --filter @iln/sdk-next docs:generate   # → packages/docs/content/sdk-refe
 | `docker compose` is not found | Docker Compose v2 is not installed or Docker Desktop is not running. | Install Docker Desktop or the Compose v2 plugin, then rerun `docker compose version`. |
 | Port `8000`, `11626`, `6379`, `3001`, or `3010` already allocated | Another Stellar Quickstart, Redis, indexer, oracle, or previous compose stack is running. | Run `docker compose down -v`, stop the conflicting process, or change port mappings locally. |
 | `stellar-node` health check never passes | Docker VM is still starting, network access is blocked, or the image changed endpoints. | Check `docker compose logs stellar-node`; retry after Docker is fully ready. |
-| `dummy-contract-id-for-local-dev` appears | No compiled WASM was found by the deployer. | Build the contract in `backend/` (`stellar contract build`), then rerun `docker compose up --build contract-deployer account-seeder`. |
+| `contract-deployer` exits `1` with `no built WASM found` (and `indexer` never starts) | The contract has not been built; the deployer fails closed instead of writing a placeholder ID. | `git submodule update --init backend && make build`, then `docker compose up --build`. Or set `EXISTING_CONTRACT_ID=<id>`. |
+| `npm error No workspaces found` from `pnpm oracle:*`, `docs:*` or `react:*` | A checkout older than the fix for #1285, where those root scripts called `npm run … -w`. npm workspaces are not declared; `pnpm-workspace.yaml` is authoritative. | Pull `dev`, or run the package directly: `pnpm --filter @iln/oracle-service dev`. |
+| `make build` / `make deploy-local` / `make test` fail with `cd: backend: No such file or directory` or an empty `backend/` | The `backend/` submodule is not initialized. | `git submodule update --init backend`. |
 | `pnpm install` fails with an engine warning | Node.js is older than the `>=20` requirement. | Install Node.js 20+ with `nvm`, Volta, `fnm`, or your OS package manager. |
 | `pnpm: command not found` | Corepack is not enabled. | Run `corepack enable`, or `npm i -g pnpm@9`. |
 | CI fails on `validate:lockfiles` | A `package-lock.json` or `yarn.lock` was created in a subpackage. | Delete it; run `pnpm install` from the repo root only. |
 | `ERR_PNPM_...` about a missing workspace package | Cross-package build outputs are stale. | Run `pnpm build` (or `pnpm --filter <pkg>... build`) before running the dependent package. |
 | `oracle-service` returns `rejected-stale-data` locally | The indexer has no history for the payer, or its data is older than `ORACLE_MAX_ORACLE_AGE_MS`. | Seed invoices for the payer and let the indexer catch up, or raise `maxOracleAgeMs` on the request. |
-| Rust cannot build a WASM target | The Soroban target is missing. | `scripts/dev-setup.sh` installs `wasm32-unknown-unknown`; the contract build may instead need `wasm32v1-none` — add whichever the `backend/` workspace or CI requests with `rustup target add <target>`. |
+| Rust cannot build a WASM target | The Soroban target is missing. | Run `make setup` (`scripts/dev-setup.sh` installs `wasm32v1-none`, which `stellar contract build`, CI and `make deploy-local` use, plus the legacy `wasm32-unknown-unknown`), or `rustup target add wasm32v1-none`. |
 | Stellar CLI command is not found | Stellar CLI is not installed or not on `PATH`. | Install it from the Stellar developer tools instructions and restart the shell. |
 | macOS Docker file sharing errors | The repository path is not shared with Docker Desktop. | Add the parent directory in Docker Desktop → Settings → Resources → File sharing. |
 | macOS: `docker compose up` extremely slow for `indexer`/`oracle-service` | Bind-mount + `pnpm install` over the osxfs/VirtioFS boundary. | Enable VirtioFS in Docker Desktop, or run those two services on the host instead of in Docker. |
@@ -453,7 +485,7 @@ They run on the host. The Docker services in `docker-compose.yml` are
 
 | Script | Invoked by | Target network | Purpose |
 |--------|-----------|----------------|---------|
-| `scripts/dev-setup.sh` | `make setup` | local | Installs the Rust toolchain, the `wasm32-unknown-unknown` target, and the Stellar CLI. |
+| `scripts/dev-setup.sh` | `make setup` | local | Installs the Rust toolchain, the `wasm32v1-none` and `wasm32-unknown-unknown` targets, and the Stellar CLI, and checks Docker. |
 | `scripts/deploy.ts` | Manual / CI | testnet / mainnet | Deploys the Soroban contract and updates `.env` and `README.md` with the new Contract ID. Supports `--network=mainnet` and `--dry-run`. |
 | `scripts/seed.sh` | `make seed` | local | Seeds the local node with test identities (`freelancer`, `payer`, `funder`), mock USDC, and sample invoices. Requires `.local-contract-id`. |
 | `scripts/fund-wallets.sh` | Manual | testnet | Funds wallet addresses via Friendbot and mints mock USDC. Testnet only — not the local node. |
@@ -466,7 +498,17 @@ They run on the host. The Docker services in `docker-compose.yml` are
 stack — including `indexer` and `oracle-service` — through Docker in dependency
 order via health checks.
 
-`make deploy-local` and `make seed` perform the equivalent **contract**
+`make build`, `make deploy-local` and `make seed` perform the equivalent **contract**
 deployment and seeding steps directly on the host using the `scripts/` scripts,
 against the `backend/` contract workspace. Use the Make targets for contract
 iteration; use Docker Compose for CI and full-stack E2E runs.
+
+## Keeping This Guide Accurate
+
+`node scripts/check-local-dev-docs.mjs` resolves every command, path, workspace,
+environment variable and default, and Docker Compose service and port in this
+guide against the repository, and checks the local-dev entry points themselves
+(root scripts, `docker-compose.yml`, `Makefile`, `scripts/dev-setup.sh`). The
+`local-dev-docs` workflow (`.github/workflows/local-dev-docs.yml`) runs it on
+every change to those files and weekly. If it fails, follow
+`docs/runbooks/local-dev-docs.md`.
