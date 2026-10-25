@@ -302,6 +302,25 @@ export interface OracleServiceHealth {
   degradedMode: boolean;
   degradedResponses?: number;
   lastSuccessfulVerificationAt?: string | null;
+  /**
+   * Per-source failover state (issues #1051, #1238), keyed by source id
+   * (`indexer-primary`, `kyb-fallback`, …). Empty when no failover pair is
+   * configured, so an operator can tell "no failover" apart from "failover
+   * armed and healthy" — the difference matters during a payer/KYB incident.
+   */
+  sources?: Record<string, SourceHealthState>;
+  /**
+   * KYB enforcement posture (issue #1240): whether a successful KYB check is
+   * *required* before a positive verdict, whether a provider is *configured*,
+   * and whether automated failover is *armed*. Surfaced so an incident
+   * responder never has to guess whether a rejection was policy (an unverified
+   * payer) or plumbing (an unreachable registry).
+   */
+  kyb: {
+    required: boolean;
+    configured: boolean;
+    failover: boolean;
+  };
   /** Issue #1054: per-stage SLO violation totals served by this instance. */
   sloViolations?: {
     fetch: number;
@@ -376,6 +395,14 @@ export interface OracleServiceOptions {
   reputationProvider?: (payer: string) => Promise<ReputationSnapshot>;
   externalProvider?: ExternalVerificationProvider;
   kybProvider?: VerificationProvider;
+  /**
+   * Fallback KYB provider for automated verification failover (issue #1238).
+   *
+   * Consulted only when the primary provider *throws* (registry unreachable).
+   * A primary that answers with an unverified result is never bypassed, so a
+   * failover can never turn an explicit rejection into an approval.
+   */
+  kybFallbackProvider?: VerificationProvider;
   /** Require a successful live KYB check before publishing a positive verdict. */
   requireKyb?: boolean;
   /**

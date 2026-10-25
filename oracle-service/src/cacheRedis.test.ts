@@ -155,7 +155,21 @@ describe('redis cache backend', () => {
 
     fake.handlers.error?.(new Error('connection reset'));
 
-    expect(spy).toHaveBeenCalledWith('[oracle-cache] redis error', expect.any(Error));
+    expect(spy).toHaveBeenCalledWith('[oracle-cache] redis error', 'connection reset');
+    spy.mockRestore();
+  });
+
+  it('redacts a payer that leaks into a redis error message (#1239)', async () => {
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    await createOracleCache({ redisUrl: 'redis://localhost:6379' });
+
+    // WRONGTYPE-style errors and client diagnostics can echo the key, which
+    // embeds the payer.
+    fake.handlers.error?.(new Error(`WRONGTYPE on key oracle:v1:${TEST_PAYER}:10000000:42`));
+
+    const logged = spy.mock.calls.at(-1)?.join(' ') ?? '';
+    expect(logged).not.toContain(TEST_PAYER);
+    expect(logged).toContain(`${TEST_PAYER.slice(0, 8)}…`);
     spy.mockRestore();
   });
 });

@@ -26,6 +26,7 @@ import {
 } from './sourceFailover';
 import {
   type IndexerInvoiceHistoryEntry,
+  type KYBVerificationResult,
   type OracleServiceHealth,
   type OracleServiceOptions,
   type OracleVerdictAttestation,
@@ -34,6 +35,7 @@ import {
   type ReputationSnapshot,
   type VerificationProvider,
 } from './types';
+import { redactErrorMessage, truncatePayer } from './redaction';
 import {
   OracleVerifier,
   DEFAULT_KYB_DECISION_TTL_MS,
@@ -493,11 +495,12 @@ async function createHistoryProvider(
     try {
       return await invoke(payer);
     } catch (error) {
-      // Gracefully degrade when every history source is unavailable
-      // Log the error for monitoring but don't fail the entire verification
-      const errorMessage = error instanceof Error ? error.message : String(error);
+      // Gracefully degrade when every history source is unavailable. Log the
+      // error for monitoring but don't fail the entire verification — and keep
+      // the payer and the (URL-bearing) message redacted (issue #1239).
+      const reason = redactErrorMessage(error);
       // eslint-disable-next-line no-console
-      console.warn(`[oracle] indexer unavailable for payer ${payer}: ${errorMessage}`);
+      console.warn(`[oracle] indexer unavailable for payer ${truncatePayer(payer)}: ${reason}`);
       throw error;
     }
   };
@@ -554,6 +557,50 @@ async function createReputationProvider(
   };
 }
 
+/**
+ * Wrap a primary KYB provider with an optional fallback (issue #1238).
+ *
+ * Mirrors `createHistoryProvider`: failover machinery is engaged only when a
+ * fallback is configured, so a solo provider behaves exactly as before and
+ * registers no source bookkeeping.
+ *
+ * The critical property is that `withFailover` only switches sources when the
+ * primary *throws*. A primary that answers — even with `isVerified: false` — is
+ * a verdict, not an outage, so the fallback is never consulted and an explicit
+ * KYB rejection can never be laundered into an approval by a second registry.
+ */
+export function createKybProvider(
+  primary: VerificationProvider,
+  fallback: VerificationProvider | undefined,
+  tracker: SourceHealthTracker
+): VerificationProvider {
+  if (!fallback) {
+    return primary;
+  }
+
+  const verifyPayer = withFailover<
+    [string, (Record<string, unknown> | undefined)?],
+    KYBVerificationResult
+  >(
+    {
+      primary: {
+        id: 'kyb-primary',
+        invoke: (payer, metadata) => primary.verifyPayer(payer, metadata),
+      },
+      secondary: {
+        id: 'kyb-fallback',
+        invoke: (payer, metadata) => fallback.verifyPayer(payer, metadata),
+      },
+    },
+    tracker
+  );
+
+  return {
+    name: `${primary.name} (failover → ${fallback.name})`,
+    verifyPayer,
+  };
+}
+
 export interface CreateOracleAppResult {
   app: express.Express;
   close(): Promise<void>;
@@ -596,6 +643,12 @@ export async function createOracleApp(
     ));
   const reputationProvider =
     options.reputationProvider ?? (await createReputationProvider(resolved, sourceTracker));
+  // Issue #1238: the KYB provider gets the same primary/fallback treatment as
+  // the indexer and RPC. With no fallback it is passed through untouched.
+  const kybProvider = options.kybProvider
+    ? createKybProvider(options.kybProvider, options.kybFallbackProvider, sourceTracker)
+    : undefined;
+  const requireKyb = options.requireKyb ?? process.env.NODE_ENV === 'production';
   // Issues #1053 and #1055: a published verdict has to be attributable (an
   // attestation the caller can verify without trusting the transport) and it
   // has to leave a durable record behind. Both are constructed here rather than
@@ -676,7 +729,9 @@ export async function createOracleApp(
   await auditTrail.enforceRetention();
   const retentionTimer = setInterval(() => {
     void auditTrail.enforceRetention().catch((error: unknown) => {
-      console.error('[oracle] audit retention sweep failed', error);
+      // Redacted: a failed sweep can surface a stored payer in its error
+      // (issue #1239).
+      console.error('[oracle] audit retention sweep failed', redactErrorMessage(error));
     });
   }, AUDIT_RETENTION_SWEEP_MS);
   retentionTimer.unref?.();
@@ -1065,7 +1120,15 @@ export async function createOracleApp(
       degradedMode: degradedResponses > 0,
       degradedResponses,
       lastSuccessfulVerificationAt,
+      // Issue #1240: the operator's proof of payer/KYB posture. `sources`
+      // (issue #1238) exposes per-source failover state so a drill — or a live
+      // incident — can confirm routing moved without reading logs.
       sources,
+      kyb: {
+        required: requireKyb,
+        configured: Boolean(options.kybProvider),
+        failover: Boolean(options.kybProvider && options.kybFallbackProvider),
+      },
     };
   }
 

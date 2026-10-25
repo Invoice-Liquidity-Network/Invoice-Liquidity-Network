@@ -724,9 +724,11 @@ describe('audit retention sweep', () => {
 
       // 1 hour: AUDIT_RETENTION_SWEEP_MS in index.ts.
       await vi.advanceTimersByTimeAsync(60 * 60 * 1000);
+      // The error is redacted to its message before logging (#1239): an
+      // exception from the store can quote a row that names a payer.
       expect(error).toHaveBeenCalledWith(
         '[oracle] audit retention sweep failed',
-        expect.any(Error)
+        'audit database is gone'
       );
 
       // The failed run must not have cost the service the next one.
