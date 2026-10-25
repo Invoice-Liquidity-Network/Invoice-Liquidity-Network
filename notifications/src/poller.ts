@@ -3,6 +3,7 @@ import { CONFIG } from './config';
 import { getCursorLedger, setCursorLedger } from './db';
 import {
   processEvent,
+  flushPendingEvents,
   processScheduledNotifications,
   flushPendingNotifications,
 } from './processor';
@@ -72,6 +73,7 @@ export async function pollOnce(): Promise<void> {
     setCursorLedger(newCursor);
   }
 
+  await flushPendingEvents();
   await processScheduledNotifications();
   await flushPendingNotifications();
 }

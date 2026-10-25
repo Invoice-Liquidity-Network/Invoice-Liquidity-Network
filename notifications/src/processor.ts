@@ -2,7 +2,12 @@ import type { rpc } from '@stellar/stellar-sdk';
 import { scValToNative } from '@stellar/stellar-sdk';
 import {
   hasEvent,
-  insertEvent,
+  getInboundEvent,
+  enqueueInboundEvent,
+  getDueInboundEvents,
+  completeInboundEvent,
+  recordInboundEventFailure,
+  getInboundEventSummary,
   upsertInvoice,
   queryInvoicesByStatus,
   getSubscriptionsByAddress,
@@ -15,7 +20,7 @@ import {
   dispatchDestinationOf,
   getDispatchOutcomeSummary,
 } from './db';
-import type { DispatchAttemptSubscription, DispatchFailureReason } from './db';
+import type { DispatchAttemptSubscription, DispatchFailureReason, InboundEvent } from './db';
 import { fetchInvoice } from './rpc';
 import { deliverNotification } from './delivery';
 import { deliverWithFallback } from './fallback';
@@ -36,8 +41,26 @@ import { isOwnershipVerified, recordBlockedDelivery } from './ownership';
 
 const KNOWN_EVENT_TYPES = new Set<ILNEventType>(['submitted', 'funded', 'paid', 'defaulted']);
 
+/**
+ * Ingest one chain event (issues #1273-#1276).
+ *
+ * The event is journaled in `event_inbox` before any RPC call, and the
+ * `events` row is only written after the invoice was retrieved and its
+ * notifications dispatched. Previously the `events` row was written first, so
+ * a failed `get_invoice` left the event "seen" while the cursor moved past it
+ * and the notification was lost for good.
+ *
+ * - Replays are idempotent: a processed event is skipped via `events`; a
+ *   pending or dead-lettered one is owned by {@link flushPendingEvents} /
+ *   the operator, never re-attempted inline.
+ * - An event whose payload cannot be decoded can never succeed, so it is
+ *   dead-lettered immediately instead of throwing and stalling the poller.
+ * - Fetch/dispatch failures retry with exponential backoff and are dead-
+ *   lettered after `CONFIG.eventMaxAttempts`.
+ */
 export async function processEvent(event: rpc.Api.EventResponse): Promise<void> {
   if (hasEvent(event.id)) {
+    notificationsMetrics.recordEventIngest('duplicate');
     return;
   }
 
@@ -45,30 +68,124 @@ export async function processEvent(event: rpc.Api.EventResponse): Promise<void> 
     return;
   }
 
-  const eventType = scValToNative(event.topic[0]) as string;
-  if (!KNOWN_EVENT_TYPES.has(eventType as ILNEventType)) {
+  let eventType: string;
+  let invoiceId: number;
+  try {
+    eventType = scValToNative(event.topic[0]) as string;
+    if (!KNOWN_EVENT_TYPES.has(eventType as ILNEventType)) {
+      return;
+    }
+    const raw = scValToNative(event.value) as bigint | number;
+    invoiceId = Number(raw);
+    if (!Number.isSafeInteger(invoiceId) || invoiceId < 0) {
+      throw new Error(`invalid invoice id ${String(raw)}`);
+    }
+  } catch (error) {
+    deadLetterMalformedEvent(event, error);
     return;
   }
 
-  const invoiceId = Number(scValToNative(event.value) as bigint);
-  insertEvent({
+  if (getInboundEvent(event.id)) {
+    // Already journaled by an earlier poll: the retry loop owns it.
+    notificationsMetrics.recordEventIngest('duplicate');
+    return;
+  }
+
+  enqueueInboundEvent({
     event_id: event.id,
-    event_type: eventType as ILNEventType,
+    event_type: eventType,
     invoice_id: invoiceId,
     ledger: event.ledger,
     ledger_closed_at: event.ledgerClosedAt,
-    created_at: Date.now(),
   });
+  const entry = getInboundEvent(event.id);
+  if (entry) await attemptInboundEvent(entry);
+  refreshEventInboxMetrics();
+}
 
-  const invoice = await fetchInvoice(invoiceId);
-  if (!invoice) {
+function deadLetterMalformedEvent(event: rpc.Api.EventResponse, error: unknown): void {
+  if (getInboundEvent(event.id)) return;
+  enqueueInboundEvent({
+    event_id: event.id,
+    event_type: 'unknown',
+    invoice_id: 0,
+    ledger: event.ledger,
+    ledger_closed_at: event.ledgerClosedAt,
+  });
+  const outcome = recordInboundEventFailure(event.id, errorMessage(error), {
+    terminalReason: 'malformed_event',
+  });
+  if (outcome) reportInboundEventFailure(event.id, outcome, errorMessage(error));
+  refreshEventInboxMetrics();
+}
+
+/**
+ * Retry journaled events whose backoff has elapsed. Runs every poll, so the
+ * poller is the retry driver and nothing in-process has to survive a restart.
+ * One failing event never aborts the rest.
+ */
+export async function flushPendingEvents(): Promise<void> {
+  for (const entry of getDueInboundEvents()) {
+    await attemptInboundEvent(entry);
+  }
+  refreshEventInboxMetrics();
+}
+
+async function attemptInboundEvent(entry: InboundEvent): Promise<void> {
+  try {
+    const invoice = await fetchInvoice(entry.invoice_id);
+    if (!invoice) {
+      throw new Error(`invoice ${entry.invoice_id} could not be retrieved`);
+    }
+
+    upsertInvoice(invoice);
+    const trigger = EVENT_TO_TRIGGER[entry.event_type as ILNEventType];
+    if (trigger) {
+      await dispatchNotifications(trigger, invoice, entry.event_id);
+    }
+    // Dispatch is idempotent (dedup key), so a crash before this line only
+    // causes a retry that re-sends nothing.
+    if (completeInboundEvent(entry.event_id)) {
+      notificationsMetrics.recordEventIngest('processed');
+    }
+  } catch (error) {
+    const message = errorMessage(error);
+    const outcome = recordInboundEventFailure(entry.event_id, message);
+    if (outcome) reportInboundEventFailure(entry.event_id, outcome, message);
+  }
+}
+
+function reportInboundEventFailure(
+  eventId: string,
+  outcome: { terminal: boolean; attempts: number; outcome_reason: string | null },
+  message: string
+): void {
+  if (outcome.terminal) {
+    notificationsMetrics.recordEventIngest('dead_lettered', outcome.outcome_reason ?? 'unknown');
+    console.error(
+      `[processor] Event ${eventId} dead-lettered (${outcome.outcome_reason}) after ` +
+        `${outcome.attempts} attempt(s): ${message}`
+    );
     return;
   }
+  notificationsMetrics.recordEventIngest('retry');
+  console.warn(
+    `[processor] Event ${eventId} failed (attempt ${outcome.attempts}/${CONFIG.eventMaxAttempts}); ` +
+      `will retry with backoff: ${message}`
+  );
+}
 
-  upsertInvoice(invoice);
-  const trigger = EVENT_TO_TRIGGER[eventType as ILNEventType];
-  if (trigger) {
-    await dispatchNotifications(trigger, invoice, event.id as string);
+function refreshEventInboxMetrics(): void {
+  try {
+    const summary = getInboundEventSummary();
+    const gauge = notificationsMetrics.eventInbox;
+    gauge.set({ status: 'pending' }, summary.pending);
+    gauge.set({ status: 'processed' }, summary.processed);
+    gauge.set({ status: 'dead' }, summary.dead);
+    gauge.set({ status: 'oldest_pending_age_seconds' }, (summary.oldestPendingAgeMs ?? 0) / 1000);
+    gauge.set({ status: 'max_pending_attempts' }, summary.maxPendingAttempts);
+  } catch (error) {
+    console.error('[processor] Failed to refresh event inbox metrics:', error);
   }
 }
 
