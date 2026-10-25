@@ -20,7 +20,7 @@ The `Launch exception accepted` status is a formal, auditable mechanism for ackn
 
 ### Exception Request
 
-1. **Initiation**: The checklist item owner opens a GitHub issue using the [Launch Exception Request template](.github/ISSUE_TEMPLATE/launch-exception-request.yml) (to be created) with:
+1. **Initiation**: The checklist item owner opens a GitHub issue using the [Launch Exception Request template](../.github/ISSUE_TEMPLATE/launch-exception-request.yml) with:
    - Checklist item reference (section and row)
    - Reason the item cannot be completed before launch
    - Risk assessment: impact, likelihood, and mitigation if the exception is granted

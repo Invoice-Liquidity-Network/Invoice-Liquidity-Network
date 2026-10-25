@@ -4,29 +4,29 @@ This guide covers upgrades between versions of the stable `@iln/sdk` package.
 The separate experimental `@iln/sdk-next` package has a different API surface;
 see the [SDK-next migration notes on GitHub](https://github.com/Invoice-Liquidity-Network/Invoice-Liquidity-Network/blob/main/docs/sdk-next-migration.md).
 
-For supported dependency versions, see the [SDK compatibility matrix on GitHub](https://github.com/Invoice-Liquidity-Network/Invoice-Liquidity-Network/blob/main/docs/SDK_COMPATIBILITY_MATRIX.md).
+For supported dependency versions, see the [SDK compatibility matrix on GitHub](https://github.com/Invoice-Liquidity-Network/Invoice-Liquidity-Network/blob/dev/docs/SDK_COMPATIBILITY_MATRIX.md).
 
 ## Package Name
 
-Older applications may refer to `@invoice-liquidity/sdk`. The stable package
+Older applications may refer to `@invoice-liquidity/sdk`. {/* sdk-name-check: allow-legacy */} The stable package
 in `sdk/` is published as `@iln/sdk`; update package specifiers, imports,
 `pnpm --filter` arguments, bundler externals and aliases, and TypeScript
 `paths` entries. A pnpm filter using the retired name can match no package
 while still exiting successfully.
 
 ```diff
-- "@invoice-liquidity/sdk": "^0.1.0"
+- "@invoice-liquidity/sdk": "^0.1.0" // sdk-name-check: allow-legacy
 + "@iln/sdk": "^0.1.0"
 ```
 
 ```diff
-- import { ILNSdk, ILN_TESTNET } from "@invoice-liquidity/sdk";
+- import { ILNSdk, ILN_TESTNET } from "@invoice-liquidity/sdk"; // sdk-name-check: allow-legacy
 + import { ILNSdk, ILN_TESTNET } from "@iln/sdk";
 ```
 
 `@iln/react` declares `@iln/sdk` (`^0.1.0`) as a peer dependency. Install the
 SDK alongside `@iln/react` in your application. The repository's
-[SDK package-name check](https://github.com/Invoice-Liquidity-Network/Invoice-Liquidity-Network/blob/main/scripts/check-sdk-package-names.mjs)
+[SDK package-name check](https://github.com/Invoice-Liquidity-Network/Invoice-Liquidity-Network/blob/dev/scripts/check-sdk-package-names.mjs)
 guards canonical package names in CI.
 
 ## Breaking Changes

@@ -244,6 +244,11 @@ jobs:
         working-directory: ./indexer
         run: pnpm install --frozen-lockfile
 
+      # @iln/opentelemetry resolves to dist/ (package.json "main"); without
+      # this build every suite that imports src/api.ts fails to load.
+      - name: Build workspace dependencies
+        run: pnpm --filter @iln/opentelemetry build
+
       - name: Run Indexer test with coverage
         working-directory: ./indexer
         run: pnpm test:coverage

@@ -2,6 +2,11 @@ version: '3.8'
 services:
   stellar-quickstart:
     image: stellar/quickstart:latest
+    # Without a network flag quickstart joins *testnet* (its start script
+    # defaults NETWORK to testnet), so RPC never reports a local ledger and the
+    # suites' "Standalone Network ; February 2017" passphrase and Friendbot do
+    # not match. --local runs the standalone network the E2E suites expect.
+    command: --local --enable core,horizon,rpc
     restart: unless-stopped
     ports:
       - '8000:8000'

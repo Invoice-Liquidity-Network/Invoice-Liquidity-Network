@@ -51,6 +51,15 @@ import {
 } from './export';
 
 /**
+ * A single named route parameter as a string. `@types/express@5` types params
+ * as `string | string[]`; express@4 (the runtime) only produces strings.
+ */
+function routeParam(req: Request, name: string): string {
+  const value = req.params[name];
+  return Array.isArray(value) ? (value[0] ?? '') : (value ?? '');
+}
+
+/**
  * Build and return the Express application.
  * Calling this as a factory (rather than exporting a singleton) makes
  * the app trivially injectable in tests.
@@ -180,40 +189,26 @@ export function createApp(): express.Application {
   const router = Router();
 
   // GET /health
-  router.get("/health", (_req: Request, res: Response) => {
-    let dbStatus: "ok" | "error" = "ok";
-    let updatedAt: number | null = null;
-    try {
-      getDb().prepare("SELECT 1").get();
-      updatedAt = getCursorUpdatedAt();
-    } catch {
-      dbStatus = "error";
-    }
-
-    res.status(dbStatus === "ok" ? 200 : 503).json({
-      status: dbStatus,
-      db: dbStatus,
-      lastSync: updatedAt === null ? null : new Date(updatedAt).toISOString(),
-      uptime: Date.now() - startTime,
-    });
+  // Liveness + readiness probe (Railway probes /v1/health). Returns 200 only
+  // when SQLite answers; any database failure is 503 with status "error" so a
+  // load balancer or orchestrator stops routing to / restarts the instance.
+  // Contract pinned by tests/api.test.ts and scripts/check-indexer-ops-docs.mjs.
   router.get('/health', (_req: Request, res: Response) => {
     let dbStatus: 'ok' | 'error' = 'ok';
+    let updatedAt: number | null = null;
     try {
       getDb().prepare('SELECT 1').get();
+      updatedAt = getCursorUpdatedAt();
     } catch {
       dbStatus = 'error';
     }
 
-    const lastSyncMs = getCursorUpdatedAt();
-    const uptime = Date.now() - startTime;
-    const status = dbStatus === 'ok' ? 'ok' : 'degraded';
-
     cacheControl(res, 'health');
-    res.json({
-      status,
+    res.status(dbStatus === 'ok' ? 200 : 503).json({
+      status: dbStatus,
       db: dbStatus,
-      lastSync: lastSyncMs !== null ? new Date(lastSyncMs).toISOString() : null,
-      uptime,
+      lastSync: updatedAt === null ? null : new Date(updatedAt).toISOString(),
+      uptime: Date.now() - startTime,
     });
   });
 
@@ -284,12 +279,12 @@ export function createApp(): express.Application {
 
   router.get('/lps/:address/stats', (req: Request, res: Response) => {
     cacheControl(res, 'short');
-    res.json(getLPStats(req.params.address));
+    res.json(getLPStats(routeParam(req, 'address')));
   });
 
   router.get('/freelancers/:address/stats', (req: Request, res: Response) => {
     cacheControl(res, 'short');
-    res.json(getFreelancerStats(req.params.address));
+    res.json(getFreelancerStats(routeParam(req, 'address')));
   });
 
   router.get('/history/:address', (req: Request, res: Response) => {
@@ -310,12 +305,12 @@ export function createApp(): express.Application {
       : undefined;
 
     cacheControl(res, 'medium');
-    res.json(getInvoiceHistory(req.params.address, role, fields));
+    res.json(getInvoiceHistory(routeParam(req, 'address'), role, fields));
   });
 
   // GET /invoice/:id
   router.get('/invoice/:id', async (req: Request, res: Response) => {
-    const id = parseInt(req.params.id, 10);
+    const id = parseInt(routeParam(req, 'id'), 10);
 
     if (isNaN(id) || id <= 0) {
       res.status(400).json({ error: 'Invalid invoice ID - must be a positive integer' });
@@ -378,7 +373,7 @@ export function createApp(): express.Application {
 
   // POST /archive/restore/:id
   router.post('/archive/restore/:id', (req: Request, res: Response) => {
-    const id = parseInt(req.params.id, 10);
+    const id = parseInt(routeParam(req, 'id'), 10);
     if (isNaN(id) || id <= 0) {
       res.status(400).json({ error: 'Invalid invoice ID - must be a positive integer' });
       return;
@@ -665,7 +660,7 @@ export function createApp(): express.Application {
 
   // GET /export/jobs/:jobId — poll job status
   router.get('/export/jobs/:jobId', (req: Request, res: Response) => {
-    const job = getExportJob(req.params.jobId);
+    const job = getExportJob(routeParam(req, 'jobId'));
     if (!job) {
       res.status(404).json({ error: 'Export job not found' });
       return;
@@ -687,7 +682,7 @@ export function createApp(): express.Application {
 
   // GET /export/download/:jobId — stream the completed export
   router.get('/export/download/:jobId', (req: Request, res: Response) => {
-    const job = getExportJob(req.params.jobId);
+    const job = getExportJob(routeParam(req, 'jobId'));
     if (!job) {
       res.status(404).json({ error: 'Export job not found' });
       return;
@@ -701,7 +696,7 @@ export function createApp(): express.Application {
       return;
     }
 
-    const content = getExportContent(req.params.jobId);
+    const content = getExportContent(routeParam(req, 'jobId'));
     if (content === undefined) {
       res.status(500).json({ error: 'Export content unavailable' });
       return;
