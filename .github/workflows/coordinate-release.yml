@@ -29,9 +29,13 @@ jobs:
       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       DRY_RUN: ${{ inputs.dry_run }}
       VERSION: ${{ inputs.version }}
-      RELEASE_TAGS_FILE: ${{ runner.temp }}/iln-release-tags.txt
 
     steps:
+      # `runner.temp` is not available in job-level env (actionlint
+      # [expression]); derive the ledger path from $RUNNER_TEMP in a step.
+      - name: Locate release ledger
+        run: echo "RELEASE_TAGS_FILE=${RUNNER_TEMP}/iln-release-tags.txt" >> "$GITHUB_ENV"
+
       - name: Initialize release ledger
         run: |
           set -euo pipefail

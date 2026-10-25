@@ -1,0 +1,10 @@
+{
+  "$comment": "GitHub Actions policy exemptions (#1286). Every third-party action must be pinned to a 40-character commit SHA; an entry here is the only way out, and it must name the exact reference, a release tag (vX.Y.Z), and why. An entry no workflow uses fails the check. See docs/runbooks/workflow-policy.md.",
+  "exemptions": [
+    {
+      "uses": "slsa-framework/slsa-github-generator/.github/workflows/generator_generic_slsa3.yml@v2.1.0",
+      "reason": "The SLSA generator verifies its own reference and only supports being called by a release tag; calling it by commit SHA fails provenance generation. It is a reusable workflow, not an action, and the tag is a signed SLSA release.",
+      "link": "https://github.com/slsa-framework/slsa-github-generator#referencing-slsa-builders-and-generators"
+    }
+  ]
+}

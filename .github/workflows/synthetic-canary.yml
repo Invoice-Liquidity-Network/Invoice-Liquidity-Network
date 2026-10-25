@@ -65,26 +65,40 @@ jobs:
     name: Live canary probe (deployed services — full critical-path)
     runs-on: ubuntu-latest
     timeout-minutes: 5
-    # Only run live checks when secrets are configured
-    if: |
-      vars.INDEXER_BASE_URL != '' ||
-      secrets.INDEXER_BASE_URL != ''
+    # Only run live checks when a target is configured. `secrets` cannot be read
+    # in a job-level `if:` (GitHub rejects the whole workflow file), so the
+    # check runs as the first step and gates the rest.
     steps:
+      - name: Resolve live probe target
+        id: target
+        env:
+          CONFIGURED: ${{ secrets.INDEXER_BASE_URL != '' || vars.INDEXER_BASE_URL != '' }}
+        run: |
+          echo "configured=${CONFIGURED}" >> "$GITHUB_OUTPUT"
+          if [ "$CONFIGURED" != "true" ]; then
+            echo "::notice title=Live canary skipped::INDEXER_BASE_URL is not configured as a secret or variable."
+          fi
+
       - uses: actions/checkout@v4
+        if: steps.target.outputs.configured == 'true'
 
       - name: Set up Node.js
+        if: steps.target.outputs.configured == 'true'
         uses: actions/setup-node@v4
         with:
           node-version: '20'
 
       - name: Install tsx (for script execution)
+        if: steps.target.outputs.configured == 'true'
         run: npm install -g tsx
 
       - name: Install ws (for WebSocket canary)
+        if: steps.target.outputs.configured == 'true'
         run: npm install ws
 
       - name: Run synthetic canary script (critical-path)
         id: canary
+        if: steps.target.outputs.configured == 'true'
         run: |
           tsx scripts/synthetic-canary.ts 2>&1 | tee canary-output.log
           exit_code=${PIPESTATUS[0]}
@@ -108,7 +122,7 @@ jobs:
           CANARY_REQUEST_TIMEOUT_MS: '8000'
 
       - name: Upload canary log as artifact
-        if: always()
+        if: always() && steps.target.outputs.configured == 'true'
         uses: actions/upload-artifact@v4
         with:
           name: canary-live-log-${{ github.run_id }}
