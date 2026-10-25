@@ -72,10 +72,10 @@ the `check-meta-nav` job of `docs-deploy.yml`). The check fails when:
 > #1218 and can be ported as-is. See
 > [runbooks/sdk-package-names.md](runbooks/sdk-package-names.md).
 
-- [x] Local development guide (`docs/local-development.md` → `packages/docs/content/local-development.mdx`)
-- [ ] CI/CD reference (`docs/ci-cd.md`)
-- [ ] Security guide (`docs/security-guide.md`)
-- [ ] Threat model (`docs/threat-model.md`)
+- [x] Local development guide (`docs/local-development.md`)
+- [x] CI/CD reference (`docs/ci-cd.md`)
+- [x] Security guide (`docs/security-guide.md` → `packages/docs/content/security/security-guide.mdx`)
+- [x] Threat model (`docs/threat-model.md` → `packages/docs/content/security/threat-model.mdx`)
 - [ ] Glossary (`docs/glossary.md`)
 - [ ] Changelog page (`docs/changelog.md`)
 - [x] SDK migration guide (`docs/sdk-migration-guide.md` → `packages/docs/content/sdk-reference/migration-guide.mdx`)
@@ -93,6 +93,7 @@ the `check-meta-nav` job of `docs-deploy.yml`). The check fails when:
 - [ ] Indexer configuration (`docs/indexer/configuration.md`)
 - [ ] Indexer deployment (`docs/indexer/deployment.md`)
 - [ ] Indexer troubleshooting (`docs/indexer/troubleshooting.md`)
+- [ ] Indexer operations checks (`docs/indexer/operations-checks.md`)
 - [ ] Contract governance (`docs/contracts/governance-contract.md`)
 - [ ] Contract reputation (`docs/contracts/reputation-contract.md`)
 - [ ] Mainnet launch checklist (`docs/mainnet-launch-checklist.md`)
@@ -171,6 +172,7 @@ the `check-meta-nav` job of `docs-deploy.yml`). The check fails when:
 - [ ] Runbook: E2E release evidence bundle (`docs/runbooks/e2e-release-evidence.md`)
 - [ ] Runbook: Example SDK Resolution (`docs/runbooks/example-sdk-resolution.md`)
 - [ ] Runbook: Generated-Client Drift Detection (`docs/runbooks/generated-client-drift.md`)
+- [ ] Runbook: GitHub Actions Workflow Policy (`docs/runbooks/workflow-policy.md`)
 - [ ] Cross-Repo Incident Response Runbook (`docs/runbooks/incident-response.md`)
 - [ ] Indexer Reorg Reconciliation & Event Idempotency Runbook (`docs/runbooks/indexer-reorg-reconciliation.md`)
 - [ ] Runbook: notification dispatch outcomes and recipient protection (`docs/runbooks/notifications-dispatch-outcomes.md`)
@@ -182,6 +184,7 @@ the `check-meta-nav` job of `docs-deploy.yml`). The check fails when:
 - [ ] Runbook: SDK Export Map Consistency (`docs/runbooks/sdk-export-maps.md`)
 - [ ] Runbook: Canonical SDK Package Names (`docs/runbooks/sdk-package-names.md`)
 - [ ] Runbook: SDK Release-Candidate Pack Smoke (`docs/runbooks/sdk-rc-smoke.md`)
+- [ ] Runbook: Security Documentation and API Security Headers (`docs/runbooks/security-docs.md`)
 - [ ] Runbook: SDK Versioning and Support Windows (`docs/runbooks/sdk-support-windows.md`)
 - [ ] ILN SCF Technical Narrative (`docs/scf-technical-narrative.md`)
 - [ ] Cross-repo SDK Trust Model visibility (`docs/sdk-trust-model-cross-repo.md`)
@@ -227,6 +230,27 @@ Run [`check-mainnet-launch-readiness.mjs`](../scripts/check-mainnet-launch-readi
 Before launch, dispatch the [Mainnet Launch Readiness workflow](../.github/workflows/mainnet-launch-readiness.yml) for the checklist rehearsal and the [Mainnet Launch Evidence workflow](../.github/workflows/mainnet-launch-evidence.yml) for the audit gate. The rehearsal requires every checklist row to be `Done` or `Launch exception accepted` and fresh independent reviewer sign-offs. The audit gate requires a complete independent external audit covering the manifest's required scope, no unresolved findings (or documented accepted findings), completion within the last 365 days, and a downloadable HTTPS report whose SHA-256 matches [`docs/evidence/external-security-audit.json`](evidence/external-security-audit.json). Both gates fail closed and publish JSON/summary evidence. The Release lead owns checklist and manifest updates and recovery.
 
 This control changes no adjacent service API or cross-repository package contract; it consumes existing repository documentation and CI artifacts only.
+
+### Indexer operations docs are executable
+
+The indexer operator pages (`docs/indexer/*.md`) are checked against the
+indexer source by [`check-indexer-ops-docs.mjs`](../scripts/check-indexer-ops-docs.mjs):
+every environment variable and default in `docs/indexer/configuration.md`,
+every endpoint, metric name, `pnpm`/`npm` command and `/health` status
+mentioned in any indexer page, and `indexer/railway.toml`. When you port an
+indexer page to `packages/docs/`, keep `docs/indexer/` as the checked source
+until the check is pointed at the new location.
+
+```bash
+node scripts/check-indexer-ops-docs.mjs
+node --test scripts/__tests__/indexer-ops-docs.test.mjs
+```
+
+The [Indexer Ops Docs workflow](../.github/workflows/indexer-ops-docs.yml) runs
+both on every PR and weekly, uploads a JSON report, and fails closed. The
+indexer team owns the control; the recovery path is in
+[indexer/operations-checks.md](indexer/operations-checks.md). It changes no
+adjacent service API or cross-repository contract.
 
 ### Canonical site — `packages/docs/` (deployed to `docs.iln.finance`)
 

@@ -10,6 +10,9 @@
  *   tsx src/audit-cli.ts --dispatch-summary
  *   tsx src/audit-cli.ts --dispatch-list failed
  *   tsx src/audit-cli.ts --requeue <attempt-id> --operator <operator-id>
+ *   tsx src/audit-cli.ts --event-summary
+ *   tsx src/audit-cli.ts --event-list dead
+ *   tsx src/audit-cli.ts --event-requeue <event-id> --operator <operator-id>
  *
  * Or via the API:
  *   curl "http://localhost:4001/audit/deliveries?recipient=GABC&start=2026-01-01T00:00:00Z"
@@ -25,8 +28,11 @@ import {
   getDispatchOutcomeSummary,
   listDispatchAttempts,
   requeueFailedDispatchAttempt,
+  getInboundEventSummary,
+  listInboundEvents,
+  requeueDeadInboundEvent,
 } from './db';
-import type { DispatchAttemptStatus } from './db';
+import type { DispatchAttemptStatus, InboundEventStatus } from './db';
 
 const args = process.argv.slice(2);
 
@@ -103,6 +109,51 @@ async function main() {
     process.exit(requeued ? 0 : 2);
   }
 
+  // Issues #1273-#1276: chain-event inbox. Exit code 3 from --event-summary
+  // means dead-lettered events exist and need an operator decision.
+  if (hasFlag('event-summary')) {
+    const summary = getInboundEventSummary();
+    console.log(JSON.stringify(summary, null, 2));
+    process.exit(summary.dead > 0 ? 3 : 0);
+  }
+
+  const eventList = getArg('event-list');
+  if (eventList !== undefined) {
+    if (!['pending', 'processed', 'dead'].includes(eventList)) {
+      console.error('--event-list must be pending, processed, or dead');
+      process.exit(1);
+    }
+    const limit = getArg('limit');
+    console.table(
+      listInboundEvents({
+        status: eventList as InboundEventStatus,
+        limit: limit ? parseInt(limit, 10) : undefined,
+      }).map((row) => ({
+        ...row,
+        last_error: row.last_error ? row.last_error.slice(0, 60) : '',
+        created_at: new Date(row.created_at).toISOString(),
+        failed_at: row.failed_at ? new Date(row.failed_at).toISOString() : '',
+      }))
+    );
+    return;
+  }
+
+  const eventRequeueId = getArg('event-requeue');
+  if (eventRequeueId !== undefined) {
+    const operator = getArg('operator');
+    if (!operator) {
+      console.error('--event-requeue requires --operator <operator-id>');
+      process.exit(1);
+    }
+    const requeued = requeueDeadInboundEvent(eventRequeueId, operator);
+    console.log(
+      requeued
+        ? `Re-queued event ${eventRequeueId}; the next poll retries it with a fresh attempt budget.`
+        : `No re-queueable dead-lettered event with id ${eventRequeueId}.`
+    );
+    process.exit(requeued ? 0 : 2);
+  }
+
   if (hasFlag('purge')) {
     const maxRowsArg = getArg('max-rows');
     const maxRows = maxRowsArg === undefined ? undefined : Number(maxRowsArg);
@@ -138,6 +189,9 @@ Options:
   --dispatch-summary   Print dispatch journal outcome counts (exit 3 if any failed)
   --dispatch-list <s>  List journal rows by status (pending, delivered, failed)
   --requeue <id>       Re-queue a failed journal row (requires --operator <id>)
+  --event-summary      Print chain-event inbox counts (exit 3 if any dead-lettered)
+  --event-list <s>     List inbox events by status (pending, processed, dead)
+  --event-requeue <id> Re-queue a dead-lettered event (requires --operator <id>)
   --help               Show this help
 
 Examples:

@@ -31,12 +31,20 @@ export default {
     title: 'CLI Reference',
     type: 'page',
   },
+  'ci-cd': {
+    title: 'CI/CD Reference',
+    type: 'page',
+  },
   governance: {
     title: 'Governance',
     type: 'page',
   },
   'api-reference': {
     title: 'API Reference',
+    type: 'page',
+  },
+  security: {
+    title: 'Security',
     type: 'page',
   },
   tutorials: {

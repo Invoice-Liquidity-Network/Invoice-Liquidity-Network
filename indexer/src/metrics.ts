@@ -116,6 +116,21 @@ export const cursorUpdatedAt = new Gauge({
   registers: [registry],
 });
 
+// ── Startup configuration control (docs/indexer/operations-checks.md) ──────
+
+export const configInfo = new Gauge({
+  name: 'iln_indexer_config_info',
+  help: 'Always 1 once startup configuration validation passed; labels identify what this instance indexes',
+  labelNames: ['network', 'contract_id'] as const,
+  registers: [registry],
+});
+
+export const configWarnings = new Gauge({
+  name: 'iln_indexer_config_warnings',
+  help: 'Number of non-fatal configuration warnings reported at startup',
+  registers: [registry],
+});
+
 // ── Analytics query isolation metrics ────────────────────────────────────────
 
 export const analyticsQueryDuration = new Histogram({

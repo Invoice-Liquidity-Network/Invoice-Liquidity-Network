@@ -27,7 +27,7 @@ Polls the Stellar Soroban contract for events in batches of 200. Maintains a cur
 
 ### Processor (`src/processor.ts`)
 
-Decodes each contract event via `scValToNative`, deduplicates by event ID, fetches the invoice from the contract via RPC simulation, and upserts it into the local SQLite DB. Maps event types to notification triggers:
+Decodes each contract event via `scValToNative`, deduplicates by event ID, journals it in `event_inbox`, fetches the invoice from the contract via RPC simulation, upserts it into the local SQLite DB and dispatches notifications. The `events` row is written only after that succeeds, so a failed fetch never leaves an event recorded-but-unprocessed; failures retry with exponential backoff and are dead-lettered after `NOTIFICATIONS_EVENT_MAX_ATTEMPTS` (see [Runbook: event ingestion](#runbook-event-ingestion-dead-letter-retry-and-replay)). Maps event types to notification triggers:
 
 | Event Type | Trigger | Recipients |
 |---|---|---|
@@ -212,7 +212,8 @@ pnpm test:watch      # Run in watch mode
 The service uses SQLite via `better-sqlite3` (default path: `notifications.sqlite`). Tables:
 
 - `invoices` — Invoice records synced from the contract
-- `events` — Processed contract events (deduplication key)
+- `events` — Processed contract events (deduplication key); written only after the invoice was retrieved and notifications dispatched
+- `event_inbox` — Durable chain-event journal (`pending` / `processed` / `dead`) with attempt count, backoff and dead-letter reason
 - `cursor` — Last processed ledger position
 - `subscriptions` — User notification subscriptions
 - `sent_notifications` — Delivered notification log (idempotency)
@@ -252,5 +253,18 @@ data, confirmation, and backup handling.
 - **Invariant:** every line in a sent digest corresponds to a persisted invoice event (or a scheduled trigger) the recipient is entitled to, appears at most once, and is never re-sent; every such event in the window `(last_flushed_at, now]` is included.
 - **Evidence the control is active:** each digest flush logs one `[digest-reconcile]` JSON report (`kept`, `backfilled`, `duplicates`, `alreadyDelivered`, `orphaned`, `mismatched`, `unresolved`). `GET /metrics/digest-reconciliation` returns cumulative `totals`, `runs`, `failures` and the `lastReport`.
 - **Fail-closed behaviour:** if reconciliation cannot read the event store, the flush throws, no email is sent, and the buffer (and `digest_pending`) is kept for the next tick; `failures` increments.
-- **Unresolved events** (event stored but its invoice fetch failed) keep the watermark before them, so they are backfilled on a later flush once the invoice is stored. A sustained non-zero `unresolved` means the RPC `get_invoice` path is failing — check `[rpc]` logs.
+- **Unresolved events** (event stored but its invoice fetch failed; since #1274 new events are only stored after the invoice is retrieved, so this applies to rows written by older versions) keep the watermark before them, so they are backfilled on a later flush once the invoice is stored. A sustained non-zero `unresolved` means the RPC `get_invoice` path is failing — check `[rpc]` logs.
 - **Restart:** on startup `digestScheduler.restore()` reloads registrations and pending items from SQLite, then `digestScheduler.start()` resumes ticking.
+
+## Runbook: event ingestion (dead-letter, retry and replay)
+
+**Control:** `event-inbox-bounded-retry-dead-letter` (#1273, #1274, #1275, #1276). **Owner:** notifications service maintainers.
+
+- **Invariant:** every contract event the poller sees is journaled in `event_inbox` before any RPC call and ends `processed` (invoice retrieved, notifications dispatched, `events` row written) or `dead` (terminal, operator-visible). The cursor may advance past an event once it is journaled, so a failed `get_invoice` can no longer lose it.
+- **Bounded retry:** a failed attempt leaves the event `pending` with `next_attempt_at = now + min(NOTIFICATIONS_EVENT_RETRY_MAX_MS, NOTIFICATIONS_EVENT_RETRY_BASE_MS * 2^(attempts-1))` (defaults 5 s base, 5 min cap). After `NOTIFICATIONS_EVENT_MAX_ATTEMPTS` (default 6) the event is dead-lettered as `max_attempts_exhausted`. A payload that cannot be decoded is dead-lettered immediately as `malformed_event` and never stalls the poller.
+- **Idempotence:** replayed polls skip processed, pending and dead events; notification sends are additionally deduplicated by the `dispatch_attempts` key, so a crash between delivery and closing the event re-sends nothing.
+- **Evidence the control is active:** `GET /metrics` exposes `iln_notifications_event_ingest_total{result,reason}` (`processed`, `retry`, `dead_lettered`, `duplicate`) and `iln_notifications_event_inbox{status}` (`pending`, `processed`, `dead`, `oldest_pending_age_seconds`, `max_pending_attempts`). Dead-lettering logs `[processor] Event <id> dead-lettered (...)`. **Alert on** `iln_notifications_event_inbox{status="dead"} > 0` or a growing `oldest_pending_age_seconds`.
+- **Triage:** `tsx src/audit-cli.ts --event-summary` (exit code 3 when any event is dead) and `--event-list dead|pending|processed`.
+- **Recovery:** fix the cause (usually the RPC `get_invoice` path — check `[rpc]` logs), then `tsx src/audit-cli.ts --event-requeue <event-id> --operator <operator-id>`. This resets the attempt budget, is recorded in the signed compliance audit chain, and the next poll retries it. `malformed_event` rows cannot be re-queued.
+- **Migration / compatibility:** `event_inbox` is created automatically (`CREATE TABLE IF NOT EXISTS`); the `events` table and every API are unchanged. Events recorded by older versions without a retrievable invoice are not recoverable by this control. No other service changes are required.
+- **Validation:** `tests/event-ingest.test.ts` (success, failed fetch, backoff boundary, retry-budget boundary, restart, replay, dead-letter and re-queue).

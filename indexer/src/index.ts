@@ -1,54 +1,40 @@
-import http from 'http';
-import { createApp } from './api';
-import { CONFIG } from './config';
-import { startPolling } from './poller';
-import { createGraphQLServer } from './graphql/server';
-import { startArchivalScheduler } from './archive';
-import { startReconciliationScheduler } from './reconciliation';
-import { BackupManager } from './backup';
+import { config as loadEnv } from 'dotenv';
+import { CONFIG_EXIT_CODE, reportConfigValidation, validateIndexerEnv } from './configValidation';
 
-async function main() {
-  const app = createApp();
-  const httpServer = http.createServer(app);
-
-  const graphqlMiddleware = await createGraphQLServer(httpServer);
-  app.use('/graphql', graphqlMiddleware);
-
-  httpServer.listen(CONFIG.apiPort, () => {
-    console.log(`[api] Listening on http://0.0.0.0:${CONFIG.apiPort}`);
-    console.log(`[graphql] http://0.0.0.0:${CONFIG.apiPort}/graphql`);
-    console.log(`[graphql] ws://0.0.0.0:${CONFIG.apiPort}/graphql`);
-  });
-
-  startPolling();
-  startReconciliationScheduler(3600000); // 1 hour interval
-
-  if (CONFIG.archiveEnabled) {
-    startArchivalScheduler(
-      CONFIG.archiveIntervalMs,
-      CONFIG.archiveOlderThanDays,
-      CONFIG.archivePurgeOlderThanDays
-    );
+/**
+ * Indexer entry point.
+ *
+ * Startup is fail-closed: the environment is validated *before* any other
+ * module is loaded, because several modules read CONFIG (and the confirmation
+ * policy validates its depth) at import time. On any configuration error the
+ * process logs every problem and exits with code 78 (EX_CONFIG) without
+ * opening the port, polling the RPC node or touching the database.
+ * See docs/indexer/operations-checks.md.
+ */
+export async function main(env: NodeJS.ProcessEnv = process.env): Promise<number | null> {
+  loadEnv();
+  const result = validateIndexerEnv(env);
+  if (!reportConfigValidation(env, result)) {
+    return CONFIG_EXIT_CODE;
   }
 
-  // Start automated backups if enabled
-  if (CONFIG.backupEnabled) {
-    const backupManager = new BackupManager({
-      backupDir: CONFIG.backupDir,
-      intervalMs: CONFIG.backupIntervalMs,
-      maxLocalBackups: CONFIG.backupMaxLocal,
-      cloud: CONFIG.backupCloudProvider
-        ? {
-            provider: CONFIG.backupCloudProvider,
-            bucket: CONFIG.backupCloudBucket ?? '',
-            prefix: CONFIG.backupCloudPrefix,
-            region: CONFIG.backupCloudRegion,
-          }
-        : undefined,
-    });
-    backupManager.start();
-    console.log('[backup] Automated backups enabled');
-  }
+  // Deferred so nothing reads CONFIG until it has been validated.
+  const { startServices } = await import('./server');
+  await startServices(result.warnings.length);
+  return null;
 }
 
-main();
+if (require.main === module) {
+  main().then(
+    (exitCode) => {
+      // Nothing was started, so the process ends on its own with this code.
+      if (exitCode !== null) process.exitCode = exitCode;
+    },
+    (err: unknown) => {
+      console.error('[startup] Fatal error while starting the indexer:', err);
+      // Services may already hold the event loop open (HTTP server, timers).
+      // eslint-disable-next-line no-process-exit
+      process.exit(1);
+    }
+  );
+}

@@ -354,6 +354,29 @@ function runMigrations(db: SQLiteDatabase): void {
     );
 
     CREATE INDEX IF NOT EXISTS idx_events_created_at ON events(created_at);
+
+    -- Issues #1273-#1276: durable inbox for chain events. A row is written
+    -- before the invoice is fetched, and the events row is only written once
+    -- the invoice was retrieved and notifications were dispatched, so a failed
+    -- fetch can no longer leave an event "recorded" but never processed.
+    CREATE TABLE IF NOT EXISTS event_inbox (
+      event_id         TEXT    PRIMARY KEY,
+      event_type       TEXT    NOT NULL,
+      invoice_id       INTEGER NOT NULL,
+      ledger           INTEGER NOT NULL,
+      ledger_closed_at TEXT    NOT NULL,
+      status           TEXT    NOT NULL DEFAULT 'pending'
+                       CHECK (status IN ('pending', 'processed', 'dead')),
+      attempts         INTEGER NOT NULL DEFAULT 0,
+      next_attempt_at  INTEGER NOT NULL,
+      last_error       TEXT,
+      outcome_reason   TEXT,
+      created_at       INTEGER NOT NULL,
+      updated_at       INTEGER NOT NULL,
+      failed_at        INTEGER
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_event_inbox_due ON event_inbox(status, next_attempt_at);
   `);
 }
 
@@ -509,6 +532,258 @@ export function insertEvent(event: {
          (@event_id, @event_type, @invoice_id, @ledger, @ledger_closed_at, @created_at)`
     )
     .run(event);
+}
+
+// ─── Event inbox (issues #1273-#1276: durable, bounded event ingestion) ──────
+
+export type InboundEventStatus = 'pending' | 'processed' | 'dead';
+
+/** Why an inbound event was dead-lettered. */
+export type InboundEventOutcomeReason = 'malformed_event' | 'max_attempts_exhausted';
+
+export interface InboundEvent {
+  event_id: string;
+  event_type: string;
+  invoice_id: number;
+  ledger: number;
+  ledger_closed_at: string;
+  status: InboundEventStatus;
+  attempts: number;
+  next_attempt_at: number;
+  last_error: string | null;
+  outcome_reason: InboundEventOutcomeReason | null;
+  created_at: number;
+  updated_at: number;
+  failed_at: number | null;
+}
+
+/** Backoff before retry `attempts` (1-based): base * 2^(attempts-1), capped. */
+export function eventRetryDelayMs(attempts: number): number {
+  const base = CONFIG.eventRetryBaseMs ?? 5000;
+  const max = CONFIG.eventRetryMaxMs ?? 300000;
+  return Math.min(max, base * Math.pow(2, Math.max(0, attempts - 1)));
+}
+
+export function getInboundEvent(eventId: string): InboundEvent | undefined {
+  return getDb().prepare('SELECT * FROM event_inbox WHERE event_id = ?').get(eventId) as
+    | InboundEvent
+    | undefined;
+}
+
+/**
+ * Journal an event before any RPC call. `INSERT OR IGNORE` on the event id, so
+ * a replayed poll can never create a second row or reset a dead-lettered one.
+ * Returns true when this call created the row.
+ */
+export function enqueueInboundEvent(event: {
+  event_id: string;
+  event_type: string;
+  invoice_id: number;
+  ledger: number;
+  ledger_closed_at: string;
+}, now: number = Date.now()): boolean {
+  const result = getDb()
+    .prepare(
+      `INSERT OR IGNORE INTO event_inbox
+         (event_id, event_type, invoice_id, ledger, ledger_closed_at, status,
+          attempts, next_attempt_at, created_at, updated_at)
+       VALUES
+         (@event_id, @event_type, @invoice_id, @ledger, @ledger_closed_at, 'pending',
+          0, @now, @now, @now)`
+    )
+    .run({ ...event, now });
+  return result.changes > 0;
+}
+
+/** Pending events whose backoff has elapsed, oldest ledger first. */
+export function getDueInboundEvents(now: number = Date.now(), limit = 100): InboundEvent[] {
+  return getDb()
+    .prepare(
+      `SELECT * FROM event_inbox
+       WHERE status = 'pending' AND next_attempt_at <= ?
+       ORDER BY ledger ASC, event_id ASC
+       LIMIT ?`
+    )
+    .all(now, limit) as InboundEvent[];
+}
+
+/**
+ * Close out an event after its invoice was retrieved and notifications were
+ * dispatched: the `events` row and the `processed` status commit together.
+ * Returns false if the row was not pending (already processed or dead).
+ */
+export function completeInboundEvent(eventId: string, createdAt: number = Date.now()): boolean {
+  const db = getDb();
+  return db.transaction(() => {
+    const row = db
+      .prepare("SELECT * FROM event_inbox WHERE event_id = ? AND status = 'pending'")
+      .get(eventId) as InboundEvent | undefined;
+    if (!row) return false;
+    insertEvent({
+      event_id: row.event_id,
+      event_type: row.event_type as ILNEventType,
+      invoice_id: row.invoice_id,
+      ledger: row.ledger,
+      ledger_closed_at: row.ledger_closed_at,
+      created_at: createdAt,
+    });
+    db.prepare(
+      `UPDATE event_inbox SET status = 'processed', updated_at = ?, next_attempt_at = 0
+       WHERE event_id = ?`
+    ).run(createdAt, eventId);
+    return true;
+  })();
+}
+
+export interface InboundEventFailureOutcome {
+  status: InboundEventStatus;
+  attempts: number;
+  outcome_reason: InboundEventOutcomeReason | null;
+  /** True when this call dead-lettered the event. */
+  terminal: boolean;
+  next_attempt_at: number;
+}
+
+/**
+ * Record a failed attempt. The event stays `pending` with an exponential
+ * backoff until `maxAttempts` is spent (or the caller reports a permanent
+ * `malformed_event`), then moves to the terminal `dead` state. Only pending
+ * rows are touched, so a late report cannot revive a processed event.
+ */
+export function recordInboundEventFailure(
+  eventId: string,
+  error: string,
+  options: {
+    terminalReason?: 'malformed_event';
+    maxAttempts?: number;
+    now?: number;
+  } = {}
+): InboundEventFailureOutcome | undefined {
+  const db = getDb();
+  const now = options.now ?? Date.now();
+  const maxAttempts = Math.max(1, options.maxAttempts ?? CONFIG.eventMaxAttempts ?? 6);
+  return db.transaction(() => {
+    const row = db
+      .prepare("SELECT attempts FROM event_inbox WHERE event_id = ? AND status = 'pending'")
+      .get(eventId) as { attempts: number } | undefined;
+    if (!row) return undefined;
+    const attempts = row.attempts + 1;
+    const outcomeReason: InboundEventOutcomeReason | null =
+      options.terminalReason ?? (attempts >= maxAttempts ? 'max_attempts_exhausted' : null);
+    const terminal = outcomeReason !== null;
+    const nextAttemptAt = terminal ? 0 : now + eventRetryDelayMs(attempts);
+    db.prepare(
+      `UPDATE event_inbox
+         SET attempts = ?, last_error = ?, updated_at = ?, next_attempt_at = ?,
+             status = ?, outcome_reason = ?, failed_at = ?
+       WHERE event_id = ?`
+    ).run(
+      attempts,
+      error.slice(0, 500),
+      now,
+      nextAttemptAt,
+      terminal ? 'dead' : 'pending',
+      outcomeReason,
+      terminal ? now : null,
+      eventId
+    );
+    return {
+      status: terminal ? ('dead' as const) : ('pending' as const),
+      attempts,
+      outcome_reason: outcomeReason,
+      terminal,
+      next_attempt_at: nextAttemptAt,
+    };
+  })();
+}
+
+export interface InboundEventSummary {
+  pending: number;
+  processed: number;
+  dead: number;
+  deadByReason: Record<string, number>;
+  oldestPendingAgeMs: number | null;
+  maxPendingAttempts: number;
+}
+
+/** Operator view of the inbox; carries no recipient data. */
+export function getInboundEventSummary(nowMs: number = Date.now()): InboundEventSummary {
+  const db = getDb();
+  const byStatus = db
+    .prepare('SELECT status, COUNT(*) AS count FROM event_inbox GROUP BY status')
+    .all() as { status: InboundEventStatus; count: number }[];
+  const byReason = db
+    .prepare(
+      `SELECT COALESCE(outcome_reason, 'unknown') AS reason, COUNT(*) AS count
+       FROM event_inbox WHERE status = 'dead' GROUP BY reason`
+    )
+    .all() as { reason: string; count: number }[];
+  const stats = db
+    .prepare(
+      `SELECT MIN(created_at) AS oldest, COALESCE(MAX(attempts), 0) AS max_attempts
+       FROM event_inbox WHERE status = 'pending'`
+    )
+    .get() as { oldest: number | null; max_attempts: number };
+  const counts = { pending: 0, processed: 0, dead: 0 };
+  for (const { status, count } of byStatus) {
+    if (status in counts) counts[status] = count;
+  }
+  return {
+    ...counts,
+    deadByReason: Object.fromEntries(byReason.map(({ reason, count }) => [reason, count])),
+    oldestPendingAgeMs: stats.oldest === null ? null : nowMs - stats.oldest,
+    maxPendingAttempts: stats.max_attempts,
+  };
+}
+
+export function listInboundEvents(
+  filter: { status?: InboundEventStatus; limit?: number } = {}
+): InboundEvent[] {
+  const limit = Math.max(1, Math.min(filter.limit ?? 100, 1000));
+  const where = filter.status ? 'WHERE status = ?' : '';
+  const params: unknown[] = filter.status ? [filter.status, limit] : [limit];
+  return getDb()
+    .prepare(`SELECT * FROM event_inbox ${where} ORDER BY updated_at DESC, event_id ASC LIMIT ?`)
+    .all(...params) as InboundEvent[];
+}
+
+/**
+ * Operator recovery path for a dead-lettered event: move it back to `pending`
+ * with a fresh attempt budget so the next poll retries it, and append the
+ * action to the signed compliance audit chain. Only `dead` rows qualify, and a
+ * `malformed_event` row is refused — retrying an undecodable payload cannot
+ * succeed.
+ */
+export function requeueDeadInboundEvent(eventId: string, operatorId: string): boolean {
+  const db = getDb();
+  return db.transaction(() => {
+    const previous = db
+      .prepare(
+        "SELECT attempts, outcome_reason FROM event_inbox WHERE event_id = ? AND status = 'dead'"
+      )
+      .get(eventId) as { attempts: number; outcome_reason: string | null } | undefined;
+    if (!previous || previous.outcome_reason === 'malformed_event') return false;
+    const now = Date.now();
+    db.prepare(
+      `UPDATE event_inbox
+         SET status = 'pending', attempts = 0, outcome_reason = NULL, failed_at = NULL,
+             next_attempt_at = ?, updated_at = ?
+       WHERE event_id = ? AND status = 'dead'`
+    ).run(now, now, eventId);
+    appendComplianceAudit(
+      db,
+      'notification-delivery',
+      'event-requeued',
+      eventId,
+      {
+        operatorId,
+        previousAttempts: previous.attempts,
+        previousOutcome: previous.outcome_reason ?? 'unknown',
+      },
+      now
+    );
+    return true;
+  })();
 }
 
 export function getCursorLedger(): number {
