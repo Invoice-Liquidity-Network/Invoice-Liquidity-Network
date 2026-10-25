@@ -1,4 +1,5 @@
 import type { Server } from 'node:http';
+import { applySecurityHeaders } from './securityHeaders';
 import { randomUUID } from 'node:crypto';
 
 import express, { type Request, type Response, type NextFunction } from 'express';
@@ -688,6 +689,8 @@ export async function createOracleApp(
 
   const app = express();
   app.set('trust proxy', 1);
+  // First, so every response — 404, 429, errors — carries the headers (#1287).
+  applySecurityHeaders(app);
   // Distributed tracing — W3C traceparent propagation
   app.use(traceMiddleware('oracle-service'));
 

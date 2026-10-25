@@ -74,8 +74,8 @@ the `check-meta-nav` job of `docs-deploy.yml`). The check fails when:
 
 - [ ] Local development guide (`docs/local-development.md`)
 - [ ] CI/CD reference (`docs/ci-cd.md`)
-- [ ] Security guide (`docs/security-guide.md`)
-- [ ] Threat model (`docs/threat-model.md`)
+- [x] Security guide (`docs/security-guide.md` → `packages/docs/content/security/security-guide.mdx`)
+- [x] Threat model (`docs/threat-model.md` → `packages/docs/content/security/threat-model.mdx`)
 - [ ] Glossary (`docs/glossary.md`)
 - [ ] Changelog page (`docs/changelog.md`)
 - [x] SDK migration guide (`docs/sdk-migration-guide.md` → `packages/docs/content/sdk-reference/migration-guide.mdx`)
@@ -182,6 +182,7 @@ the `check-meta-nav` job of `docs-deploy.yml`). The check fails when:
 - [ ] Runbook: SDK Export Map Consistency (`docs/runbooks/sdk-export-maps.md`)
 - [ ] Runbook: Canonical SDK Package Names (`docs/runbooks/sdk-package-names.md`)
 - [ ] Runbook: SDK Release-Candidate Pack Smoke (`docs/runbooks/sdk-rc-smoke.md`)
+- [ ] Runbook: Security Documentation and API Security Headers (`docs/runbooks/security-docs.md`)
 - [ ] Runbook: SDK Versioning and Support Windows (`docs/runbooks/sdk-support-windows.md`)
 - [ ] ILN SCF Technical Narrative (`docs/scf-technical-narrative.md`)
 - [ ] Cross-repo SDK Trust Model visibility (`docs/sdk-trust-model-cross-repo.md`)
