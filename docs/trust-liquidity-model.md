@@ -17,7 +17,7 @@ This document represents the finalized Trust & Liquidity Model for the Invoice L
 
 KYB is a required onboarding control for business borrowers; provider unavailability never counts as a pass. The oracle uses a **temporary hard block with caller-driven retry**: if the required KYB adapter is missing or throws/times out, the verification response is not approved and carries the `rejected-kyb-unavailable` outcome. The borrower remains unapproved and cannot proceed to liquidity onboarding until a successful provider result is available. Provider rejection remains a distinct negative verification result: it carries the `rejected-kyb-unverified` outcome and the `PAYER_KYB_UNVERIFIED` code, while unavailability carries `PAYER_KYB_UNAVAILABLE` (see [Payer Authorization Failures Runbook](runbooks/payer-authorization-failures.md)).
 
-The service does not silently fall back to heuristic-only approval, and there is no manual-review override in this contract. Callers should retry after provider health recovers, using bounded backoff. Production oracle wiring requires a live KYB result for approval and bypasses cached verdicts while this check is required; local/test deployments can explicitly opt into non-required KYB for fixtures only. A manual review route, if introduced later, must preserve the same KYB requirement and be separately approved and audited.
+The service does not silently fall back to heuristic-only approval, and there is no manual-review override in this contract. Callers should retry after provider health recovers, using bounded backoff. Production oracle wiring requires a live KYB result for approval and bypasses cached verdicts while this check is required; local/test deployments can explicitly opt into non-required KYB for fixtures only. Production boot additionally refuses to start without an explicit, required, non-mock KYB adapter, every publication records KYB provider provenance (`kybProvenance`), and a recorded decision expires after `ORACLE_KYB_DECISION_TTL_MS` (default 24h) and is revalidated against the provider rather than replayed (see [Oracle Service](oracle-service.md)). A manual review route, if introduced later, must preserve the same KYB requirement and be separately approved and audited.
 
 ### 3. LP Cold-Start Posture
 - **Reviewer Question**: How do we guarantee initial liquidity before a proven track record is established?
@@ -124,3 +124,194 @@ Before introducing pooled LP shares, the contract design should specify:
 4. **Run disclosures and monitoring:** publish liquid/committed/queued balances, queue age, and repayment assumptions, and test recovery as invoices repay under base and stressed default assumptions.
 
 These are design recommendations, not deployed protections. The applicable Soroban implementation is maintained in the separate [smart-contract repository](https://github.com/Invoice-Liquidity-Network/ILN-Smart-Contract); no withdrawal logic is claimed here until that implementation defines and tests it.
+
+---
+
+## 7. Withdrawal Queue Specification for Pooled LP Shares
+
+This section formally specifies the withdrawal queue behavior, notice periods, and queue state model for pooled LP share redemptions. This specification governs the Soroban implementation in the ILN-Smart-Contract repository and must be implemented and tested before pooled LP shares are deployed.
+
+### 7.1 Design Principles
+
+1. **No synchronous full redemption**: The protocol does not guarantee immediate redemption of capital committed to invoices. Locked capital becomes available only as invoices repay or reach terminal states.
+2. **Pro rata fairness**: Within each epoch, all queued withdrawal requests are satisfied proportionally from available liquidity; no transaction-order priority.
+3. **Fail-closed liquidity protection**: New invoice funding pauses automatically when queued withdrawals exceed available liquid assets.
+4. **Transparent disclosure**: Real-time publication of liquid/committed/queued balances, queue age, and repayment assumptions.
+5. **Operator-observable state**: Every queue state transition emits an on-chain event and is indexed for monitoring.
+
+### 7.2 Withdrawal Notice Period
+
+| Parameter | Value | Description |
+|-----------|-------|-------------|
+| `NOTICE_PERIOD_EPOCHS` | 1 | Minimum number of epochs between withdrawal request submission and eligibility for processing. A request submitted in epoch N becomes eligible in epoch N+1. |
+| `EPOCH_DURATION_DAYS` | 7 | Length of each withdrawal epoch. Aligns with typical invoice repayment cycles. |
+| `MAX_NOTICE_EPOCHS` | 4 | Maximum notice period an LP can specify (4 epochs = 28 days). Requests with longer notice are capped at this value. |
+
+**Invariant**: A withdrawal request cannot be processed in the same epoch it is submitted. This prevents last-minute queue manipulation and ensures the protocol has visibility into pending outflows before committing new capital.
+
+### 7.3 Withdrawal Request State Machine
+
+Each withdrawal request transitions through the following states. All transitions are recorded on-chain with timestamps and emitted as indexable events.
+
+```
+┌─────────────┐     submit      ┌──────────┐   epoch cutoff    ┌──────────┐
+│  PENDING    │ ──────────────▶ │  QUEUED  │ ────────────────▶ │ PROCESSING │
+│ (submitted) │                 │ (eligible)│                   │ (settling) │
+└─────────────┘                 └──────────┘                   └──────┬─────┘
+      │                            │                                  │
+      │ cancel (LP)                │ cancel (LP)                      │
+      ▼                            ▼                                  ▼
+┌─────────────┐                ┌──────────┐                    ┌─────────────┐
+│  CANCELLED  │                │  CANCELLED │                │  COMPLETED  │
+│  (by LP)    │                │  (by LP)   │                │  (paid out) │
+└─────────────┘                └──────────┘                    └─────────────┘
+                                                                      │
+                                                           partial fill │
+                                                                      ▼
+                                                             ┌─────────────┐
+                                                             │  PARTIAL    │
+                                                             │  (re-queued)│
+                                                             └─────────────┘
+```
+
+**State Definitions:**
+
+| State | Description | Terminal? |
+|-------|-------------|-----------|
+| `PENDING` | Request submitted but not yet eligible (within notice period). LP may cancel. | No |
+| `QUEUED` | Request eligible for processing in current or future epoch. LP may cancel. | No |
+| `PROCESSING` | Request being settled in current epoch. No cancellation allowed. | No |
+| `COMPLETED` | Request fully paid out. | Yes |
+| `PARTIAL` | Request partially filled; remainder re-queued for next epoch with same priority. | No |
+| `CANCELLED` | Request cancelled by LP before processing. | Yes |
+
+**Transition Rules:**
+
+1. `PENDING` → `QUEUED`: Automatic at epoch boundary when `current_epoch >= request_epoch + NOTICE_PERIOD_EPOCHS`.
+2. `QUEUED` → `PROCESSING`: Automatic at epoch processing cutoff for all eligible requests.
+3. `PROCESSING` → `COMPLETED`: When full requested amount is paid from available liquidity.
+4. `PROCESSING` → `PARTIAL`: When available liquidity < requested amount. Paid portion moves to `COMPLETED`; remainder stays `QUEUED` for next epoch.
+5. `PENDING` → `CANCELLED` / `QUEUED` → `CANCELLED`: LP-initiated at any time before `PROCESSING`.
+6. `PARTIAL` → `QUEUED`: Automatic at next epoch boundary (remainder retains original submission timestamp for priority).
+
+### 7.4 Epoch Processing Algorithm
+
+At each epoch cutoff (every `EPOCH_DURATION_DAYS`):
+
+1. **Snapshot**: Record `available_liquidity = idle_cash + projected_repayments_this_epoch - reserved_for_pending_invoices`.
+2. **Collect eligible requests**: All requests in `QUEUED` state with `eligible_epoch <= current_epoch`.
+3. **Sort by submission timestamp**: FIFO within same epoch; earlier submissions get priority if pro rata cannot satisfy all.
+4. **Pro rata allocation**: For each request in order:
+   - `allocation = min(request.remaining_amount, request.remaining_amount * available_liquidity / total_queued_amount)`
+   - If `allocation == request.remaining_amount`: transition to `COMPLETED`.
+   - Else: transition to `PARTIAL` (remainder re-queued).
+   - `available_liquidity -= allocation`
+   - `total_queued_amount -= request.remaining_amount`
+5. **Emit events**: `WithdrawalEpochProcessed` with epoch number, total requested, total paid, number of partial fills.
+6. **Advance epoch**: Increment epoch counter; move `PENDING` requests meeting notice period to `QUEUED`.
+
+**Invariant**: `sum(allocation) <= available_liquidity` at all times. The protocol never over-commits liquidity.
+
+### 7.5 Illiquid Position Handling
+
+An "illiquid position" is LP capital committed to invoices that have not yet reached a terminal state (repayment, default, or restructuring). This capital is **not** part of `available_liquidity` and cannot be used to satisfy withdrawal requests.
+
+| Position Type | Included in `available_liquidity`? | Withdrawable? |
+|---------------|-----------------------------------|---------------|
+| Idle cash (uncommitted) | Yes | Immediately (subject to notice period) |
+| Projected repayments (next epoch) | Yes, as `projected_repayments_this_epoch` | In the epoch they are projected |
+| Committed to active invoices | No | Only as invoices repay |
+| Committed to defaulted invoices | No | Only after default resolution (recovery or write-off) |
+| First-loss treasury buffer | No (separate accounting) | Never — not LP capital |
+
+**Illiquid Position Disclosure**: The protocol publishes daily:
+- `total_committed`: Capital locked in active invoices
+- `total_queued_withdrawals`: Sum of all `QUEUED` and `PARTIAL` request amounts
+- `liquidity_coverage_ratio = available_liquidity / total_queued_withdrawals` (capped at 1.0)
+- `oldest_queued_request_age`: Days since oldest `QUEUED` request submission
+
+### 7.6 Funding Circuit Breaker
+
+The protocol automatically pauses new invoice deployment when liquidity conditions deteriorate:
+
+| Trigger | Condition | Action |
+|---------|-----------|--------|
+| **Liquidity threshold breach** | `available_liquidity < LIQUIDITY_FLOOR` (governed parameter, default 10% of pool TVL) | Pause new invoice deployment |
+| **Queue overflow** | `total_queued_withdrawals > available_liquidity * QUEUE_COVERAGE_LIMIT` (default 2.0x) | Pause new invoice deployment |
+| **Concentration risk** | Single LP's queued withdrawals > `SINGLE_LP_QUEUE_CAP` (default 25% of pool TVL) | Pause new invoice deployment for that LP's capital |
+
+**Recovery**: The pause lifts automatically when all trigger conditions are false for `PAUSE_COOLDOWN_EPOCHS` (default 2 epochs). Manual override requires multi-sig approval from Protocol lead + Security lead.
+
+### 7.7 Queue State Model Implementation Requirements
+
+The Soroban contract must implement the following for each withdrawal request:
+
+```rust
+pub struct WithdrawalRequest {
+    pub request_id: u64,
+    pub lp_address: Address,
+    pub pool_id: u64,
+    pub requested_amount: i128,
+    pub remaining_amount: i128,
+    pub submitted_epoch: u64,
+    pub notice_epochs: u8, // 1..=MAX_NOTICE_EPOCHS
+    pub state: WithdrawalState,
+    pub created_at: u64, // ledger timestamp
+    pub updated_at: u64,
+    pub paid_epochs: Vec<u64>, // epochs where partial fills occurred
+}
+
+pub enum WithdrawalState {
+    Pending,
+    Queued,
+    Processing,
+    Completed,
+    Partial,
+    Cancelled,
+}
+```
+
+**Required contract methods:**
+- `submit_withdrawal(lp, pool_id, amount, notice_epochs)` → `request_id`
+- `cancel_withdrawal(request_id)` → `bool` (only in `Pending` or `Queued`)
+- `process_epoch()` → `EpochResult` (callable by anyone at epoch boundary)
+- `get_request(request_id)` → `WithdrawalRequest`
+- `get_pool_queue_state(pool_id)` → `PoolQueueState` (aggregate metrics)
+
+**Required events:**
+- `WithdrawalSubmitted { request_id, lp, amount, epoch, notice_epochs }`
+- `WithdrawalCancelled { request_id, lp, remaining_amount }`
+- `WithdrawalProcessed { request_id, lp, paid_amount, epoch, final_state }`
+- `WithdrawalEpochProcessed { epoch, total_requested, total_paid, partial_count }`
+- `CircuitBreakerTriggered { pool_id, trigger_type, threshold_value }`
+- `CircuitBreakerCleared { pool_id }`
+
+### 7.8 Monitoring and Runbook References
+
+The runbooks below are planned but not yet written; until they exist, page the
+protocol on-call through the [Incident Response Runbook](incident-response.md).
+
+| Metric / Alert | Threshold | Runbook |
+|----------------|-----------|---------|
+| `liquidity_coverage_ratio` | < 0.5 for 2 consecutive epochs | Liquidity Crisis Runbook (`docs/runbooks/liquidity-crisis.md`, not yet written) |
+| `oldest_queued_request_age` | > 28 days | Stale Withdrawal Investigation (`docs/runbooks/stale-withdrawal.md`, not yet written) |
+| `circuit_breaker_active` | Any trigger active | Funding Pause Response (`docs/runbooks/funding-pause.md`, not yet written) |
+| `partial_fill_rate` | > 50% of requests in epoch | Partial Fill Analysis (`docs/runbooks/partial-fill-analysis.md`, not yet written) |
+
+### 7.9 Governance Parameters
+
+All parameters below are governed by the Protocol multi-sig and can be updated via on-chain governance proposal:
+
+| Parameter | Default | Description |
+|-----------|---------|-------------|
+| `EPOCH_DURATION_DAYS` | 7 | Length of withdrawal processing epoch |
+| `NOTICE_PERIOD_EPOCHS` | 1 | Minimum epochs between submission and eligibility |
+| `MAX_NOTICE_EPOCHS` | 4 | Maximum notice period an LP can specify |
+| `LIQUIDITY_FLOOR` | 10% of pool TVL | Minimum available liquidity before funding pause |
+| `QUEUE_COVERAGE_LIMIT` | 2.0x | Max ratio of queued withdrawals to available liquidity |
+| `SINGLE_LP_QUEUE_CAP` | 25% of pool TVL | Max single LP exposure in queue |
+| `PAUSE_COOLDOWN_EPOCHS` | 2 | Epochs conditions must be clear before auto-resume |
+
+---
+
+*This specification (Section 7) is a binding design document for the ILN-Smart-Contract implementation. The smart contract code must conform to this specification and pass the corresponding integration tests before pooled LP shares are deployed to mainnet.*

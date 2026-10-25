@@ -11,6 +11,16 @@ export interface NotificationsMetrics {
   fallbackDeliveriesTotal: client.Counter<string>;
   healthChecksTotal: client.Counter<string>;
   auditRecordsTotal: client.Counter<string>;
+  dispatchAttemptsTotal: client.Counter<string>;
+  dispatchTerminalTotal: client.Counter<string>;
+  dispatchQueue: client.Gauge<string>;
+  recipientRejectionsTotal: client.Counter<string>;
+  eventIngestTotal: client.Counter<string>;
+  eventInbox: client.Gauge<string>;
+  recordEventIngest(result: 'processed' | 'retry' | 'dead_lettered' | 'duplicate', reason?: string): void;
+  recordDispatchAttempt(channel: string, result: 'delivered' | 'retry' | 'terminal'): void;
+  recordDispatchTerminal(channel: string, outcome: string): void;
+  recordRecipientRejection(channel: string, stage: string, reason: string): void;
   recordDispatch(channel: string, trigger: string): void;
   recordFailure(channel: string, reason: string): void;
   recordRateLimitHit(channel: string): void;
@@ -86,6 +96,71 @@ export function createNotificationsMetrics(): NotificationsMetrics {
     registers: [registry],
   });
 
+  // Issue #1277: every provider attempt against the durable journal, and the
+  // terminal outcome each row ends in.
+  const dispatchAttemptsTotal = new client.Counter({
+    name: 'iln_notifications_dispatch_attempts_total',
+    help: 'Journal dispatch attempts by channel and result (delivered, retry, terminal)',
+    labelNames: ['channel', 'result'] as const,
+    registers: [registry],
+  });
+
+  const dispatchTerminalTotal = new client.Counter({
+    name: 'iln_notifications_dispatch_terminal_total',
+    help: 'Journal rows reaching a terminal state by channel and outcome reason',
+    labelNames: ['channel', 'outcome'] as const,
+    registers: [registry],
+  });
+
+  const dispatchQueue = new client.Gauge({
+    name: 'iln_notifications_dispatch_queue',
+    help: 'Journal rows by status, plus oldest_pending_age_seconds and max_pending_attempts',
+    labelNames: ['status'] as const,
+    registers: [registry],
+  });
+
+  // Issues #1278/#1279: recipients refused before enqueue.
+  const recipientRejectionsTotal = new client.Counter({
+    name: 'iln_notifications_recipient_rejections_total',
+    help: 'Notification recipients rejected before enqueue by channel, stage and reason',
+    labelNames: ['channel', 'stage', 'reason'] as const,
+    registers: [registry],
+  });
+
+  // Issues #1273-#1276: chain-event ingestion outcomes and inbox depth.
+  const eventIngestTotal = new client.Counter({
+    name: 'iln_notifications_event_ingest_total',
+    help: 'Chain events by ingestion result (processed, retry, dead_lettered, duplicate) and reason',
+    labelNames: ['result', 'reason'] as const,
+    registers: [registry],
+  });
+
+  const eventInbox = new client.Gauge({
+    name: 'iln_notifications_event_inbox',
+    help: 'Event inbox rows by status, plus oldest_pending_age_seconds and max_pending_attempts',
+    labelNames: ['status'] as const,
+    registers: [registry],
+  });
+
+  function recordEventIngest(
+    result: 'processed' | 'retry' | 'dead_lettered' | 'duplicate',
+    reason = 'none'
+  ): void {
+    eventIngestTotal.inc({ result, reason });
+  }
+
+  function recordDispatchAttempt(channel: string, result: 'delivered' | 'retry' | 'terminal'): void {
+    dispatchAttemptsTotal.inc({ channel, result });
+  }
+
+  function recordDispatchTerminal(channel: string, outcome: string): void {
+    dispatchTerminalTotal.inc({ channel, outcome });
+  }
+
+  function recordRecipientRejection(channel: string, stage: string, reason: string): void {
+    recipientRejectionsTotal.inc({ channel, stage, reason });
+  }
+
   function recordDispatch(channel: string, trigger: string): void {
     dispatchesTotal.inc({ channel, trigger });
   }
@@ -117,6 +192,16 @@ export function createNotificationsMetrics(): NotificationsMetrics {
     fallbackDeliveriesTotal,
     healthChecksTotal,
     auditRecordsTotal,
+    dispatchAttemptsTotal,
+    dispatchTerminalTotal,
+    dispatchQueue,
+    recipientRejectionsTotal,
+    eventIngestTotal,
+    eventInbox,
+    recordEventIngest,
+    recordDispatchAttempt,
+    recordDispatchTerminal,
+    recordRecipientRejection,
     recordDispatch,
     recordFailure,
     recordRateLimitHit,

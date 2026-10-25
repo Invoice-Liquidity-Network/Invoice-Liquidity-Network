@@ -3,6 +3,10 @@ export default {
     title: 'Getting Started',
     type: 'page',
   },
+  'local-development': {
+    title: 'Local Development',
+    type: 'page',
+  },
   'protocol-overview': {
     title: 'Protocol Overview',
     type: 'page',
@@ -15,12 +19,20 @@ export default {
     title: 'SDK Reference',
     type: 'page',
   },
+  'launch-communications': {
+    title: 'Launch Communications Evidence',
+    type: 'page',
+  },
   'frontend-guide': {
     title: 'Frontend Guide',
     type: 'page',
   },
   'cli-reference': {
     title: 'CLI Reference',
+    type: 'page',
+  },
+  'ci-cd': {
+    title: 'CI/CD Reference',
     type: 'page',
   },
   governance: {
@@ -31,6 +43,10 @@ export default {
     title: 'API Reference',
     type: 'page',
   },
+  security: {
+    title: 'Security',
+    type: 'page',
+  },
   tutorials: {
     title: 'Tutorials',
     type: 'page',
@@ -38,5 +54,10 @@ export default {
   'analytics-plugin-guide': {
     title: 'Analytics Plugin Guide',
     type: 'page',
+  },
+  // Linked from the version banner rather than the navbar.
+  versioning: {
+    title: 'Versioning',
+    display: 'hidden',
   },
 };

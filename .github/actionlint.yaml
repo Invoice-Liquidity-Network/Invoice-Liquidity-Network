@@ -1,0 +1,6 @@
+# actionlint configuration (#1286). The workflow policy check runs actionlint
+# over every workflow; see docs/runbooks/workflow-policy.md.
+self-hosted-runner:
+  # Namespace.so runner profile used by ci.yml's heavier jobs.
+  labels:
+    - namespace-profile-nursca

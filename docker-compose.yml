@@ -1,18 +1,20 @@
-version: '3.8'
-
 # Local development environment for Invoice Liquidity Network.
 #
-# This file manages three services that together form the local dev stack:
+# This file manages six services that together form the local dev stack:
 #
 #   stellar-node      — standalone Stellar Quickstart node with Soroban RPC
+#   redis             — cache shared by the indexer and oracle service
 #   contract-deployer — builds context: ./contract-deployer; deploys the
 #                       Soroban contract once the node is healthy and writes
 #                       the contract ID to .docker-output/contract-id.txt
 #   account-seeder    — builds context: ./account-seeder; creates funded test
 #                       accounts and mock assets after the deployer completes
+#   indexer           — runs `pnpm --filter iln-indexer dev` against the local
+#                       node, reading the contract ID the deployer wrote
+#   oracle-service    — runs `pnpm oracle:dev` against the indexer and redis
 #
-# For CI and E2E tests, `docker compose up --build` starts all three in the
-# correct dependency order via health checks.
+# For CI and E2E tests, `docker compose up --build` starts all six in the
+# correct dependency order via health checks and completion conditions.
 #
 # The scripts/ directory contains additional helper scripts that are invoked
 # directly (not through Docker) during local Make-based development:
@@ -47,14 +49,26 @@ services:
   indexer:
     image: node:20-alpine
     working_dir: /workspace
-    command: sh -lc "corepack enable && pnpm install --frozen-lockfile && pnpm dev -w iln-indexer"
+    # `pnpm <script> -w <pkg>` would run the *root* script (pnpm's -w means
+    # --workspace-root), so the package is selected with --filter. The contract
+    # ID comes from the deployer's output; without it the indexer would fall
+    # back to its built-in testnet contract while reading the local node.
+    command: >-
+      sh -lc 'corepack enable && pnpm install --frozen-lockfile &&
+      export CONTRACT_ID="$$(cat .docker-output/contract-id.txt)" &&
+      pnpm --filter iln-indexer dev'
     depends_on:
       stellar-node:
         condition: service_healthy
+      contract-deployer:
+        condition: service_completed_successfully
+      redis:
+        condition: service_started
     volumes:
       - .:/workspace
     environment:
       PORT: 3001
+      NETWORK_PASSPHRASE: 'Standalone Network ; February 2017'
       DB_PATH: /workspace/indexer.db
       RPC_URL: http://stellar-node:8000/soroban/rpc
       REDIS_URL: redis://redis:6379

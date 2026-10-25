@@ -41,6 +41,15 @@ export const CONFIG = {
   resendFromEmail: process.env.RESEND_FROM_EMAIL || 'no-reply@invoice-liquidity.network',
   dueWarningHours: parseIntEnv('DUE_WARNING_HOURS', 48),
   maxWebhookRetry: 3,
+  // Issue #1277: total provider attempts per dispatch_attempts row before it is
+  // dead-lettered as `failed` / `max_attempts_exhausted`.
+  maxDispatchAttempts: parseIntEnv('NOTIFICATIONS_MAX_DISPATCH_ATTEMPTS', 8),
+  // Issues #1273-#1276: chain events are journaled in `event_inbox` before the
+  // invoice is retrieved. Retries use exponential backoff (base * 2^(n-1),
+  // capped) and a row that spends `eventMaxAttempts` is dead-lettered.
+  eventMaxAttempts: parseIntEnv('NOTIFICATIONS_EVENT_MAX_ATTEMPTS', 6),
+  eventRetryBaseMs: parseIntEnv('NOTIFICATIONS_EVENT_RETRY_BASE_MS', 5000),
+  eventRetryMaxMs: parseIntEnv('NOTIFICATIONS_EVENT_RETRY_MAX_MS', 300000),
   webhookBackoffBaseMs: 500,
   twilioAccountSid: process.env.TWILIO_ACCOUNT_SID || '',
   twilioAuthToken: process.env.TWILIO_AUTH_TOKEN || '',
@@ -50,6 +59,7 @@ export const CONFIG = {
   retentionSweepIntervalMs: parseIntEnv('RETENTION_SWEEP_INTERVAL_MS', 86400000),
   retentionDryRun: process.env.NOTIFICATIONS_RETENTION_DRY_RUN !== 'false',
   retentionMaxRows: parseIntEnv('RETENTION_MAX_DELETE_ROWS', 10000),
+  ownershipChallengeTtlMs: parseIntEnv('OWNERSHIP_CHALLENGE_TTL_MS', 600000),
 };
 
 export function isValidEmail(email: string): boolean {

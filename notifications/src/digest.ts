@@ -16,6 +16,8 @@ import type { InvoiceEvent } from './types';
 import type { NotificationFrequency } from './preferences';
 import { renderDigestEmail, buildDigestSubject } from './templates/digest.template';
 import type { DigestItem } from './templates/digest.template';
+import { InvalidRecipientError, validateEmailRecipient } from './recipient';
+import { SqliteDigestReconciler } from './digest-reconciliation';
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -46,10 +48,32 @@ export interface DigestSendResult {
   sentAt: number;
 }
 
+/**
+ * Durable source of truth a digest is checked against before it is sent
+ * (#1282). Implemented by SqliteDigestReconciler in digest-reconciliation.ts.
+ */
+export interface DigestReconciler {
+  recordRegistration(config: DigestUserConfig, nowMs: number): void;
+  recordBuffered(stellarAddress: string, item: DigestItem, nowMs: number): void;
+  /** Persisted registrations, watermarks and pending items, used after a restart. */
+  loadRegistrations(): Array<{
+    config: DigestUserConfig;
+    lastFlushedAt: number;
+    items: DigestItem[];
+  }>;
+  reconcile(stellarAddress: string, items: DigestItem[], nowMs: number): DigestItem[];
+  recordFlush(stellarAddress: string, items: DigestItem[], nowMs: number): void;
+}
+
+export interface DigestSchedulerOptions {
+  reconciler?: DigestReconciler;
+}
+
 // ── Helpers ────────────────────────────────────────────────────────────────
 
 function eventToDigestItem(event: InvoiceEvent): DigestItem {
   return {
+    eventId: event.eventId,
     invoiceId: event.invoiceId,
     eventType: event.type,
     amount: event.amount,
@@ -100,16 +124,47 @@ export class DigestScheduler {
 
   /** How often to check whether any digest is due (default: every minute). */
   private readonly tickMs: number;
+  private readonly reconciler?: DigestReconciler;
 
-  constructor(private readonly emailSender: DigestEmailSender, tickMs = 60_000) {
+  constructor(
+    private readonly emailSender: DigestEmailSender,
+    tickMs = 60_000,
+    options: DigestSchedulerOptions = {}
+  ) {
     this.tickMs = tickMs;
+    this.reconciler = options.reconciler;
+  }
+
+  /**
+   * Re-register users persisted by the reconciler so digests keep flushing
+   * after a restart, together with the items they had pending.
+   */
+  restore(): number {
+    if (!this.reconciler) return 0;
+    const registrations = this.reconciler.loadRegistrations();
+    for (const { config, lastFlushedAt, items } of registrations) {
+      if (this.buffers.has(config.stellarAddress)) continue;
+      this.buffers.set(config.stellarAddress, { config, items, lastFlushedAt });
+    }
+    return registrations.length;
   }
 
   /**
    * Register a user for digest delivery. Safe to call multiple times —
    * subsequent calls update the config without clearing the pending buffer.
+   *
+   * Issue #1279: `config.email` must pass {@link validateEmailRecipient}
+   * before anything is buffered for it. An invalid mailbox — including a
+   * Stellar wallet address (#1278) — throws {@link InvalidRecipientError} and
+   * leaves any existing registration untouched, so a bad update can never
+   * redirect an already-buffered digest.
    */
   register(config: DigestUserConfig): void {
+    const validation = validateEmailRecipient(config.email);
+    if (!validation.valid) {
+      throw new InvalidRecipientError(validation.reason, 'email');
+    }
+    this.reconciler?.recordRegistration(config, Date.now());
     const existing = this.buffers.get(config.stellarAddress);
     if (existing) {
       existing.config = config;
@@ -131,12 +186,17 @@ export class DigestScheduler {
 
   /**
    * Add an event to the digest buffer for a given address.
-   * Silently ignored if the address has no digest registration.
+   * Silently ignored if the address has no digest registration, and for an
+   * event id that is already buffered (replayed events / repeated scheduler
+   * passes must not duplicate digest lines).
    */
   buffer(stellarAddress: string, event: InvoiceEvent): void {
     const buf = this.buffers.get(stellarAddress);
     if (!buf) return;
-    buf.items.push(eventToDigestItem(event));
+    if (buf.items.some((item) => item.eventId === event.eventId)) return;
+    const item = eventToDigestItem(event);
+    this.reconciler?.recordBuffered(stellarAddress, item, Date.now());
+    buf.items.push(item);
   }
 
   /**
@@ -182,8 +242,14 @@ export class DigestScheduler {
     const buf = this.buffers.get(stellarAddress);
     if (!buf) return null;
 
-    const { config, items } = buf;
+    const { config } = buf;
     const now = new Date(nowMs);
+
+    // Reconciliation errors propagate: the buffer is kept and nothing is sent,
+    // so an unavailable event store can never produce an unverified digest.
+    const items = this.reconciler
+      ? this.reconciler.reconcile(stellarAddress, buf.items, nowMs)
+      : buf.items;
 
     const subject = buildDigestSubject({ frequency: config.frequency, items });
     const html = renderDigestEmail({
@@ -204,6 +270,16 @@ export class DigestScheduler {
     // Clear buffer and record flush time
     buf.items = [];
     buf.lastFlushedAt = nowMs;
+
+    if (this.reconciler) {
+      try {
+        this.reconciler.recordFlush(stellarAddress, items, nowMs);
+      } catch (err) {
+        // The email is already out; the next reconcile may re-include these
+        // items (at-least-once) rather than silently dropping them.
+        console.error(`[digest] Failed to record flush for ${stellarAddress}:`, err);
+      }
+    }
 
     return { stellarAddress, itemCount: items.length, sentAt: nowMs };
   }
@@ -227,11 +303,15 @@ export class DigestScheduler {
   }
 }
 
-export const digestScheduler = new DigestScheduler({
-  async send(to, subject, html) {
-    // Replace with your real Resend/email sender in index.ts startup
-    console.warn(
-      `[digest] No email sender configured — would send to ${to}: ${subject} (${html.length} chars)`
-    );
+export const digestScheduler = new DigestScheduler(
+  {
+    async send(to, subject, html) {
+      // Replace with your real Resend/email sender in index.ts startup
+      console.warn(
+        `[digest] No email sender configured — would send to ${to}: ${subject} (${html.length} chars)`
+      );
+    },
   },
-});
+  60_000,
+  { reconciler: new SqliteDigestReconciler() }
+);

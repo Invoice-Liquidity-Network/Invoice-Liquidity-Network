@@ -33,6 +33,54 @@ test('doc link check ignores links inside fenced Markdown examples', () => {
   assert.doesNotMatch(result.stdout, /missing-inline\.md/);
 });
 
+test('doc link check fails when a local target is missing', () => {
+  const root = mkdtempSync(join(tmpdir(), 'iln-doc-links-'));
+  roots.push(root);
+  writeFileSync(join(root, 'guide.md'), '# Guide\n\n[missing](missing-page.md)\n');
+
+  const result = spawnSync(process.execPath, [checkScript, 'guide.md'], {
+    cwd: root,
+    encoding: 'utf8',
+  });
+
+  assert.equal(result.status, 1);
+  assert.match(result.stderr, /missing missing-page\.md/);
+});
+
+test('doc link check reevaluates the filesystem after a missing target is restored', () => {
+  const root = mkdtempSync(join(tmpdir(), 'iln-doc-links-'));
+  roots.push(root);
+  writeFileSync(join(root, 'guide.md'), '# Guide\n\n[recovered](target.md)\n');
+
+  const firstRun = spawnSync(process.execPath, [checkScript, 'guide.md'], {
+    cwd: root,
+    encoding: 'utf8',
+  });
+  assert.equal(firstRun.status, 1);
+
+  writeFileSync(join(root, 'target.md'), '# Restored target\n');
+  const restartedRun = spawnSync(process.execPath, [checkScript, 'guide.md'], {
+    cwd: root,
+    encoding: 'utf8',
+  });
+
+  assert.equal(restartedRun.status, 0, restartedRun.stderr || restartedRun.stdout);
+});
+
+test('doc link check fails closed when a selected tree has no Markdown files', () => {
+  const root = mkdtempSync(join(tmpdir(), 'iln-doc-links-'));
+  roots.push(root);
+  mkdirSync(join(root, 'empty'));
+
+  const result = spawnSync(process.execPath, [checkScript, 'empty/**/*.md'], {
+    cwd: root,
+    encoding: 'utf8',
+  });
+
+  assert.equal(result.status, 2);
+  assert.match(result.stderr, /No files to check/);
+});
+
 test('doc link check warns when external fetch fails but fails on an HTTP error response', async () => {
   const unavailable = await checkExternalLink('https://docs.example.invalid', async () => {
     throw new Error('network unavailable');
@@ -46,4 +94,37 @@ test('doc link check warns when external fetch fails but fails on an HTTP error 
   }));
   assert.equal(broken.warning, null);
   assert.match(broken.problem, /404/);
+});
+
+test('doc link check treats rate limiting and server errors as unverified, not broken', async () => {
+  for (const status of [429, 500, 502, 503, 504]) {
+    const result = await checkExternalLink('https://docs.example.invalid', async () => ({
+      ok: false,
+      status,
+    }));
+    assert.equal(result.problem, null, `HTTP ${status}`);
+    assert.match(result.warning, new RegExp(`HTTP ${status}`));
+  }
+  const gone = await checkExternalLink('https://docs.example.invalid', async () => ({
+    ok: false,
+    status: 410,
+  }));
+  assert.match(gone.problem, /410/);
+});
+
+test('doc link check retries HEAD rejections with GET before judging the link', async () => {
+  for (const status of [403, 405, 501]) {
+    const methods = [];
+    const ok = await checkExternalLink('https://docs.example.invalid', async (_url, init) => {
+      methods.push(init.method);
+      return init.method === 'HEAD' ? { ok: false, status } : { ok: true, status: 200 };
+    });
+    assert.deepEqual(methods, ['HEAD', 'GET']);
+    assert.deepEqual(ok, { problem: null, warning: null });
+  }
+  const forbidden = await checkExternalLink('https://docs.example.invalid', async () => ({
+    ok: false,
+    status: 403,
+  }));
+  assert.match(forbidden.problem, /403/);
 });

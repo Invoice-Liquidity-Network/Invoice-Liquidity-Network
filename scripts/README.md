@@ -56,6 +56,8 @@ Tests mock `spawnSync` to avoid network access and verify argument construction,
 | `validate-packages.mjs` | Validates package.json fields across the monorepo. |
 | `check-monorepo-map-drift.mjs` | Cross-references `docs/monorepo-map.md` status against each package's `package.json` (name, `deprecated` notice, publish intent). Advisory; run `pnpm drift:check`. |
 | `mainnet-checklist-parser.js` | Parses the mainnet launch checklist markdown and updates issue statuses. |
+| `validate-mainnet-launch-evidence.mjs` | Validates per-row artifact links and, in launch mode, downloads and verifies current independent external audit evidence. |
+| `check-mainnet-launch-readiness.mjs` | Validates checklist ownership, freshness, local evidence, independent sign-off, and prelaunch readiness; writes an operator report. |
 | `generate-types.ts` | Generates shared TypeScript types from contract specs. |
 | `deploy.ts` | Deployment orchestration for Soroban contracts. |
 | `migrate.ts` | Database migration runner. |

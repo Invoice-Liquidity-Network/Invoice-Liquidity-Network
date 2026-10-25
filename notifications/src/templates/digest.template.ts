@@ -8,6 +8,8 @@
 import { emailShell, escapeHtml, formatAmount, formatDate, shortAddress } from './helpers';
 
 export interface DigestItem {
+  /** Source invoice event id; used to dedupe and reconcile digests (#1282). */
+  eventId?: string;
   invoiceId: number;
   eventType: string;
   amount: string;

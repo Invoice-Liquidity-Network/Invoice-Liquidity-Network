@@ -1,0 +1,19 @@
+{
+  "status": "pending",
+  "auditor": {
+    "name": "",
+    "organization": "",
+    "independent": false
+  },
+  "completedAt": "",
+  "scope": [],
+  "findings": {
+    "open": null,
+    "accepted": null,
+    "acceptanceRationale": ""
+  },
+  "evidence": {
+    "url": "",
+    "sha256": ""
+  }
+}

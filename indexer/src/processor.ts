@@ -1,6 +1,6 @@
 import { type rpc, scValToNative } from '@stellar/stellar-sdk';
-import { hasEvent, insertEvent, upsertInvoice, getInvoiceById } from './db';
-import { eventsProcessedTotal, invoicesUpsertedTotal } from './metrics';
+import { hasEvent, applyEventWithInvoice } from './db';
+import { eventsProcessedTotal, duplicateEventsTotal, invoicesUpsertedTotal } from './metrics';
 import { invalidateInvoiceCache } from './cache';
 import { fetchInvoice } from './rpc';
 import type { ILNEvent, ILNEventType } from './types';
@@ -18,16 +18,21 @@ const KNOWN_EVENT_TYPES = new Set<ILNEventType>(['submitted', 'funded', 'paid', 
  * Process a single Soroban contract event:
  * 1. Deduplicate by event_id.
  * 2. Decode the topic symbol and invoice_id from the event body.
- * 3. Persist the event record.
- * 4. Fetch the latest invoice state from the RPC and upsert into SQLite.
+ * 3. Fetch the latest invoice state from the RPC.
+ * 4. Atomically persist the event record and upsert the invoice into SQLite (#1260).
  *
- * Fetching via RPC (rather than parsing all fields from events) ensures we
- * always have accurate state even if events are processed out-of-order or after
- * a re-org.
+ * Atomic application ensures that an RPC error or crash never leaves an event
+ * marked as processed without its invoice state, guaranteeing idempotency across
+ * replays and restarts.
  */
 export async function processEvent(event: rpc.Api.EventResponse): Promise<void> {
   // ── Deduplication ─────────────────────────────────────────────────────────
   if (hasEvent(event.id)) {
+    try {
+      duplicateEventsTotal.inc();
+    } catch {
+      /* metrics failure is non-fatal */
+    }
     return;
   }
 
@@ -42,7 +47,6 @@ export async function processEvent(event: rpc.Api.EventResponse): Promise<void> 
   // ── Decode invoice_id from value ──────────────────────────────────────────
   const invoiceId = Number(scValToNative(event.value) as bigint);
 
-  // ── Persist event record (INSERT OR IGNORE handles any race condition) ────
   const ilnEvent: ILNEvent = {
     event_id: event.id,
     event_type: eventType as ILNEventType,
@@ -51,7 +55,27 @@ export async function processEvent(event: rpc.Api.EventResponse): Promise<void> 
     ledger_closed_at: event.ledgerClosedAt,
     created_at: Date.now(),
   };
-  insertEvent(ilnEvent);
+
+  // ── Fetch latest invoice state from RPC ───────────────────────────────────
+  let invoice = null;
+  let attempts = 0;
+  const maxAttempts = 3;
+  while (attempts < maxAttempts) {
+    try {
+      invoice = await fetchInvoice(invoiceId);
+      break;
+    } catch (fetchErr) {
+      attempts++;
+      if (attempts >= maxAttempts) {
+        console.error(`[processor] Failed to fetch invoice ${invoiceId} after ${maxAttempts} attempts`, fetchErr);
+        throw fetchErr;
+      }
+      await new Promise((resolve) => setTimeout(resolve, 300 * Math.pow(2, attempts)));
+    }
+  }
+
+  // ── Atomic Event & Invoice Application (#1260) ───────────────────────────
+  const { isChanged } = applyEventWithInvoice(ilnEvent, invoice);
 
   // Track processed events
   try {
@@ -60,20 +84,8 @@ export async function processEvent(event: rpc.Api.EventResponse): Promise<void> 
     /* metrics failure is non-fatal */
   }
 
-  // ── Fetch latest invoice state and upsert ─────────────────────────────────
-  // We always fetch the current state from the RPC regardless of event type.
-  // This handles:
-  //   • `submitted`  → inserts the full invoice with status=Pending
-  //   • `funded`     → updates status=Funded + funder + funded_at
-  //   • `paid`       → updates status=Paid
-  //   • `defaulted`  → updates status=Defaulted
-  const invoice = await fetchInvoice(invoiceId);
   if (invoice) {
-    const existing = getInvoiceById(invoiceId);
-    const isChanged = !existing || existing.status !== invoice.status || existing.funder !== (invoice.funder ?? null);
-
     if (isChanged) {
-      upsertInvoice(invoice);
       await invalidateInvoiceCache(invoiceId);
       try {
         invoicesUpsertedTotal.inc();
@@ -81,9 +93,8 @@ export async function processEvent(event: rpc.Api.EventResponse): Promise<void> 
         /* metrics failure is non-fatal */
       }
     }
-    // Publish to the single shared pubsub. The modular WebSocket schema
-    // receives structured payloads, while the legacy Yoga schema receives
-    // the raw invoice on its own namespaced channels (see ./graphql/pubsub).
+
+    // Publish to the single shared pubsub.
     pubsub.publish(INVOICE_UPDATED, { invoiceUpdated: invoice, triggeringEvent: ilnEvent });
     pubsub.publish(EVENT_STREAM, { eventStream: ilnEvent });
     if (eventType === 'submitted') {

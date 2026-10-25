@@ -210,6 +210,9 @@ Read by `notifications/src/config.ts`; see also `notifications/.env.example`.
 | `RATE_LIMIT_WINDOW_MS` | No | `60000` | Sliding rate-limit window |
 | `TWILIO_ACCOUNT_SID` / `TWILIO_AUTH_TOKEN` / `TWILIO_FROM_NUMBER` | No | — | SMS delivery via Twilio |
 | `SMS_RATE_LIMIT_MAX` / `SMS_RATE_LIMIT_WINDOW_MS` | No | `10` / `3600000` | SMS-specific rate limit |
+| `NOTIFICATIONS_MAX_DISPATCH_ATTEMPTS` | No | `8` | Provider attempts per journal row before it is dead-lettered as `failed` (#1277) |
+| `NOTIFICATIONS_RECIPIENT_KEY` | **Yes in production** | dev key | 32-byte key (64 hex chars or base64) used to tokenize/encrypt recipient data at rest (#1280) |
+| `NOTIFICATIONS_RECIPIENT_KEY_PREVIOUS` | No | — | Previous recipient key, kept readable during rotation |
 
 There is **no** `DATABASE_URL` or global `WEBHOOK_SECRET`; earlier revisions of
 this doc listed those and they are not read by the service.
@@ -230,11 +233,14 @@ recipient should receive:
 | Column | Meaning |
 | --- | --- |
 | `id` | `sha256` of `dedup_key`, so the same notification always maps to the same row |
-| `dedup_key` | `JSON.stringify([invoice_id, trigger, recipient_address, channel, destination, event_id])`; `UNIQUE` index `idx_dispatch_attempts_dedup`. Scheduled triggers (`invoice_due_soon`, `invoice_overdue`) have no event id, which the key encodes as `''` |
-| `subscription`, `payload` | The JSON needed to send the notification again, years later if necessary, without re-reading the subscription table |
-| `status` | `pending` while undelivered, `delivered` once the provider confirmed the send |
-| `attempts`, `last_error` | How many provider calls have failed and the reason for the most recent one |
-| `created_at`, `updated_at`, `delivered_at` | Timestamps for triage |
+| `dedup_key` | `JSON.stringify([invoice_id, trigger, recipient_address, channel, destination_token, event_id])`; `UNIQUE` index `idx_dispatch_attempts_dedup`. Scheduled triggers (`invoice_due_soon`, `invoice_overdue`) have no event id, which the key encodes as `''` |
+| `destination` | Keyed `rtok:v1:` token of the destination (#1280) — never the contact detail itself |
+| `subscription`, `payload` | The data needed to send the notification again without re-reading the subscription table; `subscription` is AES-256-GCM encrypted (#1280) |
+| `subscription_id` | Plain subscription id, so unsubscribe can find rows whose blob is encrypted |
+| `status` | `pending` while undelivered; terminal `delivered` or `failed` (#1277) |
+| `outcome_reason` | Why the row is terminal: `delivered`, `max_attempts_exhausted`, `permanent_error`, `invalid_recipient`, `unreadable` |
+| `attempts`, `last_error` | How many provider calls were made and the reason for the most recent failure |
+| `created_at`, `updated_at`, `last_attempt_at`, `delivered_at`, `failed_at` | Timestamps for triage |
 
 `enqueueDispatchAttempt()` inserts with `INSERT OR IGNORE` against that unique
 key. A retried poll, a replayed event, or a restart re-processing its cursor
@@ -275,12 +281,14 @@ a chain event) and the `X-ILN-Event-Id` header.
 
 ### Known limits
 
-- **No attempt cap and no dead-letter queue.** A notification whose provider call
-  always fails stays `pending` and is retried on every poll forever. Watch
-  `attempts`/`last_error` on `pending` rows: high counts mean a destination that
-  will never accept the send.
-- A row whose `payload`/`subscription` JSON cannot be parsed is skipped by the
-  flush and stays `pending` (visible, but not retryable).
+- **Retries are bounded (#1277).** After `NOTIFICATIONS_MAX_DISPATCH_ATTEMPTS`
+  transient failures, or one non-retryable error, a row moves to `failed` with an
+  `outcome_reason` and is no longer retried automatically. Operators inspect and
+  re-queue such rows with `tsx src/audit-cli.ts --dispatch-summary`,
+  `--dispatch-list failed` and `--requeue <id> --operator <id>`; see
+  [`runbooks/notifications-dispatch-outcomes.md`](runbooks/notifications-dispatch-outcomes.md).
+- A row whose `payload`/`subscription` cannot be decrypted or parsed is closed as
+  `failed` / `unreadable` (visible in metrics, re-queueable once the key is restored).
 - Retention (`purgeExpiredDeliveryLogs`) deletes only **terminal** rows, after 90
   days. Purging pending work would break the guarantee, so it never does.
 - The guarantee covers the dispatch pipeline started by the poller. `POST /test-webhook`
@@ -293,6 +301,8 @@ a chain event) and the `X-ILN-Event-Id` header.
 pnpm --filter ./notifications vitest run tests/crash-recovery.test.ts
 # Queue semantics against a real (in-memory) SQLite database
 pnpm --filter ./notifications vitest run src/__tests__/processor.test.ts
+# Terminal outcomes, recipient identity/validation, recipient encryption (#1277-#1280)
+pnpm --filter ./notifications vitest run src/__tests__/recipient-hardening.test.ts
 ```
 
 The crash test spawns the production pipeline through the same TypeScript loader

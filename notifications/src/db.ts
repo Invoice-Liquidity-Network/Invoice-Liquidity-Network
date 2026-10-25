@@ -1,6 +1,12 @@
 import Database from 'better-sqlite3';
 import { createHash, createHmac, timingSafeEqual } from 'crypto';
 import { CONFIG } from './config';
+import {
+  decryptRecipientData,
+  encryptRecipientData,
+  recipientLookupForms,
+  tokenizeRecipient,
+} from './recipient-crypto';
 import type {
   ILNEventType,
   Invoice,
@@ -84,10 +90,19 @@ function upgradeDispatchAttemptsTable(db: SQLiteDatabase): void {
   addColumnIfMissing(db, 'dispatch_attempts', 'last_error', 'TEXT');
   addColumnIfMissing(db, 'dispatch_attempts', 'updated_at', 'INTEGER NOT NULL DEFAULT 0');
   addColumnIfMissing(db, 'dispatch_attempts', 'delivered_at', 'INTEGER');
+  // Issue #1277: terminal outcome tracking.
+  addColumnIfMissing(db, 'dispatch_attempts', 'subscription_id', 'TEXT');
+  addColumnIfMissing(db, 'dispatch_attempts', 'outcome_reason', 'TEXT');
+  addColumnIfMissing(db, 'dispatch_attempts', 'last_attempt_at', 'INTEGER');
+  addColumnIfMissing(db, 'dispatch_attempts', 'failed_at', 'INTEGER');
 }
 
 function runMigrations(db: SQLiteDatabase): void {
   upgradeDispatchAttemptsTable(db);
+  // Issue #1281: databases created before ownership verification lack this
+  // column. Existing rows stay NULL (unverified) so they are not delivered to
+  // until the owner re-verifies.
+  addColumnIfMissing(db, 'subscriptions', 'ownership_verified_at', 'INTEGER');
 
   db.exec(`
     CREATE TABLE IF NOT EXISTS invoices (
@@ -126,6 +141,7 @@ function runMigrations(db: SQLiteDatabase): void {
       destination     TEXT    NOT NULL,
       triggers        TEXT    NOT NULL,
       webhook_secret  TEXT,
+      ownership_verified_at INTEGER,
       created_at      INTEGER NOT NULL
     );
 
@@ -140,6 +156,13 @@ function runMigrations(db: SQLiteDatabase): void {
     -- event_id uses '' (not NULL) when the notification is not tied to a chain
     -- event, because NULL never collides in a SQLite UNIQUE index and would
     -- silently disable dedup for scheduled triggers.
+    -- Issue #1277: every row ends in exactly one terminal state. 'delivered'
+    -- or 'failed' (attempt budget exhausted, permanent provider/recipient
+    -- error, or an unreadable row), with outcome_reason saying which, and
+    -- failed_at/delivered_at saying when. A 'failed' row is never retried
+    -- automatically; an operator re-queues it explicitly.
+    -- Issue #1280: destination holds a keyed token and subscription holds
+    -- AES-GCM ciphertext; neither stores the contact detail in the clear.
     CREATE TABLE IF NOT EXISTS dispatch_attempts (
       id                TEXT    PRIMARY KEY,
       dedup_key         TEXT    NOT NULL,
@@ -157,7 +180,11 @@ function runMigrations(db: SQLiteDatabase): void {
       last_error        TEXT,
       created_at        INTEGER NOT NULL,
       updated_at        INTEGER NOT NULL DEFAULT 0,
-      delivered_at      INTEGER
+      delivered_at      INTEGER,
+      subscription_id   TEXT,
+      outcome_reason    TEXT,
+      last_attempt_at   INTEGER,
+      failed_at         INTEGER
     );
 
     CREATE TABLE IF NOT EXISTS sent_notifications (
@@ -224,6 +251,7 @@ function runMigrations(db: SQLiteDatabase): void {
     -- deterministically ordered.
     CREATE INDEX IF NOT EXISTS idx_dispatch_attempts_pending ON dispatch_attempts(status, created_at);
     CREATE INDEX IF NOT EXISTS idx_dispatch_attempts_invoice ON dispatch_attempts(invoice_id);
+    CREATE INDEX IF NOT EXISTS idx_dispatch_attempts_subscription ON dispatch_attempts(subscription_id);
     CREATE INDEX IF NOT EXISTS idx_audit_recipient     ON delivery_audit_log(recipient_address);
     CREATE INDEX IF NOT EXISTS idx_audit_event         ON delivery_audit_log(event_id);
     CREATE INDEX IF NOT EXISTS idx_audit_created       ON delivery_audit_log(created_at);
@@ -286,6 +314,69 @@ function runMigrations(db: SQLiteDatabase): void {
       BEFORE DELETE ON compliance_audit_chain BEGIN
         SELECT RAISE(ABORT, 'compliance audit chain is append-only');
       END;
+
+    -- Issue #1281: single-use challenges a subscriber signs with the Stellar
+    -- key behind stellar_address to prove they own it. consumed_at is set
+    -- atomically on successful verification so a replayed proof is rejected.
+    CREATE TABLE IF NOT EXISTS ownership_challenges (
+      nonce           TEXT    PRIMARY KEY,
+      stellar_address TEXT    NOT NULL,
+      message         TEXT    NOT NULL,
+      expires_at      INTEGER NOT NULL,
+      consumed_at     INTEGER,
+      created_at      INTEGER NOT NULL
+    );
+
+    -- Issue #1282: durable digest watermark and delivery ledger used to
+    -- reconcile buffered digest items against persisted invoice events.
+    CREATE TABLE IF NOT EXISTS digest_state (
+      stellar_address TEXT    PRIMARY KEY,
+      config          TEXT    NOT NULL,
+      registered_at   INTEGER NOT NULL,
+      last_flushed_at INTEGER
+    );
+
+    CREATE TABLE IF NOT EXISTS digest_pending (
+      stellar_address TEXT    NOT NULL,
+      event_id        TEXT    NOT NULL,
+      item            TEXT    NOT NULL,
+      buffered_at     INTEGER NOT NULL,
+      PRIMARY KEY (stellar_address, event_id)
+    );
+
+    CREATE TABLE IF NOT EXISTS digest_deliveries (
+      stellar_address TEXT    NOT NULL,
+      event_id        TEXT    NOT NULL,
+      invoice_id      INTEGER NOT NULL,
+      event_type      TEXT    NOT NULL,
+      delivered_at    INTEGER NOT NULL,
+      PRIMARY KEY (stellar_address, event_id)
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_events_created_at ON events(created_at);
+
+    -- Issues #1273-#1276: durable inbox for chain events. A row is written
+    -- before the invoice is fetched, and the events row is only written once
+    -- the invoice was retrieved and notifications were dispatched, so a failed
+    -- fetch can no longer leave an event "recorded" but never processed.
+    CREATE TABLE IF NOT EXISTS event_inbox (
+      event_id         TEXT    PRIMARY KEY,
+      event_type       TEXT    NOT NULL,
+      invoice_id       INTEGER NOT NULL,
+      ledger           INTEGER NOT NULL,
+      ledger_closed_at TEXT    NOT NULL,
+      status           TEXT    NOT NULL DEFAULT 'pending'
+                       CHECK (status IN ('pending', 'processed', 'dead')),
+      attempts         INTEGER NOT NULL DEFAULT 0,
+      next_attempt_at  INTEGER NOT NULL,
+      last_error       TEXT,
+      outcome_reason   TEXT,
+      created_at       INTEGER NOT NULL,
+      updated_at       INTEGER NOT NULL,
+      failed_at        INTEGER
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_event_inbox_due ON event_inbox(status, next_attempt_at);
   `);
 }
 
@@ -443,6 +534,258 @@ export function insertEvent(event: {
     .run(event);
 }
 
+// ─── Event inbox (issues #1273-#1276: durable, bounded event ingestion) ──────
+
+export type InboundEventStatus = 'pending' | 'processed' | 'dead';
+
+/** Why an inbound event was dead-lettered. */
+export type InboundEventOutcomeReason = 'malformed_event' | 'max_attempts_exhausted';
+
+export interface InboundEvent {
+  event_id: string;
+  event_type: string;
+  invoice_id: number;
+  ledger: number;
+  ledger_closed_at: string;
+  status: InboundEventStatus;
+  attempts: number;
+  next_attempt_at: number;
+  last_error: string | null;
+  outcome_reason: InboundEventOutcomeReason | null;
+  created_at: number;
+  updated_at: number;
+  failed_at: number | null;
+}
+
+/** Backoff before retry `attempts` (1-based): base * 2^(attempts-1), capped. */
+export function eventRetryDelayMs(attempts: number): number {
+  const base = CONFIG.eventRetryBaseMs ?? 5000;
+  const max = CONFIG.eventRetryMaxMs ?? 300000;
+  return Math.min(max, base * Math.pow(2, Math.max(0, attempts - 1)));
+}
+
+export function getInboundEvent(eventId: string): InboundEvent | undefined {
+  return getDb().prepare('SELECT * FROM event_inbox WHERE event_id = ?').get(eventId) as
+    | InboundEvent
+    | undefined;
+}
+
+/**
+ * Journal an event before any RPC call. `INSERT OR IGNORE` on the event id, so
+ * a replayed poll can never create a second row or reset a dead-lettered one.
+ * Returns true when this call created the row.
+ */
+export function enqueueInboundEvent(event: {
+  event_id: string;
+  event_type: string;
+  invoice_id: number;
+  ledger: number;
+  ledger_closed_at: string;
+}, now: number = Date.now()): boolean {
+  const result = getDb()
+    .prepare(
+      `INSERT OR IGNORE INTO event_inbox
+         (event_id, event_type, invoice_id, ledger, ledger_closed_at, status,
+          attempts, next_attempt_at, created_at, updated_at)
+       VALUES
+         (@event_id, @event_type, @invoice_id, @ledger, @ledger_closed_at, 'pending',
+          0, @now, @now, @now)`
+    )
+    .run({ ...event, now });
+  return result.changes > 0;
+}
+
+/** Pending events whose backoff has elapsed, oldest ledger first. */
+export function getDueInboundEvents(now: number = Date.now(), limit = 100): InboundEvent[] {
+  return getDb()
+    .prepare(
+      `SELECT * FROM event_inbox
+       WHERE status = 'pending' AND next_attempt_at <= ?
+       ORDER BY ledger ASC, event_id ASC
+       LIMIT ?`
+    )
+    .all(now, limit) as InboundEvent[];
+}
+
+/**
+ * Close out an event after its invoice was retrieved and notifications were
+ * dispatched: the `events` row and the `processed` status commit together.
+ * Returns false if the row was not pending (already processed or dead).
+ */
+export function completeInboundEvent(eventId: string, createdAt: number = Date.now()): boolean {
+  const db = getDb();
+  return db.transaction(() => {
+    const row = db
+      .prepare("SELECT * FROM event_inbox WHERE event_id = ? AND status = 'pending'")
+      .get(eventId) as InboundEvent | undefined;
+    if (!row) return false;
+    insertEvent({
+      event_id: row.event_id,
+      event_type: row.event_type as ILNEventType,
+      invoice_id: row.invoice_id,
+      ledger: row.ledger,
+      ledger_closed_at: row.ledger_closed_at,
+      created_at: createdAt,
+    });
+    db.prepare(
+      `UPDATE event_inbox SET status = 'processed', updated_at = ?, next_attempt_at = 0
+       WHERE event_id = ?`
+    ).run(createdAt, eventId);
+    return true;
+  })();
+}
+
+export interface InboundEventFailureOutcome {
+  status: InboundEventStatus;
+  attempts: number;
+  outcome_reason: InboundEventOutcomeReason | null;
+  /** True when this call dead-lettered the event. */
+  terminal: boolean;
+  next_attempt_at: number;
+}
+
+/**
+ * Record a failed attempt. The event stays `pending` with an exponential
+ * backoff until `maxAttempts` is spent (or the caller reports a permanent
+ * `malformed_event`), then moves to the terminal `dead` state. Only pending
+ * rows are touched, so a late report cannot revive a processed event.
+ */
+export function recordInboundEventFailure(
+  eventId: string,
+  error: string,
+  options: {
+    terminalReason?: 'malformed_event';
+    maxAttempts?: number;
+    now?: number;
+  } = {}
+): InboundEventFailureOutcome | undefined {
+  const db = getDb();
+  const now = options.now ?? Date.now();
+  const maxAttempts = Math.max(1, options.maxAttempts ?? CONFIG.eventMaxAttempts ?? 6);
+  return db.transaction(() => {
+    const row = db
+      .prepare("SELECT attempts FROM event_inbox WHERE event_id = ? AND status = 'pending'")
+      .get(eventId) as { attempts: number } | undefined;
+    if (!row) return undefined;
+    const attempts = row.attempts + 1;
+    const outcomeReason: InboundEventOutcomeReason | null =
+      options.terminalReason ?? (attempts >= maxAttempts ? 'max_attempts_exhausted' : null);
+    const terminal = outcomeReason !== null;
+    const nextAttemptAt = terminal ? 0 : now + eventRetryDelayMs(attempts);
+    db.prepare(
+      `UPDATE event_inbox
+         SET attempts = ?, last_error = ?, updated_at = ?, next_attempt_at = ?,
+             status = ?, outcome_reason = ?, failed_at = ?
+       WHERE event_id = ?`
+    ).run(
+      attempts,
+      error.slice(0, 500),
+      now,
+      nextAttemptAt,
+      terminal ? 'dead' : 'pending',
+      outcomeReason,
+      terminal ? now : null,
+      eventId
+    );
+    return {
+      status: terminal ? ('dead' as const) : ('pending' as const),
+      attempts,
+      outcome_reason: outcomeReason,
+      terminal,
+      next_attempt_at: nextAttemptAt,
+    };
+  })();
+}
+
+export interface InboundEventSummary {
+  pending: number;
+  processed: number;
+  dead: number;
+  deadByReason: Record<string, number>;
+  oldestPendingAgeMs: number | null;
+  maxPendingAttempts: number;
+}
+
+/** Operator view of the inbox; carries no recipient data. */
+export function getInboundEventSummary(nowMs: number = Date.now()): InboundEventSummary {
+  const db = getDb();
+  const byStatus = db
+    .prepare('SELECT status, COUNT(*) AS count FROM event_inbox GROUP BY status')
+    .all() as { status: InboundEventStatus; count: number }[];
+  const byReason = db
+    .prepare(
+      `SELECT COALESCE(outcome_reason, 'unknown') AS reason, COUNT(*) AS count
+       FROM event_inbox WHERE status = 'dead' GROUP BY reason`
+    )
+    .all() as { reason: string; count: number }[];
+  const stats = db
+    .prepare(
+      `SELECT MIN(created_at) AS oldest, COALESCE(MAX(attempts), 0) AS max_attempts
+       FROM event_inbox WHERE status = 'pending'`
+    )
+    .get() as { oldest: number | null; max_attempts: number };
+  const counts = { pending: 0, processed: 0, dead: 0 };
+  for (const { status, count } of byStatus) {
+    if (status in counts) counts[status] = count;
+  }
+  return {
+    ...counts,
+    deadByReason: Object.fromEntries(byReason.map(({ reason, count }) => [reason, count])),
+    oldestPendingAgeMs: stats.oldest === null ? null : nowMs - stats.oldest,
+    maxPendingAttempts: stats.max_attempts,
+  };
+}
+
+export function listInboundEvents(
+  filter: { status?: InboundEventStatus; limit?: number } = {}
+): InboundEvent[] {
+  const limit = Math.max(1, Math.min(filter.limit ?? 100, 1000));
+  const where = filter.status ? 'WHERE status = ?' : '';
+  const params: unknown[] = filter.status ? [filter.status, limit] : [limit];
+  return getDb()
+    .prepare(`SELECT * FROM event_inbox ${where} ORDER BY updated_at DESC, event_id ASC LIMIT ?`)
+    .all(...params) as InboundEvent[];
+}
+
+/**
+ * Operator recovery path for a dead-lettered event: move it back to `pending`
+ * with a fresh attempt budget so the next poll retries it, and append the
+ * action to the signed compliance audit chain. Only `dead` rows qualify, and a
+ * `malformed_event` row is refused — retrying an undecodable payload cannot
+ * succeed.
+ */
+export function requeueDeadInboundEvent(eventId: string, operatorId: string): boolean {
+  const db = getDb();
+  return db.transaction(() => {
+    const previous = db
+      .prepare(
+        "SELECT attempts, outcome_reason FROM event_inbox WHERE event_id = ? AND status = 'dead'"
+      )
+      .get(eventId) as { attempts: number; outcome_reason: string | null } | undefined;
+    if (!previous || previous.outcome_reason === 'malformed_event') return false;
+    const now = Date.now();
+    db.prepare(
+      `UPDATE event_inbox
+         SET status = 'pending', attempts = 0, outcome_reason = NULL, failed_at = NULL,
+             next_attempt_at = ?, updated_at = ?
+       WHERE event_id = ? AND status = 'dead'`
+    ).run(now, now, eventId);
+    appendComplianceAudit(
+      db,
+      'notification-delivery',
+      'event-requeued',
+      eventId,
+      {
+        operatorId,
+        previousAttempts: previous.attempts,
+        previousOutcome: previous.outcome_reason ?? 'unknown',
+      },
+      now
+    );
+    return true;
+  })();
+}
+
 export function getCursorLedger(): number {
   const row = getDb().prepare('SELECT last_ledger FROM cursor WHERE id = 1').get() as
     | { last_ledger: number }
@@ -469,8 +812,9 @@ export function createSubscription(
   const result = getDb()
     .prepare(
       `INSERT INTO subscriptions
-         (stellar_address, channel, destination, triggers, webhook_secret, created_at)
-       VALUES (?, ?, ?, ?, ?, ?)`
+         (stellar_address, channel, destination, triggers, webhook_secret,
+          ownership_verified_at, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`
     )
     .run(
       subscription.stellar_address,
@@ -478,6 +822,7 @@ export function createSubscription(
       subscription.destination,
       JSON.stringify(subscription.triggers),
       subscription.webhook_secret ?? null,
+      subscription.ownership_verified_at ?? null,
       now
     );
 
@@ -499,6 +844,7 @@ export function getSubscriptionsByAddress(address: string): Subscription[] {
       destination: row.destination,
       triggers: JSON.parse(row.triggers),
       webhook_secret: row.webhook_secret ?? undefined,
+      ownership_verified_at: row.ownership_verified_at ?? null,
       created_at: row.created_at,
     })) as Subscription[];
 }
@@ -517,8 +863,23 @@ export function getSubscriptionById(id: number): Subscription | undefined {
     destination: row.destination,
     triggers: JSON.parse(row.triggers),
     webhook_secret: row.webhook_secret ?? undefined,
+    ownership_verified_at: row.ownership_verified_at ?? null,
     created_at: row.created_at,
   } as Subscription;
+}
+
+export function markSubscriptionsOwnershipVerified(address: string, verifiedAt: number): number {
+  const result = getDb()
+    .prepare('UPDATE subscriptions SET ownership_verified_at = ? WHERE stellar_address = ?')
+    .run(verifiedAt, address);
+  return result.changes;
+}
+
+export function countUnverifiedSubscriptions(): number {
+  const row = getDb()
+    .prepare('SELECT COUNT(*) as count FROM subscriptions WHERE ownership_verified_at IS NULL')
+    .get() as { count: number };
+  return row.count;
 }
 
 export function deleteSubscriptionById(id: number): boolean {
@@ -557,7 +918,11 @@ export function eraseNotificationDataForAddress(
     const destinations = db
       .prepare('SELECT destination FROM subscriptions WHERE stellar_address = ?')
       .all(address) as { destination: string }[];
-    const destinationValues = destinations.map(({ destination }) => destination);
+    // Issue #1280: journal rows store tokenized destinations, legacy rows the
+    // plaintext, so erase every stored form.
+    const destinationValues = destinations.flatMap(({ destination }) =>
+      recipientLookupForms(destination)
+    );
     const subs = db
       .prepare('SELECT id FROM subscriptions WHERE stellar_address = ?')
       .all(address) as { id: number }[];
@@ -629,9 +994,16 @@ function deleteSubscriptions(ids: number[]): boolean {
   return db.transaction(() => {
     for (const id of ids) {
       db.prepare('DELETE FROM webhook_delivery_logs WHERE subscription_id = ?').run(id);
-      db.prepare("DELETE FROM dispatch_attempts WHERE json_extract(subscription, '$.id') = ?").run(
-        id
-      );
+      // The subscription blob is encrypted on new rows (#1280), so match the
+      // plain subscription_id column; the CASE keeps json_extract away from
+      // ciphertext while still matching legacy plaintext rows.
+      db.prepare(
+        `DELETE FROM dispatch_attempts
+         WHERE subscription_id = ?
+            OR (subscription_id IS NULL
+                AND CASE WHEN json_valid(subscription)
+                         THEN json_extract(subscription, '$.id') END = ?)`
+      ).run(String(id), id);
     }
     const placeholders = ids.map(() => '?').join(', ');
     const result = db
@@ -741,6 +1113,11 @@ export function getWebhookDeliveryLogs(subscriptionId: number): WebhookDeliveryL
     })) as WebhookDeliveryLog[];
 }
 
+/**
+ * Issue #1280: `destination` is stored as a keyed token. The lookup also
+ * matches the previous-key token and legacy plaintext rows, so neither an
+ * upgrade nor a key rotation re-sends a notification that was already sent.
+ */
 export function hasSentNotification(
   invoiceId: number,
   trigger: NotificationTrigger,
@@ -748,6 +1125,7 @@ export function hasSentNotification(
   channel: SubscriptionChannel,
   destination: string
 ): boolean {
+  const forms = recipientLookupForms(destination);
   return (
     getDb()
       .prepare(
@@ -756,9 +1134,9 @@ export function hasSentNotification(
            AND trigger = ?
            AND recipient_address = ?
            AND channel = ?
-           AND destination = ?`
+           AND destination IN (${forms.map(() => '?').join(', ')})`
       )
-      .get(invoiceId, trigger, recipientAddress, channel, destination) !== undefined
+      .get(invoiceId, trigger, recipientAddress, channel, ...forms) !== undefined
   );
 }
 
@@ -776,7 +1154,15 @@ export function logSentNotification(
          (invoice_id, trigger, recipient_address, channel, destination, event_id, sent_at)
        VALUES (?, ?, ?, ?, ?, ?, ?)`
     )
-    .run(invoiceId, trigger, recipientAddress, channel, destination, eventId ?? null, Date.now());
+    .run(
+      invoiceId,
+      trigger,
+      recipientAddress,
+      channel,
+      tokenizeRecipient(destination),
+      eventId ?? null,
+      Date.now()
+    );
 }
 
 export interface DeliveryAnalytics {
@@ -1107,6 +1493,29 @@ export function countDeliveryAuditLogs(filter: DeliveryAuditFilter = {}): number
 export type DispatchAttemptStatus = 'pending' | 'delivered' | 'failed';
 
 /**
+ * Why a row reached its terminal state (issue #1277). `null` while pending.
+ * - `delivered`: the provider (or a fallback channel) confirmed the send;
+ * - `max_attempts_exhausted`: the retry budget ran out on transient errors;
+ * - `permanent_error`: the provider refused in a way retrying cannot fix;
+ * - `invalid_recipient`: the destination failed recipient validation;
+ * - `unreadable`: the persisted intent could not be decrypted/deserialised.
+ */
+export type DispatchOutcomeReason =
+  | 'delivered'
+  | 'max_attempts_exhausted'
+  | 'permanent_error'
+  | 'invalid_recipient'
+  | 'unreadable';
+
+export type DispatchFailureReason = Exclude<
+  DispatchOutcomeReason,
+  'delivered' | 'max_attempts_exhausted'
+>;
+
+/** Default retry budget when `CONFIG.maxDispatchAttempts` is not set. */
+export const DEFAULT_MAX_DISPATCH_ATTEMPTS = 8;
+
+/**
  * The subscription shape the processor and delivery layer actually pass around
  * at runtime — the `subscriptions` DB row (`stellar_address`, `destination`,
  * `triggers`, `webhook_secret`) rather than the service-layer projection
@@ -1131,16 +1540,20 @@ export interface DispatchAttempt {
   trigger: NotificationTrigger;
   recipient_address: string;
   channel: SubscriptionChannel;
+  /** Keyed token of the destination (issue #1280), or plaintext on legacy rows. */
   destination: string;
   /** `null` when the notification is not tied to a chain event. */
   event_id: string | null;
   status: DispatchAttemptStatus;
   attempts: number;
   last_error: string | null;
+  outcome_reason: DispatchOutcomeReason | null;
   created_at: number;
   updated_at: number;
+  last_attempt_at: number | null;
   delivered_at: number | null;
-  /** Deserialised straight back into what `deliverNotification` expects. */
+  failed_at: number | null;
+  /** Decrypted and deserialised straight back into what `deliverNotification` expects. */
   subscription: Subscription;
   payload: NotificationPayload;
 }
@@ -1170,7 +1583,9 @@ export function dispatchDestinationOf(subscription: DispatchAttemptSubscription)
  * channel + destination + event. Serialised as a fixed-order JSON array so the
  * fields cannot alias each other (a `|` inside a destination would collide two
  * different tuples otherwise), and so scheduled notifications (no event id)
- * still produce a stable key.
+ * still produce a stable key. The destination is tokenized (issue #1280) so
+ * the persisted key carries no contact detail, while equal destinations still
+ * collide exactly as before.
  */
 export function dispatchDedupKey(input: {
   invoiceId: number;
@@ -1185,8 +1600,23 @@ export function dispatchDedupKey(input: {
     input.trigger,
     input.recipientAddress,
     input.channel,
-    input.destination,
+    tokenizeRecipient(input.destination),
     input.eventId ?? '',
+  ]);
+}
+
+function legacyDispatchDedupKey(
+  payload: NotificationPayload,
+  channel: SubscriptionChannel,
+  destination: string
+): string {
+  return JSON.stringify([
+    payload.invoice.id,
+    payload.trigger,
+    payload.recipientAddress,
+    channel,
+    destination,
+    payload.eventId ?? '',
   ]);
 }
 
@@ -1220,16 +1650,33 @@ export function enqueueDispatchAttempt(
   const id = dispatchAttemptId(dedupKey);
   const db = getDb();
 
+  // Rows journaled before #1280 carry the plaintext destination in their key.
+  // Collapse onto such a row instead of queueing a second copy next to it.
+  const legacy = db
+    .prepare('SELECT id, dedup_key, status FROM dispatch_attempts WHERE dedup_key = ?')
+    .get(legacyDispatchDedupKey(payload, subscription.channel, destination)) as
+    | { id: string; dedup_key: string; status: DispatchAttemptStatus }
+    | undefined;
+  if (legacy) {
+    return {
+      id: legacy.id,
+      dedup_key: legacy.dedup_key,
+      status: legacy.status,
+      deduplicated: true,
+      alreadyDelivered: legacy.status === 'delivered',
+    };
+  }
+
   const result = db
     .prepare(
       `INSERT OR IGNORE INTO dispatch_attempts
          (id, dedup_key, invoice_id, trigger, recipient_address, channel, destination,
           event_id, subscription, payload, status, attempts, last_error,
-          created_at, updated_at, delivered_at)
+          created_at, updated_at, delivered_at, subscription_id)
        VALUES
          (@id, @dedup_key, @invoice_id, @trigger, @recipient_address, @channel, @destination,
           @event_id, @subscription, @payload, 'pending', 0, NULL,
-          @created_at, @created_at, NULL)`
+          @created_at, @created_at, NULL, @subscription_id)`
     )
     .run({
       id,
@@ -1238,11 +1685,12 @@ export function enqueueDispatchAttempt(
       trigger: payload.trigger,
       recipient_address: payload.recipientAddress,
       channel: subscription.channel,
-      destination,
+      destination: tokenizeRecipient(destination),
       event_id: payload.eventId ?? '',
-      subscription: JSON.stringify(subscription),
+      subscription: encryptRecipientData(JSON.stringify(subscription)),
       payload: JSON.stringify(payload),
       created_at: Date.now(),
+      subscription_id: subscription.id === undefined ? null : String(subscription.id),
     });
 
   if (result.changes === 0) {
@@ -1268,7 +1716,7 @@ export function enqueueDispatchAttempt(
   };
 }
 
-function rowToDispatchAttempt(row: {
+interface DispatchAttemptRow {
   id: string;
   dedup_key: string | null;
   invoice_id: number;
@@ -1282,10 +1730,15 @@ function rowToDispatchAttempt(row: {
   status: string;
   attempts: number;
   last_error: string | null;
+  outcome_reason: string | null;
   created_at: number;
   updated_at: number;
+  last_attempt_at: number | null;
   delivered_at: number | null;
-}): DispatchAttempt | undefined {
+  failed_at: number | null;
+}
+
+function rowToDispatchAttempt(row: DispatchAttemptRow): DispatchAttempt | undefined {
   try {
     return {
       id: row.id,
@@ -1299,16 +1752,25 @@ function rowToDispatchAttempt(row: {
       status: row.status as DispatchAttemptStatus,
       attempts: row.attempts,
       last_error: row.last_error,
+      outcome_reason: (row.outcome_reason ?? null) as DispatchOutcomeReason | null,
       created_at: row.created_at,
       updated_at: row.updated_at,
+      last_attempt_at: row.last_attempt_at ?? null,
       delivered_at: row.delivered_at,
-      subscription: JSON.parse(row.subscription) as Subscription,
+      failed_at: row.failed_at ?? null,
+      subscription: JSON.parse(decryptRecipientData(row.subscription)) as Subscription,
       payload: JSON.parse(row.payload) as NotificationPayload,
     };
   } catch (error: any) {
-    // A row whose intent cannot be reconstructed stays pending and carries the
-    // reason, so it is visible to operators instead of vanishing from the queue.
-    recordDispatchAttemptFailure(row.id, `Unreadable dispatch attempt: ${error?.message ?? error}`);
+    // A row whose intent cannot be reconstructed (corrupt JSON, ciphertext
+    // under a key that is no longer configured) can never succeed, so it is
+    // closed out as a terminal failure with the reason attached instead of
+    // being retried forever or vanishing from the queue (issue #1277).
+    recordDispatchAttemptFailure(
+      row.id,
+      `Unreadable dispatch attempt: ${error?.message ?? error}`,
+      { terminalReason: 'unreadable' }
+    );
     return undefined;
   }
 }
@@ -1320,18 +1782,25 @@ function rowToDispatchAttempt(row: {
  * deterministically because several rows can share a `created_at` millisecond.
  */
 export function getPendingDispatchAttempts(limit = 500): DispatchAttempt[] {
-  const rows: any[] = getDb()
+  const rows = getDb()
     .prepare(
       `SELECT * FROM dispatch_attempts
        WHERE status = 'pending'
        ORDER BY created_at ASC, id ASC
        LIMIT ?`
     )
-    .all(Math.max(1, Math.min(limit, 5000)));
+    .all(Math.max(1, Math.min(limit, 5000))) as DispatchAttemptRow[];
 
   return rows
     .map((row) => rowToDispatchAttempt(row))
     .filter((attempt): attempt is DispatchAttempt => attempt !== undefined);
+}
+
+export function getDispatchAttemptById(id: string): DispatchAttempt | undefined {
+  const row = getDb().prepare('SELECT * FROM dispatch_attempts WHERE id = ?').get(id) as
+    | DispatchAttemptRow
+    | undefined;
+  return row ? rowToDispatchAttempt(row) : undefined;
 }
 
 /**
@@ -1350,31 +1819,205 @@ export function markDispatchAttemptDelivered(
          SET status = 'delivered',
              delivered_at = ?,
              updated_at = ?,
+             last_attempt_at = ?,
              attempts = attempts + 1,
-             last_error = NULL
+             last_error = NULL,
+             outcome_reason = 'delivered',
+             failed_at = NULL
        WHERE id = ? AND status <> 'delivered'`
     )
-    .run(deliveredAt, deliveredAt, id);
+    .run(deliveredAt, deliveredAt, deliveredAt, id);
   return result.changes > 0;
 }
 
+export interface DispatchFailureOutcome {
+  status: DispatchAttemptStatus;
+  attempts: number;
+  outcome_reason: DispatchOutcomeReason | null;
+  /** True when this call moved the row into the terminal `failed` state. */
+  terminal: boolean;
+}
+
 /**
- * Record a failed provider call. The row stays `pending` so a later flush retries
- * it — that is what makes the guarantee at-least-once rather than at-most-once —
- * while `attempts` and `last_error` make repeated failures observable.
+ * Record a failed provider call.
+ *
+ * A transient failure leaves the row `pending` so a later flush retries it —
+ * that is what makes the guarantee at-least-once rather than at-most-once.
+ * Issue #1277 bounds that retry: once `attempts` reaches `maxAttempts`, or the
+ * caller reports a permanent failure via `terminalReason`, the row moves to
+ * the terminal `failed` state with `outcome_reason` and `failed_at` recorded,
+ * and the flush stops picking it up.
+ *
+ * Only `pending` rows are updated, so a late failure report can never revive a
+ * row another worker already delivered (or already dead-lettered). Returns
+ * `undefined` when no pending row matched.
  */
-export function recordDispatchAttemptFailure(id: string, error: string): void {
+export function recordDispatchAttemptFailure(
+  id: string,
+  error: string,
+  options: { terminalReason?: DispatchFailureReason; maxAttempts?: number } = {}
+): DispatchFailureOutcome | undefined {
   const now = Date.now();
-  getDb()
+  const maxAttempts = Math.max(
+    1,
+    options.maxAttempts ?? CONFIG.maxDispatchAttempts ?? DEFAULT_MAX_DISPATCH_ATTEMPTS
+  );
+  const row = getDb()
     .prepare(
       `UPDATE dispatch_attempts
-         SET status = 'pending',
-             attempts = attempts + 1,
-             last_error = ?,
-             updated_at = ?
-       WHERE id = ?`
+         SET attempts = attempts + 1,
+             last_error = @error,
+             updated_at = @now,
+             last_attempt_at = @now,
+             status = CASE
+               WHEN @terminal_reason IS NOT NULL OR attempts + 1 >= @max_attempts THEN 'failed'
+               ELSE 'pending' END,
+             outcome_reason = CASE
+               WHEN @terminal_reason IS NOT NULL THEN @terminal_reason
+               WHEN attempts + 1 >= @max_attempts THEN 'max_attempts_exhausted'
+               ELSE NULL END,
+             failed_at = CASE
+               WHEN @terminal_reason IS NOT NULL OR attempts + 1 >= @max_attempts THEN @now
+               ELSE NULL END
+       WHERE id = @id AND status = 'pending'
+       RETURNING status, attempts, outcome_reason`
     )
-    .run(error, now, id);
+    .get({
+      id,
+      error,
+      now,
+      terminal_reason: options.terminalReason ?? null,
+      max_attempts: maxAttempts,
+    }) as
+    | { status: DispatchAttemptStatus; attempts: number; outcome_reason: string | null }
+    | undefined;
+
+  if (!row) return undefined;
+  return {
+    status: row.status,
+    attempts: row.attempts,
+    outcome_reason: row.outcome_reason as DispatchOutcomeReason | null,
+    terminal: row.status === 'failed',
+  };
+}
+
+export interface DispatchOutcomeSummary {
+  pending: number;
+  delivered: number;
+  failed: number;
+  failedByReason: Record<string, number>;
+  /** Age in ms of the oldest still-pending row, or null when the queue is empty. */
+  oldestPendingAgeMs: number | null;
+  /** Highest attempt count among pending rows — how close the queue is to dead-lettering. */
+  maxPendingAttempts: number;
+}
+
+/**
+ * Operator view of the journal (issue #1277): how many intents are still in
+ * flight, how many reached each terminal outcome, and how stale the queue is.
+ * Carries no recipient data, so it is safe to log, export, or chart.
+ */
+export function getDispatchOutcomeSummary(nowMs: number = Date.now()): DispatchOutcomeSummary {
+  const db = getDb();
+  const byStatus = db
+    .prepare('SELECT status, COUNT(*) AS count FROM dispatch_attempts GROUP BY status')
+    .all() as { status: DispatchAttemptStatus; count: number }[];
+  const byReason = db
+    .prepare(
+      `SELECT COALESCE(outcome_reason, 'unknown') AS reason, COUNT(*) AS count
+       FROM dispatch_attempts WHERE status = 'failed' GROUP BY reason`
+    )
+    .all() as { reason: string; count: number }[];
+  const pendingStats = db
+    .prepare(
+      `SELECT MIN(created_at) AS oldest, COALESCE(MAX(attempts), 0) AS max_attempts
+       FROM dispatch_attempts WHERE status = 'pending'`
+    )
+    .get() as { oldest: number | null; max_attempts: number };
+
+  const counts = { pending: 0, delivered: 0, failed: 0 };
+  for (const { status, count } of byStatus) {
+    if (status in counts) counts[status] = count;
+  }
+  return {
+    ...counts,
+    failedByReason: Object.fromEntries(byReason.map(({ reason, count }) => [reason, count])),
+    oldestPendingAgeMs: pendingStats.oldest === null ? null : nowMs - pendingStats.oldest,
+    maxPendingAttempts: pendingStats.max_attempts,
+  };
+}
+
+export interface DispatchAttemptListing {
+  id: string;
+  invoice_id: number;
+  trigger: string;
+  channel: string;
+  status: DispatchAttemptStatus;
+  outcome_reason: string | null;
+  attempts: number;
+  last_error: string | null;
+  created_at: number;
+  last_attempt_at: number | null;
+  failed_at: number | null;
+  delivered_at: number | null;
+}
+
+/** List journal rows for investigation, without recipient or destination data. */
+export function listDispatchAttempts(
+  filter: { status?: DispatchAttemptStatus; limit?: number } = {}
+): DispatchAttemptListing[] {
+  const limit = Math.max(1, Math.min(filter.limit ?? 100, 1000));
+  const where = filter.status ? 'WHERE status = ?' : '';
+  const params: unknown[] = filter.status ? [filter.status, limit] : [limit];
+  return getDb()
+    .prepare(
+      `SELECT id, invoice_id, trigger, channel, status, outcome_reason, attempts, last_error,
+              created_at, last_attempt_at, failed_at, delivered_at
+       FROM dispatch_attempts ${where}
+       ORDER BY updated_at DESC, id ASC
+       LIMIT ?`
+    )
+    .all(...params) as DispatchAttemptListing[];
+}
+
+/**
+ * Operator recovery path for a dead-lettered row (issue #1277): move a
+ * terminal `failed` row back to `pending` with a fresh attempt budget so the
+ * next poll's flush retries it. The previous `last_error` is kept for context
+ * and the action is appended to the signed compliance audit chain. Returns
+ * false if the row does not exist or is not `failed` — a delivered row can
+ * never be re-queued.
+ */
+export function requeueFailedDispatchAttempt(id: string, operatorId: string): boolean {
+  const db = getDb();
+  return db.transaction(() => {
+    const previous = db
+      .prepare(
+        "SELECT attempts, outcome_reason FROM dispatch_attempts WHERE id = ? AND status = 'failed'"
+      )
+      .get(id) as { attempts: number; outcome_reason: string | null } | undefined;
+    if (!previous) return false;
+    const now = Date.now();
+    db.prepare(
+      `UPDATE dispatch_attempts
+         SET status = 'pending', attempts = 0, outcome_reason = NULL,
+             failed_at = NULL, updated_at = ?
+       WHERE id = ? AND status = 'failed'`
+    ).run(now, id);
+    appendComplianceAudit(
+      db,
+      'notification-delivery',
+      'dispatch-requeued',
+      id,
+      {
+        operatorId,
+        previousAttempts: previous.attempts,
+        previousOutcome: previous.outcome_reason ?? 'unknown',
+      },
+      now
+    );
+    return true;
+  })();
 }
 
 /**

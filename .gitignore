@@ -78,6 +78,9 @@ notifications/*.txt
 coverage/
 *.tgz
 tests/load/results/
+# E2E machine-readable reports consumed by scripts/check-e2e-coverage.mjs
+.artifacts/
+.docker-output/
 
 # =============================================================================
 # Docker
@@ -111,3 +114,8 @@ TODO.md
 
 test-results/
 playwright-report/
+
+# SQLite databases
+*.db
+*.db-shm
+*.db-wal

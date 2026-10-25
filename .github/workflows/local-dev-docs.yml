@@ -1,0 +1,123 @@
+name: Local Dev Docs
+
+# Blocking guard for the local development guide (#1285).
+#
+# docs/local-development.md is the contributor setup path. This workflow fails
+# when a command, path, workspace, environment variable/default, or Docker
+# Compose service/port it documents no longer matches the repository, and when
+# the local-dev entry points themselves break: root scripts that call npm
+# workspaces, `pnpm <script> -w <pkg>`, Makefile `cd` into missing directories,
+# or WASM targets dev-setup.sh never installs. The JSON report is uploaded on
+# every run (pass or fail) as proof the control ran.
+# Owner: @Invoice-Liquidity-Network/devops. Recovery: docs/runbooks/local-dev-docs.md
+
+on:
+  pull_request:
+    branches:
+      - main
+      - dev
+    paths:
+      - 'docs/local-development.md'
+      - 'docs/local-development-validation.md'
+      - 'docs/runbooks/local-dev-docs.md'
+      - 'packages/docs/content/local-development.mdx'
+      - 'package.json'
+      - 'pnpm-workspace.yaml'
+      - 'docker-compose.yml'
+      - 'Makefile'
+      - '.gitmodules'
+      - 'scripts/dev-setup.sh'
+      - 'scripts/seed.sh'
+      - 'contract-deployer/**'
+      - 'account-seeder/**'
+      - '*/.env.example'
+      - '*/package.json'
+      - 'packages/*/package.json'
+      - 'examples/*/package.json'
+      - 'indexer/src/**'
+      - 'notifications/src/**'
+      - 'oracle-service/src/**'
+      - 'docs/components/**'
+      - 'scripts/check-local-dev-docs.mjs'
+      - 'scripts/lib/local-dev-docs.mjs'
+      - 'scripts/__tests__/local-dev-docs.test.mjs'
+      - '.github/workflows/local-dev-docs.yml'
+  push:
+    branches:
+      - main
+      - dev
+  schedule:
+    # Weekly sweep so the control stays visibly active between PRs.
+    - cron: '29 5 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  guide:
+    name: local development guide matches the repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Unit tests for the guard
+        run: node --test scripts/__tests__/local-dev-docs.test.mjs
+
+      - name: Check docs/local-development.md
+        run: node scripts/check-local-dev-docs.mjs --json="$RUNNER_TEMP/local-dev-docs-report.json"
+
+      - name: Upload report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: local-dev-docs-report
+          path: ${{ runner.temp }}/local-dev-docs-report.json
+          if-no-files-found: ignore
+          retention-days: 30
+
+  entry-points:
+    name: local-dev entry points parse and run
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Compose file is valid
+        run: docker compose config --quiet
+
+      - name: Shell scripts parse
+        run: |
+          for f in scripts/dev-setup.sh scripts/seed.sh scripts/fund-wallets.sh \
+                   contract-deployer/deploy.sh account-seeder/seed.sh; do
+            bash -n "$f"
+          done
+
+      - name: Make targets expand
+        run: make -n setup build deploy-local test clean
+
+      - name: Setup pnpm with store cache
+        uses: ./.github/actions/setup-pnpm
+        with:
+          install-args: --frozen-lockfile --filter @iln/oracle-service...
+
+      # @iln/opentelemetry resolves to dist/ (package.json "main").
+      - name: Build workspace dependencies
+        run: pnpm --filter @iln/opentelemetry build
+
+      # Root wrapper scripts must reach their package (they used to call
+      # `npm run … -w`, which fails with "No workspaces found").
+      - name: Root oracle script runs the oracle suite
+        run: pnpm oracle:test

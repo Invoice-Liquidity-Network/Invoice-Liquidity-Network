@@ -16,6 +16,7 @@ import {
   markDispatchAttemptDelivered,
   dispatchDestinationOf,
 } from '../db';
+import { tokenizeRecipient } from '../recipient-crypto';
 import * as rpc from '../rpc';
 import * as delivery from '../delivery';
 import * as fallback from '../fallback';
@@ -25,6 +26,9 @@ import {
   flushPendingNotifications,
 } from '../processor';
 import type { Invoice, NotificationPayload } from '../types';
+import { digestScheduler } from '../digest';
+import { preferencesService } from '../preferences';
+import { getOwnershipMetrics, resetOwnershipMetrics } from '../ownership';
 
 let db: InstanceType<typeof Database>;
 
@@ -32,6 +36,7 @@ beforeEach(() => {
   db = createDb(':memory:');
   setDb(db);
   vi.restoreAllMocks();
+  resetOwnershipMetrics();
 });
 
 describe('Notification processor', () => {
@@ -56,12 +61,14 @@ describe('Notification processor', () => {
       channel: 'email',
       destination: 'freelancer@example.com',
       triggers: ['invoice_funded'],
+      ownership_verified_at: Date.now(),
     });
     createSubscription({
       stellar_address: invoice.payer,
       channel: 'webhook',
       destination: 'https://example.com/payer',
       triggers: ['invoice_funded'],
+      ownership_verified_at: Date.now(),
     });
 
     const event = {
@@ -98,6 +105,7 @@ describe('Notification processor', () => {
       channel: 'webhook',
       destination: 'https://example.com/lp',
       triggers: ['invoice_due_soon'],
+      ownership_verified_at: Date.now(),
     });
 
     const deliverySpy = vi.spyOn(delivery, 'deliverNotification').mockResolvedValue();
@@ -127,6 +135,7 @@ describe('Notification processor', () => {
       channel: 'email',
       destination: 'payer@example.com',
       triggers: ['invoice_overdue'],
+      ownership_verified_at: Date.now(),
     });
 
     const deliverySpy = vi.spyOn(delivery, 'deliverNotification').mockResolvedValue();
@@ -148,6 +157,7 @@ describe('Notification processor', () => {
       channel: 'email',
       destination: 'funded@example.com',
       triggers: ['invoice_funded'],
+      ownership_verified_at: Date.now(),
     });
 
     await processEvent(fundedEvent('evt-persisted', invoice.id));
@@ -163,7 +173,8 @@ describe('Notification processor', () => {
       trigger: 'invoice_funded',
       recipient_address: invoice.freelancer,
       channel: 'email',
-      destination: 'funded@example.com',
+      // Issue #1280: the journal stores a keyed token, not the mailbox.
+      destination: tokenizeRecipient('funded@example.com'),
       event_id: 'evt-persisted',
     });
     expect(dispatchAttemptRows(db)[0].delivered_at).not.toBeNull();
@@ -211,6 +222,7 @@ describe('dispatch attempt queue', () => {
       channel: 'email',
       destination: 'retry@example.com',
       triggers: ['invoice_funded'],
+      ownership_verified_at: Date.now(),
     });
 
     await processEvent(fundedEvent('evt-failed', invoice.id));
@@ -273,6 +285,7 @@ describe('dispatch attempt queue', () => {
       channel: 'email',
       destination: 'dedup@example.com',
       triggers: ['invoice_funded'],
+      ownership_verified_at: Date.now(),
     });
 
     const first = enqueueDispatchAttempt(subscription, samplePayload(invoice));
@@ -295,6 +308,7 @@ describe('dispatch attempt queue', () => {
       channel: 'webhook',
       destination: 'https://example.com/hook',
       triggers: ['invoice_funded'],
+      ownership_verified_at: Date.now(),
     });
     expect(enqueueDispatchAttempt(otherDestination, samplePayload(invoice))).toMatchObject({
       deduplicated: false,
@@ -317,12 +331,14 @@ describe('dispatch attempt queue', () => {
       channel: 'email',
       destination: 'a@example.com',
       triggers: ['invoice_funded'],
+      ownership_verified_at: Date.now(),
     });
     const subB = createSubscription({
       stellar_address: invoiceB.freelancer,
       channel: 'email',
       destination: 'b@example.com',
       triggers: ['invoice_funded'],
+      ownership_verified_at: Date.now(),
     });
     enqueueDispatchAttempt(subA, samplePayload(invoiceA));
     enqueueDispatchAttempt(subB, samplePayload(invoiceB));
@@ -366,6 +382,7 @@ describe('dispatch attempt queue', () => {
       channel: 'email',
       destination: 'orphan@example.com',
       triggers: ['invoice_funded'],
+      ownership_verified_at: Date.now(),
     });
     enqueueDispatchAttempt(subscription, samplePayload(invoice));
     db.prepare(
@@ -464,3 +481,121 @@ function dispatchAttemptRows(handle: InstanceType<typeof Database>): any[] {
 function countRows(handle: InstanceType<typeof Database>, table: string): number {
   return (handle.prepare(`SELECT COUNT(*) AS c FROM ${table}`).get() as { c: number }).c;
 }
+
+describe('Notification processor — address ownership gate (#1281)', () => {
+  const invoice = {
+    id: 10,
+    freelancer: 'GAFREELANCER',
+    payer: 'GAPAYER',
+    amount: '10000000',
+    due_date: Math.floor(Date.now() / 1000) + 86400,
+    discount_rate: 300,
+    status: 'Funded' as const,
+    funder: 'GLP',
+    funded_at: Math.floor(Date.now() / 1000),
+  };
+
+  function gateEvent(id: string) {
+    return {
+      id,
+      topic: [nativeToScVal('funded')],
+      value: nativeToScVal(BigInt(invoice.id)),
+      ledger: 1,
+      ledgerClosedAt: new Date().toISOString(),
+    } as any;
+  }
+
+  it('does not deliver to a subscription whose address ownership is unverified', async () => {
+    vi.spyOn(rpc, 'fetchInvoice').mockResolvedValue(invoice as any);
+    const deliverySpy = vi.spyOn(delivery, 'deliverNotification').mockResolvedValue();
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+    createSubscription({
+      stellar_address: invoice.freelancer,
+      channel: 'email',
+      destination: 'attacker@example.com',
+      triggers: ['invoice_funded'],
+    });
+    createSubscription({
+      stellar_address: invoice.payer,
+      channel: 'email',
+      destination: 'payer@example.com',
+      triggers: ['invoice_funded'],
+      ownership_verified_at: Date.now(),
+    });
+
+    await processEvent(gateEvent('evt-gate-1'));
+
+    expect(deliverySpy).toHaveBeenCalledTimes(1);
+    expect(deliverySpy.mock.calls[0][0].destination).toBe('payer@example.com');
+    expect(getOwnershipMetrics().deliveriesBlockedUnverified).toBe(1);
+  });
+
+  it('keeps blocking an unverified subscription when the event is replayed', async () => {
+    vi.spyOn(rpc, 'fetchInvoice').mockResolvedValue(invoice as any);
+    const deliverySpy = vi.spyOn(delivery, 'deliverNotification').mockResolvedValue();
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+    createSubscription({
+      stellar_address: invoice.freelancer,
+      channel: 'webhook',
+      destination: 'https://attacker.example.com/hook',
+      triggers: ['invoice_funded'],
+    });
+
+    await processEvent(gateEvent('evt-gate-2'));
+    await processEvent(gateEvent('evt-gate-3'));
+
+    expect(deliverySpy).not.toHaveBeenCalled();
+  });
+
+  it('sends digests to the verified email, never to the Stellar address', async () => {
+    vi.spyOn(rpc, 'fetchInvoice').mockResolvedValue(invoice as any);
+    vi.spyOn(delivery, 'deliverNotification').mockResolvedValue();
+    const registerSpy = vi.spyOn(digestScheduler, 'register');
+    preferencesService.upsert(invoice.freelancer, { frequency: 'daily' });
+
+    createSubscription({
+      stellar_address: invoice.freelancer,
+      channel: 'email',
+      destination: 'freelancer@example.com',
+      triggers: ['invoice_funded'],
+      ownership_verified_at: Date.now(),
+    });
+
+    try {
+      await processEvent(gateEvent('evt-gate-4'));
+      expect(registerSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          stellarAddress: invoice.freelancer,
+          email: 'freelancer@example.com',
+        })
+      );
+    } finally {
+      preferencesService.delete(invoice.freelancer);
+      digestScheduler.unregister(invoice.freelancer);
+    }
+  });
+
+  it('does not buffer a digest when the address has no verified email', async () => {
+    vi.spyOn(rpc, 'fetchInvoice').mockResolvedValue(invoice as any);
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const bufferSpy = vi.spyOn(digestScheduler, 'buffer');
+    preferencesService.upsert(invoice.freelancer, { frequency: 'weekly' });
+
+    createSubscription({
+      stellar_address: invoice.freelancer,
+      channel: 'email',
+      destination: 'unverified@example.com',
+      triggers: ['invoice_funded'],
+    });
+
+    try {
+      await processEvent(gateEvent('evt-gate-5'));
+      expect(bufferSpy).not.toHaveBeenCalledWith(invoice.freelancer, expect.anything());
+      expect(getOwnershipMetrics().digestsBlockedNoVerifiedEmail).toBe(1);
+    } finally {
+      preferencesService.delete(invoice.freelancer);
+    }
+  });
+});

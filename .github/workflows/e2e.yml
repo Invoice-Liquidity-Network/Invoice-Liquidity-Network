@@ -7,9 +7,14 @@ on:
       - 'tests/e2e/**'
       - 'sdk/**'
       - 'packages/**'
+      - 'scripts/provision-e2e-contract.mjs'
+      - 'scripts/check-e2e-coverage.mjs'
+      - 'scripts/wait-for-stellar-rpc.mjs'
+      - 'scripts/provision-e2e-node.mjs'
       - '.github/workflows/e2e.yml'
       - 'pnpm-workspace.yaml'
       - 'package.json'
+      - 'e2e-skip-budgets.json'
       - 'pnpm-lock.yaml'
   pull_request:
     branches: [main, dev]
@@ -17,7 +22,12 @@ on:
       - 'tests/e2e/**'
       - 'sdk/**'
       - 'packages/**'
+      - 'scripts/provision-e2e-contract.mjs'
+      - 'scripts/check-e2e-coverage.mjs'
+      - 'scripts/wait-for-stellar-rpc.mjs'
+      - 'scripts/provision-e2e-node.mjs'
       - '.github/workflows/e2e.yml'
+      - 'e2e-skip-budgets.json'
   workflow_dispatch:
 
 permissions:
@@ -30,45 +40,144 @@ concurrency:
 jobs:
   e2e-tests:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
 
       - name: Initialize submodules
         run: git submodule update --init --recursive
 
-      - name: Start Local Stellar Node
-        run: docker compose -f tests/e2e/docker-compose.yml up -d stellar-quickstart
+      - name: Provision local Stellar node for E2E and disaster recovery
+        run: node scripts/provision-e2e-node.mjs
 
       - name: Setup pnpm with store cache
         uses: ./.github/actions/setup-pnpm
 
-      - name: Wait for Stellar RPC
-        run: |
-          echo "Waiting for Stellar node to be healthy..."
-          for i in $(seq 1 60); do
-            if curl -sf http://localhost:8000/soroban/rpc -X POST -H "Content-Type: application/json" -d '{"jsonrpc":"2.0","id":1,"method":"getLatestLedger"}' > /dev/null 2>&1; then
-              echo "Stellar node RPC is ready"
-              exit 0
-            fi
-            sleep 2
-          done
-          echo "Stellar node failed to start within timeout"
-          docker compose -f tests/e2e/docker-compose.yml logs
-          exit 1
+      # ── #1241: provision a REAL deployed contract for the lifecycle suite ──────
+      # No placeholder contract ID is ever used (#1242). The script either verifies
+      # an already-deployed CONTRACT_ID against the live chain or deploys the
+      # built WASM, and fails with the recovery path if neither is possible.
+      # The runner image's preinstalled Rust is not guaranteed to be current,
+      # and soroban-sdk 27 needs rustc >= 1.91: the WASM build below failed with
+      # exit 101 on the image toolchain. Install stable explicitly, pinned to
+      # the same action CI's "Build contract" job uses.
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@2c7215f132e9ebf062739d9130488b56d53c060c # stable
+        with:
+          toolchain: stable
+          targets: wasm32v1-none
 
-      - name: Run E2E Tests
-        run: pnpm test:e2e
+      # A prebuilt, checksum-verified Stellar CLI instead of `cargo install`:
+      # compiling the latest stellar-cli on the runner fails (exit 101) and
+      # takes most of the job's time.
+      - name: Install Stellar CLI
         env:
-          CONTRACT_ID: ${{ env.CONTRACT_ID || 'C_DEPLOYED_CONTRACT_ID' }}
-
-      - name: Check test output for skip regression
-        if: startsWith(github.ref, 'refs/heads/release') || contains(github.event.pull_request.labels.*.name, 'release')
+          STELLAR_CLI_VERSION: 28.1.0
+          STELLAR_CLI_SHA256: c1680deee94301d33ada7a17f98411e642a4248c727afbd2e43050d345746462
         run: |
-          output=$(pnpm test:e2e 2>&1 || true)
-          skip_count=$(echo "$output" | grep -o "[0-9]* skipped" | head -1 | grep -o "[0-9]*" || echo "0")
-          echo "Tests skipped: $skip_count"
-          if [ "$skip_count" -gt 5 ]; then
-            echo "ERROR: Too many tests skipped on release branch ($skip_count > 5). This indicates incomplete E2E coverage."
-            exit 1
+          rustc --version
+          archive="stellar-cli-${STELLAR_CLI_VERSION}-x86_64-unknown-linux-gnu.tar.gz"
+          curl -sSfL -o "$RUNNER_TEMP/$archive" \
+            "https://github.com/stellar/stellar-cli/releases/download/v${STELLAR_CLI_VERSION}/$archive"
+          echo "${STELLAR_CLI_SHA256}  $RUNNER_TEMP/$archive" | sha256sum -c -
+          mkdir -p "$HOME/.local/bin"
+          tar -xzf "$RUNNER_TEMP/$archive" -C "$HOME/.local/bin" stellar
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+          "$HOME/.local/bin/stellar" --version
+
+
+      # Registry only. ~/.cargo/bin is no longer cached: the old fixed-key entry
+      # dates from when stellar-cli was `cargo install`ed, and restoring it
+      # would put stale rustup/cargo binaries over the toolchain installed above.
+      - name: Cache Cargo registry
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+          key: ${{ runner.os }}-cargo-e2e-${{ hashFiles('backend/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-e2e-
+
+      - name: Build contract WASM
+        run: |
+          if [ -f backend/Cargo.toml ]; then
+            cargo build --manifest-path backend/Cargo.toml --target wasm32v1-none --release
+          elif [ -f Cargo.toml ]; then
+            cargo build --target wasm32v1-none --release
+          else
+            echo "No contract crate found; provisioning will rely on an existing CONTRACT_ID."
           fi
+
+      - name: Provision E2E contract (real deployment, no placeholders)
+        id: provision
+        run: node scripts/provision-e2e-contract.mjs
+
+      # ── #1243: the suite must actually run ─────────────────────────────────────
+      # The E2E prerequisites are fail-closed (#1244): an unreachable node or a
+      # missing contract ID fails the run instead of skipping it.
+      - name: Run E2E Tests
+        run: |
+          mkdir -p .artifacts
+          pnpm exec vitest run tests/e2e \
+            --reporter=default --reporter=json \
+            --outputFile.json=.artifacts/e2e-results.json \
+            | tee .artifacts/e2e-output.txt
+        env:
+          # Re-provisioned here so the E2E suites never fall back to a placeholder.
+          CONTRACT_ID: ${{ steps.provision.outputs.contract-id }}
+          E2E_SKIP_REASONS_FILE: .artifacts/e2e-skip-reasons.jsonl
+          # Deliberately NOT setting E2E_ALLOW_SKIP: the skip escape hatch is
+          # forbidden on CI, and check-e2e-coverage.mjs fails the run if it is set.
+
+      - name: Enforce E2E coverage gate (no skips, every suite executed, no placeholders)
+        id: coverage
+        if: always()
+        run: |
+          node scripts/check-e2e-coverage.mjs \
+            --report=.artifacts/e2e-results.json \
+            --budgets=e2e-skip-budgets.json \
+            --branch="${GITHUB_BASE_REF:-$GITHUB_REF_NAME}" \
+            --skip-reasons=.artifacts/e2e-skip-reasons.jsonl \
+            --evidence=.artifacts/e2e-control-evidence.json \
+            --scan-sources
+
+      # Machine-readable copy of the coverage verdict for the evidence bundle.
+      - name: Capture E2E coverage verdict
+        if: always()
+        run: |
+          node scripts/check-e2e-coverage.mjs --report=.artifacts/e2e-results.json --json \
+            > .artifacts/e2e-coverage.json 2>/dev/null || true
+
+      # ── #1254: environment ownership & credential rotation gate ────────────────
+      - name: Check E2E environment ownership & rotation
+        id: ownership
+        if: always()
+        run: |
+          node scripts/check-e2e-environment-rotation.mjs \
+            --manifest=tests/e2e/environment-ownership.json \
+            --report=.artifacts/e2e-ownership.json
+
+      # ── #1255: assemble the release evidence bundle ────────────────────────────
+      # Runs even when an earlier gate failed, so the bundle records *why* the run
+      # was not releasable instead of disappearing with the job.
+      - name: Build E2E release evidence bundle
+        if: always()
+        run: |
+          node scripts/build-e2e-evidence-bundle.mjs \
+            --root=. \
+            --results=.artifacts/e2e-results.json \
+            --ownership=tests/e2e/environment-ownership.json \
+            --rpc-wait=.artifacts/rpc-wait.json \
+            --coverage-report=.artifacts/e2e-coverage.json \
+            --coverage-exit=${{ steps.coverage.outcome == 'success' && '0' || '1' }} \
+            --out=.artifacts/e2e-evidence-bundle.json
+
+      - name: Upload E2E evidence artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-coverage-evidence-${{ github.run_id }}
+          path: .artifacts/
+          include-hidden-files: true
+          retention-days: 14
