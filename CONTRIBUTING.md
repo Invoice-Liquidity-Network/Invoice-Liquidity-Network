@@ -27,6 +27,8 @@ This repository uses pnpm. Run `pnpm install` from the repository root and do no
 
 Use `README.md` and `docs/local-development.md` for repository-specific development instructions.
 
+Not sure which tests to write, or where they go? Start with the **[Testing Strategy](docs/testing-strategy.md)**: it lists every kind of test in the repository, when each one runs, and a decision guide for new features.
+
 Run the main test suite with:
 
 ```bash
