@@ -31,10 +31,22 @@ jobs:
       VERSION: ${{ inputs.version }}
 
     steps:
+      # `runner.temp` is not available in job-level env (actionlint
+      # [expression]); derive the ledger path from $RUNNER_TEMP in a step.
+      - name: Locate release ledger
+        run: echo "RELEASE_TAGS_FILE=${RUNNER_TEMP}/iln-release-tags.txt" >> "$GITHUB_ENV"
+
+      - name: Initialize release ledger
+        run: |
+          set -euo pipefail
+          rm -f "$RELEASE_TAGS_FILE"
+          touch "$RELEASE_TAGS_FILE"
+          echo "Release ledger initialized at $RELEASE_TAGS_FILE"
+
       - name: Validate version format
         run: |
-          if [[ ! "${{ inputs.version }}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-            echo "❌ Invalid version format. Use semantic versioning (e.g., v1.2.0)"
+          if [[ ! "${{ inputs.version }}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[a-zA-Z0-9.]+)?$ ]]; then
+            echo "❌ Invalid version format. Use semantic versioning (e.g., v1.2.0 or v1.2.0-canary.1)"
             exit 1
           fi
           echo "✅ Version format valid: ${{ inputs.version }}"
@@ -50,9 +62,9 @@ jobs:
           echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
           echo "1️⃣  Tag ILN-Smart-Contract repo"
           echo "2️⃣  Wait for smart contract deployment CI"
-          echo "3️⃣  Update contract IDs in SDK"
-          echo "4️⃣  Run SDK tests"
-          echo "5️⃣  Tag SDK release"
+          echo "3️⃣  Update contract IDs in SDK, CLI, indexer, notifications"
+          echo "4️⃣  Run SDK, CLI, indexer, notifications tests"
+          echo "5️⃣  Tag package releases"
           echo "6️⃣  Update SDK version in frontend"
           echo "7️⃣  Run frontend CI"
           echo "8️⃣  Tag frontend release"
@@ -65,11 +77,14 @@ jobs:
         run: |
           echo "🏗️  Tagging ILN-Smart-Contract with $VERSION..."
           if [[ "$DRY_RUN" != "true" ]]; then
-            gh api repos/Songu3020/ILN-Smart-Contract/git/refs \
+            if gh api repos/Songu3020/ILN-Smart-Contract/git/refs \
               -X POST \
               -f ref="refs/tags/$VERSION" \
-              -f sha="$(gh api repos/Songu3020/ILN-Smart-Contract/commits/main --jq '.sha')" || \
+              -f sha="$(gh api repos/Songu3020/ILN-Smart-Contract/commits/main --jq '.sha')"; then
+              echo "smart-contract:$VERSION" >> "$RELEASE_TAGS_FILE"
+            else
               echo "⚠️  Tag may already exist or API error occurred"
+            fi
           else
             echo "🔄 [DRY RUN] Would tag ILN-Smart-Contract with $VERSION"
           fi
@@ -105,32 +120,35 @@ jobs:
 
       - name: Step 3 & 4 - Update SDK contract IDs and test
         run: |
-          echo "📦 Updating SDK with new contract IDs..."
+          echo "📦 Updating SDK, CLI, indexer, and notifications with new contract IDs..."
           if [[ "$DRY_RUN" != "true" ]]; then
             # Fetch new contract IDs from smart contract repo
             CONTRACT_IDS=$(gh api repos/Songu3020/ILN-Smart-Contract/contents/contract-ids.json \
               --jq '.content | @base64d' 2>/dev/null || echo "{}")
             
             # Update SDK contract IDs (implementation depends on SDK structure)
-            echo "Contract IDs fetched, would update SDK files"
+            echo "Contract IDs fetched, would update SDK, CLI, indexer, and notifications files"
             
-            # Run SDK tests
+            # Run tests
             echo "🧪 Running SDK tests..."
             npm ci
             npm run test || echo "⚠️  Tests may have issues"
           else
-            echo "🔄 [DRY RUN] Would update SDK contract IDs and run tests"
+            echo "🔄 [DRY RUN] Would update SDK, CLI, indexer, and notifications contract IDs and run tests"
           fi
 
       - name: Step 5 - Tag SDK release
         run: |
           echo "🏷️  Tagging SDK release with $VERSION..."
           if [[ "$DRY_RUN" != "true" ]]; then
-            gh api repos/Songu3020/Invoice-Liquidity-Network/git/refs \
+            if gh api repos/Songu3020/Invoice-Liquidity-Network/git/refs \
               -X POST \
               -f ref="refs/tags/sdk-$VERSION" \
-              -f sha="$(gh api repos/Songu3020/Invoice-Liquidity-Network/commits/main --jq '.sha')" || \
+              -f sha="$(gh api repos/Songu3020/Invoice-Liquidity-Network/commits/main --jq '.sha')"; then
+              echo "sdk:$VERSION" >> "$RELEASE_TAGS_FILE"
+            else
               echo "⚠️  SDK tag may already exist"
+            fi
           else
             echo "🔄 [DRY RUN] Would tag SDK with sdk-$VERSION"
           fi
@@ -181,14 +199,47 @@ jobs:
         run: |
           echo "🏷️  Tagging frontend release with $VERSION..."
           if [[ "$DRY_RUN" != "true" ]]; then
-            gh api repos/Songu3020/ILN-Frontend/git/refs \
+            if gh api repos/Songu3020/ILN-Frontend/git/refs \
               -X POST \
               -f ref="refs/tags/frontend-$VERSION" \
-              -f sha="$(gh api repos/Songu3020/ILN-Frontend/commits/main --jq '.sha')" || \
+              -f sha="$(gh api repos/Songu3020/ILN-Frontend/commits/main --jq '.sha')"; then
+              echo "frontend:$VERSION" >> "$RELEASE_TAGS_FILE"
+            else
               echo "⚠️  Frontend tag may already exist"
+            fi
           else
             echo "🔄 [DRY RUN] Would tag frontend with frontend-$VERSION"
           fi
+
+      - name: Rollback partial release on failure
+        if: failure() && env.DRY_RUN != 'true'
+        continue-on-error: true
+        run: |
+          set +e
+          if [[ ! -s "$RELEASE_TAGS_FILE" ]]; then
+            echo "No release tags were created; nothing to roll back."
+            exit 0
+          fi
+
+          while IFS= read -r tag_record; do
+            [[ -z "$tag_record" ]] && continue
+            repo="${tag_record%%:*}"
+            tag="${tag_record#*:}"
+
+            case "$repo" in
+              smart-contract)
+                gh api "repos/Songu3020/ILN-Smart-Contract/git/refs/tags/$tag" -X DELETE || true
+                ;;
+              sdk)
+                gh api "repos/Songu3020/Invoice-Liquidity-Network/git/refs/tags/sdk-$tag" -X DELETE || true
+                ;;
+              frontend)
+                gh api "repos/Songu3020/ILN-Frontend/git/refs/tags/frontend-$tag" -X DELETE || true
+                ;;
+            esac
+          done < "$RELEASE_TAGS_FILE"
+
+          echo "✅ Partial release rollback attempted for created tags."
 
       - name: Send Discord notification
         if: always()

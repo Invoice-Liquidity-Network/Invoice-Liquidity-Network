@@ -12,8 +12,9 @@ ILN uses token-weighted on-chain governance so that token holders collectively c
 
 - Propose parameter changes (fee rate, max discount rate, supported tokens)
 - Vote on active proposals with weight proportional to their token balance
-- Delegate voting power to another address
+- Delegate voting power to another address (transitive delegation, max 10 hops)
 - Execute proposals that have passed their timelock
+- Disable admin veto power permanently (via governance vote)
 
 ### Proposal lifecycle
 
@@ -28,22 +29,54 @@ create_proposal()
     └─── quorum met AND for > against
               │
               ▼
-          [Passed]  ← timelock delay
+          [Passed]  ← timelock delay (configurable)
               │
     ┌─────────┴──────────┐
     │                    │
     ▼                    ▼
-[Executed]           [Vetoed]  ← admin emergency block (temporary)
+[Executed]           [Vetoed]  ← admin emergency block
 ```
 
 ### Governance parameters (testnet defaults)
 
 | Parameter              | Default      | Description                                   |
 | ---------------------- | ------------ | --------------------------------------------- |
-| Voting period          | 3 days       | Duration of the voting window                 |
-| Quorum                 | 10%          | Minimum share of total supply that must vote  |
+| Voting period          | 3 days (259,200 s) | Duration of the voting window         |
+| Quorum                 | 1,000 bps (10%) | Minimum share of total supply that must vote |
 | Minimum proposal balance | 1,000 stroops | Tokens required to submit a proposal        |
 | Execution delay        | 0 ledgers    | Timelock before execution (admin-configurable)|
+| Max delegation depth   | 10 hops      | Circuit breaker for transitive delegation chains |
+| Veto power             | Enabled      | Can be permanently disabled by governance vote |
+
+### Low-turnout quorum manipulation risk model
+
+The current default policy is a 10% quorum and a simple majority of cast votes. In a low-turnout environment, that can be abused by a concentrated coalition because the required coalition size is not much larger than the quorum threshold itself.
+
+Let:
+
+- q = required quorum fraction of total supply;
+- m = majority threshold of cast votes (currently 50% + 1 vote);
+- t = turnout fraction of total supply at the time of vote settlement;
+- s = attacker-controlled supply fraction.
+
+A successful proposal requires:
+
+- t >= q
+- s >= 0.5 * t when the coalition is the only active yes side and there is no meaningful opposition
+
+Therefore the minimum concentration needed to pass a proposal in a low-turnout scenario is approximately:
+
+- s_min ≈ max(q, 0.5 * t)
+
+Under the current 10% quorum default:
+
+| Turnout | Minimum yes-vote concentration | Interpretation |
+|--------|-------------------------------|----------------|
+| 10% | 10% | A single concentrated holder can pass if they hold at least quorum and no one opposes them |
+| 12% | 6% | A small coordinated coalition can pass with exactly half of the cast vote weight |
+| 20% | 10% | The coalition still only needs quorum-level concentration to win if the rest abstain |
+
+This is why low-turnout attack modeling is a real governance concern even when the rule looks safe on paper. For a governance system intended to resist capture, the recommended review posture is: keep the quorum floor conservative, require a larger buffer above the 50% yes threshold for high-impact changes, and treat any parameter change that affects execution, fee policy, or token access as requiring a formal RFC before implementation.
 
 ### Contract addresses
 
@@ -51,6 +84,29 @@ create_proposal()
 | -------- | -------------------------------------------------------- |
 | Testnet  | `CD7GOIU3GNK7EZHG7XWBC7VI4NRVGMRCU7X2FOCAPQN6EGTSW46BY4EB` |
 | Mainnet  | Coming after audit                                       |
+
+> **Cross-repo reference:** The governance contract's implementation lives in the [ILN-Smart-Contract](https://github.com/Invoice-Liquidity-Network/ILN-Smart-Contract) repository under `contracts/iln_governance`. See the [Governance Contract Reference](./contracts/governance-contract.md) for the full API surface.
+
+### Contract addresses
+
+| Network  | Contract ID                                              |
+| -------- | -------------------------------------------------------- |
+| Testnet  | `CD7GOIU3GNK7EZHG7XWBC7VI4NRVGMRCU7X2FOCAPQN6EGTSW46BY4EB` |
+| Mainnet  | Coming after audit                                       |
+
+---
+
+## Multi-Sig Admin and Key Custody
+
+The ILN governance contract supports admin privileges (emergency veto, execution delay configuration) that are held by a multi-signature admin setup for production safety. The complete multi-sig runbook — including key allocation, quorum thresholds, timelock procedures, HSM custody, and emergency response steps — is maintained as the **authoritative source** in the [ILN-Smart-Contract repository](https://github.com/Invoice-Liquidity-Network/ILN-Smart-Contract).
+
+> **For the full multi-sig runbook:** See the smart contract repo's operational documentation covering 2-of-3 (testnet) and 4-of-7 (mainnet) signer configurations, key custody procedures, and emergency pause/unpause workflows.
+
+This governance guide covers the **governance process** (proposals, voting, delegation) rather than admin key-management details. The admin's powers in the governance contract are:
+
+- **Veto power** — can block proposals in Active or Passed state (can be permanently disabled by governance vote via `disable_veto_power`)
+- **Execution delay** — configures the timelock before proposal execution
+- **Emergency circuit breaker** — immediate halt (coordinated through the multi-sig runbook)
 
 ---
 
@@ -295,10 +351,10 @@ await server.sendTransaction(tx.transaction);
 ## FAQ
 
 **Q: How many tokens do I need to create a proposal?**  
-A: At least 1,000 stroops of the ILN governance token at the time you call `create_proposal`. If your balance drops after submission the proposal still proceeds.
+A: At least 1,000 stroops (default `min_proposal_balance`, configurable by governance). Your current balance is snapshotted at proposal creation — balance changes afterward do not affect the proposal.
 
 **Q: How is my voting weight calculated?**  
-A: Your weight = your own token balance at proposal creation + any tokens delegated to you (transitively). If you delegated your tokens away before the vote, your own weight is zero.
+A: Your weight = your own token balance (snapshotted at proposal creation) + any tokens delegated to you transitively. If you delegated your tokens away before the vote, your own weight is zero.
 
 **Q: Can I vote if I delegated my tokens?**  
 A: No. If you have an active delegation your weight counts toward your delegate's vote. Revoke delegation first with `undelegateVotes` if you want to vote directly.
@@ -307,24 +363,63 @@ A: No. If you have an active delegation your weight counts toward your delegate'
 A: No. Each address may only vote once per proposal (`AlreadyVoted` error is returned on a second attempt).
 
 **Q: What is the maximum delegation chain depth?**  
-A: 10 hops. Chains longer than 10 are rejected with `DelegationCyclePrevented` as a circuit breaker.
+A: 10 hops (`MAX_DELEGATION_DEPTH`). The contract also rejects cycles; the hop bound limits traversal depth and is not a cap on how much voting power one delegate can receive.
 
 **Q: Can the admin veto any proposal?**  
-A: Yes, while veto power is enabled. The admin can block proposals in `Active` or `Passed` state. Veto power can be permanently disabled by a governance vote, after which no single party can block proposals.
+A: Yes, while veto power is enabled. The admin can block proposals in `Active` or `Passed` state (error `NotVetoable` for other states). Veto power can be permanently disabled by calling `disable_veto_power` through the ILN contract after a governance vote, after which no single party can block proposals.
+
+**Q: Can veto power be re-enabled after being disabled?**
+A: No. `disable_veto_power` is a one-way switch — once disabled, veto power cannot be re-enabled. This is by design to allow governance to fully control the protocol.
 
 **Q: Is testnet governance the same as mainnet?**  
 A: The contract logic is identical. Testnet uses `GOVERNANCE_TESTNET_CONTRACT_ID` (`CD7GOIU3GNK7EZHG7XWBC7VI4NRVGMRCU7X2FOCAPQN6EGTSW46BY4EB`). Testnet tokens have no real value; use them freely for experimentation.
 
 **Q: Where is the off-chain proposal description stored?**  
-A: Only a SHA-256 hash is stored on-chain. The full description should be published on the ILN governance forum or IPFS and the hash must match what was submitted.
+A: Only a SHA-256 hash (`description_hash`) is stored on-chain. The full description should be published on the ILN governance forum or IPFS and the hash must match what was submitted.
 
 **Q: What happens if quorum is not met?**  
 A: The proposal moves to `Rejected` status after the voting period ends. A new proposal with the same parameters can be submitted.
+
+**Q: What is the vote receipt TTL?**
+A: Vote receipts are stored in temporary storage with a TTL threshold of 50,000 ledgers and an explicit TTL of 69,120 ledgers (~4 days at 5s/ledger) for audit trail purposes.
+
+**Q: What error do I get if I try to vote after the voting deadline?**
+A: `VotingEnded` (error code 3). The voting period is exactly 3 days (259,200 seconds) from proposal creation.
+
+**Q: What happens if I try to delegate to myself?**
+A: `CannotDelegateToSelf` (error code 11). The contract prevents self-delegation.
 
 ---
 
 ## Further reading
 
-- [Governance Contract Reference](./contracts/governance-contract.md)
-- [SDK API Reference](./sdk-api-reference.md)
-- [Protocol Overview](./protocol-overview.md)
+- [Governance Contract Reference](./contracts/governance-contract.md) — full contract API and error codes
+- [SDK API Reference](./sdk-api-reference.md) — SDK governance client methods
+- [Protocol Overview](./protocol-overview.md) — system-wide design context
+- [ILN Smart Contract Repository](https://github.com/Invoice-Liquidity-Network/ILN-Smart-Contract) — contract source and multi-sig runbook
+- [Governance Monitor Example](../examples/governance-monitor/README.md) — reference implementation for contract monitoring
+
+## Delegation Concentration and Vote-Buying Risk
+
+### What the current controls cover
+
+The documented governance contract rejects self-delegation and delegation cycles, resolves delegation transitively, permits a delegator to replace or revoke its delegate, and caps a delegation chain at 10 hops. Those rules bound traversal and let a token holder change their delegation. They do **not** cap the number of delegators or the share of voting power controlled by one terminal delegate. A delegate can therefore accumulate a large share of participating voting weight through many valid incoming delegations.
+
+The documented vote weight is based on the voter's own snapshotted balance plus delegated weight. Balance snapshots limit post-proposal token transfers from changing a voter's own proposal weight. The reference does not clearly specify whether delegation edges and delegated balances are snapshotted at proposal creation or can be changed during an active vote; this timing must be confirmed against the deployed contract before claiming snapshot protection for delegated power.
+
+### Vote buying
+
+An on-chain delegation is indistinguishable from a voluntary delegation if compensation is arranged privately or off-chain. The contract has no documented mechanism to detect payment, enforce a no-bribery rule, or prove a delegate's motives. Consequently, the current controls are **not technically resistant to delegate-for-payment schemes**. Revocability reduces the delegator's ongoing exposure but does not prevent a paid delegate from casting a vote before revocation; one-vote-per-address also does not address the underlying bargain.
+
+### Concentration assessment and recommended safeguards
+
+The 10-hop limit is not a concentration limit. Neither the governance guide nor the contract reference documents a per-delegate voting-power cap, incoming-delegator cap, or automatic concentration circuit breaker. A hard per-address cap would be easy to evade by splitting power across Sybil addresses and could penalize legitimate delegates, so it should not be presented as a complete mitigation.
+
+Recommended follow-up for the governance contract and its monitoring client:
+
+1. Specify and test a proposal-start snapshot of both token voting units and delegation relationships, including how changes during an active vote take effect. Do not count on-chain balance snapshots as protection for mutable delegation edges.
+2. Expose per-proposal delegated weight and total voting weight by delegate, and alert voters when one delegate exceeds a disclosed concentration threshold. Treat an alert as transparency, not an enforcement guarantee.
+3. Publish delegate policies and conflicts of interest off-chain, and remind token holders to delegate only to representatives they trust and to revoke delegation when that trust changes.
+4. Evaluate any binding concentration cap only with a Sybil-resistance and governance-participation analysis; the current documentation does not establish identity controls that would make a simple address cap robust.
+
+These safeguards are recommendations, not implemented protections in this repository. The contract source is maintained in the separate [ILN Smart Contract repository](https://github.com/Invoice-Liquidity-Network/ILN-Smart-Contract). Until that contract specifies snapshot semantics and corresponding tests, the protocol should not claim that cycle protection also prevents vote buying or voting-power concentration.

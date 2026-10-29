@@ -78,12 +78,19 @@ notifications/*.txt
 coverage/
 *.tgz
 tests/load/results/
+# E2E machine-readable reports consumed by scripts/check-e2e-coverage.mjs
+.artifacts/
+.docker-output/
 
 # =============================================================================
 # Docker
 # =============================================================================
 
 .docker-output/
+
+# Canary rollout scrape targets (issue #1095) — written/removed at runtime by
+# scripts/canary/register-target.mjs, not committed.
+monitoring/prometheus/canary-targets/
 
 # =============================================================================
 # Scratch files
@@ -97,3 +104,18 @@ issue.md
 pr.md
 fix.md
 TODO.md
+
+# =============================================================================
+# Playwright output
+#
+# Browser-test artifacts (traces, screenshots, .last-run.json) are local
+# runner state and must never be committed.
+# =============================================================================
+
+test-results/
+playwright-report/
+
+# SQLite databases
+*.db
+*.db-shm
+*.db-wal

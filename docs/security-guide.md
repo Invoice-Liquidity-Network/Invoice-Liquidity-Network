@@ -24,6 +24,8 @@ ILN protects three classes of assets:
 - Every API response, SDK input, and wallet connection is treated as potentially attacker-controlled until validated.
 - SLSA Level 3 provenance attestations are published with every SDK release, proving that packages were built by the official GitHub Actions workflow and not from a developer machine.
 
+For the complete SDK trust model — including trust assumptions per component, key management guidelines for browser and backend environments, and the SDK-specific threat model — see the [SDK Trust Model](./sdk-trust-model.md).
+
 ---
 
 ## Vulnerability Reporting Process
@@ -32,9 +34,10 @@ ILN protects three classes of assets:
 
 The disclosure policy — how to report, what to include, severity classification, response
 timelines, safe harbour, and recognition — is defined once, canonically, in the repository root
-[`SECURITY.md`](../SECURITY.md). Report through one of the channels listed there (a private
-GitHub Security Advisory or `security@invoiceliquidity.network`) rather than a public issue or
-pull request.
+[`SECURITY.md`](../SECURITY.md). For the reporter-facing entryway, see the
+[Vulnerability Disclosure Policy](./vulnerability-disclosure.md). Report through one of the
+channels listed there (a private GitHub Security Advisory or
+`security@invoiceliquidity.network`) rather than a public issue or pull request.
 
 ---
 
@@ -58,16 +61,18 @@ const { transaction } = await sdk.buildWriteTransaction(...);
 - Detect the Freighter wallet via its published extension ID, not via duck-typing on `window.freighter`.
 - Do not trust wallet providers injected by unknown browser extensions.
 
+For the full SDK trust model — including trust assumptions, key management guidelines, threat model, and what the SDK validates vs. delegates — see [SDK Trust Model](./sdk-trust-model.md). This is the authoritative reference for SDK-level security and should be consulted before integrating the SDK into any application.
+
 **Dependency management**
 
 - Pin your lockfile (`pnpm-lock.yaml` or equivalent) and review changes to transitive dependencies on every update.
-- Verify SDK package provenance after install:
+- Verify SDK package provenance after install (once `@iln/sdk-next` is published):
 
 ```bash
-npm audit signatures @invoice-liquidity/sdk
+npm audit signatures
 ```
 
-Expected output:
+Expected output for the installed SDK:
 ```
 1 package has a verified registry signature
 1 package has a verified attestation
@@ -83,11 +88,44 @@ Expected output:
 
 **Rate limiting**
 
-The indexer and notifications services enforce per-IP request quotas. Configure `RATE_LIMIT_WHITELIST` with your own monitoring IPs so health checks are not throttled.
+The indexer enforces a per-IP request quota (`RATE_LIMIT_MAX` per `RATE_LIMIT_WINDOW_MS`), and the oracle service a per-IP limit with abuse blocking. The notifications service limits per user and per recipient rather than per IP. Configure `RATE_LIMIT_WHITELIST` on the indexer with your own monitoring IPs so they are not throttled.
 
 ```env
 RATE_LIMIT_WHITELIST=10.0.0.5,10.0.0.6
 ```
+
+**HTTP security headers**
+
+The indexer and oracle APIs send these headers on every response — successes,
+404s, 429s and errors alike — and do not advertise `X-Powered-By`:
+
+| Header | Value |
+|---|---|
+| `X-Frame-Options` | `DENY` |
+| `Content-Security-Policy` | `frame-ancestors 'none'; base-uri 'none'; form-action 'self'; object-src 'none'` |
+| `X-Content-Type-Options` | `nosniff` |
+| `Referrer-Policy` | `no-referrer` |
+| `Cross-Origin-Resource-Policy` | `same-site` |
+| `Strict-Transport-Security` | `max-age=31536000; includeSubDomains` — HTTPS requests only, via the trusted proxy |
+
+No service sends `Access-Control-Allow-Origin`, so browsers do not let other
+origins read API responses. The CSP restricts framing, plugins and form targets
+but not scripts, so the indexer's Swagger UI (`/docs`) and GraphiQL keep
+working. On Express's own 404/500 pages the CSP is Express's stricter
+`default-src 'none'`; the other headers are unchanged.
+
+To confirm on a running service:
+
+```bash
+curl -sI http://localhost:3001/v1/health | grep -iE 'x-frame-options|content-security-policy|x-content-type-options|referrer-policy'
+```
+
+The middleware is `indexer/src/securityHeaders.ts` and
+`oracle-service/src/securityHeaders.ts` (identical copies, enforced by
+`scripts/check-security-docs.mjs`). The notifications service does not send
+these headers yet: its source does not currently compile on `dev`, and the
+headers are added once it does (threat-model gap TM-2.3b). Recovery when the
+check fails: see [runbooks/security-docs.md](runbooks/security-docs.md).
 
 **Network hardening**
 
@@ -105,23 +143,40 @@ RATE_LIMIT_WHITELIST=10.0.0.5,10.0.0.6
 
 ### Package provenance (SLSA Level 3)
 
-All ILN npm packages (`@invoice-liquidity/sdk`, `@invoice-liquidity/cli`) are published with [SLSA Level 3](https://slsa.dev/spec/v1.0/levels#build-l3) provenance attestations. Each attestation links the published tarball to the exact GitHub Actions workflow run and commit SHA that built it.
+Every npm publish path in this repository is configured to publish with
+[SLSA Level 3](https://slsa.dev/spec/v1.0/levels#build-l3) provenance
+attestations: the publish steps use the `--provenance` flag (or
+`NPM_CONFIG_PROVENANCE=true`), the jobs hold the `id-token: write` permission
+GitHub Actions OIDC needs, and each attestation links the published tarball to
+the exact GitHub Actions workflow run and commit SHA that built it. The audit
+and per-workflow status are recorded in
+[release-process.md#package-provenance-verification](release-process.md#package-provenance-verification).
 
-**Verify via npm:**
+The canonical package is `@iln/sdk-next` (`packages/sdk`). It is not yet
+published to the npm registry — this section describes the configured
+guarantee and the procedure that applies from the first release onward; it is
+not a claim that an attestation already exists.
+
+**Verify a published package's attestation via the registry:**
 
 ```bash
-npm audit signatures @invoice-liquidity/sdk
+# Attestations endpoint — answers only once the package is published:
+curl -s https://registry.npmjs.org/-/npm/v1/attestations/@iln/sdk-next@<version> | jq
+
+# Or inspect the version metadata:
+npm view @iln/sdk-next@<version> --json | jq '.provenance'
 ```
 
-**Verify via GitHub CLI:**
+**Verify via GitHub CLI (per release):**
 
 ```bash
 gh attestation verify \
-  $(npm pack @invoice-liquidity/sdk --dry-run 2>/dev/null | tail -1) \
+  "$(npm pack @iln/sdk-next@<version> --silent)" \
   --repo Invoice-Liquidity-Network/Invoice-Liquidity-Network
 ```
 
-A successful verification prints the attestation details including the workflow run URL and commit SHA.
+A successful verification prints the attestation details including the
+workflow run URL and commit SHA.
 
 ### Smart contract audits
 
@@ -132,11 +187,20 @@ The Soroban smart contract is the authoritative source for on-chain state. Befor
 - Integer overflow and arithmetic edge cases
 - Reentrancy and cross-contract call risks
 
-Audit reports are published in the repository under `contracts/audits/` when available. The current audit status for the deployed contract version is documented in [Deployment Infrastructure](./deployment/infrastructure.md).
+No contract audit report has been published yet. The contract source lives in the
+[ILN-Smart-Contract](https://github.com/Invoice-Liquidity-Network/ILN-Smart-Contract)
+repository (the `backend` submodule here), and reports will be published there.
+The external audit gate for mainnet is tracked in
+[evidence/external-security-audit.json](evidence/external-security-audit.json); the
+current status for the deployed contract version is documented in
+[Deployment Infrastructure](./deployment/infrastructure.md).
 
 ### Dependency scanning
 
-CI runs `pnpm audit` and license compliance checks on every pull request. The workflow enforces an 80% test-coverage floor and includes mutation testing to validate test quality.
+License compliance runs on every pull request (the `license-compliance` job in
+`ci.yml`). The dependency audit (`pnpm audit`, with escalation) runs on every push
+to `dev` and `main` and daily, not on pull requests. Codecov enforces an 80%
+project coverage target, and mutation testing runs in `mutation-testing.yml`.
 
 Additionally, Snyk is configured to run weekly and on pull requests via the `snyk.yml` workflow. The `--all-projects` flag ensures that all workspaces and sub-packages in the monorepo are fully scanned for vulnerabilities.
 
@@ -243,9 +307,36 @@ After the fix is deployed and downstream integrators have had time to update:
 
 ---
 
+## Verified claims
+
+`node scripts/check-security-docs.mjs` checks every row: the file must exist and,
+where an anchor follows `#`, contain that text. A claim this guide makes about
+the repository belongs in this table, so it cannot silently go stale.
+
+<!-- claims:begin -->
+| Claim | Evidence |
+|---|---|
+| SDK releases publish with npm provenance | `.github/workflows/sdk-release.yml#--provenance` |
+| SDK releases attach a CycloneDX SBOM | `.github/workflows/sdk-release.yml#CycloneDX/gh-node-module-generatebom` |
+| `axios` is pinned to `>=1.16.0` by a pnpm override | `package.json#"axios": ">=1.16.0"` |
+| Snyk scans every workspace on pull requests | `.github/workflows/snyk.yml#--all-projects`, `.github/workflows/snyk.yml#pull_request` |
+| License compliance runs in CI | `.github/workflows/ci.yml#license-compliance` |
+| The dependency audit runs on push and on a schedule | `.github/workflows/dependency-audit-escalation.yml#schedule` |
+| Codecov enforces an 80% coverage target | `codecov.yml#target: 80%` |
+| Mutation testing runs in CI | `.github/workflows/mutation-testing.yml` |
+| API services send security headers, registered before routing | `indexer/src/api.ts#applySecurityHeaders(app)`, `oracle-service/src/index.ts#applySecurityHeaders(app)` |
+| Health monitoring script exists | `scripts/monitor.sh` |
+| Researchers are credited in the hall of fame | `HALL_OF_FAME.md` |
+| The disclosure policy is canonical in the root `SECURITY.md` | `SECURITY.md` |
+<!-- claims:end -->
+
+---
+
 ## Related Documents
 
-- [Threat Model](./threat-model.md) — full attack surface analysis across SDK, frontend, API, and governance
+- [Incident Response Runbook](./incident-response.md) — operational runbook for SDK, indexer, oracle, and notifications service incidents
+- [Threat Model](./threat-model.md) — full attack surface analysis across SDK, frontend, API, and governance, with machine-checked mitigation evidence
+- [Security docs runbook](./runbooks/security-docs.md) — what the security documentation check enforces and how to recover when it fails
 - [SECURITY.md](../SECURITY.md) — canonical root-level disclosure policy and supported versions
 - [Security](./security.md) — stub that redirects to `SECURITY.md`, kept for existing links
 - [CI/CD](./ci-cd.md) — how security checks are enforced in the pipeline

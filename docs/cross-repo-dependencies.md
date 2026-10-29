@@ -19,7 +19,7 @@ The smart contract repo produces a compiled WASM and a contract spec (`spec.json
 Each row represents a tested, compatible combination of component versions. **The CI pipeline validates that the currently checked-out versions match at least one row in this table.**
 
 <!-- COMPATIBILITY_MATRIX_START -->
-| Contract (`invoice_liquidity`) | SDK (`@invoice-liquidity/sdk`) | Frontend (`ILN-Frontend`) | Notes |
+| Contract (`invoice_liquidity`) | SDK (`@iln/sdk`) | Frontend (`ILN-Frontend`) | Notes |
 |---|---|---|---|
 | `0.1.0` | `0.1.0` | `0.1.0` | Initial release — all components aligned |
 <!-- COMPATIBILITY_MATRIX_END -->
@@ -42,10 +42,10 @@ ILN-Smart-Contract (Rust / Soroban)
         │  stellar contract build → .wasm
         │  stellar contract info  → spec.json
         ▼
-@invoice-liquidity/sdk (TypeScript)
+@iln/sdk (TypeScript)
         │
         │  pnpm generate:types → sdk/src/generated/types.ts
-        │  npm publish → @invoice-liquidity/sdk@x.y.z
+        │  npm publish → @iln/sdk@x.y.z
         ▼
 ILN-Frontend (Next.js)
         │
@@ -137,3 +137,15 @@ A: The existing `sdk-types-sync` CI job catches this. It rebuilds the contract, 
 
 **Q: Can I have multiple valid rows for the same contract version?**
 A: Yes. For example, contract `0.1.0` may be compatible with SDK `0.1.0` and SDK `0.1.1` if the spec didn't change.
+
+---
+
+## Service Level Objectives (SLOs) Cross-Repo Reference
+
+The main repository hosts authoritative SLO definitions for the ecosystem in [`docs/slos.md`](slos.md). Downstream repositories (`ILN-Frontend` and `ILN-Smart-Contract`) MUST reference these authoritative numbers for downtime resilience, lag tolerances, and timeout settings:
+
+- **Indexer Ingestion Lag Target**: `< 5.0s` for 99.9% of ledgers. Frontend cache resilience fallback window is set to **15.0s** based on this target.
+- **Oracle Verification Latency Target**: `p95 < 150ms`, `p99 < 400ms`. Frontend badge verification spinner timeout is capped at **2.0s**.
+- **Notification Delivery Latency Target**: `p95 < 10.0s` across email, SMS, and webhooks. Frontend polling interval aligns with this 10.0s target.
+- **Uptime Targets**: Indexer `99.9%`, Oracle Service `99.95%`, Notification Service `99.9%`.
+

@@ -1,0 +1,115 @@
+# SDK Migration Guide
+
+This guide covers upgrades between versions of the stable `@iln/sdk` package.
+The separate experimental `@iln/sdk-next` package has a different API surface;
+see the [SDK-next migration notes on GitHub](https://github.com/Invoice-Liquidity-Network/Invoice-Liquidity-Network/blob/main/docs/sdk-next-migration.md).
+
+For supported dependency versions, see the [SDK compatibility matrix on GitHub](https://github.com/Invoice-Liquidity-Network/Invoice-Liquidity-Network/blob/dev/docs/SDK_COMPATIBILITY_MATRIX.md).
+
+## Package Name
+
+Older applications may refer to `@invoice-liquidity/sdk`. {/* sdk-name-check: allow-legacy */} The stable package
+in `sdk/` is published as `@iln/sdk`; update package specifiers, imports,
+`pnpm --filter` arguments, bundler externals and aliases, and TypeScript
+`paths` entries. A pnpm filter using the retired name can match no package
+while still exiting successfully.
+
+```diff
+- "@invoice-liquidity/sdk": "^0.1.0" // sdk-name-check: allow-legacy
++ "@iln/sdk": "^0.1.0"
+```
+
+```diff
+- import { ILNSdk, ILN_TESTNET } from "@invoice-liquidity/sdk"; // sdk-name-check: allow-legacy
++ import { ILNSdk, ILN_TESTNET } from "@iln/sdk";
+```
+
+`@iln/react` declares `@iln/sdk` (`^0.1.0`) as a peer dependency. Install the
+SDK alongside `@iln/react` in your application. The repository's
+[SDK package-name check](https://github.com/Invoice-Liquidity-Network/Invoice-Liquidity-Network/blob/dev/scripts/check-sdk-package-names.mjs)
+guards canonical package names in CI.
+
+## Breaking Changes
+
+| Feature | Change | Migration |
+| --- | --- | --- |
+| Invoice status | `invoice.status` is an `InvoiceStatus` enum, not a raw string. | Use the enum or predicates such as `isPaid` and `isFunded`. |
+| Error handling | Typed errors inherit from `ILNError`. | Catch specific error classes instead of matching message text. |
+| Amount precision | `BigAmount` supports exact 7-decimal conversions. | Avoid floating-point multiplication for token amounts. |
+| Caching | A 60-second cache is enabled by default. | Set `cache: { enabled: false }` when immediate RPC reads are required. |
+| REST API and SSE | Indexer and SSE routes use `/v1/` by default. | Update custom endpoint and stream URLs to versioned routes. |
+
+## Upgrade Steps
+
+Update `@iln/sdk` and, when used, `@iln/react`:
+
+```bash
+pnpm add @iln/sdk@latest @iln/react@latest
+```
+
+Replace string comparisons on invoice status with the enum or helper
+predicates. Update error handling to catch typed errors, and choose cache
+behavior explicitly if the application depends on uncached reads.
+
+```ts
+import { InvoiceStatus, isFunded, isPaid } from '@iln/sdk';
+
+const invoice = await sdk.getInvoice(invoiceId);
+if (isPaid(invoice.status)) {
+  console.log('Payment completed');
+} else if (isFunded(invoice.status)) {
+  console.log('Funding completed');
+}
+
+if (invoice.status === InvoiceStatus.Paid) {
+  console.log('Payment completed');
+}
+```
+
+Handle errors by type so validation, protocol, and unknown failures remain
+distinct:
+
+```ts
+import { ILNError, InsufficientBalanceError, ValidationError } from '@iln/sdk';
+
+try {
+  await sdk.submitInvoice(params);
+} catch (error) {
+  if (error instanceof InsufficientBalanceError) {
+    showInsufficientBalance();
+  } else if (error instanceof ValidationError) {
+    showValidationError(error.message);
+  } else if (error instanceof ILNError) {
+    showProtocolError(error.message);
+  } else {
+    showUnexpectedError();
+  }
+}
+```
+
+Use `BigAmount` instead of floating-point arithmetic for token amounts:
+
+```ts
+import { BigAmount } from '@iln/sdk';
+
+const amount = BigAmount.fromNumber(10.15, 7).toBigInt(); // 101500000n
+```
+
+## Verification Checklist
+
+- Type-check the application with `npx tsc --noEmit`.
+- Submit an invoice and verify `InvoiceStatus.Pending`.
+- Fund the invoice and verify `InvoiceStatus.Funded`.
+- Mark it paid and verify `InvoiceStatus.Paid`.
+- Submit invalid due dates or empty addresses and verify a `ValidationError`.
+- Disconnect Freighter and verify transaction submission reports
+  `WalletNotConnectedError`.
+- Subscribe to invoice updates and verify versioned SSE events arrive.
+
+## Rollback
+
+If the new SDK release causes a production regression, pin the last known-good
+versions, restore the corresponding status and error handling, then rebuild
+and deploy. Do not downgrade blindly: confirm the previous version against
+the application's lockfile and run the same lifecycle and wallet checks
+before redeployment.

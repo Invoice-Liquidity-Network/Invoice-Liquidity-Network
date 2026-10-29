@@ -118,3 +118,37 @@ Invoices submitted before this change used the fixed-discount model. They are no
 - Tracking issues: #6, #7, #8, #10
 - Implementation PR(s): —
 - Merged: —
+
+---
+
+## Addendum — Thin-Liquidity and Low-Participation Scenarios
+
+**Analysis date:** 2026-09-29
+**Scope:** RFC mechanism as written; this is not evidence that a deployed contract uses these parameters.
+
+### Model and outcomes
+
+The RFC defines the rate as a monotonically increasing discount, capped at `max_discount_bps`; the first LP to fund locks in the then-current rate. It does not specify a minimum amount of competing LP liquidity or a clearing-price auction among multiple LPs. To make the effect concrete, assume a 100-unit face-value invoice with `start_discount_bps = 300`, `auction_step_bps = 100`, `step_interval_seconds = 86,400`, and `max_discount_bps = 2,000`. The table assumes one LP funds the full invoice as soon as they arrive and excludes fees.
+
+| LP arrival / participation case | Elapsed time | Discount | Borrower receives per 100 face | Result |
+|---|---:|---:|---:|---|
+| Immediate, one LP available | 0 days | 300 bps (3%) | 97 | Clears immediately; no competitive price discovery |
+| Low participation, LP arrives after one step | 1 day | 400 bps (4%) | 96 | Clears at a worse borrower price than at submission |
+| Thin liquidity, first LP arrives after one week | 7 days | 1,000 bps (10%) | 90 | One LP can fund the full amount at the accrued rate |
+| Severe scarcity, first LP arrives at the cap | 17 days | 2,000 bps (20%) | 80 | Clears at the maximum discount; additional waiting cannot raise the rate |
+| No LP before expiry | At/after expiry | Capped or expired | No funding proceeds | No clearing occurs; invoice remains unfunded or expires per contract rules |
+
+At the assumed 100-bps daily step, the cap is reached after 17 steps. A single available LP can therefore dominate funding and earn the entire face-value discount; this is a first-funder mechanism, not a competitive Dutch auction. The model does **not** produce a near-zero payout if the suggested 2,000-bps maximum is enforced: payout remains 80% of face value before any other deductions. However, the RFC describes 2,000 bps as a suggested ceiling, not an established enforced invariant. Without an enforced bound below 10,000 bps and a positive payout invariant, a pathological near-zero or non-positive payout is not ruled out by the written design.
+
+### Assessment and parameter requirements
+
+Thin participation does not create a price-clearing cliff: the rate advances deterministically and eventually saturates. It creates an **orderly but borrower-adverse degradation** up to the configured cap, followed by a funding cliff if no LP accepts that capped price before expiry. Single-LP domination is inherent in the first-funder rule and is plausible when participation is low; the RFC supplies no liquidity-depth data from which to estimate its probability.
+
+Before implementation, make these invariants normative and test boundary cases:
+
+1. Enforce `start_discount_bps <= max_discount_bps <= 2,000` (or another explicitly approved ceiling), and ensure the payout is always strictly positive after all fees.
+2. Require `auction_step_bps > 0` and `step_interval_seconds` to be at least one ledger interval; use saturating or checked arithmetic before applying the cap.
+3. Specify expiry and cancellation behavior at the cap, and make clear that an invoice may remain unfunded rather than silently extending the auction or lowering the seller's minimum proceeds.
+4. Treat one-LP/full-invoice dominance as an accepted tradeoff for the early market. Revisit partial fills or a multi-LP clearing mechanism only when participation is sufficient to justify their added contract complexity.
+
+These are proposed RFC clarifications, not assertions about deployed contract behavior. The current RFC status and implementation notes remain unchanged until the contract repository adopts and tests the invariants.

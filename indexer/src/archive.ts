@@ -1,15 +1,21 @@
 import { getDb, type InvoiceFilter } from './db';
 import type { Invoice, ILNEvent } from './types';
 
-let archiveAttached = false;
+/**
+ * Connections that already have the archive database attached. Tracked per
+ * connection (not a module-level boolean) so a replaced connection — e.g.
+ * after `setDb()` — gets the archive attached instead of failing with
+ * "no such table: archive.invoices".
+ */
+const attachedConnections = new WeakSet<object>();
 
 /**
  * Return the database connection with the archive database attached.
  * Configured via process.env.ARCHIVE_DB_PATH (defaults to "archive.db").
  */
-export function getArchiveDbConnection() {
+export function getArchiveDbConnection(): ReturnType<typeof getDb> {
   const db = getDb();
-  if (!archiveAttached) {
+  if (!attachedConnections.has(db)) {
     const archivePath = process.env.ARCHIVE_DB_PATH || 'archive.db';
 
     // Attach the archive database file
@@ -40,10 +46,10 @@ export function getArchiveDbConnection() {
         created_at       INTEGER NOT NULL
       );
 
-      CREATE INDEX IF NOT EXISTS idx_archive_invoices_created_at ON archive.invoices(created_at);
-      CREATE INDEX IF NOT EXISTS idx_archive_invoices_status ON archive.invoices(status);
-      CREATE INDEX IF NOT EXISTS idx_archive_events_invoice_id ON archive.events(invoice_id);
-      CREATE INDEX IF NOT EXISTS idx_archive_events_created_at ON archive.events(created_at);
+      CREATE INDEX IF NOT EXISTS archive.idx_archive_invoices_created_at ON invoices(created_at);
+      CREATE INDEX IF NOT EXISTS archive.idx_archive_invoices_status ON invoices(status);
+      CREATE INDEX IF NOT EXISTS archive.idx_archive_events_invoice_id ON events(invoice_id);
+      CREATE INDEX IF NOT EXISTS archive.idx_archive_events_created_at ON events(created_at);
 
       CREATE TABLE IF NOT EXISTS archive.archive_runs (
         id            INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -53,7 +59,7 @@ export function getArchiveDbConnection() {
       );
     `);
 
-    archiveAttached = true;
+    attachedConnections.add(db);
   }
   return db;
 }
@@ -206,6 +212,44 @@ export function restoreInvoice(id: number): boolean {
   return txn();
 }
 
+
+/**
+ * Purge invoices and events from the archive database older than the specified retention threshold (in days).
+ * This permanently deletes data in accordance with the data-minimization and legal-hold lifecycle policy (e.g. 7 years).
+ */
+export function purgeOldArchiveData(olderThanDays: number = 2555): {
+  invoicesPurged: number;
+  eventsPurged: number;
+} {
+  const db = getArchiveDbConnection();
+  const thresholdMs = Date.now() - olderThanDays * 24 * 60 * 60 * 1000;
+
+  const txn = db.transaction(() => {
+    // 1. Calculate how many records will be purged
+    const invoicesToPurge = db
+      .prepare('SELECT COUNT(*) as count FROM archive.invoices WHERE created_at < ?')
+      .get(thresholdMs) as { count: number };
+    const eventsToPurge = db
+      .prepare('SELECT COUNT(*) as count FROM archive.events WHERE created_at < ?')
+      .get(thresholdMs) as { count: number };
+
+    if (invoicesToPurge.count === 0 && eventsToPurge.count === 0) {
+      return { invoicesPurged: 0, eventsPurged: 0 };
+    }
+
+    // 2. Permanently delete from archive database
+    db.prepare('DELETE FROM archive.invoices WHERE created_at < ?').run(thresholdMs);
+    db.prepare('DELETE FROM archive.events WHERE created_at < ?').run(thresholdMs);
+    
+    return {
+      invoicesPurged: invoicesToPurge.count,
+      eventsPurged: eventsToPurge.count,
+    };
+  });
+
+  return txn();
+}
+
 export interface ArchiveStats {
   totalArchivedInvoices: number;
   totalArchivedEvents: number;
@@ -247,25 +291,12 @@ let schedulerInterval: NodeJS.Timeout | null = null;
 /**
  * Start the background archival scheduling loop.
  */
-export function startArchivalScheduler(intervalMs = 86400000, olderThanDays = 90) {
+export function startArchivalScheduler(intervalMs = 86400000, olderThanDays = 90, purgeOlderThanDays = 2555) {
   if (schedulerInterval) {
     clearInterval(schedulerInterval);
   }
 
-  // Run once immediately on startup
-  try {
-    const res = archiveOldData(olderThanDays);
-    if (res.invoicesMoved > 0 || res.eventsMoved > 0) {
-      console.log(
-        `[archive] Automatic archive run completed. Archived ${res.invoicesMoved} invoices and ${res.eventsMoved} events.`
-      );
-    }
-  } catch (err: any) {
-    console.error(`[archive] Automatic archive run failed: ${err.message}`);
-  }
-
-  // Schedule periodic runs
-  schedulerInterval = setInterval(() => {
+  const runTasks = () => {
     try {
       const res = archiveOldData(olderThanDays);
       if (res.invoicesMoved > 0 || res.eventsMoved > 0) {
@@ -273,8 +304,20 @@ export function startArchivalScheduler(intervalMs = 86400000, olderThanDays = 90
           `[archive] Automatic archive run completed. Archived ${res.invoicesMoved} invoices and ${res.eventsMoved} events.`
         );
       }
+      const purgeRes = purgeOldArchiveData(purgeOlderThanDays);
+      if (purgeRes.invoicesPurged > 0 || purgeRes.eventsPurged > 0) {
+        console.log(
+          `[archive] Automatic purge run completed. Permanently deleted ${purgeRes.invoicesPurged} invoices and ${purgeRes.eventsPurged} events.`
+        );
+      }
     } catch (err: any) {
-      console.error(`[archive] Automatic archive run failed: ${err.message}`);
+      console.error(`[archive] Automatic archive/purge run failed: ${err.message}`);
     }
-  }, intervalMs);
+  };
+
+  // Run once immediately on startup
+  runTasks();
+
+  // Schedule periodic runs
+  schedulerInterval = setInterval(runTasks, intervalMs);
 }

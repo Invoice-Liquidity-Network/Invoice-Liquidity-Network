@@ -1,19 +1,18 @@
 [build]
 builder = "nixpacks"
-buildCommand = "npm ci && npm run build"
+buildCommand = "corepack pnpm install --frozen-lockfile --filter iln-indexer... && corepack pnpm --filter iln-indexer build"
 
 [deploy]
-startCommand = "npm start"
-healthcheckPath = "/health"
-healthcheckTimeout = 10
-restartPolicyType = "on_failure"
-restartPolicyMaxRetries = 5
-restartPolicyMaxDelay = 60
+startCommand = "corepack pnpm --filter iln-indexer start"
 # Single-instance only — SQLite single-writer constraint prevents horizontal scaling.
 numReplicas = 1
+healthcheckPath = "/v1/health"
+healthcheckTimeout = 120
+restartPolicyType = "on_failure"
+# A process that exits on invalid configuration must not restart forever.
+restartPolicyMaxRetries = 3
 
 [variables]
 NODE_ENV = "production"
 PORT = "3001"
-# SQLite WAL mode improves concurrent read performance under the single-writer model.
-SQLITE_WAL_MODE = "true"
+# SQLite always runs in WAL mode (indexer/src/db.ts); no variable controls it.

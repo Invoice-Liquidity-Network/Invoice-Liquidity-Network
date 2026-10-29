@@ -1,3 +1,4 @@
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { Account, Keypair, Networks, nativeToScVal } from '@stellar/stellar-sdk';
 
 import { ContractCallError } from '../errors';
@@ -31,12 +32,12 @@ function makeOp(overrides: Partial<Record<string, any>> = {}): any {
 }
 
 function mockServer(records: any[]) {
-  const callFn = jest.fn().mockResolvedValue({ records });
+  const callFn = vi.fn().mockResolvedValue({ records });
   const queryChain = {
-    forAccount: jest.fn().mockReturnThis(),
-    limit: jest.fn().mockReturnThis(),
-    order: jest.fn().mockReturnThis(),
-    cursor: jest.fn().mockReturnThis(),
+    forAccount: vi.fn().mockReturnThis(),
+    limit: vi.fn().mockReturnThis(),
+    order: vi.fn().mockReturnThis(),
+    cursor: vi.fn().mockReturnThis(),
     call: callFn,
   };
   return { queryChain, callFn };
@@ -47,20 +48,20 @@ const TOKEN_ID = 'CBIELTK6YBZJU5UP2WWQEUCYKLPU6AUNZ2BQ4WWFEIE3USCIHMXQDAMA';
 
 function makeSigner(publicKey: string): InvoiceTransactionSigner {
   return {
-    getPublicKey: jest.fn().mockResolvedValue(publicKey),
-    signTransaction: jest.fn(async (transactionXdr: string) => transactionXdr),
+    getPublicKey: vi.fn().mockResolvedValue(publicKey),
+    signTransaction: vi.fn(async (transactionXdr: string) => transactionXdr),
   };
 }
 
 function makeRpcServer(source: string, overrides: Partial<Record<string, any>> = {}) {
   return {
-    getAccount: jest.fn().mockResolvedValue(new Account(source, '1')),
-    simulateTransaction: jest.fn().mockResolvedValue({
+    getAccount: vi.fn().mockResolvedValue(new Account(source, '1')),
+    simulateTransaction: vi.fn().mockResolvedValue({
       result: { retval: nativeToScVal(7n, { type: 'u64' }) },
     }),
-    prepareTransaction: jest.fn(async (transaction: { toXDR(): string }) => transaction),
-    sendTransaction: jest.fn().mockResolvedValue({ hash: 'tx-hash-123', status: 'PENDING' }),
-    pollTransaction: jest.fn().mockResolvedValue({
+    prepareTransaction: vi.fn(async (transaction: { toXDR(): string }) => transaction),
+    sendTransaction: vi.fn().mockResolvedValue({ hash: 'tx-hash-123', status: 'PENDING' }),
+    pollTransaction: vi.fn().mockResolvedValue({
       status: 'SUCCESS',
       events: [{ topic: ['InvoiceSubmitted'], value: { invoice_id: 7n } }],
     }),
@@ -338,14 +339,12 @@ describe('InvoiceClient invoice lifecycle writes', () => {
   it('reads invoice state to compute the remaining funding amount when amount is omitted', async () => {
     const funder = Keypair.random().publicKey();
     const signer = makeSigner(funder);
-    const invoiceRetval = nativeToScVal(
-      new Map<string, unknown>([
-        ['amount', 1_000_000n],
-        ['amount_funded', 250_000n],
-      ])
-    );
+    const invoiceRetval = nativeToScVal({
+      amount: 1_000_000n,
+      amount_funded: 250_000n,
+    });
     const rpcServer = makeRpcServer(funder, {
-      simulateTransaction: jest
+      simulateTransaction: vi
         .fn()
         .mockResolvedValueOnce({ result: { retval: invoiceRetval } })
         .mockResolvedValueOnce({ result: { retval: nativeToScVal(0, { type: 'u32' }) } }),
@@ -368,7 +367,7 @@ describe('InvoiceClient invoice lifecycle writes', () => {
     const payer = Keypair.random().publicKey();
     const signer = makeSigner(payer);
     const rpcServer = makeRpcServer(payer, {
-      simulateTransaction: jest.fn().mockResolvedValue({
+      simulateTransaction: vi.fn().mockResolvedValue({
         result: { retval: nativeToScVal(0, { type: 'u32' }) },
       }),
     });
@@ -393,7 +392,7 @@ describe('InvoiceClient invoice lifecycle writes', () => {
     const payer = Keypair.random().publicKey();
     const signer = makeSigner(freelancer);
     const rpcServer = makeRpcServer(freelancer, {
-      simulateTransaction: jest.fn().mockResolvedValue({ error: 'host invocation failed' }),
+      simulateTransaction: vi.fn().mockResolvedValue({ error: 'host invocation failed' }),
     });
     const client = new InvoiceClient({
       contractId: CONTRACT_ID,
@@ -412,6 +411,97 @@ describe('InvoiceClient invoice lifecycle writes', () => {
         token: TOKEN_ID,
       })
     ).rejects.toBeInstanceOf(ContractCallError);
+  });
+
+  it('disputes an invoice with reason and evidence CID', async () => {
+    const disputer = Keypair.random().publicKey();
+    const signer = makeSigner(disputer);
+    const rpcServer = makeRpcServer(disputer, {
+      pollTransaction: vi.fn().mockResolvedValue({
+        status: 'SUCCESS',
+        events: [{ topic: ['InvoiceDisputed'], value: { invoice_id: 101n } }],
+      }),
+    });
+
+    const client = new InvoiceClient({
+      contractId: CONTRACT_ID,
+      rpcUrl: 'https://soroban-testnet.stellar.org',
+      signer,
+      rpcServer,
+    });
+
+    const result = await client.disputeInvoice({
+      disputer,
+      invoiceId: 101n,
+      reasonCategory: 'quality',
+      evidenceCid: 'ipfs://bafybeiqualityevidence',
+    });
+
+    expect(result.txHash).toBe('tx-hash-123');
+    expect(rpcServer.sendTransaction).toHaveBeenCalled();
+  });
+
+  it('submits dispute evidence', async () => {
+    const submitter = Keypair.random().publicKey();
+    const signer = makeSigner(submitter);
+    const rpcServer = makeRpcServer(submitter);
+
+    const client = new InvoiceClient({
+      contractId: CONTRACT_ID,
+      rpcUrl: 'https://soroban-testnet.stellar.org',
+      signer,
+      rpcServer,
+    });
+
+    const result = await client.submitDisputeEvidence({
+      submitter,
+      invoiceId: 101n,
+      evidenceCid: 'ipfs://bafybeimoreevidence',
+    });
+
+    expect(result.txHash).toBe('tx-hash-123');
+  });
+
+  it('resolves dispute as admin', async () => {
+    const admin = Keypair.random().publicKey();
+    const signer = makeSigner(admin);
+    const rpcServer = makeRpcServer(admin);
+
+    const client = new InvoiceClient({
+      contractId: CONTRACT_ID,
+      rpcUrl: 'https://soroban-testnet.stellar.org',
+      signer,
+      rpcServer,
+    });
+
+    const result = await client.resolveDispute({
+      admin,
+      invoiceId: 101n,
+      decision: 'favor_freelancer',
+      notes: 'Deliverable accepted.',
+    });
+
+    expect(result.txHash).toBe('tx-hash-123');
+  });
+
+  it('auto-resolves dispute after deadline', async () => {
+    const caller = Keypair.random().publicKey();
+    const signer = makeSigner(caller);
+    const rpcServer = makeRpcServer(caller);
+
+    const client = new InvoiceClient({
+      contractId: CONTRACT_ID,
+      rpcUrl: 'https://soroban-testnet.stellar.org',
+      signer,
+      rpcServer,
+    });
+
+    const result = await client.autoResolveDispute({
+      caller,
+      invoiceId: 101n,
+    });
+
+    expect(result.txHash).toBe('tx-hash-123');
   });
 });
 

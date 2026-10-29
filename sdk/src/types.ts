@@ -167,7 +167,7 @@ export interface RpcServerLike {
  *
  * @example
  * ```ts
- * import { ILNSdk, ILN_TESTNET } from "@invoice-liquidity/sdk";
+ * import { ILNSdk, ILN_TESTNET } from "@iln/sdk";
  *
  * const sdk = new ILNSdk({
  *   ...ILN_TESTNET,
@@ -187,7 +187,12 @@ export interface ILNSdkConfig {
     writeMs?: number;
     simulationMs?: number;
   };
-  cache?: CacheConfig;
+  /**
+   * Whether to verify the contractId against known official ILN deployment IDs on initialization.
+   * Defaults to true. If set to true (or omitted) and the contractId does not match a known official deployment,
+   * a loud warning will be logged to alert integrators of possible misconfiguration.
+   */
+  verifyContractId?: boolean;
   /**
    * Enable the offline transaction queue.
    * When provided, write methods (`submitInvoice`, `fundInvoice`, `markPaid`,
@@ -202,7 +207,21 @@ export interface ILNSdkConfig {
    * defaults to 3 retries with exponential backoff and jitter.
    */
   backoff?: BackoffOptions | false;
+  /**
+   * Cache configuration for read operations.
+   * Set to `{ enabled: false }` to disable caching.
+   * Defaults to `{ ttl: 60000, storage: 'memory', enabled: true }`.
+   */
+  cache?: CacheConfig;
+  /**
+   * Opt-in request batching and deduplication configuration for near-simultaneous reads.
+   * Set to `true` or `{ enabled: true, windowMs: 10 }` to coalesce near-simultaneous identical read requests.
+   * Defaults to `false` (disabled).
+   */
+  batching?: import('./batcher').RequestBatchingOptions | boolean;
 }
+
+export type { RequestBatchingOptions, BatchingMetrics } from './batcher';
 
 /**
  * Pre-configured network settings for connecting to a Stellar network.

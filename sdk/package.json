@@ -12,6 +12,11 @@
       "react-native": "./dist/react-native/index.js",
       "import": "./dist/index.mjs",
       "require": "./dist/index.cjs"
+    },
+    "./legacy": {
+      "types": "./dist/legacy-imports.d.ts",
+      "import": "./dist/legacy-imports.mjs",
+      "require": "./dist/legacy-imports.cjs"
     }
   },
   "react-native": {
@@ -38,16 +43,18 @@
     }
   },
   "scripts": {
-    "build": "tsup",
+    "build": "tsup && node ../scripts/check-bundle-size.js",
     "prepare": "husky install || true",
     "lint": "eslint src --ext .ts",
     "test": "vitest run",
     "test:integration": "vitest run src/integration.test.ts",
     "test:integration:testnet": "vitest run src/integration/testnet.test.ts",
     "test:e2e-local": "vitest run src/e2e/*.test.ts",
+    "test:browser": "playwright test",
     "test:coverage": "vitest run --coverage",
     "type-check": "tsc --noEmit",
-    "docs:generate": "typedoc --out ../docs/sdk-api src/index.ts"
+    "docs:generate": "typedoc --out ../docs/sdk-api src/index.ts",
+    "check-size": "node ../scripts/check-bundle-size.js"
   },
   "dependencies": {
     "@iln/shared": "workspace:*",
@@ -57,10 +64,12 @@
   },
   "devDependencies": {
     "@iln/eslint-config": "workspace:*",
+    "@playwright/test": "^1.49.1",
     "@types/node": "^20.0.0",
     "@typescript-eslint/eslint-plugin": "^6.0.0",
     "@typescript-eslint/parser": "^6.0.0",
     "@vitest/coverage-v8": "^4.1.5",
+    "fast-check": "^3.23.0",
     "eslint": "^8.0.0",
     "eslint-config-prettier": "^9.0.0",
     "@commitlint/cli": "^17.6.0",
@@ -69,6 +78,7 @@
     "tsup": "^8.5.0",
     "typedoc": "^0.27.0",
     "typescript": "^5.9.3",
+    "vite": "^6.1.0",
     "vitest": "^4.1.5"
   }
 }

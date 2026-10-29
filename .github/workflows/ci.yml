@@ -27,6 +27,7 @@ jobs:
       sdk: ${{ steps.filter.outputs.sdk }}
       cli: ${{ steps.filter.outputs.cli }}
       indexer: ${{ steps.filter.outputs.indexer }}
+      oracle: ${{ steps.filter.outputs.oracle }}
       packages: ${{ steps.filter.outputs.packages }}
     steps:
       - uses: actions/checkout@v4
@@ -51,13 +52,14 @@ jobs:
               - 'sdk/**'
               - 'packages/sdk/**'
               - 'packages/shared/**'
-              - 'packages/invoice-sdk/**'
+              - 'tests/sdk-integration/**'
             cli:
               - 'cli/**'
-              - 'packages/cli/**'
             indexer:
               - 'indexer/**'
               - 'packages/indexer/**'
+            oracle:
+              - 'oracle-service/**'
             packages:
               - 'packages/**'
 
@@ -98,7 +100,17 @@ jobs:
 
       - name: Run cargo test
         working-directory: ./backend
-        run: cargo test --target x86_64-unknown-linux-gnu
+        run: |
+          START=$(date +%s)
+          cargo test --target x86_64-unknown-linux-gnu
+          END=$(date +%s)
+          DURATION=$((END - START))
+          BUDGET=$(jq -r '.budgets[] | select(.package=="backend") | .budgetSeconds' ../test-runtime-budgets.json)
+          echo "backend test runtime: ${DURATION}s (budget: ${BUDGET}s)"
+          if [ "$DURATION" -gt "$BUDGET" ]; then
+            echo "::error::backend test suite took ${DURATION}s, exceeding its ${BUDGET}s runtime budget (test-runtime-budgets.json). See docs/test-runtime-budgets.md."
+            exit 1
+          fi
 
       - name: Comment PR on failure
         if: failure() && github.event_name == 'pull_request' && !github.event.pull_request.head.repo.fork
@@ -333,6 +345,33 @@ jobs:
               body: '🚨 **Dependency version mismatch detected!** Run `pnpm syncpack:check` locally and align versions before merging.'
             })
 
+  sdk-fixture-mock-guard:
+    name: SDK fixture mock audit guard
+    needs: [pnpm-cache, changes]
+    if: needs.changes.outputs.sdk == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup pnpm with store cache
+        uses: ./.github/actions/setup-pnpm
+
+      - name: Fail on undocumented SDK integration mocks
+        run: pnpm check:sdk-fixture-mocks
+
+      - name: Comment PR on failure
+        if: failure() && github.event_name == 'pull_request' && !github.event.pull_request.head.repo.fork
+        continue-on-error: true
+        uses: actions/github-script@v7
+        with:
+          script: |
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: '🚨 **Undocumented SDK fixture mock detected!** Run `pnpm check:sdk-fixture-mocks` locally, then either document the mock in the "Documented mocks (CI allowlist)" block of `docs/sdk-integration-fixture-audit.md` (with justification) or replace it with a live testnet-backed fixture.'
+            })
+
   validate-packages:
     name: Validate package.json consistency
     needs: [pnpm-cache, changes]
@@ -353,6 +392,15 @@ jobs:
       - name: Validate all workspace package.json files
         run: node scripts/validate-packages.mjs
 
+      - name: Check SDK export map consistency (#1210)
+        run: pnpm check:sdk-export-maps
+
+      - name: Check SDK support windows (#1211)
+        run: pnpm check:sdk-support-windows
+
+      - name: Check React peer contract (#1213)
+        run: pnpm check:react-peer-contract
+
       - name: Comment PR on failure
         if: failure() && github.event_name == 'pull_request' && !github.event.pull_request.head.repo.fork
         continue-on-error: true
@@ -366,14 +414,33 @@ jobs:
               body: '🚨 **Package.json validation failed!** Run `node scripts/validate-packages.mjs` locally and fix violations before merging.'
             })
 
-  no-foreign-lockfiles:
-    name: Guard against non-pnpm lockfiles
+  sdk-rc-smoke:
+    name: SDK RC pack smoke (#1212)
+    needs: [pnpm-cache, changes]
+    if: >-
+      needs.changes.outputs.sdk == 'true' ||
+      needs.changes.outputs.packages == 'true' ||
+      needs.changes.outputs.shared_config == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
-      - name: Check for stray package-lock.json / yarn.lock files
-        run: node scripts/check-no-foreign-lockfiles.mjs
+      - name: Setup pnpm with store cache
+        uses: ./.github/actions/setup-pnpm
+
+      - name: Build shared workspace dependency
+        run: pnpm --filter @iln/shared build
+
+      - name: Pack and resolve both SDK surfaces (#1212)
+        run: pnpm check:sdk-rc-smoke --json=rc-smoke-report.json
+
+      - name: Upload RC smoke report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: sdk-rc-smoke-report
+          path: rc-smoke-report.json
+          if-no-files-found: warn
 
       - name: Comment PR on failure
         if: failure() && github.event_name == 'pull_request' && !github.event.pull_request.head.repo.fork
@@ -385,7 +452,110 @@ jobs:
               issue_number: context.issue.number,
               owner: context.repo.owner,
               repo: context.repo.repo,
-              body: '🚨 **Foreign lockfile detected!** This is a pnpm-only workspace. Remove any `package-lock.json`/`yarn.lock` and run `pnpm install` instead.'
+              body: '🚨 **SDK RC smoke failed!** A packed SDK surface does not resolve. Run `pnpm check:sdk-rc-smoke` locally and inspect `rc-smoke-report.json` before merging.'
+            })
+
+  monorepo-map:
+    name: Monorepo map drift check
+    needs: [pnpm-cache, changes]
+    if: >-
+      needs.changes.outputs.shared_config == 'true' ||
+      needs.changes.outputs.packages == 'true' ||
+      needs.changes.outputs.notifications == 'true' ||
+      needs.changes.outputs.sdk == 'true' ||
+      needs.changes.outputs.cli == 'true' ||
+      needs.changes.outputs.indexer == 'true'
+    runs-on: namespace-profile-nursca
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup pnpm with store cache
+        uses: ./.github/actions/setup-pnpm
+
+      - name: Check monorepo map against workspace members
+        run: pnpm check-monorepo-map
+
+      - name: Comment PR on failure
+        if: failure() && github.event_name == 'pull_request' && !github.event.pull_request.head.repo.fork
+        continue-on-error: true
+        uses: actions/github-script@v7
+        with:
+          script: |
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: '🚨 **Monorepo map drift detected!** Update `docs/monorepo-map.md` or the workspace membership so the map stays authoritative.'
+            })
+
+  compatibility-matrix:
+    name: Cross-repo version compatibility check
+    needs: [pnpm-cache, changes]
+    if: >-
+      needs.changes.outputs.shared_config == 'true' ||
+      needs.changes.outputs.sdk == 'true' ||
+      needs.changes.outputs.cli == 'true' ||
+      needs.changes.outputs.indexer == 'true'
+    runs-on: namespace-profile-nursca
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup pnpm with store cache
+        uses: ./.github/actions/setup-pnpm
+
+      - name: Verify current SDK/contract/frontend version matrix
+        run: pnpm check-compatibility
+
+      - name: Comment PR on failure
+        if: failure() && github.event_name == 'pull_request' && !github.event.pull_request.head.repo.fork
+        continue-on-error: true
+        uses: actions/github-script@v7
+        with:
+          script: |
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: '🚨 **Cross-repo compatibility failed!** Update the matching matrix row in `docs/cross-repo-dependencies.md` before merging.'
+            })
+  gitleaks:
+    name: Secret scanning
+    needs: pnpm-cache
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup pnpm with store cache
+        uses: ./.github/actions/setup-pnpm
+      - name: Install gitleaks
+        run: |
+          GITLEAKS_VERSION=$(curl -s https://api.github.com/repos/gitleaks/gitleaks/releases/latest | grep '"tag_name"' | sed -E 's/.*"v([^"]+)".*/\1/')
+          curl -sSfL "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz" | sudo tar -xz -C /usr/local/bin gitleaks
+      - name: Scan repository for secrets
+        run: gitleaks detect --no-git -s . --config gitleaks.toml --baseline-path .secrets.baseline
+
+  no-foreign-lockfiles:
+    name: Guard against non-pnpm lockfiles
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check for stray package-lock.json / yarn.lock files
+        run: node scripts/check-no-foreign-lockfiles.mjs
+
+      - name: Check for duplicate shared type definitions
+        run: node scripts/check-no-duplicate-types.mjs
+
+      - name: Comment PR on failure
+        if: failure() && github.event_name == 'pull_request' && !github.event.pull_request.head.repo.fork
+        continue-on-error: true
+        uses: actions/github-script@v7
+        with:
+          script: |
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: '🚨 **Repository guardrail failed.** Check the job log for a foreign lockfile or a duplicate shared type definition. Use pnpm at the repository root and import shared types from `@iln/shared` where applicable.'
             })
 
   node-tests:
@@ -409,7 +579,7 @@ jobs:
         if: always()
         continue-on-error: true
         run: |
-          for pkg in sdk cli indexer notifications packages/react packages/mock-backend packages/opentelemetry packages/upgrade-tests packages/test-utils packages/cli; do
+          for pkg in sdk cli indexer notifications packages/react packages/mock-backend packages/opentelemetry packages/upgrade-tests packages/test-utils; do
             if [ -f "$pkg/vitest.config.ts" ] || [ -f "$pkg/vitest.config.js" ]; then
               echo "Generating JUnit report for $pkg..."
               cd "$GITHUB_WORKSPACE/$pkg"
@@ -462,7 +632,7 @@ jobs:
         run: pnpm --filter @iln/shared test
 
       - name: Comment PR on failure
-        if: failure() && github.event_name == 'pull_request'
+        if: failure() && github.event_name == 'pull_request' && !github.event.pull_request.head.repo.fork
         continue-on-error: true
         uses: actions/github-script@v7
         with:
@@ -574,6 +744,14 @@ jobs:
             echo "❌ Generated types are out of sync!"
             echo "Run: pnpm generate:types"
             exit 1
+          fi
+
+      - name: Check SDK/deployed-ABI compatibility (issue #1094)
+        run: |
+          if [ -f backend/target/spec.json ]; then
+            pnpm check:contract-abi-compat
+          else
+            echo "Contract submodule not initialized, skipping ABI compatibility check"
           fi
 
       - name: Comment PR on failure
@@ -714,7 +892,36 @@ jobs:
           key: ${{ runner.os }}-turbo-test-${{ github.sha }}
           restore-keys: ${{ runner.os }}-turbo-test-
       - name: Test
-        run: pnpm exec turbo run test --cache-dir=.turbo
+        run: pnpm exec turbo run test --cache-dir=.turbo --summarize
+
+      - name: Root node --test suites
+        run: |
+          npm run test:checklist
+          npm run test:audit
+          npm run test:provenance
+          npm run test:sdk-fixture-mocks
+          npm run test:sdk-package-names
+          npm run test:sdk-export-maps
+          npm run test:sdk-support-windows
+          npm run test:sdk-rc-smoke
+          npm run test:react-peer-contract
+          npm run test:contract-abi-compat
+          npm run test:e2e-guards
+          npm run test:release-scripts
+          npm run test:canary
+          npm run canary:drill
+
+      - name: Root scripts/__tests__ (vitest)
+        run: |
+          START=$(date +%s.%N)
+          pnpm exec vitest run scripts/__tests__ --exclude "**/*.test.mjs" --exclude "**/*.test.js" --exclude "**/check-compatibility.test.ts"
+          END=$(date +%s.%N)
+          echo "ROOT_SCRIPTS_TEST_DURATION_SECONDS=$(echo "$END - $START" | bc)" >> "$GITHUB_ENV"
+
+      - name: Enforce test-runtime budgets
+        run: |
+          SUMMARY=$(ls -t .turbo/runs/*.json | head -1)
+          node scripts/check-test-runtime-budgets.mjs --turbo-summary="$SUMMARY" --external "root-scripts=${ROOT_SCRIPTS_TEST_DURATION_SECONDS}"
 
   core-build:
     name: Core · build

@@ -4,9 +4,21 @@
     "indexer/src/dlq.ts",
     "frontend/**",
     "backend/**",
-    "oracle-service/**"
+    "oracle-service/**",
+    "notifications/src/audit-cli.ts",
+    "packages/sdk/src/schemas/**",
+    "tests/sdk-integration/compat-matrix/fixtures/**"
   ],
-  "ignoreBinaries": ["playwright", "sqlite3", "sha256sum", "gsutil", "gitleaks", "less"],
+  "ignoreBinaries": [
+    "playwright",
+    "sqlite3",
+    "sha256sum",
+    "gsutil",
+    "gitleaks",
+    // Stellar CLI, invoked by scripts/provision-e2e-contract.mjs to deploy the
+    // real E2E contract (#1241). Installed via `cargo install stellar-cli` in CI.
+    "stellar"
+  ],
   "rules": {
     "optionalPeerDependencies": "off",
     "duplicates": "off"
@@ -24,7 +36,8 @@
     "sdk": {
       "entry": ["src/**/*.test.ts"],
       "project": ["src/**/*.ts"],
-      "ignoreDependencies": ["@commitlint/cli", "@commitlint/config-conventional"]
+      "ignoreDependencies": ["@commitlint/cli", "@commitlint/config-conventional"],
+      "ignoreUnresolved": ["./xdr"]
     },
     ".": {
       "entry": ["scripts/*.ts", "scripts/migrations/*.ts"],
@@ -41,7 +54,8 @@
         "src/**/*.test.ts",
         "src/crypto-browser.ts"
       ],
-      "project": ["src/**/*.ts", "*.ts"]
+      "project": ["src/**/*.ts", "*.ts"],
+      "ignoreDependencies": ["@stellar/freighter-api"]
     },
     "cli": {
       "entry": ["src/bin.ts", "src/cli.ts", "src/index.ts"],
@@ -90,8 +104,8 @@
       "entry": ["**/*.{ts,js}"],
       "project": ["**/*.{ts,js}"]
     },
-    "packages/invoice-sdk": {
-      "ignoreDependencies": ["@iln/sdk"]
+    "packages/react": {
+      "ignoreDependencies": ["@iln/shared"]
     },
     "packages/eslint-config": {
       "ignoreDependencies": []

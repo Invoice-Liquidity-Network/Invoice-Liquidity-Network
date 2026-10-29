@@ -1,6 +1,7 @@
 import express, { Request, Response, NextFunction } from 'express';
 import { randomBytes } from 'crypto';
 import { RateLimiter } from './rate-limiter';
+import { traceMiddleware } from '@iln/opentelemetry';
 import {
   createSubscription,
   deleteSubscriptionByAddressAndDestination,
@@ -11,6 +12,11 @@ import {
   getDeliveryAnalytics,
   getChannelComparison,
   getTrendAnalytics,
+  getDeliveryAuditLogs,
+  getDeliveryAuditLogById,
+  countDeliveryAuditLogs,
+  purgeExpiredDeliveryLogs,
+  markSubscriptionsOwnershipVerified,
 } from './db';
 import {
   ALLOWED_CHANNELS,
@@ -22,8 +28,20 @@ import {
   validateTrigger,
 } from './config';
 import type { NotificationTrigger } from './types';
-import { sendWebhook } from './delivery';
+import { getDeadLetterCount, getDeadLetterEntries, getRetryMetrics, replayDeadLetter, sendWebhook } from './delivery';
 import { createPreferencesRouter } from './preferences-api';
+import { digestScheduler, DigestScheduler } from './digest';
+import { preferencesService } from './preferences';
+import { notificationsMetrics } from './metrics';
+import { getAllProviderHealth } from './provider-health';
+import { getDigestReconciliationMetrics } from './digest-reconciliation';
+import {
+  getOwnershipMetrics,
+  isOwnershipVerified,
+  isValidStellarAddress,
+  issueOwnershipChallenge,
+  verifyOwnershipProof,
+} from './ownership';
 
 interface SubscribeRequest {
   stellar_address: string;
@@ -31,9 +49,79 @@ interface SubscribeRequest {
   destination: string;
   triggers: unknown;
   webhook_secret?: string;
+  /** Nonce from POST /subscribe/challenge (#1281). */
+  challenge_nonce?: string;
+  /** Base64 ed25519 signature of the challenge message by stellar_address. */
+  signature?: string;
+}
+
+/**
+ * Verify the ownership proof in a request body. Responds and returns null on
+ * failure; a database error yields 503 so the request fails closed.
+ */
+function requireOwnershipProof(
+  body: { stellar_address?: unknown; challenge_nonce?: unknown; signature?: unknown },
+  res: Response
+): number | null {
+  if (!body.challenge_nonce || !body.signature) {
+    res.status(401).json({
+      error:
+        'ownership proof required: request a challenge from POST /subscribe/challenge and submit challenge_nonce and signature',
+      reason: 'missing_proof',
+    });
+    return null;
+  }
+
+  try {
+    const result = verifyOwnershipProof({
+      stellarAddress: body.stellar_address,
+      nonce: body.challenge_nonce,
+      signature: body.signature,
+    });
+    if (!result.ok) {
+      res.status(403).json({ error: 'ownership verification failed', reason: result.reason });
+      return null;
+    }
+    return result.verifiedAt;
+  } catch (error) {
+    console.error('[ownership] verification unavailable:', error);
+    res.status(503).json({ error: 'ownership verification unavailable' });
+    return null;
+  }
 }
 
 const rateLimiter = new RateLimiter({
+  perUserLimit: parseInt(process.env.RATE_LIMIT_PER_USER ?? "60", 10),
+  perRecipientLimit: parseInt(
+    process.env.RATE_LIMIT_PER_RECIPIENT ?? process.env.RATE_LIMIT_PER_CHANNEL ?? "200",
+    10,
+  ),
+  windowMs: parseInt(process.env.RATE_LIMIT_WINDOW_MS ?? "60000", 10),
+});
+
+function applyRateLimit(req: Request, res: Response, next: NextFunction): void {
+  const body =
+    typeof req.body === "object" && req.body !== null
+      ? (req.body as Record<string, unknown>)
+      : {};
+  const subscription =
+    req.path === "/test-webhook" && typeof body.id === "number"
+      ? getSubscriptionById(body.id)
+      : undefined;
+  const userId = (typeof body.stellar_address === "string" ? body.stellar_address : undefined)
+    ?? subscription?.stellar_address
+    ?? req.params.address
+    ?? req.ip
+    ?? "anonymous";
+  const channel =
+    (typeof body.channel === "string" ? body.channel : undefined)
+    ?? subscription?.channel
+    ?? "api";
+  const recipientId =
+    (typeof body.destination === "string" ? body.destination : undefined)
+    ?? subscription?.destination
+    ?? userId;
+  const result = rateLimiter.check(userId, channel, recipientId);
   perUserLimit: parseInt(process.env.RATE_LIMIT_PER_USER ?? '60', 10),
   perChannelLimit: parseInt(process.env.RATE_LIMIT_PER_CHANNEL ?? '200', 10),
   windowMs: parseInt(process.env.RATE_LIMIT_WINDOW_MS ?? '60000', 10),
@@ -64,10 +152,37 @@ function applyRateLimit(req: Request, res: Response, next: NextFunction): void {
 
 export function createApp() {
   const app = express();
+  app.use(traceMiddleware('notifications'));
   app.use(express.json());
 
   app.get('/health', (_req: Request, res: Response) => {
     res.json({ status: 'ok' });
+  });
+
+  app.get('/metrics', async (_req: Request, res: Response) => {
+    res.setHeader('Content-Type', notificationsMetrics.registry.contentType);
+    res.end(await notificationsMetrics.registry.metrics());
+  });
+
+  // Provider health inspection — for drill verification and ops dashboards
+  app.get('/health/providers', (_req: Request, res: Response) => {
+    res.json({ providers: getAllProviderHealth() });
+  });
+
+  app.post('/subscribe/challenge', applyRateLimit, (req: Request, res: Response) => {
+    const address = (req.body as { stellar_address?: unknown })?.stellar_address;
+    if (!isValidStellarAddress(address)) {
+      return res
+        .status(400)
+        .json({ error: 'stellar_address must be a valid Stellar public key (G...)' });
+    }
+
+    try {
+      return res.status(201).json({ challenge: issueOwnershipChallenge(address) });
+    } catch (error) {
+      console.error('[ownership] failed to issue challenge:', error);
+      return res.status(503).json({ error: 'ownership verification unavailable' });
+    }
   });
 
   app.post('/subscribe', applyRateLimit, (req: Request, res: Response) => {
@@ -75,6 +190,12 @@ export function createApp() {
 
     if (!body?.stellar_address || typeof body.stellar_address !== 'string') {
       return res.status(400).json({ error: 'stellar_address is required' });
+    }
+
+    if (!isValidStellarAddress(body.stellar_address)) {
+      return res
+        .status(400)
+        .json({ error: 'stellar_address must be a valid Stellar public key (G...)' });
     }
 
     if (!validateChannel(body.channel)) {
@@ -112,6 +233,11 @@ export function createApp() {
         .json({ error: 'destination must be a valid E.164 phone number (e.g. +14155552671)' });
     }
 
+    const verifiedAt = requireOwnershipProof(body, res);
+    if (verifiedAt === null) {
+      return res;
+    }
+
     const subscription = createSubscription({
       stellar_address: body.stellar_address,
       channel: body.channel as 'email' | 'webhook' | 'sms',
@@ -123,9 +249,30 @@ export function createApp() {
             ? body.webhook_secret
             : randomBytes(32).toString('hex')
           : undefined,
+      ownership_verified_at: verifiedAt,
     });
 
     return res.status(201).json({ subscription });
+  });
+
+  // Recovery path for subscriptions created before #1281 (or whose owner
+  // wants to re-prove control): a fresh signed challenge marks every
+  // subscription for the address as verified.
+  app.post('/subscriptions/verify', applyRateLimit, (req: Request, res: Response) => {
+    const body = req.body as SubscribeRequest;
+    if (!isValidStellarAddress(body?.stellar_address)) {
+      return res
+        .status(400)
+        .json({ error: 'stellar_address must be a valid Stellar public key (G...)' });
+    }
+
+    const verifiedAt = requireOwnershipProof(body, res);
+    if (verifiedAt === null) {
+      return res;
+    }
+
+    const updated = markSubscriptionsOwnershipVerified(body.stellar_address, verifiedAt);
+    return res.json({ verified: updated, ownership_verified_at: verifiedAt });
   });
 
   app.delete('/unsubscribe', (req: Request, res: Response) => {
@@ -165,6 +312,7 @@ export function createApp() {
       channel: sub.channel,
       destination: sub.destination,
       triggers: sub.triggers,
+      ownership_verified: isOwnershipVerified(sub),
       created_at: sub.created_at,
     }));
     return res.json({ subscriptions });
@@ -228,6 +376,21 @@ export function createApp() {
     }
   });
 
+  // Operational evidence for #1281 / #1282: counters an operator can scrape
+  // to confirm both controls are active and see what they are rejecting.
+  app.get('/metrics/ownership', (_req: Request, res: Response) => {
+    try {
+      return res.json(getOwnershipMetrics());
+    } catch (error) {
+      console.error('[ownership] metrics unavailable:', error);
+      return res.status(503).json({ error: 'ownership metrics unavailable' });
+    }
+  });
+
+  app.get('/metrics/digest-reconciliation', (_req: Request, res: Response) => {
+    return res.json(getDigestReconciliationMetrics());
+  });
+
   app.get('/analytics', (_req: Request, res: Response) => {
     return res.json(getDeliveryAnalytics());
   });
@@ -240,6 +403,86 @@ export function createApp() {
     const rawDays = typeof req.query.days === 'string' ? parseInt(req.query.days, 10) : 30;
     const days = Number.isFinite(rawDays) && rawDays > 0 ? Math.min(rawDays, 365) : 30;
     return res.json({ trends: getTrendAnalytics(days) });
+  });
+
+  // ── Delivery audit log (durable, queryable, independent of retry state) ─────
+  // Support / compliance investigations need to answer "was this notification
+  // actually delivered, and when" without scraping scattered application logs.
+  // The audit log is a durable, queryable record per delivery outcome.
+  app.get('/audit/deliveries', (req: Request, res: Response) => {
+    const {
+      recipient,
+      eventId,
+      trigger,
+      channel,
+      status,
+      start,
+      end,
+      limit: rawLimit,
+      offset: rawOffset,
+    } = req.query as Record<string, string | undefined>;
+
+    const filter: any = {};
+    if (recipient) filter.recipient = recipient;
+    if (eventId) filter.eventId = eventId;
+    if (trigger) filter.trigger = trigger;
+    if (channel) filter.channel = channel;
+    if (status) {
+      if (!['pending', 'delivered', 'failed'].includes(status)) {
+        return res.status(400).json({ error: 'status must be pending, delivered, or failed' });
+      }
+      filter.status = status;
+    }
+    if (start) {
+      const ms = Date.parse(start);
+      if (Number.isNaN(ms)) return res.status(400).json({ error: 'start must be ISO 8601 date' });
+      filter.startTime = ms;
+    }
+    if (end) {
+      const ms = Date.parse(end);
+      if (Number.isNaN(ms)) return res.status(400).json({ error: 'end must be ISO 8601 date' });
+      filter.endTime = ms;
+    }
+    if (rawLimit) {
+      const n = parseInt(rawLimit, 10);
+      if (!Number.isFinite(n) || n <= 0) return res.status(400).json({ error: 'limit must be positive integer' });
+      filter.limit = Math.min(n, 1000);
+    }
+    if (rawOffset) {
+      const n = parseInt(rawOffset, 10);
+      if (!Number.isFinite(n) || n < 0) return res.status(400).json({ error: 'offset must be non-negative integer' });
+      filter.offset = n;
+    }
+
+    const records = getDeliveryAuditLogs(filter);
+    const total = countDeliveryAuditLogs(filter);
+    return res.json({ total, records });
+  });
+
+  app.get('/audit/deliveries/:id', (req: Request, res: Response) => {
+    const id = Number(req.params.id);
+    if (Number.isNaN(id)) return res.status(400).json({ error: 'Invalid audit id' });
+    const record = getDeliveryAuditLogById(id);
+    if (!record) return res.status(404).json({ error: 'Audit record not found' });
+    return res.json({ record });
+  });
+
+  // Retention enforcement — consistent with docs/privacy.md (30d sent, 90d webhook/audit).
+  // Exposed for internal ops / CLI `purge-audit` and for scheduled job.
+  app.post('/audit/purge', (req: Request, res: Response) => {
+    const nowParam = (req.query.now as string | undefined) ?? (req.body as any)?.now;
+    const nowMs = nowParam ? Date.parse(nowParam) : Date.now();
+    if (Number.isNaN(nowMs)) return res.status(400).json({ error: 'now must be ISO 8601' });
+    const result = purgeExpiredDeliveryLogs(nowMs);
+    return res.json({ purged: result, retentionPolicy: { sentNotificationsDays: 30, webhookLogsDays: 90, auditLogsDays: 90 } });
+  });
+
+  app.get('/audit/stats', (_req: Request, res: Response) => {
+    const delivered = countDeliveryAuditLogs({ status: 'delivered' });
+    const failed = countDeliveryAuditLogs({ status: 'failed' });
+    const pending = countDeliveryAuditLogs({ status: 'pending' });
+    const total = countDeliveryAuditLogs();
+    return res.json({ total, delivered, failed, pending });
   });
 
   // Issue #718: digest preview endpoint — returns pending buffer items

@@ -73,3 +73,28 @@ export type {
   UseSubmitClaimResult,
   UseReviewClaimResult,
 } from './useInsurance';
+
+export {
+  useDispute,
+  useDisputeList,
+  useFileDispute,
+  useSubmitDisputeEvidence,
+  useResolveDispute,
+  useAutoResolveDispute,
+  useDisputeAnalytics,
+} from './useDispute';
+/** @public Stable cache-key factory for external query invalidation. */
+export { disputeKeys } from './useDispute';
+export type {
+  UseDisputeResult,
+  UseDisputeListResult,
+  UseFileDisputeResult,
+  UseSubmitDisputeEvidenceResult,
+  UseResolveDisputeResult,
+  UseAutoResolveDisputeResult,
+  UseDisputeAnalyticsResult,
+  FileDisputeParams,
+  SubmitDisputeEvidenceParams,
+  ResolveDisputeParams,
+  AutoResolveDisputeParams,
+} from './useDispute';

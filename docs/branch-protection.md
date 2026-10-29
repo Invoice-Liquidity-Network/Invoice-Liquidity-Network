@@ -176,3 +176,22 @@ The `coverage.yml` workflow runs its own Rust and Node.js coverage collection in
 - Verify the `main` branch protection settings in GitHub repository settings (Settings → Rules → Rulesets).
 - Confirm that the required status checks listed above appear in the branch protection rule for `main`.
 - Use `gh api repos/{owner}/{repo}/branches/main/protection` or the GitHub UI to audit live settings and compare against this document.
+
+## Automated verification
+
+Branch protection configuration drift is invisible in the repo's own files (it is a GitHub setting, not committed code) and can be silently misconfigured. To detect drift between this document's intent and the live GitHub settings, run the verification script:
+
+```bash
+sh scripts/verify-branch-protection.sh <owner> <repo>
+```
+
+This script uses the GitHub API to fetch the live branch protection settings and compares them against the documented rules in this file. It checks:
+
+1. Branch protection is enabled on `main`
+2. PR reviews are required (≥1 approval)
+3. Stale approvals are dismissed on new commits
+4. Linear history is required
+5. Force pushes are restricted
+6. Required status checks match the documented set
+
+> **Note:** The script requires a GitHub token with `repo` scope (or `administration:read` on an org admin). Run it periodically (e.g., in CI) to catch configuration drift early.

@@ -16,6 +16,11 @@ export const CONFIG = {
    * 0 = automatically start from (latestLedger - 1000).
    */
   startLedger: Number(process.env.START_LEDGER ?? '0'),
+  /**
+   * Canonical ledger confirmation depth policy threshold (default: 10).
+   * Events within the unconfirmed tip window are deferred until reaching finality.
+   */
+  confirmationDepth: Number(process.env.CONFIRMATION_DEPTH ?? '10'),
   /** Optional Redis connection URL (e.g. redis://localhost:6379). Caching is disabled when unset. */
   redisUrl: process.env.REDIS_URL,
   /** Rate limit window for the public API, in ms (default: 60 seconds). */
@@ -30,10 +35,27 @@ export const CONFIG = {
     .split(',')
     .map((ip) => ip.trim())
     .filter(Boolean),
+  /**
+   * Optional bearer token required on GraphQL WebSocket subscription
+   * connections. When unset, subscriptions are publicly accessible.
+   * Clients send it via the `Authorization: Bearer <token>` header during
+   * the graphql-transport-ws `connection_init` handshake.
+   */
+  subscriptionAuthToken: process.env.SUBSCRIPTION_AUTH_TOKEN,
+  /** Max concurrent GraphQL WebSocket connections allowed (default: 100). */
+  subscriptionMaxConnections: Number(
+    process.env.SUBSCRIPTION_MAX_CONNECTIONS ?? '100'
+  ),
+  /** Max GraphQL WebSocket connections allowed per client IP (default: 10). */
+  subscriptionMaxConnectionsPerIp: Number(
+    process.env.SUBSCRIPTION_MAX_CONNECTIONS_PER_IP ?? '10'
+  ),
   /** Archival schedule interval in ms (default: 24 hours). */
   archiveIntervalMs: Number(process.env.ARCHIVE_INTERVAL_MS ?? '86400000'),
   /** Retention period in days (default: 90 days). */
   archiveOlderThanDays: Number(process.env.ARCHIVE_OLDER_THAN_DAYS ?? '90'),
+  /** Permanently delete archived data after this many days (default: 7 years). */
+  archivePurgeOlderThanDays: Number(process.env.ARCHIVE_PURGE_OLDER_THAN_DAYS ?? '2555'),
   /** Whether automatic background archival is enabled. */
   archiveEnabled: process.env.ARCHIVE_ENABLED !== 'false',
   /** Enable automated backups (default: false). */
@@ -52,4 +74,17 @@ export const CONFIG = {
   backupCloudPrefix: process.env.BACKUP_CLOUD_PREFIX,
   /** Cloud storage region. */
   backupCloudRegion: process.env.BACKUP_CLOUD_REGION,
+  /**
+   * Optional path to a read-only SQLite replica for analytics queries.
+   * When set, heavy aggregation queries (getProtocolStats, getLPStats, etc.)
+   * are routed to this connection so they cannot compete with production
+   * read/write traffic on the primary.
+   */
+  analyticsDbPath: process.env.ANALYTICS_DB_PATH,
+  /**
+   * Maximum duration in milliseconds allowed for analytics queries.
+   * Queries exceeding this budget are aborted to protect I/O bandwidth.
+   * Default: 5000 ms.
+   */
+  analyticsQueryBudgetMs: Number(process.env.ANALYTICS_QUERY_BUDGET_MS ?? '5000'),
 } as const;

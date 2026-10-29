@@ -29,6 +29,9 @@ jobs:
       - uses: upptime/uptime-monitor@c540f23fc12982bc1df4624aa428b818f2020bdd # master
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          NOTIFICATION_SLACK: ${{ secrets.NOTIFICATION_SLACK }}
+          NOTIFICATION_DISCORD: ${{ secrets.NOTIFICATION_DISCORD }}
+          NOTIFICATION_WEBHOOK: ${{ secrets.NOTIFICATION_WEBHOOK }}
 
   response-time:
     name: Response Time

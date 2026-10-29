@@ -302,3 +302,34 @@ A: Not automatically. If you remove a `sync:*` label, future syncs don't happen,
 
 **Q: What happens if I sync the same issue twice?**  
 A: Each label event creates a new issue. Avoid re-adding the same label to prevent duplicates. If this happens, close the duplicate and add a comment linking the issues.
+
+---
+
+## Hardening Batch Coordination
+
+During concurrent 125-issue hardening batches across the main repo, `ILN-Smart-Contract`, and `ILN-Frontend`, duplicate or overlapping work is governed by [docs/hardening-batch-coordination.md](hardening-batch-coordination.md).
+
+Key guidelines:
+- **Indexer Work**: `Invoice-Liquidity-Network` is authoritative for indexer implementation, RPC polling loop, and schema. Frontend indexer issues must consume the canonical indexer API.
+- **Notifications Work**: `Invoice-Liquidity-Network` is authoritative for notification service dispatch and webhook HMAC signatures.
+- **Oracle Work**: `ILN-Smart-Contract` is authoritative for Soroban oracle storage & on-chain verification, while `Invoice-Liquidity-Network` is authoritative for off-chain `oracle-service/` price fetchers.
+- **De-duplication**: Use `sync:*` labels on authoritative issues in the main repo to mirror and link duplicate items across repos rather than maintaining independent diverging copies.
+
+---
+
+## Contract ABI Changes (issue #1094)
+
+A contract ABI change in `ILN-Smart-Contract` is the one class of change with
+an automated compatibility gate on this side, rather than only a sync label:
+
+1. Label the `ILN-Smart-Contract` change `sync:smart-contract` (or `sync:all`)
+   per the process above, so a tracking issue exists in this repo.
+2. Once merged there, open a PR here bumping the `backend` submodule pin.
+3. `.github/workflows/ci.yml`'s `sdk-types-sync` job and
+   `.github/workflows/sdk-release.yml`'s `contract-abi-gate` job both rebuild
+   the contract from the new pin and verify `packages/sdk/src/clients/InvoiceClient.ts`
+   still agrees with it — see [docs/contract-abi-compatibility.md](contract-abi-compatibility.md).
+   A drift fails CI on the submodule-bump PR and blocks the next SDK release.
+
+This makes ABI drift a CI failure instead of a manually-tracked sync label.
+

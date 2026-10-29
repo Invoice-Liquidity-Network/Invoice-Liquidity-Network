@@ -103,7 +103,7 @@ export const resolvers = {
   Subscription: {
     invoiceUpdated: {
       subscribe: withFilter(
-        () => pubsub.asyncIterableIterator<InvoiceUpdatedPayload>(INVOICE_UPDATED),
+        () => pubsub.asyncIterator<InvoiceUpdatedPayload>(INVOICE_UPDATED),
         filterInvoiceUpdated
       ),
       resolve: (payload: InvoiceUpdatedPayload) => payload.invoiceUpdated,
@@ -111,7 +111,7 @@ export const resolvers = {
 
     eventStream: {
       subscribe: withFilter(
-        () => pubsub.asyncIterableIterator<EventStreamPayload>(EVENT_STREAM),
+        () => pubsub.asyncIterator<EventStreamPayload>(EVENT_STREAM),
         filterEventStream
       ),
       resolve: (payload: EventStreamPayload) => payload.eventStream,

@@ -1,0 +1,44 @@
+# SDK End-to-End Testing
+
+## Local Stellar Node
+
+The SDK package suite uses a local Stellar node and funds fresh test keypairs
+through the local friendbot. Start the node, run the package-specific suite,
+and always stop the compose services afterward:
+
+```bash
+docker compose -f tests/e2e/docker-compose.yml up -d
+pnpm --filter @iln/sdk test:e2e-local
+docker compose -f tests/e2e/docker-compose.yml down
+```
+
+The [SDK local-node workflow](https://github.com/Invoice-Liquidity-Network/Invoice-Liquidity-Network/blob/main/.github/workflows/sdk-e2e-local-node.yml)
+runs this suite on pushes to `main`. It waits for Horizon before invoking the
+tests and tears down Docker Compose even when the test step fails. If the node
+does not become healthy, inspect the compose logs, fix the local Docker or
+port issue, and rerun; do not treat a skipped or unstarted suite as a pass.
+
+## Cross-Package E2E
+
+The root suite in `tests/e2e/` requires a reachable Soroban RPC and a real
+deployed contract. Provision the local network and contract, then run the
+suite and its coverage gate:
+
+```bash
+docker compose -f tests/e2e/docker-compose.yml up -d stellar-quickstart
+cargo build --target wasm32v1-none --release
+node scripts/provision-e2e-contract.mjs
+export CONTRACT_ID=<contract-id-printed-by-provisioning>
+pnpm test:e2e
+
+mkdir -p .artifacts
+pnpm exec vitest run tests/e2e --reporter=json --outputFile.json=.artifacts/e2e-results.json
+node scripts/check-e2e-coverage.mjs --report=.artifacts/e2e-results.json --scan-sources
+```
+
+An unavailable RPC or placeholder contract ID fails the run rather than
+skipping tests. Follow the
+[E2E prerequisites runbook](https://github.com/Invoice-Liquidity-Network/Invoice-Liquidity-Network/blob/dev/docs/runbooks/e2e-prerequisites.md)
+to diagnose service readiness and contract provisioning failures. Preserve
+the JSON report as CI evidence; regenerate it from a fresh run rather than
+reusing a prior report after a restart.

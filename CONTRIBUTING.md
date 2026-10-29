@@ -6,7 +6,7 @@ Thank you for your interest in contributing to Invoice Liquidity Network (ILN).
 
 ### Prerequisites
 
-- Node.js 18+
+- Node.js 20+ (see `.nvmrc`)
 - pnpm 9+
 - Rust 1.74+
 - Docker
@@ -46,9 +46,15 @@ pnpm build
 
 ## Secret scanning
 
-The repository uses a Husky `pre-commit` hook to run gitleaks against staged changes. After `pnpm install`, Husky installs the hook automatically through the root `prepare` script. The hook is deliberately limited to staged content so it does not perform a full-repository scan on every commit.
-
-A commit containing a detected secret is rejected. Remove the secret from the staged changes, rotate or revoke it when appropriate, and then commit again. Do not add real credentials to source files, examples, documentation, tests, or local configuration that could be committed. Use environment variables and document required variables instead.
+The repository uses gitleaks to prevent secrets from being committed. The scan
+runs in CI on every pull request and push via the `gitleaks` job in
+`.github/workflows/ci.yml`. Commit-level enforcement is configured through a
+Husky `pre-commit` hook after `pnpm install` (the root `prepare` script installs
+Husky); a commit containing a detected secret is rejected. Remove the secret
+from the staged changes, rotate or revoke it when appropriate, and then commit
+again. Do not add real credentials to source files, examples, documentation,
+tests, or local configuration that could be committed. Use environment
+variables and document required variables instead.
 
 In a genuine emergency only, the hook can be bypassed with:
 
@@ -66,16 +72,59 @@ pnpm gitleaks:scan
 
 ## Pull requests
 
-1. Create a focused branch from the current main branch.
+1. Create a focused branch from the current `dev` branch (the repository's default branch).
 2. Keep changes limited to the issue being addressed.
 3. Add or update tests for behavior changes.
 4. Run the relevant formatting, lint, type-check, build, and test commands locally.
 5. Open a pull request with a clear description of the change, verification performed, and any follow-up work.
 
-Use conventional commit messages where possible, for example:
+### Commit messages and PR titles (unified convention)
+
+Commit messages and pull-request titles share **one** rule set:
+[`commitlint.config.js`](./commitlint.config.js), based on
+[`@commitlint/config-conventional`](https://github.com/conventional-changelog/commitlint)
+with an extended `type-enum`.
+
+| Enforcement point | What it checks | How |
+| --- | --- | --- |
+| Commit messages (local) | Each commit header | [`.husky/commit-msg`](./.husky/commit-msg) via `commitlint --config commitlint.config.js` |
+| PR titles (CI) | The PR title only | [`.github/workflows/pr-title-lint.yml`](./.github/workflows/pr-title-lint.yml) runs `commitlint --config commitlint.config.js` |
+
+Because both points load the same config file, anything accepted by one is
+accepted by the other.
+
+Allowed types (must match exactly; both commits and PR titles):
+
+`feat`, `fix`, `docs`, `chore`, `test`, `refactor`, `perf`, `ci`, `design`, `build`
+
+Format:
 
 ```text
-security: add gitleaks pre-commit hook via Husky
+<type>(optional-scope): <imperative summary>
+```
+
+Examples:
+
+```text
+feat(sdk): add Freighter network mismatch guard
+fix(indexer): retry Horizon cursor on 429
+docs: cross-link SDK trust model from SECURITY.md
+ci: reconcile PR title lint and commitlint rules
+test: expand SDK browser Freighter interaction coverage
+chore: bump stellar-sdk to 15.0.1
+```
+
+Notes:
+
+- Use `docs` or `chore` for security-policy and tooling changes — there is no
+  `security` type, so `security: ...` is rejected by both checks.
+- Keep the header at or under 100 characters (the conventional-commit default).
+- Do not end the subject with a period.
+
+Verify the two enforcement points have not drifted apart:
+
+```bash
+pnpm validate:commit-convention
 ```
 
 ## Code standards

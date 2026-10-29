@@ -6,3 +6,4 @@ export * from './recovery';
 export * from './xdr';
 export * from './tokens';
 export * from './amount-formatting';
+export * from './dispute/state-machine';

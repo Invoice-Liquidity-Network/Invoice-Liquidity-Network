@@ -1,0 +1,76 @@
+name: Monorepo Map Drift
+
+# Advisory, NON-BLOCKING check.
+#
+# Cross-references docs/monorepo-map.md's Status column against each
+# workspace package's actual package.json metadata (name, `deprecated`
+# notice, publish intent). It intentionally does NOT fail the build so it
+# can surface contradictions while the status table is being reconciled
+# (see scripts/check-monorepo-map-drift.mjs). Flip it to enforcing later by
+# passing `--strict` (exit 1 on error-level findings) once the table is
+# stable, and promote the job to a required status check.
+#
+# See CONTRIBUTING.md / docs for interpreting the output locally:
+#   pnpm drift:check
+
+on:
+  pull_request:
+    branches:
+      - main
+      - dev
+    paths:
+      - 'docs/monorepo-map.md'
+      - 'pnpm-workspace.yaml'
+      - '**/package.json'
+      - 'scripts/check-monorepo-map-drift.mjs'
+  push:
+    branches:
+      - main
+      - dev
+    paths:
+      - 'docs/monorepo-map.md'
+      - 'pnpm-workspace.yaml'
+      - '**/package.json'
+      - 'scripts/check-monorepo-map-drift.mjs'
+  schedule:
+    # Daily at 06:17 UTC — cheap drift sweep independent of PR activity.
+    - cron: '17 6 * * *'
+  workflow_dispatch:
+
+# Least-privilege: read code to run the drift check.
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  pnpm-cache:
+    uses: ./.github/workflows/reusable-cache-pnpm.yml
+
+  drift:
+    name: monorepo-map drift
+    needs: pnpm-cache
+    runs-on: ubuntu-latest
+    # Never block merges: a non-zero exit here must not fail the workflow.
+    continue-on-error: true
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm with store cache
+        uses: ./.github/actions/setup-pnpm
+        with:
+          install-args: --frozen-lockfile --ignore-scripts
+
+      - name: Run monorepo-map drift check
+        run: node scripts/check-monorepo-map-drift.mjs --json=drift-report.json
+
+      - name: Upload drift report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: monorepo-map-drift-report
+          path: drift-report.json
+          if-no-files-found: ignore

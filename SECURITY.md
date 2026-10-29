@@ -1,18 +1,32 @@
 # Security Policy
 
-This policy covers the full Invoice Liquidity Network (ILN) ecosystem: Soroban contracts, SDKs and CLI tooling, indexer APIs, notification delivery, documentation, and deployment automation in this repository and linked ILN repositories.
+This policy defines the unified security and vulnerability disclosure policy for the entire Invoice Liquidity Network (ILN) ecosystem across all three repositories:
+- 🏠 [Invoice-Liquidity-Network](https://github.com/Invoice-Liquidity-Network/Invoice-Liquidity-Network) (SDK, CLI, Indexer, Notifications, Documentation, CI/CD)
+- ⚙️ [ILN-Smart-Contract](https://github.com/Invoice-Liquidity-Network/ILN-Smart-Contract) (Soroban Smart Contracts & WASM artifacts)
+- 🖥️ [ILN-Frontend](https://github.com/Invoice-Liquidity-Network/ILN-Frontend) (Next.js Web Application & dApp)
+
+This unified policy ensures consistent severity classification, private disclosure channels, safe-harbour commitments, and response timelines across all ILN components.
+
+## SDK Trust Model (required reading)
+
+The SDK is a thin transaction builder: it validates address format and signer identity, then delegates key custody and network verification to Freighter (or your signer) and to Soroban RPC. It is the authoritative reference for what the SDK validates, what it delegates, and what integrators must protect themselves — including browser signing via Freighter and backend keypair signing.
+
+- **[SDK Trust Model](docs/sdk-trust-model.md)** — trust boundaries, key management, and the SDK-specific threat model
+
+Sibling repositories link the same document from their `SECURITY.md` files (wallet UX in the frontend; client authorization assumptions in the contracts). See the [SCF Technical Narrative](docs/scf-technical-narrative.md#security-documentation-map) for the cross-repo security documentation map, and [Cross-repo SDK Trust Model visibility](docs/sdk-trust-model-cross-repo.md) for ready-to-paste snippets.
 
 ## Supported Versions
 
 Security fixes are provided for the latest major version of each maintained ILN component. Pre-mainnet deployments are treated as test environments and must not be used with real funds unless the release notes explicitly say otherwise.
 
-| Component | Supported surface | Notes |
-| --- | --- | --- |
-| Soroban contracts | Latest deployed testnet contracts and release candidates | Includes invoice, reputation, governance, upgrade, and token integration logic. |
-| SDK and CLI | Latest published npm major version | Includes transaction construction, XDR handling, signing flows, and browser or Node.js integrations. |
-| Indexer | Latest main branch deployment target | Includes ingestion, SQLite or API storage, REST and GraphQL endpoints, and rate limiting. |
-| Notifications | Latest main branch deployment target | Includes webhook, email, SMS, digest, and WebSocket delivery paths. |
-| Documentation and CI/CD | Latest main branch | Includes setup guidance, examples, workflows, and release automation. |
+| Component | Repository | Supported surface | Notes |
+| --- | --- | --- | --- |
+| Soroban contracts | `ILN-Smart-Contract` | Latest deployed testnet/mainnet contracts and release candidates | Includes invoice, reputation, governance, upgrade, and token integration logic. |
+| SDK and CLI | `Invoice-Liquidity-Network` | Latest published npm major version | Includes transaction construction, XDR handling, signing flows, and browser or Node.js integrations. |
+| Indexer | `Invoice-Liquidity-Network` | Latest main branch deployment target | Includes ingestion, SQLite or API storage, REST and GraphQL endpoints, and rate limiting. |
+| Notifications | `Invoice-Liquidity-Network` | Latest main branch deployment target | Includes webhook, email, SMS, digest, and WebSocket delivery paths. |
+| Frontend | `ILN-Frontend` | Latest main branch deployment target | Includes web UI, wallet connections, and client-side transaction submission. |
+| Documentation and CI/CD | `Invoice-Liquidity-Network` | Latest main branch | Includes setup guidance, examples, workflows, and release automation. |
 
 ## Reporting a Vulnerability
 
@@ -79,6 +93,15 @@ Safe harbour does not cover extortion, social engineering, phishing, physical at
 
 ## Bug Bounty and Recognition
 
-ILN does not guarantee bounty payment unless a separate bounty program says otherwise. Valid reports may be eligible for discretionary recognition or reward based on severity, quality of report, and impact.
+ILN runs an active **Pre-Mainnet Bug Bounty Program** to incentivize external security researchers and auditors to identify and responsibly report vulnerabilities before mainnet launch.
 
-Researchers who want public credit may be listed in [`HALL_OF_FAME.md`](./HALL_OF_FAME.md) after the issue is fixed and disclosure is approved.
+- **Reward Tiers:** $100 to $25,000 (paid in USDC or direct transfer) based on severity and impact:
+  - **Critical:** $5,000 – $25,000 (direct risk to funds, contract drainage, or signing bypass)
+  - **High:** $2,000 – $10,000 (fund locks, privilege escalation, persistent exposure)
+  - **Medium:** $500 – $2,500 (conditional exploits, partial information disclosure)
+  - **Low:** $100 – $500 (defense-in-depth weaknesses, minor hardening)
+- **Scope:** Soroban contracts (`ILN-Smart-Contract`), SDK/CLI, Indexer, Notifications, and Frontend (`ILN-Frontend`).
+- **Response SLA:** Initial acknowledgment within 48 hours; triage within 7 days.
+- **Full Program Details:** See [`docs/bug-bounty.md`](./docs/bug-bounty.md) for eligibility, rules of engagement, and payment terms.
+
+Researchers who responsibly disclose verified vulnerabilities will be credited in [`HALL_OF_FAME.md`](./HALL_OF_FAME.md) after remediation and coordinated disclosure.

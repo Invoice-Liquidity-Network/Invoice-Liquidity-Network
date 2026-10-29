@@ -23,10 +23,11 @@
   "sdk-quickstart": "SDK Quickstart",
   "sdk-api-reference": "SDK API Reference",
   "sdk-trust-model": "SDK Trust Model",
+  "sdk-trust-model-cross-repo": "SDK Trust Model Cross-Repo Visibility",
   "sdk-e2e": "SDK End-to-End Testing",
   "sdk-migration-guide": "SDK Migration Guide",
   "sdk-next-migration": "SDK vs SDK-next",
-  "cli-vs-cli-next": "CLI vs CLI-next",
+  "cli-vs-cli-next": "CLI Consolidation History",
   "-- Smart Contracts --": {
     "type": "separator",
     "title": "Smart Contracts"
@@ -34,6 +35,7 @@
   "contracts": "Contract Reference",
   "architecture": "Architecture",
   "contract-abi-compatibility": "Contract ABI Compatibility",
+  "oracle-service": "Oracle Service",
   "-- Indexer --": {
     "type": "separator",
     "title": "Indexer"
@@ -59,11 +61,16 @@
   },
   "governance-guide": "Governance Guide",
   "reputation": "Reputation System",
+  "trust-liquidity-model": "Trust & Liquidity Model",
   "-- Operations --": {
     "type": "separator",
     "title": "Operations"
   },
   "mainnet-launch-checklist": "Mainnet Launch Checklist",
+  "mainnet-deployment-dry-run": "Mainnet Deployment Dry Run",
+  "emergency-pause-rehearsal": "Emergency Pause Rehearsal",
+  "monitoring": "Monitoring",
+  "community-announcement": "Community Announcement",
   "deployment": "Deployment",
   "release-process": "Release Process",
   "release-runbook": "Release Runbook",
@@ -82,7 +89,7 @@
   "load-test-harness": "Load Test Harness",
   "test-runtime-budgets": "Test Runtime Budgets",
   "sdk-integration-fixture-audit": "SDK Integration Fixture Audit",
-  "credential-least-privilege-audit": "Credential Least-Privilege Audit",
+  "cli-function-level-audit": "CLI Function-Level Audit",
   "-- Contributing --": {
     "type": "separator",
     "title": "Contributing"
@@ -91,6 +98,7 @@
   "cross-repo-sync": "Cross-Repo Sync",
   "cross-repo-dependencies": "Cross-Repo Dependencies",
   "branch-protection": "Branch Protection",
+  "hardening-batch-coordination": "Hardening Batch Coordination",
   "project-board": "Project Board",
   "-- Reference --": {
     "type": "separator",
@@ -104,8 +112,14 @@
   "security": "Security",
   "security-guide": "Security Guide",
   "vulnerability-disclosure": "Vulnerability Disclosure",
+  "scf-technical-narrative": "SCF Technical Narrative",
   "secrets-baseline-audit": "Secrets Baseline Audit",
+  "credential-least-privilege-audit": "Credential Least-Privilege Audit",
   "privacy": "Privacy & Data Retention",
   "next.config": "Next Config",
-  "theme.config": "Theme Config"
+  "theme.config": "Theme Config",
+  "bug-bounty": "Bug Bounty Program",
+  "cost-attribution": "Cost Attribution",
+  "reproducible-builds": "Reproducible Builds",
+  "slsa-provenance": "SLSA Provenance"
 }

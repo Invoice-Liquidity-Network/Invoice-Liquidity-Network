@@ -1,5 +1,30 @@
 # Reusable workflow: install Stellar CLI, configure testnet, and create a funded identity.
 # Callable from this repo or sibling repos (ILN-Smart-Contract, ILN-Frontend).
+#
+# Contract
+# ─────────────────────────────────────────────────────────────────────────────
+# Inputs (all optional — safe defaults for this repo):
+#   identity-name       string  Stellar identity alias       (default: ci-test)
+#   network             string  Stellar network name          (default: testnet)
+#   fund-identity       bool    Fund via Friendbot?           (default: true)
+#   horizon-url         string  Horizon base URL              (default: https://horizon-testnet.stellar.org)
+#   rpc-url             string  Soroban RPC URL               (default: https://soroban-testnet.stellar.org)
+#   network-passphrase  string  Network passphrase            (default: Test SDF Network ; September 2015)
+#   stellar-cli-features string Cargo features for CLI build  (default: '')
+#
+# Outputs:
+#   identity-name  string  Identity alias used
+#   public-key     string  G-address of the funded identity
+#   network        string  Network alias configured
+#
+# Side effects:
+#   - Installs stellar-cli via cargo (cached across runs)
+#   - Registers and selects the Stellar network
+#   - Generates and optionally funds a testnet identity
+#   - Verifies Horizon connectivity
+#
+# Consumers: sdk-e2e-local-node.yml, ci.yml
+# ─────────────────────────────────────────────────────────────────────────────
 name: Reusable Stellar setup
 
 on:

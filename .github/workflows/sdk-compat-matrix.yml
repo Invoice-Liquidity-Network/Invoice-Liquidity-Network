@@ -1,0 +1,101 @@
+name: SDK Backward-Compatibility Matrix
+
+# Installs @iln/sdk's last three published minor releases (or, until any
+# exist, a working-tree self-check — see docs/sdk-next-migration.md) against
+# representative consumer code paths: frontend hooks (packages/react), CLI
+# commands (cli/src), and example scripts (examples/typescript-example).
+# BLOCKING — a regression against any resolved version fails this job.
+#
+# Run locally:
+#   pnpm run sdk:compat-matrix
+
+on:
+  push:
+    branches: [main, dev]
+    paths:
+      - 'sdk/**'
+      - 'packages/react/**'
+      - 'cli/src/**'
+      - 'examples/typescript-example/**'
+      - 'tests/sdk-integration/compat-matrix/**'
+      - 'scripts/check-sdk-compat-matrix.mjs'
+      - 'scripts/lib/sdk-compat-versions.mjs'
+      - '.github/workflows/sdk-compat-matrix.yml'
+  pull_request:
+    paths:
+      - 'sdk/**'
+      - 'packages/react/**'
+      - 'cli/src/**'
+      - 'examples/typescript-example/**'
+      - 'tests/sdk-integration/compat-matrix/**'
+      - 'scripts/check-sdk-compat-matrix.mjs'
+      - 'scripts/lib/sdk-compat-versions.mjs'
+      - '.github/workflows/sdk-compat-matrix.yml'
+  # Callable so a release pipeline can gate a release-candidate cut on this
+  # matrix, not just changes to the SDK's own unit tests — e.g.
+  # `jobs: gate-sdk-compat: uses: ./.github/workflows/sdk-compat-matrix.yml`.
+  # NOTE: this repo's only tag-triggered publish pipeline today
+  # (sdk-release.yml) releases packages/sdk (@iln/sdk-next), a *different*
+  # package from the one this matrix covers (sdk/, @iln/sdk — the one
+  # frontend hooks, cli/src, and examples/typescript-example actually import
+  # today; see docs/sdk-next-migration.md). There is no publish pipeline for
+  # @iln/sdk itself yet to wire this into directly — a `push.tags` trigger
+  # was deliberately not added here, since combining it with the `paths`
+  # filter above would risk silently skipping a release tag pushed at a
+  # commit that doesn't happen to touch those exact paths.
+  workflow_call:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  pnpm-cache:
+    uses: ./.github/workflows/reusable-cache-pnpm.yml
+
+  resolve-versions:
+    name: Resolve versions
+    needs: pnpm-cache
+    runs-on: ubuntu-latest
+    outputs:
+      versions: ${{ steps.resolve.outputs.versions }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # need full tag history, not a shallow clone
+      - name: Setup pnpm with store cache
+        uses: ./.github/actions/setup-pnpm
+        with:
+          install-args: --frozen-lockfile --ignore-scripts
+      - id: resolve
+        run: echo "versions=$(node scripts/check-sdk-compat-matrix.mjs --print-versions)" >> "$GITHUB_OUTPUT"
+
+  compat-matrix:
+    name: compat (@iln/sdk ${{ matrix.version }})
+    needs: resolve-versions
+    strategy:
+      fail-fast: false
+      matrix:
+        version: ${{ fromJson(needs.resolve-versions.outputs.versions) }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Setup pnpm with store cache
+        uses: ./.github/actions/setup-pnpm
+        with:
+          install-args: --frozen-lockfile --ignore-scripts
+      - name: Run compat matrix for ${{ matrix.version }}
+        run: node scripts/check-sdk-compat-matrix.mjs --only-version="${{ matrix.version }}" --json=sdk-compat-report-${{ matrix.version }}.json
+      - name: Upload report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: sdk-compat-report-${{ matrix.version }}
+          path: sdk-compat-report-*.json
+          if-no-files-found: ignore

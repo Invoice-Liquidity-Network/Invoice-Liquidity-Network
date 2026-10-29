@@ -23,6 +23,11 @@ jobs:
         with:
           install-args: --frozen-lockfile --ignore-scripts
       - name: Lint PR title
+        env:
+          # Pass the title through the environment rather than interpolating it
+          # into the shell: a title containing quotes or `$(...)` would
+          # otherwise be executed as part of this run.
+          PR_TITLE: ${{ github.event.pull_request.title }}
         run: |
-          echo "${{ github.event.pull_request.title }}" > pr_title
+          printf '%s\n' "$PR_TITLE" > pr_title
           pnpm exec commitlint --config commitlint.config.js --edit pr_title

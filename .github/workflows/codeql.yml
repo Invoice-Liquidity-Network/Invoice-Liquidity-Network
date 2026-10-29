@@ -40,17 +40,21 @@ jobs:
         with:
           languages: ${{ matrix.language }}
           config: |
+            # Keep in sync with pnpm-workspace.yaml — every workspace
+            # package directory must appear here so CodeQL analyses it.
             paths:
               - sdk
               - cli
               - indexer
               - notifications
+              - oracle-service
               - frontend
               - docs
               - packages
               - examples
               - scripts
               - workers
+              - monitoring
               - contract-deployer
               - account-seeder
               - tests

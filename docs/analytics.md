@@ -262,7 +262,7 @@ Errors:
 Import from the published SDK package:
 
 ```ts
-import { AnalyticsSDK } from "@invoice-liquidity/sdk";
+import { AnalyticsSDK } from "@iln/sdk";
 ```
 
 Constructor:
@@ -344,7 +344,7 @@ Use `new AnalyticsSDK(baseUrl, 0)` or call `clearCache()` when a dashboard needs
 ## Example: Simple Analytics Widget
 
 ```ts
-import { AnalyticsSDK } from "@invoice-liquidity/sdk";
+import { AnalyticsSDK } from "@iln/sdk";
 
 const api = new AnalyticsSDK("http://localhost:3001", 30_000);
 const usd = (units: bigint) => `$${(Number(units) / 10_000_000).toFixed(2)}`;
@@ -367,6 +367,38 @@ export async function renderAnalyticsWidget(el: HTMLElement) {
   `;
 }
 ```
+
+## Query-Load Isolation
+
+Analytics aggregation queries (`getProtocolStats`, `getLPStats`, `getFreelancerStats`, `getTopLPs`) perform full-table scans and grouping operations that can be expensive as the invoice table grows. To prevent these from degrading production read latency, the indexer provides two isolation mechanisms:
+
+### Read-Only Replica Connection
+
+Set `ANALYTICS_DB_PATH` to route all analytics queries to a dedicated read-only SQLite connection. This connection opens the database in read-only mode and is separate from the primary connection used for production reads and writes. In SQLite WAL mode, a read-only connection can read concurrently without blocking writers or being blocked by them, and its I/O does not contend with the primary connection's page cache.
+
+In production, this should point to the same WAL database file (the OS-level read isolation comes from separate file descriptors and page caches) or to a filesystem-level snapshot/replica if stricter isolation is needed.
+
+```env
+ANALYTICS_DB_PATH=indexer.db    # same file, separate read-only connection
+```
+
+### Query Budget Enforcement
+
+`ANALYTICS_QUERY_BUDGET_MS` (default: 5000 ms) sets a time budget for analytics queries. Queries exceeding this budget are logged as warnings and counted by the `iln_analytics_query_exceeded_budget_total` Prometheus counter. Alerting rules should fire when this counter increments, as it indicates an analytics query is approaching the threshold where it could affect production latency through shared I/O bandwidth.
+
+### SDK Analytics Collector (Cloudflare Worker)
+
+The SDK usage analytics pipeline (`workers/analytics-collector/`) is fully isolated by design: it runs as a Cloudflare Worker writing to a separate Postgres database via Hyperdrive. It shares no infrastructure with the indexer's SQLite-backed production path.
+
+### Monitoring
+
+| Metric | Type | Description |
+| --- | --- | --- |
+| `iln_analytics_query_duration_seconds` | Histogram | Duration of analytics aggregation queries |
+| `iln_analytics_query_exceeded_budget_total` | Counter | Analytics queries exceeding the configured time budget |
+| `iln_db_query_duration_seconds` | Histogram | Production query path duration (should not spike when analytics queries run) |
+
+**Recommended alert**: fire when `rate(iln_analytics_query_exceeded_budget_total[5m]) > 0` — this means analytics queries are slow enough to risk impacting production I/O.
 
 ## Limitations
 

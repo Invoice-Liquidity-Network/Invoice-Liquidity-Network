@@ -20,6 +20,7 @@
  - [Reputation](reputation/overview.md)
 - [RFC Process](rfc-process.md)
 - [Security](security.md)
+- [SDK Trust Model](sdk-trust-model.md) — trust assumptions, key management, and threat model for the SDK
 - [Glossary](glossary.md)
 
 ## Support

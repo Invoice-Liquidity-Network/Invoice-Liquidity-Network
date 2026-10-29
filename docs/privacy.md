@@ -1,17 +1,59 @@
-# ILN Notification Data & Privacy Policy
+# Privacy and Data Retention Policy
 
-This policy describes the data the **ILN notifications service** stores on
-behalf of users, how long each piece of data is retained, and how users can
-exercise their right to view, export, or delete their data.
+This document describes the data the Invoice Liquidity Network stores on behalf of users, how long each piece of data is retained, and how users can exercise their right to view, export, or delete their data across all services (Notifications, Indexer, KYB Provider Interface, and Oracle).
 
-For protocol-level security and threat-model information, see
-[`security-guide.md`](security-guide.md) and [`threat-model.md`](threat-model.md).
+For protocol-level security and threat-model information, see [`security-guide.md`](security-guide.md) and [`threat-model.md`](threat-model.md).
+For the processor and agreement evidence register, see [Third-Party Data-Processor Inventory](third-party-data-processor-inventory.md).
 
 ---
 
-## 1. What data we store
+## 1. Notifications Service (`notifications/`)
 
-The notifications service stores data in two distinct buckets:
+### Right-to-erasure request process
+
+Users may request deletion through the support/privacy contact published by
+the operator. The operator records the request ID and received date, verifies
+control of the relevant Stellar address using a signed challenge from the
+wallet or equivalent documented account proof, and scopes the request against
+the notifications service. A public address supplied in a URL or email alone
+is not identity verification. Do not request or retain a secret key.
+
+After verification, an authorized operator runs the notifications erasure
+operation for that address. It disables in-memory preferences, removes all
+subscriptions and their webhook retry rows, removes pending dispatch work,
+and removes deduplication rows containing the address or its destinations.
+Delivery audit rows required for the published 90-day investigation window
+are retained but anonymized: address, destination, and free-text error fields
+are cleared. The remaining event/time/channel/outcome fields are retained only
+for that period and then removed by the existing retention sweep. The
+operation is transactional and produces an audit record with request ID,
+counts, operator, and timestamp but no address or destination. The operator
+confirms completion to the verified requester and records any legally required
+retention exception and expiry date.
+
+This repository has no persistent user-account database beyond notification
+preferences and subscriptions. Wallet accounts and ledger data are public
+network records and are not deletable by this service. A deployment with
+additional account stores must add their owners and deletion adapters to the
+request checklist before describing a request as globally complete. Backups
+expire on their separately configured lifecycle; restored backups must be
+reconciled with completed erasure records before being returned to service.
+
+The HTTP notification API does not itself prove requester identity. Intake and
+wallet/account identity verification are operator-mediated; never expose an
+unauthenticated endpoint that deletes records by address. After verification,
+an authorized operator calls `POST /preferences/erasure/:address` with
+`{ "requestId": "...", "operatorId": "..." }` and an `Authorization:
+Bearer ...` header. Configure `ERASURE_OPERATOR_TOKEN` as a high-entropy secret
+of at least 32 characters in the service environment. The request ID is
+idempotent; a repeated completed ID returns HTTP 409. The endpoint is not a
+public user self-service route. Keep the verification evidence in the
+controlled request system, not in the notifications database.
+Keep a minimal request receipt outside the erased data store only where
+required to demonstrate completion, with its own access controls and
+retention schedule.
+
+The notifications service has in-memory preferences and SQLite-backed delivery data:
 
 ### 1a. Notification preferences (per Stellar address)
 
@@ -23,13 +65,6 @@ The notifications service stores data in two distinct buckets:
 | `quietHours` | Optional `{ startHour, endHour, timezone }` window during which notifications are held back. |
 | `triggerPreferences` | Per-trigger overrides (e.g. "don't notify me of `invoice_defaulted` events"). |
 | `updatedAt` | ISO 8601 timestamp of the last edit. |
-
-These are managed by `notifications/src/preferences.ts` and are exposed via
-[`notifications/src/preferences-api.ts`](../notifications/src/preferences-api.ts)
-(routes `GET/PUT/PATCH/DELETE /preferences/:address`,
-`POST /preferences/:address/unsubscribe`,
-`POST /preferences/unsubscribe/token/:token`,
-`GET /preferences/:address/export`).
 
 ### 1b. Subscriptions (rows in the `subscriptions` SQLite table)
 
@@ -44,121 +79,75 @@ Each row describes one outbound subscription:
 | `webhook_secret` | Optional HMAC signing secret for webhooks. |
 | `created_at` | Subscription creation timestamp. |
 
-### 1c. Delivery audit log (rows in `sent_notifications` and `webhook_delivery_logs`)
+### 1c. Delivery audit log (rows in `sent_notifications`, `webhook_delivery_logs`, and `delivery_audit_log`)
 
-These records exist for delivery-state correctness (de-duplication and
-transient-retry bookkeeping). They are not visible to users by default but
-are included in the export endpoint (§3).
+These records support compliance investigations ("was this specific notification actually delivered, and when?") as a durable, queryable audit log. Three kinds of records exist:
 
-Records may contain the user-supplied destination (e.g. email or phone
-number). This is intentional — users are entitled to see exactly what
-data the service stores about them.
+- **De-duplication state** (`sent_notifications`) and **webhook retry state** (`webhook_delivery_logs`).
+- **Durable dispatch journal** (`dispatch_attempts`) — pending work is retained until completed; terminal delivered/failed rows are purged after 90 days. Destinations are stored only as keyed HMAC tokens and the subscription snapshot needed for retries is AES-256-GCM encrypted under `NOTIFICATIONS_RECIPIENT_KEY` (issue #1280). `sent_notifications.destination` is likewise tokenized. See `docs/runbooks/notifications-dispatch-outcomes.md` for key handling and rotation.
+- **Durable delivery-confirmation audit log** (`delivery_audit_log`) — one row per delivery outcome (whether `delivered` or `failed`), with attempt timestamps, channel, and final status. This table is the source of truth for `GET /audit/deliveries` (by recipient, event, or time range) and for the CLI `query-audit` tool.
 
----
+They are not visible to users by default but are included in the export endpoint.
 
-## 2. Retention Policy
+**Retention behavior** (`notifications/src/db.ts`, `notifications/src/retention.ts`):
+- **Preferences**: Held in process memory only; lost on process restart. They are not persisted to SQLite.
+- **Subscriptions**: Persisted in SQLite until unsubscribe/deletion. A deletion request removes the subscription and its webhook retry records.
+- **`sent_notifications`**: Purged 30 days after `sent_at`.
+- **`webhook_delivery_logs` and `delivery_audit_log`**: Purged 90 days after `created_at`.
+- **`dispatch_attempts`**: Terminal delivered/failed rows are purged 90 days after `created_at`; pending work is not automatically deleted so an outage cannot silently discard delivery work.
+- **Redeemed unsubscribe tokens**: Purged 90 days after `redeemed_at`.
+- **Retention deletion audit**: Every run records the category, cutoff, eligible/deleted counts, mode, and time in `retention_deletion_audit`. It contains no recipient or destination data and is retained for compliance review.
 
-| Data class | Default retention | Basis |
-|------------|-------------------|-------|
-| **Active preferences** (with non-empty `enabledChannels`) | Until the user updates them, unsubscribes, or deletes the record. | User-controlled. |
-| **Preferences after one-click unsubscribe** (`POST /preferences/:address/unsubscribe`) | **Soft-deleted** in-place: `enabledChannels` set to `[]`, `triggerPreferences` set to `[]`. Rows persist with `updatedAt` so that subsequent re-enable requests work. | Set so users can revert an accidental unsubscribe without a support ticket. |
-| **Subscriptions** (rows in `subscriptions`) | **Deleted immediately** on `DELETE /unsubscribe` (by id) or `POST /unsubscribe` (by address + destination). The deletion takes effect on the same request — no confirmation loop. | Required by opt-out compliance: unsubscribe must take effect immediately. |
-| **`sent_notifications` delivery log** | 30 days from `sent_at`, then pruned by the nightly cleanup job. | Used to suppress duplicate deliveries and debug transient failures; not a long-term audit trail. |
-| **`webhook_delivery_logs`** | 90 days from `created_at`. Used for retry-attempt diagnostics. | Longer than `sent_notifications` because failed webhooks need to be investigated across several retry windows. |
-| **Unsubscribe tokens** | Single-use, bound to the address that minted them. A token is invalidated as soon as it is redeemed (verified via HMAC over `address.nonce`). | Links in a delivered email are the only legitimate redemption path; replay is impossible because the nonce is consumed. |
-| **Wallet / on-chain data** | None — the notifications service never accesses secret keys and never touches Stellar accounts directly. | The SDK and signers hold signing material; the notifications service is purely observer-side. |
+The retention job runs at process startup and every 24 hours by default. It starts in **dry-run mode**; scheduled deletion is enabled only by setting `NOTIFICATIONS_RETENTION_DRY_RUN=false`. If eligible rows exceed `RETENTION_MAX_DELETE_ROWS` (default 10,000), the run deletes nothing and emits an error-level alert for the deployment's log alerting. Review the audit rows before raising the limit. `RETENTION_SWEEP_INTERVAL_MS` controls the interval. Operators can preview or run a bounded sweep using `pnpm --filter iln-notifications exec tsx src/audit-cli.ts --purge --dry-run --max-rows 10000`.
 
-### 2a. Right to be forgotten
-
-If a user requests deletion of all data the notifications service holds about
-them and does **not** want to retain the ability to re-enable with one click,
-an operator can run the equivalent of:
-
-```ts
-// Pseudocode — actual implementation lives in the notifications service
-// admin tooling (not exposed publicly to avoid abuse).
-for (const subId of getSubscriptionIdsByAddress(address)) {
-  deleteSubscriptionById(subId);
-}
-preferencesService.delete(address); // wipe in-memory record
-```
-
-After such a request the address will not match any preference or
-subscription row; the only remaining artefacts will be in the
-`sent_notifications` / `webhook_delivery_logs` audit tables, and those purge
-according to the schedule above (30 / 90 days).
+The HTTP purge endpoint is an operational/manual path; the scheduled worker is the enforcement mechanism. Client-side notification history follows the frontend application's retention practices and is outside this service's deletion job.
 
 ---
 
-## 3. Data export (GDPR/CCPA-style "Right of Access")
+## 2. Indexer Service (`indexer/`)
 
-The endpoint `GET /preferences/:address/export` returns, in a single JSON
-document:
-
-```json
-{
-  "schemaVersion": 1,
-  "exportedAt": "2026-07-26T12:00:00.000Z",
-  "address": "G…",
-  "preferences": { "enabledChannels": [], "frequency": "realtime", … },
-  "subscriptions": [{ "id": 7, "channel": "email", "destination": "…", … }],
-  "sentLog":    [{ "invoice_id": 42, "trigger": "invoice_funded", "channel": "email", "destination": "…", "sent_at": 1722000000 }],
-  "webhookLogs":[{"subscription_id": 7, "destination": "https://…", "logs": [{ "status": "success", … }] }]
-}
-```
-
-The response includes a `Content-Disposition: attachment` header so a
-browser download saves it as `iln-preferences-<address>.json`.
-
-The export endpoint is rate-limited per address (same `RATE_LIMIT_PER_USER`
-enforcement as the other preferences routes).
+- **Data Collected**: The indexer aggregates on-chain transaction data (e.g., wallet addresses, invoice token IDs, transfer events, and settlement actions).
+- **Data Retention & Archive**: The indexer keeps recent records in its primary database for 90 days, then moves them to the archive database. Archived invoices/events are permanently purged after 2,555 days (approximately seven years), on the same daily scheduler. `ARCHIVE_PURGE_OLDER_THAN_DAYS` configures that period. These records originate from public ledgers; wallet addresses may still be personal data where they can be linked to an individual.
+- **Backups**: Optional local backups retain the configured maximum count (30 by default); optional cloud backup lifecycle/region is controlled by the operator and is not enforced by the indexer. The documented nightly GitHub Actions backup artifact is retained for seven days. Backups can therefore outlive a live-database purge until their own retention expires.
 
 ---
 
-## 4. One-click unsubscribe
+## 3. KYB Provider Interface
 
-Every outbound email includes a footer link to either:
-
-- a **tokenized** URL of the form
-  `https://iln.finance/unsubscribe?token=<base64(address)>.<nonce>.<hmac>`, or
-- the generic preference endpoint `POST /preferences/<address>/unsubscribe`.
-
-See: [glossary § One-Click Unsubscribe](glossary.md#one-click-unsubscribe) for the
-canonical terminology.
-
-Both endpoints take effect immediately on the first request — there is no
-double-opt-in step. The token variant signs the address with HMAC-SHA256 so
-the URL cannot be forged or replayed.
-
-After redemption:
-
-- `enabledChannels` is cleared to `[]`, so subsequent events for this address
-  are routed to no destination.
-- The subscriber may re-enable delivery at any time by sending `PUT
-  /preferences/<address>` with the desired channels.
-
-For templates that do **not** carry an `unsubscribeToken`, callers should
-pass an `unsubscribeUrl` option to the renderer so the footer link is still
-a working, address-scoped endpoint (see `notifications/src/templates/helpers.ts`).
+- **Data Collected**: If the external KYB (Know Your Business) provider integration is enabled, this service securely routes business identity verification payloads.
+- **Data Retention & Archive**: The oracle accepts an injected provider adapter; no production provider adapter or provider-side retention control is included in this repository. The audit trail stores a reduced verdict payload and does not store KYB business names, registration numbers, raw details, or provider reasons. Provider data may be present in the live response; production KYB-required checks bypass the oracle response cache. Provider-side records and logs remain subject to the provider's contract and retention policy and must be reviewed before enabling that provider. The prior 14-day local KYB-log statement was not backed by an implemented local logging/deletion path and is withdrawn.
 
 ---
 
-## 5. What we **do not** store
+## 4. Oracle Service (`oracle-service/`)
+
+- **Data Collected**: The oracle service fetches and verifies off-chain asset pricing and invoice status updates.
+- **Data Retention & Archive**: The oracle audit trail retains reduced verification attestations for 365 days. Retention is enforced at startup and hourly by `AuditTrail.enforceRetention`; purges are recorded through signed retention anchors. The durable audit includes payer wallet addresses and invoice identifiers, which may be personal data depending on linkability. Oracle cache entries are short-lived (300 seconds by default), but the last-known-good in-memory entry remains until process restart; Redis expiry behavior is separate from the durable audit window.
+
+## 5. Cross-Border Processing and Data Residency
+
+The trust-liquidity model identifies SME suppliers in LATAM and Southeast Asia and US enterprise buyers, but it does not select launch countries. Those regions contain materially different privacy, localization, and international-transfer rules; this repository therefore cannot make a country-specific legal-compliance finding.
+
+The current code/configuration does not pin or attest a storage/processing region. Indexer primary/archive SQLite paths and notification SQLite paths are deployment-local; indexer deployment documentation recommends Railway but does not select a Railway region. Oracle SQLite audit storage, optional Redis cache, optional cloud backups, GitHub Actions backup artifacts, the KYB provider, Stellar RPCs, email/SMS providers, and customer webhook destinations can involve separate locations and subprocessors. No region restriction or cross-border transfer mechanism is enforced by this codebase.
+
+Before onboarding residents of any launch country, record the exact countries and data-subject cohorts, map each data flow and processor/location, and have qualified counsel confirm applicable localization, transfer, notice, consent, contract, and impact-assessment requirements. In particular, assess the applicable national transfer rules for each selected LATAM and Southeast Asian country (including Brazil's LGPD transfer framework where Brazil is in scope) and applicable US state/sector obligations for buyer data. Select and configure compliant hosting, backup, and provider regions and required transfer safeguards before launch. Until that review and deployment evidence exist, regional data-residency compliance is **unverified and a launch gate**; no infrastructure region change can be responsibly selected from the broad regional target alone.
+
+---
+
+## 6. What we **do not** store
 
 | ❌ Not stored | Why |
 |---------------|-----|
-| Stellar secret keys | The notifications service is observer-only. |
+| Stellar secret keys | The infrastructure services are observer-only. |
 | IP addresses | Failures are surfaced via application logs; PII is not retained alongside delivery records. |
 | Tracking pixels / open-tracking data | We respect the user's inbox. |
-| Third-party analytics identifiers | None are embedded in the email templates. |
+| Third-party analytics identifiers | None are embedded in the templates or payloads. |
 
 ---
 
-## 6. Contact
+## 7. Contact
 
-- Email: [security@invoiceliquidity.network](mailto:security@invoiceliquidity.network)
-- For data-export / deletion requests, use the API endpoints above or email
-  the security contact.
+- Email: security@invoiceliquidity.network
+- For data-export / deletion requests, please email the security contact.
 
-_Last reviewed: 2026-07-26 — see PR #_-linked-to-Issue-#741 for the
-implementation history._
+*Retention behavior described above reflects the code paths and deployment defaults in this repository. Provider-side processing, actual deployed regions, backup lifecycle configuration, and country-specific legal compliance require deployment evidence and review before launch.*

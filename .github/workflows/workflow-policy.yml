@@ -1,0 +1,101 @@
+name: Workflow Policy
+
+# Blocking guard for GitHub Actions supply-chain policy and the CI/CD
+# reference (#1286):
+#   - actionlint: every workflow is valid (syntax, expressions, contexts);
+#   - check-workflow-policy.mjs: every workflow declares top-level
+#     `permissions:` (never write-all), every third-party action is pinned to a
+#     commit SHA with a version comment (or carries a reasoned exemption in
+#     .github/workflow-policy.json), and docs/ci-cd.md's inventory and pinned-
+#     actions table match the files.
+# The JSON report is uploaded on every run (pass or fail) as proof the control
+# ran. Owner: @Invoice-Liquidity-Network/devops.
+# Recovery: docs/runbooks/workflow-policy.md
+#
+# Dependency-free apart from actionlint, which is downloaded at a pinned
+# version and verified against its published SHA-256 before it runs.
+
+on:
+  pull_request:
+    branches:
+      - main
+      - dev
+    paths:
+      - '.github/workflows/**'
+      - '.github/actions/**'
+      - '.github/actionlint.yaml'
+      - '.github/workflow-policy.json'
+      - 'docs/ci-cd.md'
+      - 'docs/runbooks/workflow-policy.md'
+      - 'packages/docs/content/ci-cd.mdx'
+      - 'scripts/check-workflow-policy.mjs'
+      - 'scripts/lib/workflow-policy.mjs'
+      - 'scripts/__tests__/workflow-policy.test.mjs'
+  push:
+    branches:
+      - main
+      - dev
+    paths:
+      - '.github/workflows/**'
+      - '.github/actions/**'
+      - '.github/workflow-policy.json'
+      - 'docs/ci-cd.md'
+  schedule:
+    # Weekly sweep so the control stays visibly active between PRs.
+    - cron: '37 5 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  workflow-policy:
+    name: workflow policy and CI/CD reference
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      ACTIONLINT_VERSION: '1.7.7'
+      ACTIONLINT_SHA256: '023070a287cd8cccd71515fedc843f1985bf96c436b7effaecce67290e7e0757'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Unit tests for the guard
+        run: node --test scripts/__tests__/workflow-policy.test.mjs
+
+      - name: Install actionlint (pinned, checksum-verified)
+        run: |
+          set -euo pipefail
+          url="https://github.com/rhysd/actionlint/releases/download/v${ACTIONLINT_VERSION}/actionlint_${ACTIONLINT_VERSION}_linux_amd64.tar.gz"
+          curl -sSfL -o "$RUNNER_TEMP/actionlint.tgz" "$url"
+          echo "${ACTIONLINT_SHA256}  $RUNNER_TEMP/actionlint.tgz" | sha256sum --check --strict
+          tar -xzf "$RUNNER_TEMP/actionlint.tgz" -C "$RUNNER_TEMP" actionlint
+
+      - name: Lint every workflow (actionlint)
+        run: |
+          set -o pipefail
+          "$RUNNER_TEMP/actionlint" -shellcheck= -pyflakes= -oneline | tee "$RUNNER_TEMP/actionlint.txt"
+
+      - name: Enforce workflow policy and check docs/ci-cd.md
+        if: always()
+        run: node scripts/check-workflow-policy.mjs --json="$RUNNER_TEMP/workflow-policy-report.json"
+
+      - name: Upload report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: workflow-policy-report
+          path: |
+            ${{ runner.temp }}/workflow-policy-report.json
+            ${{ runner.temp }}/actionlint.txt
+          if-no-files-found: ignore
+          retention-days: 30

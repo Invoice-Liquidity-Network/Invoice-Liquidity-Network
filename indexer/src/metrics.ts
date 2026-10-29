@@ -25,6 +25,12 @@ export const eventsProcessedTotal = new Counter({
   registers: [registry],
 });
 
+export const duplicateEventsTotal = new Counter({
+  name: 'iln_duplicate_events_total',
+  help: 'Number of duplicate contract events detected and skipped',
+  registers: [registry],
+});
+
 export const invoicesUpsertedTotal = new Counter({
   name: 'iln_invoices_upserted_total',
   help: 'Number of invoices upserted into the DB',
@@ -37,8 +43,157 @@ export const lastProcessedLedger = new Gauge({
   registers: [registry],
 });
 
+export const reorgRollbacksTotal = new Counter({
+  name: 'iln_reorg_rollbacks_total',
+  help: 'Number of chain reorganisations detected and rolled back by the poller',
+  registers: [registry],
+});
+
+export const reorgAbortionsTotal = new Counter({
+  name: 'iln_reorg_abortions_total',
+  help: 'Number of polling cycles aborted because the chain reorg did not stabilise',
+  registers: [registry],
+});
+
+export const reorgRemovedEventsTotal = new Counter({
+  name: 'iln_reorg_removed_events_total',
+  help: 'Number of contract events rolled back and removed during chain re-orgs',
+  registers: [registry],
+});
+
+export const reorgForkDecisionsTotal = new Counter({
+  name: 'iln_reorg_fork_decisions_total',
+  help: 'Total number of fork replacement decisions recorded for restart safety',
+  labelNames: ['status'] as const,
+  registers: [registry],
+});
+
+export const reorgPendingDecisions = new Gauge({
+  name: 'iln_reorg_pending_decisions',
+  help: 'Number of in-progress fork replacement decisions currently pending completion',
+  registers: [registry],
+});
+
+export const reorgQuarantinedTotal = new Counter({
+  name: 'iln_reorg_quarantined_total',
+  help: 'Total number of incomplete or corrupted reorg recoveries quarantined',
+  registers: [registry],
+});
+
+export const reorgQuarantinedActive = new Gauge({
+  name: 'iln_reorg_quarantined_active',
+  help: 'Current number of active quarantined reorg recovery records',
+  registers: [registry],
+});
+
+export const cursorMonotonicityViolationsTotal = new Counter({
+  name: 'iln_cursor_monotonicity_violations_total',
+  help: 'Total number of attempts to rewind the cursor outside of an authorized rollback',
+  registers: [registry],
+});
+
+export const confirmationDepthGauge = new Gauge({
+  name: 'iln_confirmation_depth',
+  help: 'Configured canonical-ledger confirmation depth policy threshold',
+  registers: [registry],
+});
+
+export const unconfirmedEventsSkippedTotal = new Counter({
+  name: 'iln_unconfirmed_events_skipped_total',
+  help: 'Total number of unconfirmed events deferred by confirmation depth policy',
+  registers: [registry],
+});
+
+export const confirmedTipLedger = new Gauge({
+  name: 'iln_confirmed_tip_ledger',
+  help: 'Highest confirmed canonical ledger tip sequence number',
+  registers: [registry],
+});
+
 export const cursorUpdatedAt = new Gauge({
   name: 'iln_cursor_updated_at',
   help: 'Timestamp (ms) when cursor was last updated',
   registers: [registry],
 });
+
+// ── Startup configuration control (docs/indexer/operations-checks.md) ──────
+
+export const configInfo = new Gauge({
+  name: 'iln_indexer_config_info',
+  help: 'Always 1 once startup configuration validation passed; labels identify what this instance indexes',
+  labelNames: ['network', 'contract_id'] as const,
+  registers: [registry],
+});
+
+export const configWarnings = new Gauge({
+  name: 'iln_indexer_config_warnings',
+  help: 'Number of non-fatal configuration warnings reported at startup',
+  registers: [registry],
+});
+
+// ── Analytics query isolation metrics ────────────────────────────────────────
+
+export const analyticsQueryDuration = new Histogram({
+  name: 'iln_analytics_query_duration_seconds',
+  help: 'Analytics aggregation query duration in seconds (isolated from production path)',
+  buckets: [0.01, 0.05, 0.1, 0.25, 0.5, 1, 2, 5],
+  registers: [registry],
+});
+
+export const analyticsQueryExceededBudget = new Counter({
+  name: 'iln_analytics_query_exceeded_budget_total',
+  help: 'Count of analytics queries that exceeded the configured time budget',
+  registers: [registry],
+});
+
+// ── SLO instrumentation (latency & availability) ───────────────────────────
+
+export const httpRequestsTotal = new Counter({
+  name: 'iln_http_requests_total',
+  help: 'Total HTTP requests by method, route, and status',
+  labelNames: ['method', 'route', 'status'] as const,
+  registers: [registry],
+});
+
+export const httpErrorsTotal = new Counter({
+  name: 'iln_http_errors_total',
+  help: 'Total HTTP errors (status >= 500) by method and route',
+  labelNames: ['method', 'route', 'status'] as const,
+  registers: [registry],
+});
+
+export const httpRequestDuration = new Histogram({
+  name: 'iln_http_request_duration_seconds',
+  help: 'HTTP request latency in seconds by method and route',
+  labelNames: ['method', 'route'] as const,
+  buckets: [0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2, 5],
+  registers: [registry],
+});
+
+// ── Cost attribution (per-service, per-operation) ──────────────────────────
+
+export const costUsdTotal = new Counter({
+  name: 'iln_cost_usd_total',
+  help: 'Attributed cost in USD by service and operation',
+  labelNames: ['service', 'operation'] as const,
+  registers: [registry],
+});
+
+export function observeHttpRequest(
+  method: string,
+  route: string,
+  status: number,
+  durationSeconds: number
+): void {
+  try {
+    httpRequestsTotal.inc({ method, route, status: String(status) });
+    if (status >= 500) {
+      httpErrorsTotal.inc({ method, route, status: String(status) });
+    }
+    httpRequestDuration.observe({ method, route }, durationSeconds);
+    // Cost attribution: ~$0.00002 per read request (RPC + DB)
+    costUsdTotal.inc({ service: 'indexer', operation: 'http_request' }, 0.00002);
+  } catch {
+    /* non-fatal */
+  }
+}

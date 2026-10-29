@@ -49,8 +49,32 @@ jobs:
           @semantic-release/git@10
           conventional-changelog-conventionalcommits@8
 
+      - name: Verify release dry run (issue #1096)
+        run: node scripts/verify-release-dry-run.mjs
+
       - name: Run semantic-release
+        id: release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: npx --no-install semantic-release
+
+      - name: Record release audit log entry (issue #1096)
+        if: always()
+        run: |
+          node scripts/release-audit-log.mjs \
+            --action semantic-release \
+            --actor "${{ github.event.workflow_run.actor.login || github.actor }}" \
+            --ref "${{ github.event.workflow_run.head_sha }}" \
+            --outcome "${{ steps.release.outcome == 'success' && 'success' || 'failure' }}"
+
+      - name: Commit release audit log entry
+        if: always()
+        run: |
+          if ! git diff --quiet -- release-audit/log.jsonl; then
+            git config user.name "github-actions[bot]"
+            git config user.email "github-actions[bot]@users.noreply.github.com"
+            git add release-audit/log.jsonl
+            git commit -m "chore(release-audit): record semantic-release outcome [skip ci]"
+            git push
+          fi

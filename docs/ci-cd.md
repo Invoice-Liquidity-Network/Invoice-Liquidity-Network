@@ -1,6 +1,13 @@
 # CI/CD pipeline reference
 
-This repository uses a small set of GitHub Actions workflows to cover code quality, security scanning, coverage, deployments, and repo automation.
+This repository uses GitHub Actions workflows to cover code quality, security scanning, coverage, deployments, and repo automation.
+
+> **This page is machine-checked.** `node scripts/check-workflow-policy.mjs` fails CI
+> when a workflow breaks the token-permission or action-pinning policy below, when the
+> [workflow inventory](#workflow-inventory-generated) differs from the files in
+> `.github/workflows/`, when the pinned-actions table drifts, or when this page names a
+> workflow that does not exist. `actionlint` validates every workflow in the same job.
+> See [runbooks/workflow-policy.md](./runbooks/workflow-policy.md).
 This repository uses GitHub Environments to protect deployment secrets and ensure audit control over network deployments. Shared CI steps for Stellar testnet and pnpm are provided as **reusable workflows** (`workflow_call`) so the main repo, [ILN-Smart-Contract](https://github.com/Invoice-Liquidity-Network/ILN-Smart-Contract), and [ILN-Frontend](https://github.com/Invoice-Liquidity-Network/ILN-Frontend) can reuse the same logic.
 
 ## Token permissions (least privilege)
@@ -13,7 +20,8 @@ declared scope.
 **Policy**
 
 - **Every** workflow file sets a top-level `permissions:` block — there are no implicit
-  defaults. New workflows must add one.
+  defaults. New workflows must add one. **Enforced** by `check-workflow-policy.mjs`
+  (`permissions-missing`); `permissions: write-all` is refused (`permissions-write-all`).
 - Start from `contents: read` (or `permissions: {}` when the job touches no repo contents,
   e.g. a pure HTTP probe) and add scopes only where a step demonstrably needs them.
 - Prefer a **read-only top-level default** and elevate at the **job level** for the single
@@ -27,16 +35,19 @@ declared scope.
 
 | Scope | Workflows |
 | ----- | --------- |
-| `contents: read` only | `ci` (top-level default), `codeql` (top-level), `coverage`, `e2e`, `e2e-nightly`, `knip`, `pr-title-lint`, `snyk`, `sdk-browser-tests`, `sdk-e2e-local-node`, `docs-deploy` (default), `deploy` (default), `reusable-cache-pnpm`, `reusable-stellar-setup`; read-only top-level default on `release`, `sdk-release`, `scripts-release` |
+| `contents: read` only | `codeql` (top-level), `coverage`, `e2e`, `e2e-nightly`, `knip`, `pr-title-lint`, `snyk`, `sdk-browser-tests`, `sdk-e2e-local-node`, `docs-deploy` (default), `deploy` (default), `cross-repo-sync`, `indexer-migrations`, `reusable-cache-pnpm`, `reusable-stellar-setup`; read-only top-level default on `release`, `sdk-release` |
 | `permissions: {}` (none) | `reusable-testnet-health` (HTTP probe only) |
 | `contents: write` | `cli-docs`, `docs-changelog` (commit regenerated docs) |
 | `contents: write` + `pull-requests: write` | `mainnet-checklist-status` (open checklist PR) |
 | `contents: write` + `actions: write` | `coordinate-release` (tag sibling repos, trigger their workflows) |
 | `contents: read` + `pull-requests: write` | `ci`, `changeset-check` (comment status on PRs) |
 | `security-events: write` (job-level) | `codeql` analyze jobs (upload results) |
-| `pages: write` + `id-token: write` (job-level) | `docs-deploy` (OIDC Pages deploy) |
-| `contents: write` + `id-token: write` (job-level) | `release`, `sdk-release`, `scripts-release` publish jobs (GitHub Release + npm provenance) |
+| `pages: write` + `id-token: write` (job-level) | `docs-deploy` `deploy` job (OIDC Pages deploy); its `check-meta-nav` and `build` jobs add `pull-requests: write` for failure comments, and `build` `pages: read` for `configure-pages` |
+| `contents: write` + `id-token: write` (job-level) | `release`, `sdk-release` publish jobs (GitHub Release + npm provenance) |
 | `issues: write` | `project-board` (move cards; falls back to `PROJECT_PAT`) |
+
+The table groups the common shapes; the [workflow inventory](#workflow-inventory-generated)
+lists every workflow's exact top-level permissions and is regenerated from the files.
 
 Reusable workflows (`workflow_call`) also declare `permissions:` — the effective token is
 still capped by whatever the **caller** grants, so the declaration documents intent and acts
@@ -45,7 +56,9 @@ as a ceiling, never an escalation.
 ## Pinned action versions (supply-chain)
 
 Every **third-party** action (anything not published by GitHub under `actions/*`) is pinned
-to a full 40-character commit SHA, with the human-readable version in a trailing comment:
+to a full 40-character commit SHA, with the human-readable version in a trailing comment.
+This is **enforced** for workflows and the composite actions in `.github/actions/`
+(`action-unpinned`, `pin-without-version`):
 
 ```yaml
 - uses: dorny/paths-filter@d1c1ffe0248fe513906c8e24db8ea791d46f8590 # v3.0.3
@@ -59,7 +72,7 @@ party `actions/*` actions are trusted and left on major-version tags.
 
 | Action | Pinned version |
 | ------ | -------------- |
-| `pnpm/action-setup` | v4.4.0 |
+| `pnpm/action-setup` | v4.4.0 (v3.0.0 in `weekly-observability-digest`) |
 | `dorny/paths-filter` | v3.0.3 |
 | `dorny/test-reporter` | v2.7.0 |
 | `codecov/codecov-action` | v5.5.5 |
@@ -71,6 +84,15 @@ party `actions/*` actions are trusted and left on major-version tags.
 | `dtolnay/rust-toolchain` | `stable` branch @ `2c7215f` (with explicit `toolchain: stable`) |
 | `upptime/uptime-monitor` | `master` @ `c540f23` |
 | `snyk/actions/setup` | `master` @ `8e119fb` |
+| `CycloneDX/gh-node-module-generatebom` | v1.0.3 (`sdk-release` SBOM; previously referenced as `1.4.0`, a tag that never existed) |
+
+**Exemptions.** The only way to use a third-party reference that is not a commit SHA is an
+entry in [`.github/workflow-policy.json`](../.github/workflow-policy.json) naming the exact
+reference, a release tag (`vX.Y.Z`, never a branch), and the reason. An exemption that no
+workflow uses fails the check (`exemption-stale`). Today there is one:
+`slsa-framework/slsa-github-generator/.github/workflows/generator_generic_slsa3.yml@v2.1.0`
+in `release` and `sdk-release` — the SLSA generator verifies its own reference and only
+supports being called by release tag.
 
 Two actions select their behaviour from the ref name, so pinning to a SHA requires passing
 that choice as an input instead: `dtolnay/rust-toolchain` gets `toolchain: stable` and
@@ -266,8 +288,7 @@ concurrency:
 | -------- | ------ |
 | `release.yml` | Publishing to npm must complete (uses the short-form `concurrency:` string, so `cancel-in-progress` defaults to false) |
 | `sdk-release.yml` | Publishing to npm must complete |
-| `scripts-release.yml` | Publishing to npm must complete |
-| `docs-deploy.yml` | Pages deployment must complete |
+| `docs-deploy.yml` | Pages deployment must complete (group `pages`) |
 | `e2e-nightly.yml` | Scheduled nightly run — no benefit to cancelling |
 | `sdk-e2e-local-node.yml` | Push-only on main — no concurrent runs expected |
 | `upptime.yml` | Scheduled uptime monitoring — no benefit to cancelling |
@@ -280,9 +301,11 @@ The three reusable workflows (`reusable-cache-pnpm.yml`, `reusable-stellar-setup
 
 ## Workflow map
 
-The diagram below shows the full topology: every workflow, grouped by the trigger that
-fires it, plus the `workflow_call` edges into the reusable workflows (dotted lines). A
-workflow can appear under more than one trigger.
+The diagram below shows the topology of the core build, test, release and deploy
+workflows, grouped by the trigger that fires them, plus the `workflow_call` edges into the
+reusable workflows (dotted lines). A workflow can appear under more than one trigger. It is
+an overview, not a complete list: the [workflow inventory](#workflow-inventory-generated)
+covers every workflow and is checked against the files.
 
 ```mermaid
 flowchart TD
@@ -321,7 +344,6 @@ flowchart TD
 
   %% ---- push tags ----
   PushTags --> SDKRelease["sdk-release.yml"]
-  PushTags --> ScriptsRelease["scripts-release.yml"]
   PushTags --> DocsChangelog
 
   %% ---- pull_request ----
@@ -339,7 +361,7 @@ flowchart TD
   PR --> E2E
   PR --> CLISmoke
   PR --> SDKRelease
-  PR --> ScriptsRelease
+  PR --> DocsDeploy
   PR --> ProjectBoard["project-board.yml"]
 
   %% ---- schedule ----
@@ -354,10 +376,8 @@ flowchart TD
   Dispatch --> Upptime
   Dispatch --> Release
   Dispatch --> SDKRelease
-  Dispatch --> ScriptsRelease
   Dispatch --> SDKLocal
   Dispatch --> DocsChangelog
-  Dispatch --> DocsDeploy
   Dispatch --> Mainnet["mainnet-checklist-status.yml"]
   Dispatch --> CLISmoke
 
@@ -391,7 +411,7 @@ flowchart TD
   `pull_request`, and scheduled cron runs.
 - `project-board.yml` and `sync-issues.yml` act on repository metadata rather than code changes.
 - `deploy.yml` is intentionally manual and protected by GitHub Environments.
-- `release.yml`, `sdk-release.yml`, and `scripts-release.yml` all support `workflow_dispatch` for manual re-runs after failed publishes.
+- `release.yml` and `sdk-release.yml` both support `workflow_dispatch` for manual re-runs after failed publishes.
 - `codeql.yml` runs two parallel jobs: `analyze-ts` (JavaScript/TypeScript across all workspaces) and `analyze-rust` (Rust for `backend/`).
 
 ## Workflow reference
@@ -426,13 +446,13 @@ flowchart TD
 
 ### `cli-smoke.yml`
 
-- Trigger: `push` to `main` and `pull_request` (both scoped to `packages/cli/**`, `sdk/**`,
-  `packages/shared/**`, and the workflow file), plus manual `workflow_dispatch`.
+- Trigger: `push` to `main` and `pull_request` (both scoped to `cli/**`, `sdk/**`,
+  and the workflow file), plus manual `workflow_dispatch`.
 - Runners: GitHub-hosted matrix — `ubuntu-latest`, `macos-latest`, `windows-latest` (not the
   self-hosted `namespace-profile-nursca` profile), so the CLI is exercised on all three OSes.
 - Jobs:
-  - `cli-smoke`: builds `@iln/cli` and its workspace deps, packs the CLI together with its
-    unpublished workspace dependencies (`@iln/sdk`, `@iln/shared`), installs the tarballs
+  - `cli-smoke`: builds `@invoice-liquidity/cli` and its workspace deps, packs the CLI
+    together with its unpublished workspace dependency (`@iln/sdk`), installs the tarballs
     globally in a clean environment, and runs `iln --version` and `iln --help` as smoke
     tests. `fail-fast: false` so one OS failing still reports the others.
 - Required secrets: none.
@@ -462,7 +482,7 @@ flowchart TD
 
 ### `coverage.yml`
 
-- Trigger: `push` to `main` and every `pull_request`.
+- Trigger: `push` to `main` and `pull_request` targeting `main`.
 - Jobs:
   - `coverage`: runs Rust coverage, SDK coverage, frontend coverage, and notifications coverage, then uploads the merged reports to Codecov.
 - Required secrets:
@@ -491,18 +511,18 @@ flowchart TD
 
 ### `e2e.yml`
 
-- Trigger: `push` and `pull_request`.
-- Guard: only runs when the repository variable `RUN_E2E` is set to `true` (disabled by default to save CI minutes on every push/PR).
+- Trigger: `push` and `pull_request` to `main` or `dev` (path-filtered) plus `workflow_dispatch`.
 - Jobs:
-  - `e2e-tests`: starts a local Stellar node via `docker compose up -d`, waits 15 seconds for RPC, runs `npm install && npm run test:e2e` at the repo root.
-- Scope: **Lightweight, root-level E2E smoke tests only.** This workflow does NOT initialize git submodules, does NOT deploy contracts, does NOT install frontend dependencies or Playwright, and does NOT upload test artifacts. It is intended as a fast gate for basic integration health.
+  - `e2e-tests`: starts a local Stellar node via `docker compose -f tests/e2e/docker-compose.yml up -d stellar-quickstart`, waits for the Soroban RPC, installs the Stellar CLI, builds the contract WASM, provisions a **real deployed contract** with `node scripts/provision-e2e-contract.mjs` (#1241 — no placeholder contract IDs, #1242), runs `vitest run tests/e2e` with a JSON reporter, and enforces the coverage gate `node scripts/check-e2e-coverage.mjs --report=.artifacts/e2e-results.json --scan-sources` (#1243). The JSON report is uploaded as the `e2e-coverage-evidence-<run_id>` artifact.
+- Scope: cross-package integration gate for `tests/e2e/`. The suite is **fail-closed** (#1244): an unreachable RPC or a missing contract ID fails the run with the recovery path instead of skipping. `E2E_ALLOW_SKIP` is never set here, and the gate fails if it is.
 - Required secrets: none.
-- Expected runtime: short to medium. Usually 5 to 15 minutes.
+- Expected runtime: medium. Usually 10 to 20 minutes (Rust + Stellar CLI installation and the contract build dominate).
+- Evidence: artifact `e2e-coverage-evidence-<run_id>` contains `.artifacts/e2e-results.json` (per-test status) and `.artifacts/e2e-output.txt` (console output). A healthy run has `skipped: 0`.
 - Debugging tips:
+  - Run the runbook in [docs/runbooks/e2e-prerequisites.md](./runbooks/e2e-prerequisites.md) — it lists every failure message the control can emit with its owner and recovery path.
   - Confirm Docker and Docker Compose are available on the runner or local machine.
-  - If the job appears to hang, inspect the local node logs and the `sleep 15` wait window.
-  - Run `docker compose up -d` and `npm run test:e2e` locally to isolate test failures.
-  - If this workflow is skipped, check that `RUN_E2E` is set to `true` in repository variables.
+  - Reproduce locally: `docker compose -f tests/e2e/docker-compose.yml up -d stellar-quickstart`, `node scripts/provision-e2e-contract.mjs`, `pnpm test:e2e`.
+  - If the gate reports `missing-file` or `empty-file`, a required E2E file stopped running — check the `pnpm test:e2e` glob.
 
 ### `e2e-nightly.yml`
 
@@ -522,15 +542,18 @@ flowchart TD
 
 | Aspect | `e2e.yml` (PR/push) | `e2e-nightly.yml` (scheduled) |
 | ------ | ------------------- | ----------------------------- |
-| Trigger | Every push and PR | Daily at 00:00 UTC |
-| Gate | Requires `RUN_E2E=true` | Always runs |
+| Trigger | Push and PR to `main`/`dev` touching E2E paths | Daily at 00:00 UTC |
+| Gate | None — fail-closed: unreachable RPC or missing contract fails the run | Always runs |
 | Submodules | Not initialized | Initialized |
-| Contract deploy | No | Yes (contract-deployer + account-seeder) |
+| Contract deploy | Yes — a real contract via `scripts/provision-e2e-contract.mjs` | Yes (contract-deployer + account-seeder) |
 | Frontend tests | No (runs at repo root) | Yes (Playwright in `frontend/`) |
-| Test artifacts | None uploaded | Playwright report uploaded |
-| Purpose | Fast integration smoke test | Full user-journey regression |
+| Test artifacts | `e2e-coverage-evidence-<run_id>` (results, coverage verdict, evidence bundle) | Playwright report uploaded |
+| Purpose | Cross-package integration gate with an evidence bundle | Full user-journey regression |
 
-**Why the split exists:** PR-time E2E is gated behind `RUN_E2E=true` and runs a lightweight smoke test to catch obvious breaks without burning 20+ minutes of CI on every PR. The nightly run provides comprehensive coverage including Playwright browser tests, contract deployment, and account seeding — catching regressions that only surface in a full-stack environment.
+**Why the split exists:** the PR/push run is the fail-closed integration gate for
+`tests/e2e/` against a locally provisioned contract, scoped by path filters so it only runs
+when E2E-relevant code changes. The nightly run adds what is too slow for every change:
+Playwright browser tests, the frontend, and account seeding.
 
 ### `pr-title-lint.yml`
 
@@ -567,7 +590,7 @@ flowchart TD
 - Debugging tips:
   - Verify the Docker Compose file still matches the ports the tests expect.
   - If Horizon never becomes reachable, inspect the container logs and the readiness loop.
-  - Run `pnpm --filter @invoice-liquidity/sdk test:e2e-local` after starting the Docker stack locally.
+  - Run `pnpm --filter @iln/sdk test:e2e-local` after starting the Docker stack locally.
 
 ### `snyk.yml`
 
@@ -659,13 +682,23 @@ End-to-end local node flow:
 docker compose -f tests/e2e/docker-compose.yml up -d
 ```
 
-The `e2e.yml` workflow currently invokes `npm run test:e2e` after bringing up the local node. If that script is missing in your checkout, treat that as a workflow/package mismatch and inspect the package that is supposed to own the command before relying on the test result.
+The `e2e.yml` workflow provisions a contract with `node scripts/provision-e2e-contract.mjs`
+and runs `pnpm test:e2e` (root `vitest.e2e.config.ts`) after bringing up the local node.
 
 For the SDK local-node suite used by `sdk-e2e-local-node.yml`, run:
 
 ```bash
-pnpm --filter @invoice-liquidity/sdk test:e2e-local
+pnpm --filter @iln/sdk test:e2e-local
 docker compose -f tests/e2e/docker-compose.yml down
+```
+
+Workflow policy and this page's inventory:
+
+```bash
+node scripts/check-workflow-policy.mjs            # policy + docs check
+node scripts/check-workflow-policy.mjs --write    # regenerate the inventory below
+node --test scripts/__tests__/workflow-policy.test.mjs
+actionlint                                        # workflow syntax and expressions
 ```
 
 PR title lint:
@@ -676,6 +709,72 @@ npx commitlint --config commitlint.config.js --edit /tmp/pr-title
 ```
 
 Security scans and code scanning are harder to reproduce exactly outside GitHub Actions, but you can still validate the project with the same package installs and test commands above before pushing.
+
+## Workflow inventory (generated)
+
+Every workflow in `.github/workflows/`, regenerated with
+`node scripts/check-workflow-policy.mjs --write` and verified on every pull request that
+touches a workflow. "Concurrency" is `cancel superseded` (`cancel-in-progress: true`),
+`queue` (a group without cancellation), or `—` (no group).
+
+<!-- workflows:begin -->
+| Workflow | Triggers | Top-level permissions | Concurrency |
+| -------- | -------- | --------------------- | ----------- |
+| [`alert-runbook-link-check.yml`](../.github/workflows/alert-runbook-link-check.yml) | `pull_request`, `push`, `schedule`, `workflow_dispatch` | `contents: read` | cancel superseded |
+| [`bulk-issue-create.yml`](../.github/workflows/bulk-issue-create.yml) | `workflow_dispatch` | `issues: write` | — |
+| [`changeset-check.yml`](../.github/workflows/changeset-check.yml) | `pull_request` | `contents: read`, `pull-requests: write` | cancel superseded |
+| [`ci-summary.yml`](../.github/workflows/ci-summary.yml) | `workflow_run` | `contents: read`, `pull-requests: write` | cancel superseded |
+| [`ci.yml`](../.github/workflows/ci.yml) | `push`, `pull_request` | `contents: read`, `pull-requests: write` | cancel superseded |
+| [`cli-docs.yml`](../.github/workflows/cli-docs.yml) | `push`, `pull_request` | `contents: write` | cancel superseded |
+| [`cli-smoke.yml`](../.github/workflows/cli-smoke.yml) | `push`, `pull_request`, `workflow_dispatch` | `contents: read` | cancel superseded |
+| [`codeql.yml`](../.github/workflows/codeql.yml) | `push`, `pull_request`, `schedule` | `contents: read` | cancel superseded |
+| [`coordinate-release.yml`](../.github/workflows/coordinate-release.yml) | `workflow_dispatch` | `contents: write`, `actions: write` | — |
+| [`coverage.yml`](../.github/workflows/coverage.yml) | `push`, `pull_request` | `contents: read` | cancel superseded |
+| [`cross-repo-sync.yml`](../.github/workflows/cross-repo-sync.yml) | `issues` | `contents: read` | — |
+| [`dependency-audit-escalation.yml`](../.github/workflows/dependency-audit-escalation.yml) | `schedule`, `workflow_dispatch`, `push` | `contents: read`, `issues: write` | — |
+| [`deploy.yml`](../.github/workflows/deploy.yml) | `workflow_dispatch` | `contents: read` | — |
+| [`docs-changelog.yml`](../.github/workflows/docs-changelog.yml) | `push`, `workflow_dispatch` | `contents: write` | — |
+| [`docs-deploy.yml`](../.github/workflows/docs-deploy.yml) | `push`, `pull_request` | `contents: read` | queue |
+| [`docs-link-check.yml`](../.github/workflows/docs-link-check.yml) | `pull_request`, `push`, `schedule`, `workflow_dispatch` | `contents: read` | cancel superseded |
+| [`e2e-nightly.yml`](../.github/workflows/e2e-nightly.yml) | `schedule` | `contents: read` | queue |
+| [`e2e-scope.yml`](../.github/workflows/e2e-scope.yml) | `pull_request`, `push` | `contents: read` | cancel superseded |
+| [`e2e.yml`](../.github/workflows/e2e.yml) | `push`, `pull_request`, `workflow_dispatch` | `contents: read` | cancel superseded |
+| [`gitleaks-reaudit.yml`](../.github/workflows/gitleaks-reaudit.yml) | `schedule`, `workflow_dispatch` | `contents: read` | — |
+| [`indexer-backup.yml`](../.github/workflows/indexer-backup.yml) | `schedule`, `workflow_dispatch` | `contents: read` | — |
+| [`indexer-migrations.yml`](../.github/workflows/indexer-migrations.yml) | `pull_request`, `push` | `contents: read` | — |
+| [`knip.yml`](../.github/workflows/knip.yml) | `pull_request`, `push` | `contents: read` | cancel superseded |
+| [`mainnet-checklist-status.yml`](../.github/workflows/mainnet-checklist-status.yml) | `issues`, `workflow_dispatch` | `contents: write`, `pull-requests: write`, `issues: read` | — |
+| [`mainnet-launch-evidence.yml`](../.github/workflows/mainnet-launch-evidence.yml) | `pull_request`, `workflow_dispatch` | `contents: read` | — |
+| [`mainnet-launch-readiness.yml`](../.github/workflows/mainnet-launch-readiness.yml) | `pull_request`, `workflow_dispatch` | `contents: read` | — |
+| [`monorepo-map-drift.yml`](../.github/workflows/monorepo-map-drift.yml) | `pull_request`, `push`, `schedule`, `workflow_dispatch` | `contents: read` | cancel superseded |
+| [`mutation-testing.yml`](../.github/workflows/mutation-testing.yml) | `schedule`, `workflow_dispatch`, `pull_request` | `contents: read`, `pull-requests: write` | cancel superseded |
+| [`oracle-chaos.yml`](../.github/workflows/oracle-chaos.yml) | `schedule`, `pull_request`, `workflow_dispatch` | `contents: read` | cancel superseded |
+| [`pr-title-lint.yml`](../.github/workflows/pr-title-lint.yml) | `pull_request` | `contents: read` | cancel superseded |
+| [`project-board.yml`](../.github/workflows/project-board.yml) | `issues`, `pull_request` | `issues: write` | — |
+| [`react-peer-contract.yml`](../.github/workflows/react-peer-contract.yml) | `pull_request`, `push`, `workflow_dispatch` | `contents: read` | cancel superseded |
+| [`release.yml`](../.github/workflows/release.yml) | `push`, `workflow_dispatch` | `contents: read` | queue |
+| [`reproducible-builds.yml`](../.github/workflows/reproducible-builds.yml) | `push`, `pull_request`, `workflow_dispatch` | `contents: read` | cancel superseded |
+| [`reusable-cache-pnpm.yml`](../.github/workflows/reusable-cache-pnpm.yml) | `workflow_call` | `contents: read` | — |
+| [`reusable-stellar-setup.yml`](../.github/workflows/reusable-stellar-setup.yml) | `workflow_call` | `contents: read` | — |
+| [`reusable-testnet-health.yml`](../.github/workflows/reusable-testnet-health.yml) | `workflow_call` | `{}` (none) | — |
+| [`reusable-workflow-selftest.yml`](../.github/workflows/reusable-workflow-selftest.yml) | `schedule`, `workflow_dispatch` | `contents: read` | — |
+| [`sdk-api-docs.yml`](../.github/workflows/sdk-api-docs.yml) | `push`, `pull_request` | `contents: write`, `pull-requests: write` | cancel superseded |
+| [`sdk-browser-tests.yml`](../.github/workflows/sdk-browser-tests.yml) | `push`, `pull_request` | `contents: read` | cancel superseded |
+| [`sdk-bundle-size.yml`](../.github/workflows/sdk-bundle-size.yml) | `push`, `pull_request` | `contents: read`, `pull-requests: write` | cancel superseded |
+| [`sdk-compat-matrix.yml`](../.github/workflows/sdk-compat-matrix.yml) | `push`, `pull_request`, `workflow_call`, `workflow_dispatch` | `contents: read` | cancel superseded |
+| [`sdk-e2e-local-node.yml`](../.github/workflows/sdk-e2e-local-node.yml) | `push`, `workflow_dispatch` | `contents: read` | queue |
+| [`sdk-export-maps.yml`](../.github/workflows/sdk-export-maps.yml) | `pull_request`, `push`, `schedule`, `workflow_dispatch` | `contents: read` | cancel superseded |
+| [`sdk-package-names.yml`](../.github/workflows/sdk-package-names.yml) | `pull_request`, `push`, `schedule`, `workflow_dispatch` | `contents: read` | cancel superseded |
+| [`sdk-release.yml`](../.github/workflows/sdk-release.yml) | `push`, `pull_request`, `workflow_dispatch` | `contents: read` | queue |
+| [`sdk-support-windows.yml`](../.github/workflows/sdk-support-windows.yml) | `pull_request`, `push`, `schedule`, `workflow_dispatch` | `contents: read` | cancel superseded |
+| [`semantic-release.yml`](../.github/workflows/semantic-release.yml) | `workflow_run` | `contents: write`, `issues: write`, `pull-requests: write` | queue |
+| [`snyk.yml`](../.github/workflows/snyk.yml) | `push`, `pull_request`, `schedule` | `contents: read` | cancel superseded |
+| [`sync-issues.yml`](../.github/workflows/sync-issues.yml) | `issues` | `contents: read` | — |
+| [`synthetic-canary.yml`](../.github/workflows/synthetic-canary.yml) | `schedule`, `workflow_dispatch` | `contents: read`, `issues: write` | queue |
+| [`upptime.yml`](../.github/workflows/upptime.yml) | `push`, `schedule`, `workflow_dispatch` | `contents: write`, `issues: write`, `pull-requests: write`, `statuses: write` | queue |
+| [`weekly-observability-digest.yml`](../.github/workflows/weekly-observability-digest.yml) | `schedule`, `workflow_dispatch` | `contents: write`, `pull-requests: read`, `issues: write` | — |
+| [`workflow-policy.yml`](../.github/workflows/workflow-policy.yml) | `pull_request`, `push`, `schedule`, `workflow_dispatch` | `contents: read` | cancel superseded |
+<!-- workflows:end -->
 
 ## Failure triage checklist
 

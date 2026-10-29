@@ -4,6 +4,12 @@ This document covers the protocol-wide attack surface for Invoice Liquidity Netw
 
 It complements the smart contract threat model maintained with the Soroban contracts. Contract-specific risks such as authorization logic, state transitions, and on-chain invariants should be reviewed alongside this document before audit.
 
+This document is part of a deliberately structured set of security-adjacent
+documents. For the security documentation map, the unified disclosure policy,
+and the reporter-facing entryway, see [Security](../SECURITY.md),
+[Security Guide](./security-guide.md), [Security](./security.md), and
+[Vulnerability Disclosure](./vulnerability-disclosure.md).
+
 ## Scope
 
 In scope:
@@ -32,12 +38,14 @@ Out of scope:
 | --- | --- | --- | --- | --- |
 | SDK | Malicious dependency, compromised npm package, or attacker-controlled host app | Dependency injection, prototype pollution, monkey-patched globals, or crafted XDR/transaction objects passed into SDK helpers | Prefer typed helpers, keep transaction construction small and explicit, validate payload shapes before encode/sign, pin dependencies in lockfiles, review transitive dependencies | A compromised application can still misuse the SDK or sign a bad transaction if it trusts unvalidated input |
 | SDK | Network attacker or malicious integration partner | XDR manipulation between simulation, signing, and submission | Build/sign/submit from the same validated transaction object, re-decode or re-simulate before submission where practical, reject unexpected source accounts, fees, time bounds, and memo fields | Users can still be tricked into signing a transaction that is syntactically valid but economically harmful |
-| Frontend | Malicious browser extension, injected script, or spoofed wallet provider | Wallet injection attacks, fake provider objects, UI redress, or DOM tampering | Strict CSP, no inline script, explicit provider detection, signed transaction preview, display destination and amount before signing, avoid trusting `window` globals blindly | Browser extension compromise remains a high-impact client-side risk |
-| Frontend | Cross-site attacker | Clickjacking, open redirect abuse, or form/iframe abuse | `frame-ancestors 'self'` or stricter, `form-action 'self'`, hardened navigation flows, clear origin checks, avoid embedding privileged views | Users can still be socially engineered away from the canonical app URL |
+| Frontend | Malicious browser extension, injected script, or spoofed wallet provider | Wallet injection attacks, fake provider objects, UI redress, or DOM tampering | Owned by the frontend repository ([ILN-Frontend](https://github.com/Invoice-Liquidity-Network/ILN-Frontend)), not this one: CSP, provider detection and signing preview are its controls — see TM-2.1 in [Mitigation evidence](#7-mitigation-evidence-machine-checked) | Browser extension compromise remains a high-impact client-side risk |
+| Frontend / API | Cross-site attacker | Clickjacking, open redirect abuse, or form/iframe abuse | API services in this repository refuse framing (`X-Frame-Options: DENY`, `frame-ancestors 'none'`) — TM-2.3; the frontend's own headers are TM-2.1 | Users can still be socially engineered away from the canonical app URL |
 | Frontend | Cross-origin web attacker | CORS misconfiguration or overly permissive credentialed requests | Tight CORS allowlists, no wildcard origins with credentials, server-side auth where needed, separate read-only endpoints from privileged actions | Public read endpoints can still be abused for scraping and traffic amplification |
 | API / Indexer | Scripted abuser or botnet | Horizon or RPC query floods, streaming abuse, pagination abuse, cache-busting, or expensive filter permutations | Server-side rate limiting, per-IP quotas, request timeouts, pagination caps, indexed query patterns, and backpressure on streams | Distributed attacks and legitimate high-volume usage can still exhaust shared infrastructure |
 | API / Indexer | Attacker trying to manipulate protocol state perception | Feeding stale or partial event data to dashboards, replaying responses, or desynchronising indexers | Source data should be derived from canonical network responses, store cursor/ledger markers, verify latest ledger continuity, and surface freshness metadata | Indexers are still eventually consistent and can lag the chain temporarily |
 | API / Indexer | Adversarial client | Horizon RPC abuse via repeated simulation, transaction submission, or event polling | Separate read and write tiers, rate limit simulation and submission, enforce body size limits, log abusive patterns, and prefer self-hosted RPC for critical operations | Public RPC endpoints will always be a shared resource and can be degraded under load |
+| API / Indexer | Attacker or oracle provider | Oracle price manipulation, stale price feeds, or price deviation attacks | Cross-reference oracle prices against multiple independent sources, implement circuit breakers for suspicious price deltas, audit oracle provider code and architecture, rate-limit price-update transaction simulation | A sophisticated oracle attack can still exploit windows of time between price updates or coordination failures between oracle sources |
+| API / Indexer | Network partition, ledger fork, or chain reorganization | Indexer chain-reorg edge cases, missing ledger continuity checks, partial event ingestion leading to state divergence | Confirmation-depth policy, tip-regression rollback with crash-safe fork decisions, monotonic cursor, hourly reconciliation (TM-3.4). Ledger-hash continuity is **not** implemented (TM-3.4b) | A ledger reorg affecting the indexer before reconciliation can still lead to temporary state divergence and mis-reporting |
 | Governance | Social engineer, impersonator, or malicious contributor | Phishing maintainers, fake “audit” requests, rogue governance links, or PRs that redirect treasury/control | Publicly documented maintainer list, explicit review requirements, off-channel confirmation for privileged actions, branch protection, and provenance checks for releases | Humans remain vulnerable to pressure, urgency, and impersonation |
 | Governance | Internal compromise of a trusted maintainer account | Malicious approvals, poisoned release notes, or misleading issue triage | Require at least two maintainer reviews for security-sensitive changes, use short-lived credentials, and verify release artifacts | A multi-account compromise can still bypass process controls |
 
@@ -230,6 +238,71 @@ Residual risk:
 - Off-chain systems are eventually consistent by design
 - A stale dashboard can still mislead users into taking a bad action
 
+### 3.3 Oracle Price Manipulation
+
+Attacker model:
+
+- A malicious or compromised oracle provider
+- An oracle provider with business incentives misaligned with the protocol
+- A network attacker intercepting oracle price updates
+- A front-runner observing price feed timing patterns
+
+Attack vector:
+
+- Supplying stale, artificially inflated, or manipulated price feeds for collateral assessment
+- Creating temporary price spikes or dips that trigger unintended funding gates or defaults
+- Coordinating price feeds across multiple oracles to create artificial consensus
+- Exploiting time windows between price updates to push through bad transactions
+- Diverging oracle sources such that different integrations see different prices
+
+Current mitigation:
+
+- Cross-reference oracle prices against multiple independent sources (decentralized oracle design)
+- Implement circuit breakers that reject price deltas exceeding expected volatility bounds
+- Audit oracle provider code, architecture, and incentive structure before integration
+- Log and monitor all oracle price updates and the reasoning behind large deltas
+- Rate-limit price-update transaction simulation to prevent abuse
+- Document the trust assumptions and operational dependencies for each oracle provider
+
+Residual risk:
+
+- A sophisticated oracle attack can exploit windows between price updates or desynchronization between oracle sources
+- An oracle provider compromise or incentive misalignment may not be detected in real-time
+- Dependent systems (frontend gates, liquidation triggers) can still be misled by coordinated oracle manipulation
+
+### 3.4 Indexer Chain Reorganization and Data Integrity
+
+Attacker model:
+
+- A network partition that causes the Stellar network or indexer to fork
+- A ledger reorganization (reorg) due to network-level consensus corrections
+- An indexer bug or network condition that causes partial event ingestion or gap
+- An attacker replaying stale events or hiding recent events from the indexer
+
+Attack vector:
+
+- Missing or incomplete ledger-continuity checks when ingesting new blocks
+- Building derived state without validating that the chain hash linkage is unbroken
+- Consuming indexer snapshots without verifying freshness and ancestry
+- Partial event ingestion (e.g., invoice submitted but funding missed) leading to state divergence
+- Replaying or re-ordering events such that the indexer sees a different timeline
+
+Current mitigation (implemented — evidence in TM-3.4):
+
+- Events are only indexed once they are `CONFIRMATION_DEPTH` ledgers behind the tip (`CanonicalConfirmationPolicy`)
+- When the RPC tip falls below the stored cursor, the poller rolls derived state back to the tip and re-scans, recording the fork decision so a crash mid-rollback is resumed on restart
+- The cursor is monotonic: any rewind outside an authorised rollback is refused and counted (`iln_cursor_monotonicity_violations_total`)
+- Derived state is reconciled against the chain hourly (`startReconciliationScheduler`)
+- `/health` exposes `lastSync`, the time the cursor last advanced
+
+Not implemented (gap TM-3.4b): ledger-hash continuity (`parentLedgerHash`) and a window of recent ledger hashes. Detection relies on tip regression, so a same-height fork is not detected by hash.
+
+Residual risk:
+
+- A ledger reorg affecting the indexer before the next reconciliation pass can lead to temporary state divergence
+- Dependent systems relying on stale indexer snapshots may not detect the reorg immediately
+- A deep reorg (affecting many ledgers) can cause cascading state corrections across dependent systems
+
 ## 4. Governance and Social Engineering
 
 Governance is a trust boundary because attackers often target people before they target code.
@@ -284,11 +357,52 @@ The highest residual risks after the current mitigations are:
 1. User-side compromise through browser extensions or phishing
 2. Transaction manipulation between construction and signature
 3. RPC and indexer abuse that degrades availability
-4. Governance impersonation or maintainer compromise
+4. Oracle price manipulation and desynchronization between oracle sources
+5. Indexer chain-reorg edge cases and temporary state divergence
+6. Governance impersonation or maintainer compromise
 
 These risks are acceptable only as long as they remain visible, monitored, and covered by process controls before mainnet expansion.
 
-## 7. Review Requirements
+### Mitigations Cross-Reference
+
+Every threat above maps to a row in [§7 Mitigation evidence](#7-mitigation-evidence-machine-checked),
+which names the code and tests that implement it — or says plainly that it is
+a gap and who owns it. An earlier version of this section cited three files that never existed: `oracle-service/src/fraud-heuristics.ts`, `indexer/src/ledger-processor.ts` and `indexer/src/state-reconciler.ts`.
+That is why the table is now verified in CI rather than trusted.
+
+## 7. Mitigation evidence (machine-checked)
+
+`node scripts/check-security-docs.mjs` fails CI when this table drifts from the
+code. Rules:
+
+- **enforced** — every evidence path exists, every `path#anchor` text appears
+  in that file, and at least one path is a test or a CI workflow.
+- **external** — the control lives outside this repository (another repository
+  or a GitHub setting), linked by URL; any local path cited beside it must
+  exist, but this repository makes no claim to enforce it.
+- **gap** — not implemented. No evidence may be claimed, and an owner is
+  required: a gap is visible and owned, never silent.
+- Every `### N.M` threat section must be covered by at least one row.
+
+<!-- mitigations:begin -->
+| ID | Threat | Status | Evidence | Owner |
+|---|---|---|---|---|
+| TM-1.1 | §1.1 Dependency injection and package compromise | enforced | `pnpm-lock.yaml`, `scripts/check-dependency-confusion.mjs`, `scripts/dependency-audit.js`, `scripts/__tests__/dependency-audit.test.js`, `.github/workflows/snyk.yml#--all-projects` | @Invoice-Liquidity-Network/security-lead |
+| TM-1.2 | §1.2 XDR manipulation — simulate and sign the same object | enforced | `packages/sdk/src/simulation.ts#export async function preflightMutation`, `packages/sdk/src/simulation.test.ts` | @Invoice-Liquidity-Network/sdk-team |
+| TM-1.2b | §1.2 XDR manipulation — reject unexpected source, fee, time bounds, memo | gap | — | @Invoice-Liquidity-Network/sdk-team |
+| TM-2.1 | §2.1 Wallet injection; frontend CSP and provider detection | external | [ILN-Frontend](https://github.com/Invoice-Liquidity-Network/ILN-Frontend) | @Invoice-Liquidity-Network/frontend-team |
+| TM-2.2 | §2.2 CORS and cross-origin abuse — no service grants cross-origin reads | enforced | `indexer/src/securityHeaders.ts#Cross-Origin-Resource-Policy`, `oracle-service/src/securityHeaders.ts#Cross-Origin-Resource-Policy`, `oracle-service/src/security-headers.test.ts#access-control-allow-origin`, `indexer/tests/security-headers.test.ts` | @Invoice-Liquidity-Network/security-lead |
+| TM-2.3 | §2.3 CSP and clickjacking — API services refuse framing and sniffing | enforced | `indexer/src/securityHeaders.ts#frame-ancestors 'none'`, `oracle-service/src/securityHeaders.ts#frame-ancestors 'none'`, `indexer/tests/security-headers.test.ts`, `oracle-service/src/security-headers.test.ts`, `.github/workflows/security-docs.yml` | @Invoice-Liquidity-Network/security-lead |
+| TM-2.3b | §2.3 Notifications API security headers | gap | — | @Invoice-Liquidity-Network/notifications-team |
+| TM-3.1 | §3.1 Horizon and RPC abuse — rate limits and query budgets | enforced | `indexer/src/rateLimit.ts#export function createApiRateLimiter`, `indexer/tests/rateLimit.test.ts`, `indexer/src/graphql.ts#MAX_GRAPHQL_COMPLEXITY`, `indexer/tests/graphql.complexity.test.ts`, `oracle-service/src/index.ts#function createRateLimitMiddleware`, `oracle-service/src/index.ts#limit: '256kb'` | @Invoice-Liquidity-Network/indexer-team |
+| TM-3.2 | §3.2 Staleness and data integrity — freshness metadata | enforced | `indexer/src/api.ts#lastSync`, `indexer/tests/api.test.ts#lastSync` | @Invoice-Liquidity-Network/indexer-team |
+| TM-3.3 | §3.3 Oracle price manipulation — delta bounds and source failover | enforced | `oracle-service/src/deltaBounds.ts#export class DeltaBoundsGuard`, `oracle-service/src/deltaBounds.test.ts`, `oracle-service/src/sourceFailover.ts#export class SourceHealthTracker`, `oracle-service/src/sourceFailover.test.ts` | @Invoice-Liquidity-Network/protocol-team |
+| TM-3.4 | §3.4 Chain reorganization — confirmation depth, rollback, monotonic cursor | enforced | `indexer/src/policy.ts#export class CanonicalConfirmationPolicy`, `indexer/tests/confirmation-depth.test.ts`, `indexer/src/poller.ts#rollbackToLedger(`, `indexer/tests/reorg-idempotency.test.ts`, `indexer/src/db.ts#Cursor monotonicity violation`, `indexer/tests/cursor-monotonicity.test.ts`, `indexer/src/reconciliation.ts#export function startReconciliationScheduler` | @Invoice-Liquidity-Network/indexer-team |
+| TM-3.4b | §3.4 Ledger-hash continuity (`parentLedgerHash`) | gap | — | @Invoice-Liquidity-Network/indexer-team |
+| TM-4.1 | §4.1 Phishing the governance process — required reviews | external | [GitHub branch protection](https://docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/managing-protected-branches/about-protected-branches) (repository settings), audited by `scripts/verify-branch-protection.sh#required_approving_review_count`; owners in `.github/CODEOWNERS#@Invoice-Liquidity-Network/security-lead` | @Invoice-Liquidity-Network/maintainers |
+<!-- mitigations:end -->
+
+## 8. Review Requirements
 
 Before merging, this document should be reviewed by at least two maintainers, with one review focused on protocol design and one on implementation or operations.
 
@@ -301,5 +415,5 @@ Before merging, this document should be reviewed by at least two maintainers, wi
 - [Transactions and envelopes](https://developers.stellar.org/docs/learn/fundamentals/transactions/operations-and-transactions)
 - [Stellar RPC](https://developers.stellar.org/docs/data/apis/rpc)
 - [Horizon rate limiting](https://developers.stellar.org/docs/data/apis/horizon/api-reference/structure/rate-limiting)
-- [OWASP Content Security Policy Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/Content_Security_Policy_Cheat_Sheet.html)
+- [OWASP Content Security Policy](https://owasp.org/www-community/controls/Content_Security_Policy)
 - [OWASP Clickjacking](https://owasp.org/www-community/attacks/Clickjacking)

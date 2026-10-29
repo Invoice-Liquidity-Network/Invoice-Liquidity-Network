@@ -5,7 +5,7 @@
 Mutation testing verifies that the test suite actually detects real bugs by
 introducing small code changes ("mutations") and confirming the tests fail.
 
-This project currently uses mutation testing in two contexts:
+This project currently uses mutation testing in two contexts. On 2026-08-27, the repository-owned TypeScript packages were reviewed separately from the frontend repository: `sdk/`, `indexer/`, `notifications/`, and `oracle-service/`. The existing CI workflow only executes `packages/sdk/src/errors.ts`; it does not establish coverage for those top-level packages. The scoped review therefore records the existing SDK errors run as the baseline and treats transaction-building/signing and oracle verification as priority follow-up targets.
 
 | Context | Tool | Target | Status |
 |---|---|---|---|

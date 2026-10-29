@@ -1,17 +1,33 @@
 {
   "dashboard": {
     "id": null,
-    "uid": "iln-observability",
-    "title": "ILN Protocol Observability",
+    "uid": "iln-operational-observability",
+    "title": "ILN Production Observability & Service Health",
     "timezone": "browser",
     "schemaVersion": 30,
-    "version": 0,
+    "version": 2,
     "refresh": "5s",
     "panels": [
       {
+        "type": "row",
+        "title": "Protocol Business Metrics",
+        "gridPos": {
+          "x": 0,
+          "y": 0,
+          "w": 24,
+          "h": 1
+        },
+        "collapsed": false
+      },
+      {
         "type": "graph",
-        "title": "Invoice submissions per hour",
-        "gridPos": { "x": 0, "y": 0, "w": 12, "h": 8 },
+        "title": "Invoice Submissions per Hour",
+        "gridPos": {
+          "x": 0,
+          "y": 1,
+          "w": 8,
+          "h": 7
+        },
         "targets": [
           {
             "expr": "rate(iln_invoice_submissions_total[1h])",
@@ -22,8 +38,13 @@
       },
       {
         "type": "graph",
-        "title": "Funded invoices per hour",
-        "gridPos": { "x": 12, "y": 0, "w": 12, "h": 8 },
+        "title": "Funded Invoices per Hour",
+        "gridPos": {
+          "x": 8,
+          "y": 1,
+          "w": 8,
+          "h": 7
+        },
         "targets": [
           {
             "expr": "rate(iln_funded_invoices_total[1h])",
@@ -34,8 +55,13 @@
       },
       {
         "type": "graph",
-        "title": "Settlement rate (paid / funded)",
-        "gridPos": { "x": 0, "y": 8, "w": 12, "h": 8 },
+        "title": "Settlement Rate (Paid / Funded)",
+        "gridPos": {
+          "x": 16,
+          "y": 1,
+          "w": 8,
+          "h": 7
+        },
         "targets": [
           {
             "expr": "irate(iln_paid_invoices_total[5m]) / irate(iln_funded_invoices_total[5m])",
@@ -46,8 +72,13 @@
       },
       {
         "type": "graph",
-        "title": "Dispute rate",
-        "gridPos": { "x": 12, "y": 8, "w": 12, "h": 8 },
+        "title": "Dispute / Default Rate",
+        "gridPos": {
+          "x": 0,
+          "y": 8,
+          "w": 8,
+          "h": 7
+        },
         "targets": [
           {
             "expr": "irate(iln_defaulted_invoices_total[5m]) / irate(iln_invoice_submissions_total[5m])",
@@ -58,8 +89,13 @@
       },
       {
         "type": "graph",
-        "title": "Average transaction fee",
-        "gridPos": { "x": 0, "y": 16, "w": 12, "h": 8 },
+        "title": "Average Transaction Fee (Stroops)",
+        "gridPos": {
+          "x": 8,
+          "y": 8,
+          "w": 8,
+          "h": 7
+        },
         "targets": [
           {
             "expr": "iln_transaction_fee_sum / iln_transaction_fee_count",
@@ -70,8 +106,13 @@
       },
       {
         "type": "graph",
-        "title": "Contract call error rate by type",
-        "gridPos": { "x": 12, "y": 16, "w": 12, "h": 8 },
+        "title": "Contract Errors by Type",
+        "gridPos": {
+          "x": 16,
+          "y": 8,
+          "w": 8,
+          "h": 7
+        },
         "targets": [
           {
             "expr": "sum by (error_type) (rate(iln_contract_error_total[5m]))",
@@ -82,16 +123,707 @@
       },
       {
         "type": "graph",
-        "title": "LP portfolio size distribution",
-        "gridPos": { "x": 0, "y": 24, "w": 24, "h": 8 },
+        "title": "LP Portfolio Size Distribution (USD)",
+        "gridPos": {
+          "x": 0,
+          "y": 15,
+          "w": 24,
+          "h": 7
+        },
         "targets": [
           {
             "expr": "sum by (lp) (iln_lp_portfolio_size_usd)",
-            "legendFormat": "{{lp}}",
+            "legendFormat": "LP {{lp}}",
             "refId": "A"
           }
         ]
+      },
+      {
+        "type": "row",
+        "title": "Indexer Service Operations",
+        "gridPos": {
+          "x": 0,
+          "y": 22,
+          "w": 24,
+          "h": 1
+        },
+        "collapsed": false
+      },
+      {
+        "type": "stat",
+        "title": "Last Processed Ledger",
+        "gridPos": {
+          "x": 0,
+          "y": 23,
+          "w": 8,
+          "h": 6
+        },
+        "targets": [
+          {
+            "expr": "iln_last_processed_ledger",
+            "legendFormat": "Ledger Sequence",
+            "refId": "A"
+          }
+        ]
+      },
+      {
+        "type": "graph",
+        "title": "Ledger Cursor Sync Lag (Seconds)",
+        "gridPos": {
+          "x": 8,
+          "y": 23,
+          "w": 8,
+          "h": 6
+        },
+        "targets": [
+          {
+            "expr": "time() - (iln_cursor_updated_at / 1000)",
+            "legendFormat": "Cursor Lag",
+            "refId": "A"
+          }
+        ]
+      },
+      {
+        "type": "graph",
+        "title": "Events Processed & Invoices Upserted Rate",
+        "gridPos": {
+          "x": 16,
+          "y": 23,
+          "w": 8,
+          "h": 6
+        },
+        "targets": [
+          {
+            "expr": "rate(iln_events_processed_total[5m])",
+            "legendFormat": "Events Processed",
+            "refId": "A"
+          },
+          {
+            "expr": "rate(iln_invoices_upserted_total[5m])",
+            "legendFormat": "Invoices Upserted",
+            "refId": "B"
+          }
+        ]
+      },
+      {
+        "type": "graph",
+        "title": "Indexer DB Query Latency (p95 / p99)",
+        "gridPos": {
+          "x": 0,
+          "y": 29,
+          "w": 12,
+          "h": 7
+        },
+        "targets": [
+          {
+            "expr": "histogram_quantile(0.95, sum(rate(iln_db_query_duration_seconds_bucket[5m])) by (le))",
+            "legendFormat": "p95 Latency",
+            "refId": "A"
+          },
+          {
+            "expr": "histogram_quantile(0.99, sum(rate(iln_db_query_duration_seconds_bucket[5m])) by (le))",
+            "legendFormat": "p99 Latency",
+            "refId": "B"
+          }
+        ]
+      },
+      {
+        "type": "graph",
+        "title": "Indexer Database Errors",
+        "gridPos": {
+          "x": 12,
+          "y": 29,
+          "w": 12,
+          "h": 7
+        },
+        "targets": [
+          {
+            "expr": "rate(iln_db_errors_total[5m])",
+            "legendFormat": "DB Errors/sec",
+            "refId": "A"
+          }
+        ]
+      },
+      {
+        "type": "row",
+        "title": "Oracle Service Performance & Accuracy",
+        "gridPos": {
+          "x": 0,
+          "y": 36,
+          "w": 24,
+          "h": 1
+        },
+        "collapsed": false
+      },
+      {
+        "type": "graph",
+        "title": "Verification Request Throughput",
+        "gridPos": {
+          "x": 0,
+          "y": 37,
+          "w": 8,
+          "h": 7
+        },
+        "targets": [
+          {
+            "expr": "rate(oracle_verification_requests_total[5m])",
+            "legendFormat": "Requests/sec",
+            "refId": "A"
+          }
+        ]
+      },
+      {
+        "type": "graph",
+        "title": "Cache Hit vs Miss Ratio",
+        "gridPos": {
+          "x": 8,
+          "y": 37,
+          "w": 8,
+          "h": 7
+        },
+        "targets": [
+          {
+            "expr": "rate(oracle_cache_hits_total[5m])",
+            "legendFormat": "Cache Hits",
+            "refId": "A"
+          },
+          {
+            "expr": "rate(oracle_cache_misses_total[5m])",
+            "legendFormat": "Cache Misses",
+            "refId": "B"
+          }
+        ]
+      },
+      {
+        "type": "graph",
+        "title": "Stale Oracle Responses",
+        "gridPos": {
+          "x": 16,
+          "y": 37,
+          "w": 8,
+          "h": 7
+        },
+        "targets": [
+          {
+            "expr": "rate(oracle_stale_responses_total[5m])",
+            "legendFormat": "Stale Responses/sec",
+            "refId": "A"
+          }
+        ]
+      },
+      {
+        "type": "graph",
+        "title": "Oracle Verification Latency (p95 / p99)",
+        "gridPos": {
+          "x": 0,
+          "y": 44,
+          "w": 24,
+          "h": 7
+        },
+        "targets": [
+          {
+            "expr": "histogram_quantile(0.95, sum(rate(oracle_verification_duration_seconds_bucket[5m])) by (le))",
+            "legendFormat": "p95 Verification Latency (s)",
+            "refId": "A"
+          },
+          {
+            "expr": "histogram_quantile(0.99, sum(rate(oracle_verification_duration_seconds_bucket[5m])) by (le))",
+            "legendFormat": "p99 Verification Latency (s)",
+            "refId": "B"
+          }
+        ]
+      },
+      {
+        "type": "row",
+        "title": "Notifications Service & Channel Health",
+        "gridPos": {
+          "x": 0,
+          "y": 51,
+          "w": 24,
+          "h": 1
+        },
+        "collapsed": false
+      },
+      {
+        "type": "graph",
+        "title": "Dispatches by Channel (Email / Webhook / SMS)",
+        "gridPos": {
+          "x": 0,
+          "y": 52,
+          "w": 8,
+          "h": 7
+        },
+        "targets": [
+          {
+            "expr": "sum by (channel) (rate(iln_notifications_dispatches_total[5m]))",
+            "legendFormat": "{{channel}} Dispatches",
+            "refId": "A"
+          }
+        ]
+      },
+      {
+        "type": "graph",
+        "title": "Delivery Failure Rate by Channel",
+        "gridPos": {
+          "x": 8,
+          "y": 52,
+          "w": 8,
+          "h": 7
+        },
+        "targets": [
+          {
+            "expr": "sum by (channel, reason) (rate(iln_notifications_failures_total[5m]))",
+            "legendFormat": "{{channel}} Error: {{reason}}",
+            "refId": "A"
+          }
+        ]
+      },
+      {
+        "type": "graph",
+        "title": "Rate Limit Rejections",
+        "gridPos": {
+          "x": 16,
+          "y": 52,
+          "w": 8,
+          "h": 7
+        },
+        "targets": [
+          {
+            "expr": "sum by (channel) (rate(iln_notifications_rate_limit_hits_total[5m]))",
+            "legendFormat": "{{channel}} 429 Hits",
+            "refId": "A"
+          }
+        ]
+      },
+      {
+        "type": "graph",
+        "title": "Notification Delivery Latency (p95)",
+        "gridPos": {
+          "x": 0,
+          "y": 59,
+          "w": 12,
+          "h": 7
+        },
+        "targets": [
+          {
+            "expr": "histogram_quantile(0.95, sum(rate(iln_notifications_delivery_duration_seconds_bucket[5m])) by (le, channel))",
+            "legendFormat": "{{channel}} p95 Delivery Latency",
+            "refId": "A"
+          }
+        ]
+      },
+      {
+        "type": "stat",
+        "title": "Active Subscriptions Count",
+        "gridPos": {
+          "x": 12,
+          "y": 59,
+          "w": 12,
+          "h": 7
+        },
+        "targets": [
+          {
+            "expr": "sum by (channel) (iln_notifications_active_subscriptions)",
+            "legendFormat": "{{channel}} Subscriptions",
+            "refId": "A"
+          }
+        ]
+      },
+      {
+        "type": "row",
+        "title": "SDK & Client Telemetry",
+        "gridPos": {
+          "x": 0,
+          "y": 66,
+          "w": 24,
+          "h": 1
+        },
+        "collapsed": false
+      },
+      {
+        "type": "graph",
+        "title": "SDK Transaction Build & Simulation Latency",
+        "gridPos": {
+          "x": 0,
+          "y": 67,
+          "w": 12,
+          "h": 7
+        },
+        "targets": [
+          {
+            "expr": "histogram_quantile(0.95, sum(rate(iln_transaction_duration_ms_bucket[5m])) by (le))",
+            "legendFormat": "Tx Build p95 (ms)",
+            "refId": "A"
+          },
+          {
+            "expr": "histogram_quantile(0.95, sum(rate(iln_simulation_duration_ms_bucket[5m])) by (le))",
+            "legendFormat": "Simulation p95 (ms)",
+            "refId": "B"
+          }
+        ]
+      },
+      {
+        "type": "graph",
+        "title": "SDK Errors by Method and Code",
+        "gridPos": {
+          "x": 12,
+          "y": 67,
+          "w": 12,
+          "h": 7
+        },
+        "targets": [
+          {
+            "expr": "sum by (method, code) (rate(iln_error_count_total[5m]))",
+            "legendFormat": "{{method}} ({{code}})",
+            "refId": "A"
+          }
+        ]
+      },
+      {
+        "type": "row",
+        "title": "System Resource Utilization",
+        "gridPos": {
+          "x": 0,
+          "y": 74,
+          "w": 24,
+          "h": 1
+        },
+        "collapsed": false
+      },
+      {
+        "type": "graph",
+        "title": "Memory Consumption (Resident Set Size)",
+        "gridPos": {
+          "x": 0,
+          "y": 75,
+          "w": 8,
+          "h": 7
+        },
+        "targets": [
+          {
+            "expr": "sum by (job) (process_resident_memory_bytes)",
+            "legendFormat": "{{job}} RSS Memory",
+            "refId": "A"
+          }
+        ]
+      },
+      {
+        "type": "graph",
+        "title": "CPU Usage Rate",
+        "gridPos": {
+          "x": 8,
+          "y": 75,
+          "w": 8,
+          "h": 7
+        },
+        "targets": [
+          {
+            "expr": "sum by (job) (rate(process_cpu_seconds_total[5m]))",
+            "legendFormat": "{{job}} CPU",
+            "refId": "A"
+          }
+        ]
+      },
+      {
+        "type": "graph",
+        "title": "Node.js Event Loop Lag",
+        "gridPos": {
+          "x": 16,
+          "y": 75,
+          "w": 8,
+          "h": 7
+        },
+        "targets": [
+          {
+            "expr": "sum by (job) (nodejs_eventloop_lag_seconds)",
+            "legendFormat": "{{job}} Event Loop Lag",
+            "refId": "A"
+          }
+        ]
+      },
+      {
+        "type": "row",
+        "title": "Cross-Service Correlation (Incident Triage)",
+        "gridPos": {
+          "x": 0,
+          "y": 82,
+          "w": 24,
+          "h": 1
+        },
+        "collapsed": false
+      },
+      {
+        "type": "graph",
+        "title": "Oracle Latency vs Notification Volume (Correlation)",
+        "description": "Cross-service correlation: oracle p95 verification latency vs notification dispatch rate. Spikes in latency often correlate with notification volume during incidents.",
+        "gridPos": {
+          "x": 0,
+          "y": 83,
+          "w": 12,
+          "h": 7
+        },
+        "targets": [
+          {
+            "expr": "histogram_quantile(0.95, sum(rate(oracle_verification_duration_seconds_bucket[5m])) by (le))",
+            "legendFormat": "Oracle p95 Latency (s)",
+            "refId": "A"
+          },
+          {
+            "expr": "sum by (channel) (rate(iln_notifications_dispatches_total[5m]))",
+            "legendFormat": "{{channel}} Dispatches/sec",
+            "refId": "B"
+          },
+          {
+            "expr": "sum by (channel) (rate(iln_notifications_failures_total[5m]))",
+            "legendFormat": "{{channel}} Failures/sec",
+            "refId": "C"
+          }
+        ]
+      },
+      {
+        "type": "graph",
+        "title": "Indexer Lag vs Oracle Stale Responses (Correlation)",
+        "description": "Cross-service: indexer cursor lag directly drives oracle stale responses. Alert on lag predicts stale alerts.",
+        "gridPos": {
+          "x": 12,
+          "y": 83,
+          "w": 12,
+          "h": 7
+        },
+        "targets": [
+          {
+            "expr": "time() - (iln_cursor_updated_at / 1000)",
+            "legendFormat": "Indexer Cursor Lag (s)",
+            "refId": "A"
+          },
+          {
+            "expr": "rate(oracle_stale_responses_total[5m])",
+            "legendFormat": "Oracle Stale/sec",
+            "refId": "B"
+          },
+          {
+            "expr": "rate(iln_db_errors_total[5m])",
+            "legendFormat": "Indexer DB Errors/sec",
+            "refId": "C"
+          }
+        ]
+      },
+      {
+        "type": "graph",
+        "title": "SLO Burn Rate \u2014 Multi-Service Composite",
+        "description": "Unified burn rate across indexer read API, oracle freshness, and notification delivery SLOs. Fast burn (5m) for paging, slow burn (1h) for tickets.",
+        "gridPos": {
+          "x": 0,
+          "y": 90,
+          "w": 12,
+          "h": 7
+        },
+        "targets": [
+          {
+            "expr": "sum(rate(iln_http_errors_total[5m])) / sum(rate(iln_http_requests_total[5m]))",
+            "legendFormat": "Indexer Error Ratio (5m)",
+            "refId": "A"
+          },
+          {
+            "expr": "sum(rate(oracle_stale_responses_total[5m])) / clamp_min(sum(rate(oracle_verification_requests_total[5m])), 0.001)",
+            "legendFormat": "Oracle Stale Ratio (5m)",
+            "refId": "B"
+          },
+          {
+            "expr": "sum(rate(iln_notifications_failures_total[5m])) / clamp_min(sum(rate(iln_notifications_dispatches_total[5m])), 0.001)",
+            "legendFormat": "Notifications Failure Ratio (5m)",
+            "refId": "C"
+          },
+          {
+            "expr": "iln_slo_error_budget_burn",
+            "legendFormat": "Indexer Burn Gauge {{slo}}",
+            "refId": "D"
+          },
+          {
+            "expr": "oracle_slo_error_budget_burn",
+            "legendFormat": "Oracle Burn {{slo}}",
+            "refId": "E"
+          }
+        ]
+      },
+      {
+        "type": "graph",
+        "title": "Notification Fallback & Audit Health",
+        "description": "Fallback deliveries by priority and audit records. Fallback spikes indicate primary provider degraded mode.",
+        "gridPos": {
+          "x": 12,
+          "y": 90,
+          "w": 12,
+          "h": 7
+        },
+        "targets": [
+          {
+            "expr": "sum by (priority) (rate(iln_notifications_fallback_deliveries_total[5m]))",
+            "legendFormat": "Fallback {{priority}}",
+            "refId": "A"
+          },
+          {
+            "expr": "sum by (status) (rate(iln_notifications_audit_records_total[5m]))",
+            "legendFormat": "Audit {{status}}",
+            "refId": "B"
+          },
+          {
+            "expr": "sum by (channel, result) (rate(iln_notifications_health_checks_total[5m]))",
+            "legendFormat": "Health {{channel}}={{result}}",
+            "refId": "C"
+          }
+        ]
+      },
+      {
+        "type": "row",
+        "title": "Cost Attribution & Latency SLO Instrumentation",
+        "gridPos": {
+          "x": 0,
+          "y": 97,
+          "w": 24,
+          "h": 1
+        },
+        "collapsed": false
+      },
+      {
+        "type": "graph",
+        "title": "Cost Attribution per Service (USD / hour)",
+        "description": "Wire in cost-attribution instrumentation: indexer http cost, oracle verification cost, notification dispatch cost.",
+        "gridPos": {
+          "x": 0,
+          "y": 98,
+          "w": 12,
+          "h": 7
+        },
+        "targets": [
+          {
+            "expr": "sum by (service) (rate(iln_cost_usd_total[1h]) * 3600)",
+            "legendFormat": "Indexer {{service}} USD/h",
+            "refId": "A"
+          },
+          {
+            "expr": "sum by (operation) (rate(oracle_cost_usd_total[1h]) * 3600)",
+            "legendFormat": "Oracle {{operation}} USD/h",
+            "refId": "B"
+          },
+          {
+            "expr": "sum by (channel) (rate(iln_notifications_cost_usd_total[1h]) * 3600)",
+            "legendFormat": "Notifications {{channel}} USD/h",
+            "refId": "C"
+          },
+          {
+            "expr": "sum(rate(iln_cost_usd_total[1h]) * 3600) + sum(rate(oracle_cost_usd_total[1h]) * 3600) + sum(rate(iln_notifications_cost_usd_total[1h]) * 3600)",
+            "legendFormat": "Total USD/h",
+            "refId": "D"
+          }
+        ]
+      },
+      {
+        "type": "graph",
+        "title": "Indexer Read Latency p95 vs SLO (200ms)",
+        "description": "Latency SLO: p95 should be <200ms. Dashed line is SLO threshold. Violations feed multi-burn alerts.",
+        "gridPos": {
+          "x": 12,
+          "y": 98,
+          "w": 12,
+          "h": 7
+        },
+        "targets": [
+          {
+            "expr": "histogram_quantile(0.95, sum(rate(iln_http_request_duration_seconds_bucket[5m])) by (le))",
+            "legendFormat": "p95 Read Latency (s)",
+            "refId": "A"
+          },
+          {
+            "expr": "histogram_quantile(0.99, sum(rate(iln_http_request_duration_seconds_bucket[5m])) by (le))",
+            "legendFormat": "p99 Read Latency (s)",
+            "refId": "B"
+          },
+          {
+            "expr": "0.2",
+            "legendFormat": "SLO Threshold 200ms",
+            "refId": "C"
+          }
+        ]
+      },
+      {
+        "type": "graph",
+        "title": "Oracle Freshness SLO \u2014 Stale Ratio vs Error Budget",
+        "description": "SLO: 99.5% non-stale (stale ratio <0.005). Burn rate indicates budget consumption.",
+        "gridPos": {
+          "x": 0,
+          "y": 105,
+          "w": 12,
+          "h": 7
+        },
+        "targets": [
+          {
+            "expr": "sum(rate(oracle_stale_responses_total[5m])) / clamp_min(sum(rate(oracle_verification_requests_total[5m])), 0.001)",
+            "legendFormat": "Stale Ratio",
+            "refId": "A"
+          },
+          {
+            "expr": "0.005",
+            "legendFormat": "SLO Threshold 0.5%",
+            "refId": "B"
+          },
+          {
+            "expr": "histogram_quantile(0.95, sum(rate(oracle_verification_duration_seconds_bucket[5m])) by (le))",
+            "legendFormat": "p95 Verification Latency",
+            "refId": "C"
+          },
+          {
+            "expr": "sum(rate(oracle_latency_slo_violations_total[5m]))",
+            "legendFormat": "Latency SLO Violations/sec",
+            "refId": "D"
+          }
+        ]
+      },
+      {
+        "type": "graph",
+        "title": "Notification Delivery SLO \u2014 Failure Rate",
+        "description": "SLO: 99.9% delivery success (failure ratio <0.001). Separate fast-burn (5m) and slow-burn (1h) alert thresholds.",
+        "gridPos": {
+          "x": 12,
+          "y": 105,
+          "w": 12,
+          "h": 7
+        },
+        "targets": [
+          {
+            "expr": "sum(rate(iln_notifications_failures_total[5m])) / clamp_min(sum(rate(iln_notifications_dispatches_total[5m])), 0.001)",
+            "legendFormat": "Failure Ratio 5m",
+            "refId": "A"
+          },
+          {
+            "expr": "sum(rate(iln_notifications_failures_total[30m])) / clamp_min(sum(rate(iln_notifications_dispatches_total[30m])), 0.001)",
+            "legendFormat": "Failure Ratio 30m",
+            "refId": "B"
+          },
+          {
+            "expr": "sum(rate(iln_notifications_failures_total[1h])) / clamp_min(sum(rate(iln_notifications_dispatches_total[1h])), 0.001)",
+            "legendFormat": "Failure Ratio 1h",
+            "refId": "C"
+          },
+          {
+            "expr": "0.001",
+            "legendFormat": "SLO Threshold 0.1%",
+            "refId": "D"
+          },
+          {
+            "expr": "0.014",
+            "legendFormat": "14x Burn (Critical)",
+            "refId": "E"
+          }
+        ]
       }
-    ]
+    ],
+    "tags": [
+      "iln",
+      "slo",
+      "correlation",
+      "cost-attribution"
+    ],
+    "description": "Unified cross-service Grafana dashboard correlating indexer, oracle-service, and notifications metrics. Includes cross-service correlation panels (oracle latency vs notification volume), cost-attribution, and latency-SLO instrumentation. Versioned as code at monitoring/grafana/dashboard.json."
   }
 }

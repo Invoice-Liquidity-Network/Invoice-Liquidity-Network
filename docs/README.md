@@ -2,7 +2,7 @@
 
 > **This directory is NOT the production documentation site.**
 >
-> The live site at **[docs.iln.finance](https://docs.iln.finance)** is built
+> The live site at **docs.iln.finance** is built
 > from [`packages/docs/`](../packages/docs) (Nextra 3, Next.js 15 App Router).
 > `docs-deploy.yml` exclusively builds and publishes `packages/docs/`.
 >

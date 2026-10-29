@@ -1,7 +1,20 @@
 import Database from 'better-sqlite3';
-import { dbQueryDuration, dbErrorsTotal, lastProcessedLedger, cursorUpdatedAt } from './metrics';
+import {
+  dbQueryDuration,
+  dbErrorsTotal,
+  lastProcessedLedger,
+  cursorUpdatedAt,
+  analyticsQueryDuration,
+  analyticsQueryExceededBudget,
+  reorgRemovedEventsTotal,
+  reorgForkDecisionsTotal,
+  reorgPendingDecisions,
+  reorgQuarantinedTotal,
+  reorgQuarantinedActive,
+  cursorMonotonicityViolationsTotal,
+} from './metrics';
 import { CONFIG } from './config';
-import type { ILNEvent, Invoice } from './types';
+import type { ILNEvent, Invoice, InvoiceStatus, ForkDecision, QuarantinedReorg } from './types';
 
 // ─── Query logging ────────────────────────────────────────────────────────────
 
@@ -19,7 +32,32 @@ function measure<T>(label: string, fn: () => T): T {
     _queryCount++;
     _totalQueryTime += elapsed;
     if (elapsed > SLOW_QUERY_THRESHOLD_MS) {
-      console.warn(`[DB] Slow query (${elapsed}ms): ${label}`);
+      throw new Error(`[DB] Query exceeded performance budget (${elapsed}ms): ${label}`);
+    }
+  }
+}
+
+/**
+ * Wrap an analytics query with timing, budget enforcement, and isolation
+ * metrics. Analytics queries are routed to the replica connection when
+ * configured, so they never contend with production read/write traffic.
+ */
+function measureAnalytics<T>(label: string, fn: () => T): T {
+  const start = Date.now();
+  try {
+    return fn();
+  } finally {
+    const elapsed = Date.now() - start;
+    try {
+      analyticsQueryDuration.observe(elapsed / 1000);
+      if (elapsed > CONFIG.analyticsQueryBudgetMs) {
+        analyticsQueryExceededBudget.inc();
+        console.warn(
+          `[DB] Analytics query exceeded budget (${elapsed}ms > ${CONFIG.analyticsQueryBudgetMs}ms): ${label}`
+        );
+      }
+    } catch {
+      /* metrics failure is non-fatal */
     }
   }
 }
@@ -27,6 +65,7 @@ function measure<T>(label: string, fn: () => T): T {
 // ─── Singleton connection ─────────────────────────────────────────────────────
 
 let _db: Database.Database | null = null;
+let _analyticsDb: Database.Database | null = null;
 
 /** Return the singleton database connection, creating and migrating it on first call. */
 export function getDb(): Database.Database {
@@ -34,6 +73,29 @@ export function getDb(): Database.Database {
     _db = createDb(CONFIG.dbPath);
   }
   return _db;
+}
+
+/**
+ * Return the analytics-dedicated database connection.
+ *
+ * When ANALYTICS_DB_PATH is configured, analytics queries run against a
+ * separate read-only SQLite connection (typically pointing at the same WAL
+ * file or a filesystem-level replica). This isolates analytics I/O from the
+ * production read/write path so an expensive aggregation cannot starve
+ * latency-sensitive reads.
+ *
+ * When unconfigured, falls back to the primary connection for backwards
+ * compatibility.
+ */
+export function getAnalyticsDb(): Database.Database {
+  if (CONFIG.analyticsDbPath) {
+    if (!_analyticsDb) {
+      _analyticsDb = new Database(CONFIG.analyticsDbPath, { readonly: true });
+      _analyticsDb.pragma('journal_mode = WAL');
+    }
+    return _analyticsDb;
+  }
+  return getDb();
 }
 
 /** Create a new database at the given path (use ":memory:" for tests). */
@@ -83,6 +145,29 @@ function runMigrations(db: Database.Database): void {
       updated_at   INTEGER NOT NULL
     );
 
+    CREATE TABLE IF NOT EXISTS fork_decisions (
+      id                INTEGER PRIMARY KEY AUTOINCREMENT,
+      detected_at       INTEGER NOT NULL,
+      from_ledger       INTEGER NOT NULL,
+      to_ledger         INTEGER NOT NULL,
+      tip_ledger        INTEGER NOT NULL,
+      status            TEXT    NOT NULL,
+      recovery_attempts INTEGER NOT NULL DEFAULT 0,
+      events_removed    INTEGER NOT NULL DEFAULT 0,
+      invoices_affected INTEGER NOT NULL DEFAULT 0,
+      resolved_at       INTEGER
+    );
+
+    CREATE TABLE IF NOT EXISTS reorg_quarantine (
+      id             INTEGER PRIMARY KEY AUTOINCREMENT,
+      decision_id    INTEGER NOT NULL,
+      from_ledger    INTEGER NOT NULL,
+      to_ledger      INTEGER NOT NULL,
+      reason         TEXT    NOT NULL,
+      error_details  TEXT,
+      quarantined_at INTEGER NOT NULL
+    );
+
     CREATE INDEX IF NOT EXISTS idx_invoices_status     ON invoices(status);
     CREATE INDEX IF NOT EXISTS idx_invoices_freelancer ON invoices(freelancer);
     CREATE INDEX IF NOT EXISTS idx_invoices_payer      ON invoices(payer);
@@ -93,7 +178,19 @@ function runMigrations(db: Database.Database): void {
     CREATE INDEX IF NOT EXISTS idx_events_invoice_id   ON events(invoice_id);
     CREATE INDEX IF NOT EXISTS idx_events_ledger       ON events(ledger);
     CREATE INDEX IF NOT EXISTS idx_events_created_at   ON events(created_at);
+    CREATE INDEX IF NOT EXISTS idx_fork_decisions_status ON fork_decisions(status);
+    CREATE INDEX IF NOT EXISTS idx_reorg_quarantine_decision ON reorg_quarantine(decision_id);
   `);
+
+  try {
+    const tableInfo = db.prepare('PRAGMA table_info(fork_decisions)').all() as { name: string }[];
+    const hasAttempts = tableInfo.some((col) => col.name === 'recovery_attempts');
+    if (!hasAttempts && tableInfo.length > 0) {
+      db.exec('ALTER TABLE fork_decisions ADD COLUMN recovery_attempts INTEGER NOT NULL DEFAULT 0;');
+    }
+  } catch {
+    /* migration check failure is non-fatal */
+  }
 }
 
 // ─── Invoice CRUD ─────────────────────────────────────────────────────────────
@@ -296,8 +393,8 @@ export interface LPStat {
 }
 
 export function getProtocolStats(): ProtocolStats {
-  const db = getDb();
-  const row = measure('getProtocolStats', () =>
+  const db = getAnalyticsDb();
+  const row = measureAnalytics('getProtocolStats', () =>
     db
       .prepare(
         `SELECT
@@ -324,8 +421,8 @@ export function getProtocolStats(): ProtocolStats {
 }
 
 export function getLPStats(address: string): LPStats {
-  const db = getDb();
-  const row = measure(`getLPStats(${address})`, () =>
+  const db = getAnalyticsDb();
+  const row = measureAnalytics(`getLPStats(${address})`, () =>
     db
       .prepare(
         `SELECT
@@ -353,8 +450,8 @@ export function getLPStats(address: string): LPStats {
 }
 
 export function getFreelancerStats(address: string): FreelancerStats {
-  const db = getDb();
-  const row = measure(`getFreelancerStats(${address})`, () =>
+  const db = getAnalyticsDb();
+  const row = measureAnalytics(`getFreelancerStats(${address})`, () =>
     db
       .prepare(
         `SELECT
@@ -376,15 +473,76 @@ export function getFreelancerStats(address: string): FreelancerStats {
   };
 }
 
+/**
+ * Allowed field names for projection filtering on the history endpoint.
+ * Restricting to a known set prevents SQL injection via column names.
+ */
+const ALLOWED_PROJECTION_FIELDS = new Set([
+  'id',
+  'freelancer',
+  'payer',
+  'amount',
+  'due_date',
+  'discount_rate',
+  'status',
+  'funder',
+  'funded_at',
+  'created_at',
+  'updated_at',
+]);
+
 export function getInvoiceHistory(
   address: string,
-  role: 'freelancer' | 'payer' | 'funder'
-): Invoice[] {
+  role: 'freelancer' | 'payer' | 'funder',
+  fields?: string[]
+): Invoice[] | Record<string, unknown>[] {
+  if (fields && fields.length > 0) {
+    const validFields = fields.filter((f) => ALLOWED_PROJECTION_FIELDS.has(f));
+    if (validFields.length > 0) {
+      return queryInvoicesProjected({ [role]: address }, validFields);
+    }
+  }
   return queryInvoices({ [role]: address });
 }
 
-export function getTopLPs(limit: number, period: string): LPStat[] {
+/**
+ * Return invoices matching the filter with only the requested columns.
+ * Reduces payload size when callers only need a subset of fields.
+ */
+function queryInvoicesProjected(
+  filter: InvoiceFilter,
+  fields: string[]
+): Record<string, unknown>[] {
   const db = getDb();
+  const columns = fields.join(', ');
+  const clauses: string[] = [];
+  const params: (string | number)[] = [];
+
+  if (filter.status) {
+    clauses.push('status = ?');
+    params.push(filter.status);
+  }
+  if (filter.freelancer) {
+    clauses.push('freelancer = ?');
+    params.push(filter.freelancer);
+  }
+  if (filter.payer) {
+    clauses.push('payer = ?');
+    params.push(filter.payer);
+  }
+  if (filter.funder) {
+    clauses.push('funder = ?');
+    params.push(filter.funder);
+  }
+
+  const where = clauses.length > 0 ? `WHERE ${clauses.join(' AND ')}` : '';
+  return db
+    .prepare(`SELECT ${columns} FROM invoices ${where} ORDER BY id ASC`)
+    .all(...params) as Record<string, unknown>[];
+}
+
+export function getTopLPs(limit: number, period: string): LPStat[] {
+  const db = getAnalyticsDb();
   const now = Date.now();
   const since =
     period === 'week'
@@ -400,7 +558,7 @@ export function getTopLPs(limit: number, period: string): LPStat[] {
 
   const params: (number | string)[] = since > 0 ? [since, limit] : [limit];
 
-  const rows = measure(`getTopLPs(${limit}, ${period})`, () =>
+  const rows = measureAnalytics(`getTopLPs(${limit}, ${period})`, () =>
     db
       .prepare(
         `SELECT
@@ -458,6 +616,66 @@ export function insertEvent(event: ILNEvent): void {
     .run(event);
 }
 
+/**
+ * Atomically apply an event and invoice state in a single transaction.
+ * Ensures that partial writes never leave orphaned event or invoice rows,
+ * guaranteeing idempotency across restarts and replays (#1260).
+ */
+export function applyEventWithInvoice(
+  event: ILNEvent,
+  invoice: Omit<Invoice, 'created_at' | 'updated_at'> | null
+): { isChanged: boolean } {
+  const db = getDb();
+  let isChanged = false;
+
+  db.transaction(() => {
+    // 1. Insert event (INSERT OR IGNORE prevents duplicates)
+    db.prepare(
+      `INSERT OR IGNORE INTO events
+         (event_id, event_type, invoice_id, ledger, ledger_closed_at, created_at)
+       VALUES
+         (@event_id, @event_type, @invoice_id, @ledger, @ledger_closed_at, @created_at)`
+    ).run(event);
+
+    // 2. If invoice provided, check if changed and upsert
+    if (invoice) {
+      const existing = db
+        .prepare('SELECT status, funder FROM invoices WHERE id = ?')
+        .get(invoice.id) as { status: string; funder: string | null } | undefined;
+
+      isChanged =
+        !existing ||
+        existing.status !== invoice.status ||
+        existing.funder !== (invoice.funder ?? null);
+
+      if (isChanged) {
+        const now = Date.now();
+        db.prepare(
+          `INSERT INTO invoices
+           (id, freelancer, payer, amount, due_date, discount_rate,
+            status, funder, funded_at, created_at, updated_at)
+         VALUES
+           (@id, @freelancer, @payer, @amount, @due_date, @discount_rate,
+            @status, @funder, @funded_at, @created_at, @updated_at)
+         ON CONFLICT(id) DO UPDATE SET
+           status    = excluded.status,
+           funder    = excluded.funder,
+           funded_at = excluded.funded_at,
+           updated_at = excluded.updated_at`
+        ).run({
+          ...invoice,
+          funder: invoice.funder ?? null,
+          funded_at: invoice.funded_at ?? null,
+          created_at: now,
+          updated_at: now,
+        });
+      }
+    }
+  })();
+
+  return { isChanged };
+}
+
 // ─── Cursor management ────────────────────────────────────────────────────────
 
 /** Return the last processed ledger sequence, or 0 if never set. */
@@ -476,8 +694,24 @@ export function getCursorUpdatedAt(): number | null {
   return row?.updated_at ?? null;
 }
 
-/** Persist the last processed ledger sequence. */
-export function setCursorLedger(ledger: number): void {
+/**
+ * Persist the last processed ledger sequence.
+ * Enforces cursor monotonicity: normal forward indexing cannot rewind the cursor.
+ * Rewinds are only permitted via explicit authorized rollback (`allowRewind = true`).
+ */
+export function setCursorLedger(ledger: number, allowRewind = false): void {
+  const current = getCursorLedger();
+  if (!allowRewind && ledger < current) {
+    try {
+      cursorMonotonicityViolationsTotal.inc();
+    } catch {
+      /* metrics failure is non-fatal */
+    }
+    throw new Error(
+      `[DB] Cursor monotonicity violation: attempted to set cursor to ${ledger} from ${current} without allowRewind`
+    );
+  }
+
   const updatedAt = Date.now();
   getDb()
     .prepare(
@@ -496,3 +730,228 @@ export function setCursorLedger(ledger: number): void {
     /* metrics failure is non-fatal */
   }
 }
+
+/** Rollback events and cursor to a specific ledger, reverting invoice state. */
+export function rollbackToLedger(
+  ledger: number,
+  decisionId?: number
+): { eventsRemoved: number; invoicesAffected: number; affectedInvoiceIds: number[] } {
+  const db = getDb();
+  let eventsRemoved = 0;
+  let invoicesAffected = 0;
+  let affectedInvoiceIds: number[] = [];
+
+  db.transaction(() => {
+    // 1. Identify all invoices affected by events after the rollback ledger
+    const removedEventRows = db
+      .prepare('SELECT DISTINCT invoice_id FROM events WHERE ledger > ?')
+      .all(ledger) as { invoice_id: number }[];
+
+    affectedInvoiceIds = removedEventRows.map((r) => r.invoice_id);
+    invoicesAffected = affectedInvoiceIds.length;
+
+    // 2. Revert invoice states or remove them if created on the abandoned fork
+    for (const invoiceId of affectedInvoiceIds) {
+      const remainingEvents = db
+        .prepare(
+          'SELECT event_type FROM events WHERE invoice_id = ? AND ledger <= ? ORDER BY ledger ASC, created_at ASC'
+        )
+        .all(invoiceId, ledger) as { event_type: string }[];
+
+      if (remainingEvents.length === 0) {
+        // Invoice originated on the abandoned fork; remove from SQLite
+        db.prepare('DELETE FROM invoices WHERE id = ?').run(invoiceId);
+      } else {
+        // Derive state from the last valid event on the canonical branch
+        const lastEventType = remainingEvents[remainingEvents.length - 1].event_type;
+        let restoredStatus: InvoiceStatus = 'Pending';
+        let funderReset = false;
+
+        switch (lastEventType) {
+          case 'submitted':
+            restoredStatus = 'Pending';
+            funderReset = true;
+            break;
+          case 'funded':
+            restoredStatus = 'Funded';
+            break;
+          case 'paid':
+            restoredStatus = 'Paid';
+            break;
+          case 'defaulted':
+            restoredStatus = 'Defaulted';
+            break;
+          default:
+            restoredStatus = 'Pending';
+            funderReset = true;
+        }
+
+        if (funderReset) {
+          db.prepare(
+            'UPDATE invoices SET status = ?, funder = NULL, funded_at = NULL, updated_at = ? WHERE id = ?'
+          ).run(restoredStatus, Date.now(), invoiceId);
+        } else {
+          db.prepare(
+            'UPDATE invoices SET status = ?, updated_at = ? WHERE id = ?'
+          ).run(restoredStatus, Date.now(), invoiceId);
+        }
+      }
+    }
+
+    // 3. Delete the rolled-back events from the events table
+    const deleteResult = db.prepare('DELETE FROM events WHERE ledger > ?').run(ledger);
+    eventsRemoved = deleteResult.changes;
+
+    // 4. Update the cursor position in DB
+    db.prepare(
+      `INSERT INTO cursor (id, last_ledger, updated_at)
+       VALUES (1, ?, ?)
+       ON CONFLICT(id) DO UPDATE SET
+         last_ledger = excluded.last_ledger,
+         updated_at  = excluded.updated_at`
+    ).run(ledger, Date.now());
+
+    // 5. Complete fork decision if ID is passed
+    if (decisionId !== undefined) {
+      db.prepare(
+        `UPDATE fork_decisions
+         SET status = 'completed',
+             events_removed = ?,
+             invoices_affected = ?,
+             resolved_at = ?
+         WHERE id = ?`
+      ).run(eventsRemoved, invoicesAffected, Date.now(), decisionId);
+    }
+  })();
+
+  try {
+    lastProcessedLedger.set(ledger);
+    if (eventsRemoved > 0) {
+      reorgRemovedEventsTotal.inc(eventsRemoved);
+    }
+    if (decisionId !== undefined) {
+      reorgForkDecisionsTotal.inc({ status: 'completed' });
+      reorgPendingDecisions.dec();
+    }
+  } catch {}
+
+  return { eventsRemoved, invoicesAffected, affectedInvoiceIds };
+}
+
+// ─── Fork Replacement Decisions ──────────────────────────────────────────────
+
+/** Record a new fork replacement decision when a chain tip rewind is detected. */
+export function recordForkDecision(
+  fromLedger: number,
+  toLedger: number,
+  tipLedger: number
+): number {
+  const db = getDb();
+  const now = Date.now();
+  const info = db
+    .prepare(
+      `INSERT INTO fork_decisions
+       (detected_at, from_ledger, to_ledger, tip_ledger, status)
+       VALUES (?, ?, ?, ?, 'in_progress')`
+    )
+    .run(now, fromLedger, toLedger, tipLedger);
+
+  try {
+    reorgForkDecisionsTotal.inc({ status: 'in_progress' });
+    reorgPendingDecisions.inc();
+  } catch {}
+
+  return Number(info.lastInsertRowid);
+}
+
+/** Return any pending in-progress fork decision from a prior crashed run. */
+export function getPendingForkDecision(): ForkDecision | undefined {
+  const db = getDb();
+  return db
+    .prepare('SELECT * FROM fork_decisions WHERE status = ? ORDER BY id ASC LIMIT 1')
+    .get('in_progress') as ForkDecision | undefined;
+}
+
+/** Return recent fork replacement decisions for audit and monitoring. */
+export function getForkDecisions(limit = 50): ForkDecision[] {
+  const db = getDb();
+  return db
+    .prepare('SELECT * FROM fork_decisions ORDER BY id DESC LIMIT ?')
+    .all(limit) as ForkDecision[];
+}
+
+/** Increment the recovery attempts counter for an in-progress fork decision. */
+export function incrementForkDecisionAttempts(id: number): number {
+  const db = getDb();
+  db.prepare('UPDATE fork_decisions SET recovery_attempts = recovery_attempts + 1 WHERE id = ?').run(id);
+  const row = db.prepare('SELECT recovery_attempts FROM fork_decisions WHERE id = ?').get(id) as
+    | { recovery_attempts: number }
+    | undefined;
+  return row?.recovery_attempts ?? 1;
+}
+
+/**
+ * Quarantine an incomplete, corrupted, or repeatedly failing fork decision.
+ * Moves the fork decision to 'quarantined' status, logs a structured entry in
+ * `reorg_quarantine`, and decrements pending decisions.
+ */
+export function quarantineForkDecision(
+  id: number,
+  reason: string,
+  errorDetails?: string
+): void {
+  const db = getDb();
+  const now = Date.now();
+
+  db.transaction(() => {
+    const decision = db
+      .prepare('SELECT from_ledger, to_ledger, status FROM fork_decisions WHERE id = ?')
+      .get(id) as { from_ledger: number; to_ledger: number; status: string } | undefined;
+
+    const fromLedger = decision?.from_ledger ?? 0;
+    const toLedger = decision?.to_ledger ?? 0;
+    const wasPending = decision?.status === 'in_progress';
+
+    db.prepare(
+      `UPDATE fork_decisions
+       SET status = 'quarantined',
+           resolved_at = ?
+       WHERE id = ?`
+    ).run(now, id);
+
+    db.prepare(
+      `INSERT INTO reorg_quarantine
+       (decision_id, from_ledger, to_ledger, reason, error_details, quarantined_at)
+       VALUES (?, ?, ?, ?, ?, ?)`
+    ).run(id, fromLedger, toLedger, reason, errorDetails ?? null, now);
+
+    try {
+      reorgForkDecisionsTotal.inc({ status: 'quarantined' });
+      reorgQuarantinedTotal.inc();
+      reorgQuarantinedActive.inc();
+      if (wasPending) {
+        reorgPendingDecisions.dec();
+      }
+    } catch {
+      /* metrics failure is non-fatal */
+    }
+  })();
+}
+
+/** Return all quarantined reorg decisions for audit and operator recovery. */
+export function getQuarantinedReorgs(limit = 50): QuarantinedReorg[] {
+  const db = getDb();
+  return db
+    .prepare('SELECT * FROM reorg_quarantine ORDER BY id DESC LIMIT ?')
+    .all(limit) as QuarantinedReorg[];
+}
+
+/** Check if a given fork decision has been quarantined. */
+export function isReorgQuarantined(decisionId: number): boolean {
+  const db = getDb();
+  const row = db
+    .prepare('SELECT id FROM reorg_quarantine WHERE decision_id = ? LIMIT 1')
+    .get(decisionId);
+  return Boolean(row);
+}
+

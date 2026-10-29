@@ -21,8 +21,21 @@ beforeEach(async () => {
 describe('Rate limit whitelist', () => {
   it('does not throttle whitelisted IPs even past the threshold', async () => {
     for (let i = 0; i < 10; i++) {
-      const res = await request(app).get('/health');
+      const res = await request(app).get('/stats');
       expect(res.status).toBe(200);
     }
+  });
+
+  it('does not treat a spoofed arbitrary identifier as a whitelisted IP', async () => {
+    // /health is exempt from rate limiting (Railway probe), so exercise a
+    // limited route: a non-IP identifier must count against the limit.
+    const spoofed = await request(app)
+      .get('/stats')
+      .set('X-Forwarded-For', 'monitoring-service');
+    expect(spoofed.status).toBe(200);
+    const next = await request(app).get('/stats').set('X-Forwarded-For', 'monitoring-service');
+    expect(next.status).toBe(200);
+    const blocked = await request(app).get('/stats').set('X-Forwarded-For', 'monitoring-service');
+    expect(blocked.status).toBe(429);
   });
 });
