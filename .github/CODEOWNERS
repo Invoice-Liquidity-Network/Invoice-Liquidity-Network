@@ -48,6 +48,11 @@ contract-deployer/           @Invoice-Liquidity-Network/devops
 .github/                     @Invoice-Liquidity-Network/devops
 .github/workflows/           @Invoice-Liquidity-Network/devops
 
+# Malware indicator guard: changes need maintainer review
+.github/workflows/malware-indicators.yml        @Invoice-Liquidity-Network/maintainers
+.github/malware-indicators-allowlist.json       @Invoice-Liquidity-Network/maintainers
+scripts/check-malware-indicators.mjs            @Invoice-Liquidity-Network/maintainers
+
 # RFCs (if added in future)
 rfcs/                        @Invoice-Liquidity-Network/maintainers
 
