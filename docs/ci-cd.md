@@ -742,10 +742,13 @@ touches a workflow. "Concurrency" is `cancel superseded` (`cancel-in-progress: t
 | [`gitleaks-reaudit.yml`](../.github/workflows/gitleaks-reaudit.yml) | `schedule`, `workflow_dispatch` | `contents: read` | — |
 | [`indexer-backup.yml`](../.github/workflows/indexer-backup.yml) | `schedule`, `workflow_dispatch` | `contents: read` | — |
 | [`indexer-migrations.yml`](../.github/workflows/indexer-migrations.yml) | `pull_request`, `push` | `contents: read` | — |
+| [`indexer-ops-docs.yml`](../.github/workflows/indexer-ops-docs.yml) | `pull_request`, `push`, `schedule`, `workflow_dispatch` | `contents: read` | cancel superseded |
 | [`knip.yml`](../.github/workflows/knip.yml) | `pull_request`, `push` | `contents: read` | cancel superseded |
+| [`local-dev-docs.yml`](../.github/workflows/local-dev-docs.yml) | `pull_request`, `push`, `schedule`, `workflow_dispatch` | `contents: read` | cancel superseded |
 | [`mainnet-checklist-status.yml`](../.github/workflows/mainnet-checklist-status.yml) | `issues`, `workflow_dispatch` | `contents: write`, `pull-requests: write`, `issues: read` | — |
 | [`mainnet-launch-evidence.yml`](../.github/workflows/mainnet-launch-evidence.yml) | `pull_request`, `workflow_dispatch` | `contents: read` | — |
 | [`mainnet-launch-readiness.yml`](../.github/workflows/mainnet-launch-readiness.yml) | `pull_request`, `workflow_dispatch` | `contents: read` | — |
+| [`malware-indicators.yml`](../.github/workflows/malware-indicators.yml) | `pull_request`, `push`, `schedule`, `workflow_dispatch` | `contents: read` | cancel superseded |
 | [`monorepo-map-drift.yml`](../.github/workflows/monorepo-map-drift.yml) | `pull_request`, `push`, `schedule`, `workflow_dispatch` | `contents: read` | cancel superseded |
 | [`mutation-testing.yml`](../.github/workflows/mutation-testing.yml) | `schedule`, `workflow_dispatch`, `pull_request` | `contents: read`, `pull-requests: write` | cancel superseded |
 | [`oracle-chaos.yml`](../.github/workflows/oracle-chaos.yml) | `schedule`, `pull_request`, `workflow_dispatch` | `contents: read` | cancel superseded |
@@ -767,6 +770,7 @@ touches a workflow. "Concurrency" is `cancel superseded` (`cancel-in-progress: t
 | [`sdk-package-names.yml`](../.github/workflows/sdk-package-names.yml) | `pull_request`, `push`, `schedule`, `workflow_dispatch` | `contents: read` | cancel superseded |
 | [`sdk-release.yml`](../.github/workflows/sdk-release.yml) | `push`, `pull_request`, `workflow_dispatch` | `contents: read` | queue |
 | [`sdk-support-windows.yml`](../.github/workflows/sdk-support-windows.yml) | `pull_request`, `push`, `schedule`, `workflow_dispatch` | `contents: read` | cancel superseded |
+| [`security-docs.yml`](../.github/workflows/security-docs.yml) | `pull_request`, `push`, `schedule`, `workflow_dispatch` | `contents: read` | cancel superseded |
 | [`semantic-release.yml`](../.github/workflows/semantic-release.yml) | `workflow_run` | `contents: write`, `issues: write`, `pull-requests: write` | queue |
 | [`snyk.yml`](../.github/workflows/snyk.yml) | `push`, `pull_request`, `schedule` | `contents: read` | cancel superseded |
 | [`sync-issues.yml`](../.github/workflows/sync-issues.yml) | `issues` | `contents: read` | — |
