@@ -1,7 +1,7 @@
 // !! AUTO-GENERATED — do not edit by hand.
 // Re-generate with: pnpm generate:types
 // Source: backend/target/spec.json
-// Spec hash: b95b6587
+// Spec hash: 68fb69d3
 // SDK version: 0.1.0
 
 /** Response returned by the oracle's get_payer_data() entry point.\nCombines identity verification with a freshness timestamp so the\ncontract can reject stale data without a second round-trip. */
@@ -804,62 +804,4 @@ export interface MultisigProposal {
   signers_approved: string[];
   /** Current state of the proposal */
   state: ProposalState;
-}
-
-/** Storage keys for the pool. */
-export type DataKey =
-  | { tag: "Admin" }
-  | { tag: "Balance" }
-  | { tag: "Coverage" }
-  | { tag: "TokenAddress" }
-  | { tag: "Enrolled"; values: [string] }
-  | { tag: "Premiums"; values: [string] }
-  | { tag: "Claimed"; values: [bigint] }
-  | { tag: "PendingCoverage" }
-  | { tag: "PendingAdmin" }
-  | { tag: "CoverageEta" }
-  | { tag: "AdminEta" }
-  | { tag: "BasePremiumRateBps" }
-  | { tag: "RiskMultiplierNumerator" }
-  | { tag: "RiskMultiplierDenominator" }
-  | { tag: "DefaultCount"; values: [string] }
-  | { tag: "ClaimCount"; values: [string] }
-  | { tag: "CoverageTiers" }
-  | { tag: "BalanceCap" }
-  | { tag: "InitializedAt" }
-  | { tag: "EnrolledCount" }
-  | { tag: "TotalDefaultCount" };
-
-/** Solvency snapshot returned by `get_pool_health`, so LPs can judge\ncoverage capacity against enrolled exposure rather than reading raw\nbalance alone. */
-export interface PoolHealth {
-  /** Current pool balance (premiums collected minus payouts). */
-  balance: bigint;
-  /** Number of distinct LPs currently enrolled in default protection. */
-  enrolled_lp_count: number;
-  /** Estimated token outflow per month from claims, projected from the\npool's historical default count times the flat coverage cap. `0`\nwhen there's no default history yet. */
-  estimated_monthly_claim_rate: bigint;
-  /** How many months the current balance would last at\n`estimated_monthly_claim_rate`. `None` when there's no claim\nhistory to project a rate from \xe2\x80\x94 this means "not yet estimable",\nnot "infinite coverage".\n\nNamed `months_of_coverage` rather than the fuller\n`months_of_coverage_at_current_rate` because Soroban's\n`#[contracttype]` caps struct field names at 30 characters. */
-  months_of_coverage: number | null;
-}
-
-/** Errors surfaced by the insurance pool stub. */
-export enum InsuranceError {
-  /** Contract has not been initialised with an admin. */
-  NotInitialized = 1,
-  /** A claim has already been processed for this invoice. */
-  AlreadyClaimed = 2,
-  /** Premium / coverage amount must be positive. */
-  InvalidAmount = 3,
-  /** Pool has no balance available to pay a claim. */
-  PoolEmpty = 4,
-  /** Contract is already initialised. */
-  AlreadyInitialized = 5,
-  /** No pending proposal exists for the requested admin action. */
-  NoPendingProposal = 6,
-  /** The proposal's timelock has not yet expired. */
-  TimelockNotExpired = 7,
-  /** A checked arithmetic operation overflowed. */
-  ArithmeticOverflow = 8,
-  /** Premium deposit would exceed the configured pool balance cap. */
-  BalanceCapExceeded = 9,
 }
