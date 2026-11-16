@@ -16,6 +16,7 @@ on:
       - 'package.json'
       - 'e2e-skip-budgets.json'
       - 'pnpm-lock.yaml'
+      - 'backend'
   pull_request:
     branches: [main, dev]
     paths:
@@ -28,6 +29,7 @@ on:
       - 'scripts/provision-e2e-node.mjs'
       - '.github/workflows/e2e.yml'
       - 'e2e-skip-budgets.json'
+      - 'backend'
   workflow_dispatch:
 
 permissions:
