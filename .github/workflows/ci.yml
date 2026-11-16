@@ -730,7 +730,7 @@ jobs:
         run: |
           if [ -f "Cargo.toml" ]; then
             stellar contract build
-            stellar contract info --wasm target/wasm32v1-none/release/*.wasm --output-format json > target/spec.json
+            stellar contract info interface --wasm target/wasm32v1-none/release/invoice_liquidity.wasm --output json > target/spec.json
           else
             echo "Contract submodule not initialized, skipping"
           fi

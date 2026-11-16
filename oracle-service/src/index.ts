@@ -658,7 +658,14 @@ export async function createOracleApp(
         verifyPayer: async (payerAddress: string, metadata?: Record<string, unknown>) => {
           const start = Date.now();
           try {
-            return await failoverKyb.verifyPayer(payerAddress, metadata);
+            const result = await failoverKyb.verifyPayer(payerAddress, metadata);
+            // Record a success only after an outage has already opened a `kyb`
+            // sample window. A healthy solo provider stays out of `sources`,
+            // and a later success can clear the unavailable state.
+            if (sourceTracker.snapshot().kyb) {
+              sourceTracker.noteAttempt('kyb', true, Date.now() - start);
+            }
+            return result;
           } catch (error) {
             sourceTracker.noteAttempt('kyb', false, Date.now() - start);
             throw error;

@@ -246,7 +246,102 @@ if (!fs.existsSync(specPath)) {
   process.exit(1);
 }
 
-const spec: SpecEntry[] = JSON.parse(fs.readFileSync(specPath, 'utf8'));
+function normalizeSorobanType(value: unknown): SorobanType {
+  if (typeof value === 'string') {
+    const scalars: Record<string, SorobanType['type']> = {
+      bool: 'Bool',
+      u32: 'U32',
+      i32: 'I32',
+      u64: 'U64',
+      i64: 'I64',
+      u128: 'U128',
+      i128: 'I128',
+      address: 'Address',
+      symbol: 'Symbol',
+      string: 'String',
+      bytes: 'Bytes',
+      void: 'Void',
+    };
+    const scalar = scalars[value];
+    if (scalar) return { type: scalar } as SorobanType;
+    return { type: 'Custom', name: value };
+  }
+  if (value && typeof value === 'object') {
+    const entry = value as Record<string, any>;
+    if (entry.type) return entry as SorobanType;
+    if (entry.bytes_n) return { type: 'BytesN', n: entry.bytes_n.n };
+    if (entry.vec) {
+      return { type: 'Vec', elementType: normalizeSorobanType(entry.vec.element_type) };
+    }
+    if (entry.option) {
+      return { type: 'Option', valueType: normalizeSorobanType(entry.option.value_type) };
+    }
+    if (entry.tuple) {
+      return {
+        type: 'Tuple',
+        types: (entry.tuple.value_types ?? []).map(normalizeSorobanType),
+      };
+    }
+    if (entry.udt) return { type: 'Custom', name: entry.udt.name };
+  }
+  return { type: 'Custom', name: 'unknown' };
+}
+
+function normalizeSpec(raw: unknown): SpecEntry[] {
+  if (!Array.isArray(raw)) return [];
+  const entries: SpecEntry[] = [];
+  for (const item of raw) {
+    if (!item || typeof item !== 'object') continue;
+    const entry = item as Record<string, any>;
+    if (typeof entry.type === 'string') {
+      entries.push(entry as SpecEntry);
+      continue;
+    }
+    if (entry.udt_struct_v0) {
+      const struct = entry.udt_struct_v0;
+      entries.push({
+        type: 'SCSpecEntryUDTStructV0',
+        name: struct.name,
+        doc: struct.doc,
+        fields: (struct.fields ?? []).map((field: any) => ({
+          name: field.name,
+          doc: field.doc,
+          type: normalizeSorobanType(field.type),
+        })),
+      } as StructEntry);
+    } else if (entry.udt_enum_v0 || entry.udt_error_enum_v0) {
+      const enumerated = entry.udt_enum_v0 ?? entry.udt_error_enum_v0;
+      entries.push({
+        type: entry.udt_error_enum_v0 ? 'SCSpecEntryUDTErrorEnumV0' : 'SCSpecEntryUDTEnumV0',
+        name: enumerated.name,
+        doc: enumerated.doc,
+        cases: enumerated.cases ?? [],
+      } as EnumEntry);
+    } else if (entry.udt_union_v0) {
+      const union = entry.udt_union_v0;
+      entries.push({
+        type: 'SCSpecEntryUDTUnionV0',
+        name: union.name,
+        doc: union.doc,
+        cases: (union.cases ?? []).map((unionCase: any) => {
+          if (unionCase.void_v0) {
+            return { kind: 'VoidCase', name: unionCase.void_v0.name, doc: unionCase.void_v0.doc };
+          }
+          const tuple = unionCase.tuple_v0;
+          return {
+            kind: 'TupleCase',
+            name: tuple?.name ?? 'Unknown',
+            doc: tuple?.doc,
+            type: (tuple?.type ?? []).map(normalizeSorobanType),
+          };
+        }),
+      } as UnionEntry);
+    }
+  }
+  return entries;
+}
+
+const spec: SpecEntry[] = normalizeSpec(JSON.parse(fs.readFileSync(specPath, 'utf8')));
 const specHash = computeSpecHash(specPath);
 
 const sections: string[] = [
