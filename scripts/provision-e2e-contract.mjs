@@ -185,6 +185,22 @@ function resolveWasmPath(explicit) {
   return null;
 }
 
+function fundDeployer(identity, rpcUrl) {
+  const address = runStellar(['keys', 'address', identity]).stdout.trim();
+  const friendbot = new URL('/friendbot', rpcUrl);
+  friendbot.searchParams.set('addr', address);
+  const result = spawnSync('curl', ['-fsS', friendbot.toString()], { encoding: 'utf8' });
+  if (result.status !== 0) {
+    throw new Error(
+      `Friendbot could not fund ${address} at ${friendbot.origin} (exit ${result.status}): ${(
+        result.stderr ||
+        result.stdout ||
+        ''
+      ).trim()}`
+    );
+  }
+}
+
 function runStellar(args, { allowFailure = false } = {}) {
   const result = spawnSync('stellar', args, { encoding: 'utf8' });
   if (result.error) {
@@ -307,6 +323,16 @@ async function main(argv, log = console.log) {
   runStellar(['keys', 'generate', options.identity, '--network', options.network], {
     allowFailure: true,
   });
+  try {
+    fundDeployer(options.identity, options.rpcUrl);
+  } catch (error) {
+    console.error(
+      `✗ ${error instanceof Error ? error.message : String(error)}\n` +
+        '  recovery: confirm the local Friendbot at <rpc-origin>/friendbot is up, or supply CONTRACT_ID ' +
+        'for an already-deployed contract.'
+    );
+    return 1;
+  }
 
   try {
     runStellar([
