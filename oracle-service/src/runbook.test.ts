@@ -3,7 +3,7 @@ import { resolve } from 'node:path';
 
 import { describe, expect, it } from 'vitest';
 
-import { createOracleApp } from './index';
+import { createOracleApp, DEFAULT_KYB_DECISION_TTL_MS } from './index';
 
 /**
  * Payer/KYB incident runbook (issue #1240).
@@ -70,7 +70,12 @@ describe('payer/KYB incident runbook (#1240)', () => {
     try {
       const snapshot = health();
       // The runbook's opening `health()` example must be a real shape.
-      expect(snapshot.kyb).toEqual({ required: false, configured: false, failover: false });
+      expect(snapshot.kyb).toEqual({
+        required: false,
+        configured: false,
+        provider: null,
+        decisionTtlMs: DEFAULT_KYB_DECISION_TTL_MS,
+      });
       expect(snapshot.sources).toEqual({});
     } finally {
       await close();

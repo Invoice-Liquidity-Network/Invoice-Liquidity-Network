@@ -1,6 +1,7 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import {
+  friendbotResponseIsFunded,
   isDeployedContractIdShape,
   isPlaceholderContractId,
   resolveWasmPath,
@@ -8,6 +9,25 @@ import {
 } from '../provision-e2e-contract.mjs';
 
 const REAL_ID = 'CABCDEFGHIJKLMNOPQRSTUVWXYZ234567ABCDEFGHIJKLMNOPQRSTUVW';
+
+describe('friendbotResponseIsFunded', () => {
+  it('accepts a new account and an account that already exists', () => {
+    assert.equal(friendbotResponseIsFunded(200, '{"hash":"abc"}'), true);
+    assert.equal(
+      friendbotResponseIsFunded(
+        400,
+        '{"status":400,"detail":"createAccountAlreadyExist: op_already_exists"}'
+      ),
+      true
+    );
+  });
+
+  it('rejects a Friendbot error that did not fund the account', () => {
+    assert.equal(friendbotResponseIsFunded(400, '{"status":400,"title":"Bad Request"}'), false);
+    assert.equal(friendbotResponseIsFunded(500, 'upstream down'), false);
+    assert.equal(friendbotResponseIsFunded(0, ''), false);
+  });
+});
 
 describe('isPlaceholderContractId', () => {
   it('rejects every placeholder shape the audit found (#1242)', () => {

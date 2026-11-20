@@ -4,6 +4,7 @@ import request from 'supertest';
 import { createOracleCache } from './cache';
 import { createOracleApp } from './index';
 import { MockKYBProvider } from './kyb/mockProvider';
+import { defaultSourceFailoverConfig } from './sourceFailover';
 import { OracleVerifier } from './verifier';
 import type { IndexerInvoiceHistoryEntry, ReputationSnapshot } from './types';
 
@@ -287,9 +288,38 @@ describe('KYB Provider Fail-Closed Hardening (Issue #1233)', () => {
         const healthRes = await request(service.app).get('/health').expect(200);
         expect(healthRes.body.status).toBe('degraded');
 
-        // Check metrics endpoint exports PAYER_KYB_UNAVAILABLE failure counter
         const metricsRes = await request(service.app).get('/metrics').expect(200);
         expect(metricsRes.text).toContain('code="PAYER_KYB_UNAVAILABLE"');
+      } finally {
+        await service.close();
+      }
+    });
+
+    it('clears the KYB outage once the provider succeeds again', async () => {
+      const flakyKyb = new MockKYBProvider({ unavailable: true });
+      const service = await createOracleApp({
+        historyProvider: async () => healthyHistory,
+        reputationProvider: async () => reputation,
+        kybProvider: flakyKyb,
+        requireKyb: true,
+        enableRateLimit: false,
+        sourceFailover: {
+          ...defaultSourceFailoverConfig(),
+          cooldownMs: 0,
+          recoverySuccesses: 1,
+        },
+      });
+
+      try {
+        await request(service.app).post('/v1/verify').send(REQUEST).expect(200);
+        expect(service.health().status).toBe('degraded');
+        expect(service.health().sources?.kyb).toBe('unavailable');
+
+        flakyKyb.setUnavailable(false);
+        const recovered = await request(service.app).post('/v1/verify').send(REQUEST).expect(200);
+        expect(recovered.body.isVerified).toBe(true);
+        expect(service.health().sources?.kyb).toBe('healthy');
+        expect(service.health().status).toBe('ok');
       } finally {
         await service.close();
       }

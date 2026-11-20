@@ -30,7 +30,8 @@
     // Docs search widget is loaded dynamically by the deployed docs build.
     "packages/docs/components/AlgoliaSearch.tsx": ["exports"],
     "packages/docs/lib/docs-version.ts": ["exports"],
-    "sdk/src/logger.ts": ["enumMembers"]
+    "sdk/src/logger.ts": ["enumMembers"],
+    "sdk/src/generated/types.ts": ["exports", "types", "nsExports", "nsTypes", "enumMembers"]
   },
   "workspaces": {
     "sdk": {

@@ -185,6 +185,43 @@ function resolveWasmPath(explicit) {
   return null;
 }
 
+/**
+ * Friendbot returns 2xx when it creates the account and HTTP 400 with
+ * `createAccountAlreadyExist` when the account is already on the ledger.
+ * A retried provision must treat that 400 as success.
+ */
+export function friendbotResponseIsFunded(statusCode, body) {
+  if (statusCode >= 200 && statusCode < 300) return true;
+  return statusCode === 400 && /already\s*exist/i.test(String(body ?? ''));
+}
+
+function fundDeployer(identity, rpcUrl) {
+  const address = runStellar(['keys', 'address', identity]).stdout.trim();
+  const friendbot = new URL('/friendbot', rpcUrl);
+  friendbot.searchParams.set('addr', address);
+  const result = spawnSync('curl', ['-sS', '-w', '\n%{http_code}', friendbot.toString()], {
+    encoding: 'utf8',
+  });
+  if (result.error || result.status !== 0) {
+    throw new Error(
+      `Friendbot could not fund ${address} at ${friendbot.origin} (exit ${result.status}): ${(
+        result.stderr ||
+        result.stdout ||
+        ''
+      ).trim()}`
+    );
+  }
+  const output = result.stdout ?? '';
+  const splitAt = output.lastIndexOf('\n');
+  const body = splitAt === -1 ? output : output.slice(0, splitAt);
+  const statusCode = Number(splitAt === -1 ? output : output.slice(splitAt + 1));
+  if (!friendbotResponseIsFunded(statusCode, body)) {
+    throw new Error(
+      `Friendbot could not fund ${address} at ${friendbot.origin} (HTTP ${statusCode}): ${body.trim()}`
+    );
+  }
+}
+
 function runStellar(args, { allowFailure = false } = {}) {
   const result = spawnSync('stellar', args, { encoding: 'utf8' });
   if (result.error) {
@@ -307,6 +344,16 @@ async function main(argv, log = console.log) {
   runStellar(['keys', 'generate', options.identity, '--network', options.network], {
     allowFailure: true,
   });
+  try {
+    fundDeployer(options.identity, options.rpcUrl);
+  } catch (error) {
+    console.error(
+      `✗ ${error instanceof Error ? error.message : String(error)}\n` +
+        '  recovery: confirm the local Friendbot at <rpc-origin>/friendbot is up, or supply CONTRACT_ID ' +
+        'for an already-deployed contract.'
+    );
+    return 1;
+  }
 
   try {
     runStellar([

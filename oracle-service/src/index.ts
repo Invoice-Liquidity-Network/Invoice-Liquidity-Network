@@ -645,10 +645,34 @@ export async function createOracleApp(
     options.reputationProvider ?? (await createReputationProvider(resolved, sourceTracker));
   // Issue #1238: the KYB provider gets the same primary/fallback treatment as
   // the indexer and RPC. With no fallback it is passed through untouched.
-  const kybProvider = options.kybProvider
+  // A thrown attempt is recorded so a required provider that is down flips
+  // service health to degraded. Successful calls are not recorded here: a
+  // solo provider must not invent failover bookkeeping.
+  const failoverKyb = options.kybProvider
     ? createKybProvider(options.kybProvider, options.kybFallbackProvider, sourceTracker)
     : undefined;
-  const requireKyb = options.requireKyb ?? process.env.NODE_ENV === 'production';
+  const kybProvider = failoverKyb
+    ? {
+        name: failoverKyb.name,
+        isMock: failoverKyb.isMock,
+        verifyPayer: async (payerAddress: string, metadata?: Record<string, unknown>) => {
+          const start = Date.now();
+          try {
+            const result = await failoverKyb.verifyPayer(payerAddress, metadata);
+            // Record a success only after an outage has already opened a `kyb`
+            // sample window. A healthy solo provider stays out of `sources`,
+            // and a later success can clear the unavailable state.
+            if (sourceTracker.snapshot().kyb) {
+              sourceTracker.noteAttempt('kyb', true, Date.now() - start);
+            }
+            return result;
+          } catch (error) {
+            sourceTracker.noteAttempt('kyb', false, Date.now() - start);
+            throw error;
+          }
+        },
+      }
+    : undefined;
   // Issues #1053 and #1055: a published verdict has to be attributable (an
   // attestation the caller can verify without trusting the transport) and it
   // has to leave a durable record behind. Both are constructed here rather than
@@ -684,24 +708,6 @@ export async function createOracleApp(
     1
   );
 
-  const rawKybProvider = kyb.kybProvider;
-  const kybProvider = rawKybProvider
-    ? {
-        name: rawKybProvider.name,
-        isMock: rawKybProvider.isMock,
-        verifyPayer: async (payerAddress: string, metadata?: Record<string, unknown>) => {
-          const start = Date.now();
-          try {
-            const result = await rawKybProvider.verifyPayer(payerAddress, metadata);
-            sourceTracker.noteAttempt('kyb', true, Date.now() - start);
-            return result;
-          } catch (error) {
-            sourceTracker.noteAttempt('kyb', false, Date.now() - start);
-            throw error;
-          }
-        },
-      }
-    : undefined;
   if (kyb.requireKyb && !kybProvider) {
     sourceTracker.noteAttempt('kyb', false, 0);
   }
@@ -1124,11 +1130,6 @@ export async function createOracleApp(
       // (issue #1238) exposes per-source failover state so a drill — or a live
       // incident — can confirm routing moved without reading logs.
       sources,
-      kyb: {
-        required: requireKyb,
-        configured: Boolean(options.kybProvider),
-        failover: Boolean(options.kybProvider && options.kybFallbackProvider),
-      },
     };
   }
 
