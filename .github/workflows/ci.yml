@@ -917,6 +917,10 @@ jobs:
           npm run test:sdk-support-windows
           npm run test:sdk-rc-smoke
           npm run test:react-peer-contract
+          npm run test:example-package-names
+          npm run test:react-sdk-imports
+          npm run test:sdk-deprecations
+          npm run test:clean-consumer-install
           npm run test:contract-abi-compat
           npm run test:e2e-guards
           npm run test:release-scripts

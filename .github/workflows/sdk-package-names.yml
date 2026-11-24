@@ -10,7 +10,14 @@ name: SDK Package Names
 # on every run (pass or fail) as proof the control ran — see
 # docs/runbooks/sdk-package-names.md.
 #
-# Dependency-free (plain Node), so it does not need a pnpm install.
+# The same workflow carries the rest of the SDK surface alignment controls, so
+# one required check family covers them (owner: @Invoice-Liquidity-Network/frontend-platform):
+#   #1220 example package names      docs/runbooks/example-package-names.md
+#   #1221 @iln/react SDK imports     docs/runbooks/react-sdk-imports.md
+#   #1222 deprecated-surface notices docs/runbooks/sdk-deprecations.md
+#   #1223 clean consumer install     docs/runbooks/clean-consumer-install.md
+#
+# The first job is dependency-free (plain Node), so it does not need a pnpm install.
 
 on:
   pull_request:
@@ -53,20 +60,107 @@ jobs:
       - name: Enforce canonical SDK package names
         run: node scripts/check-sdk-package-names.mjs --json="$RUNNER_TEMP/sdk-package-names-report.json"
 
+      - name: Unit tests for the SDK surface guards (#1220, #1221, #1222)
+        if: ${{ !cancelled() }}
+        run: >-
+          node --test
+          scripts/__tests__/check-example-package-names.test.mjs
+          scripts/__tests__/check-react-sdk-imports.test.mjs
+          scripts/__tests__/check-sdk-deprecations.test.mjs
+
+      - name: Enforce example package names (#1220)
+        if: ${{ !cancelled() }}
+        run: node scripts/check-example-package-names.mjs --json="$RUNNER_TEMP/example-package-names-report.json"
+
+      - name: Enforce canonical SDK imports in @iln/react (#1221)
+        if: ${{ !cancelled() }}
+        run: node scripts/check-react-sdk-imports.mjs --json="$RUNNER_TEMP/react-sdk-imports-report.json"
+
+      - name: Enforce SDK deprecation notices (#1222)
+        if: ${{ !cancelled() }}
+        run: node scripts/check-sdk-deprecations.mjs --json="$RUNNER_TEMP/sdk-deprecations-report.json"
+
       - name: Job summary
         if: always()
         run: |
-          REPORT="$RUNNER_TEMP/sdk-package-names-report.json"
+          node -e '
+            const fs = require("fs");
+            const dir = process.argv[1];
+            const reports = [
+              ["SDK package names", "sdk-package-names-report.json"],
+              ["Example package names (#1220)", "example-package-names-report.json"],
+              ["@iln/react SDK imports (#1221)", "react-sdk-imports-report.json"],
+              ["SDK deprecation notices (#1222)", "sdk-deprecations-report.json"],
+            ];
+            const lines = ["### SDK surface alignment", "", "| Control | Result | Findings | By rule |", "|---|---|---|---|"];
+            for (const [label, file] of reports) {
+              const path = dir + "/" + file;
+              if (!fs.existsSync(path)) { lines.push(`| ${label} | ⚠️ no report | – | – |`); continue; }
+              const s = JSON.parse(fs.readFileSync(path, "utf8")).summary;
+              lines.push(`| ${label} | ${s.ok ? "✅ pass" : "❌ fail"} | ${s.total} | ${JSON.stringify(s.byRule)} |`);
+            }
+            console.log(lines.join("\n"));
+          ' "$RUNNER_TEMP" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: sdk-package-names-report
+          path: |
+            ${{ runner.temp }}/sdk-package-names-report.json
+            ${{ runner.temp }}/example-package-names-report.json
+            ${{ runner.temp }}/react-sdk-imports-report.json
+            ${{ runner.temp }}/sdk-deprecations-report.json
+          if-no-files-found: ignore
+          retention-days: 30
+
+  clean-consumer-install:
+    name: clean consumer install (#1223)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm with store cache
+        uses: ./.github/actions/setup-pnpm
+        with:
+          # This job tests what a consumer installs, not lockfile hygiene (owned
+          # by the lockfile/dependency checks), so it does not fail on a lockfile
+          # that lags a package.json. Scripts are skipped: nothing here needs husky.
+          install-args: --no-frozen-lockfile --ignore-scripts --filter @iln/sdk... --filter @iln/shared...
+
+      - name: Unit tests for the guard
+        run: node --test scripts/__tests__/check-clean-consumer-install.test.mjs
+
+      - name: Emit @iln/shared declarations
+        run: |
+          pnpm --filter @iln/shared exec tsc -p tsconfig.json \
+            || echo "::warning::@iln/shared reports type errors (tracked separately); declarations are still emitted"
+          test -f packages/shared/dist/index.d.ts
+
+      - name: Build @iln/sdk bundles
+        # tsup only: the bundle-size budget is enforced by sdk-bundle-size.yml.
+        run: pnpm --filter @iln/sdk exec tsup
+
+      - name: Pack, install into an empty project, resolve (#1223)
+        run: node scripts/check-clean-consumer-install.mjs --no-build --json="$RUNNER_TEMP/clean-consumer-install-report.json"
+
+      - name: Job summary
+        if: always()
+        run: |
+          REPORT="$RUNNER_TEMP/clean-consumer-install-report.json"
           [ -f "$REPORT" ] || exit 0
           node -e '
             const r = require(process.argv[1]);
             const s = r.summary;
             const lines = [
-              "### SDK package names",
+              "### Clean consumer install",
               "",
-              `| Result | Findings | Files | By rule |`,
-              `|---|---|---|---|`,
-              `| ${s.ok ? "✅ pass" : "❌ fail"} | ${s.total} | ${s.filesWithFindings} | ${JSON.stringify(s.byRule)} |`,
+              "| Result | Findings | Packages | Install ms | Skipped |",
+              "|---|---|---|---|---|",
+              `| ${s.ok ? "✅ pass" : "❌ fail"} | ${s.total} | ${r.tarballs.map((t) => t.pkg).join(", ")} | ${r.installMs ?? "-"} | ${r.skipped.join("; ") || "-"} |`,
             ];
             console.log(lines.join("\n"));
           ' "$REPORT" >> "$GITHUB_STEP_SUMMARY"
@@ -75,7 +169,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: sdk-package-names-report
-          path: ${{ runner.temp }}/sdk-package-names-report.json
+          name: clean-consumer-install-report
+          path: ${{ runner.temp }}/clean-consumer-install-report.json
           if-no-files-found: ignore
           retention-days: 30

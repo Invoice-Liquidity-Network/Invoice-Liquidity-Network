@@ -26,7 +26,10 @@
     "dist",
     "README.md"
   ],
-  "sideEffects": false,
+  "sideEffects": [
+    "./dist/legacy-imports.mjs",
+    "./dist/legacy-imports.cjs"
+  ],
   "engines": {
     "node": ">=20"
   },

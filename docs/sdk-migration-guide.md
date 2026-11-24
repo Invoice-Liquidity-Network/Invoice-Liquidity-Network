@@ -35,6 +35,42 @@ dependency: install it alongside `@iln/react` in your app.
 CI enforces the canonical names with `scripts/check-sdk-package-names.mjs`.
 See [runbooks/sdk-package-names.md](runbooks/sdk-package-names.md).
 
+## Deprecated SDK surface
+
+Deprecated entry points keep working, and now tell you so at runtime.
+
+| Deprecated | Use instead | Removed in | Warning code |
+|:---|:---|:---|:---|
+| `@iln/sdk/legacy` (compatibility shim) | `@iln/sdk` | `1.0.0` | `ILN_SDK_DEPRECATED_LEGACY_IMPORT` |
+
+The shim re-exports the same public API, so migrating is a specifier change:
+
+```diff
+- import { ILNSdk, ILN_TESTNET } from "@iln/sdk/legacy";
++ import { ILNSdk, ILN_TESTNET } from "@iln/sdk";
+```
+
+**What you will see.** The first time a process loads `@iln/sdk/legacy`, Node
+prints a `DeprecationWarning` to stderr (and emits `process.on('warning')`):
+
+```text
+(node:1234) [ILN_SDK_DEPRECATED_LEGACY_IMPORT] DeprecationWarning: [@iln/sdk] the '@iln/sdk/legacy' import path is deprecated and will be removed in @iln/sdk 1.0.0. Migrate: import from '@iln/sdk'. ...
+```
+
+- It is emitted **once per process**; restarting the service emits it again.
+  Search your logs for the warning code to find every service still on the shim.
+- Where `process.emitWarning` does not exist (browsers, React Native) the same
+  message is written with `console.warn`.
+- `--no-deprecation` and `NODE_NO_WARNINGS=1` silence Node warnings. To silence
+  only this SDK's migration warnings, set `ILN_SDK_SUPPRESS_DEPRECATION_WARNINGS=1`.
+- The warning never throws and never changes what the import returns.
+- `@iln/sdk` declares `sideEffects` for the shim's bundles so a bundler keeps
+  the warning; the canonical `@iln/sdk` entry stays tree-shakeable.
+
+CI enforces that every notice is wired, tested and documented with
+`scripts/check-sdk-deprecations.mjs`. See
+[runbooks/sdk-deprecations.md](runbooks/sdk-deprecations.md).
+
 ---
 
 ## Overview of Breaking Changes

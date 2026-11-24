@@ -28,15 +28,16 @@ Designed for DAO governance participants who want to stay updated on new proposa
 
 ## Prerequisites
 
-- Node.js 18+
+- Node.js 20+ (matches `engines` in `package.json`)
+- pnpm (this example depends on `@iln/sdk` through the pnpm `workspace:` protocol)
 - A Discord server with webhook configured
 - Stellar testnet or mainnet RPC endpoint access
 
 ## Installation
 
 ```bash
+pnpm install            # from the repository root; resolves @iln/sdk to ../../sdk
 cd examples/governance-monitor
-npm install
 ```
 
 ## Setup
@@ -267,24 +268,28 @@ pm2 startup
 
 ### Using Docker
 
+Save this as `examples/governance-monitor/Dockerfile`:
+
 ```dockerfile
-FROM node:18-alpine
+# Build from the repository root so the `workspace:` dependency on @iln/sdk resolves.
+FROM node:20-alpine
 
 WORKDIR /app
 COPY . .
-RUN npm install
+RUN corepack enable && pnpm install --filter @iln/governance-monitor...
+WORKDIR /app/examples/governance-monitor
 
 ENV DISCORD_WEBHOOK_URL=""
 ENV GOVERNANCE_CONTRACT_ID=""
 ENV RPC_URL=""
 
-CMD ["npm", "start"]
+CMD ["pnpm", "start"]
 ```
 
 Build and run:
 
 ```bash
-docker build -t iln-governance-monitor .
+docker build -t iln-governance-monitor -f examples/governance-monitor/Dockerfile .   # run from the repository root
 docker run -e DISCORD_WEBHOOK_URL="..." iln-governance-monitor
 ```
 
