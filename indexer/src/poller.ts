@@ -230,17 +230,26 @@ export async function pollOnce(): Promise<void> {
     // page limit — otherwise we've consumed all available events.
     paginationCursor = response.events.length === BATCH_SIZE ? response.cursor : undefined;
 
-    if (highestEventLedger > stored) {
-      setCursorLedger(highestEventLedger);
-      stored = highestEventLedger;
-    }
+    // ── DO NOT advance the persisted cursor here ──────────────────────────────
+    // The cursor is the durability boundary: it must only move forward once
+    // every event in the cycle has been persisted. Advancing per-batch lets a
+    // failed or partial poll (a thrown processEvent, a mid-cycle crash, an RPC
+    // error on a later page) leave the cursor pointing past data that was never
+    // written. Deduplication makes re-scan safe, but the cursor must still be
+    // the source of truth for "what has been durably indexed" (#1436).
+    //
+    // Re-org detection uses the DB cursor (`stored`), which is the durability
+    // boundary: a chain tip below the persisted cursor means the chain has
+    // rewound past data the indexer believes it has durably stored.
 
     if (!paginationCursor) break;
   }
 
-  // ── Advance cursor ────────────────────────────────────────────────────────
+  // ── Advance cursor (single durability boundary for the whole cycle) ───────
   // Save up to confirmed tip so next poll starts from the confirmed tip,
-  // giving a small overlap window for any in-flight events.
+  // giving a small overlap window for any in-flight events. This is the ONLY
+  // place the persisted cursor advances during a cycle, so a failed or
+  // partial poll cannot advance the cursor before data is persisted (#1436).
   const confirmedTip = _activeConfirmationPolicy.getConfirmedTip(latestKnownLedger);
   const newCursor = Math.max(highestEventLedger, confirmedTip);
   if (newCursor > stored) {

@@ -8,5 +8,6 @@
   "failover-plan": "Failover Plan",
   "operations-checks": "Operations Checks",
   "cursor-divergence-recovery": "Cursor Divergence Recovery",
-  "api-hardening": "API Hardening"
+  "api-hardening": "API Hardening",
+  "pipeline-hardening": "Pipeline Hardening"
 }
