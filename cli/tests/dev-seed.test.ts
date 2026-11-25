@@ -1,6 +1,10 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { createUi } from '../src/format';
-import { TestnetAccountSeeder, type SeededAccount } from '../src/dev-seed';
+import {
+  TestnetAccountSeeder,
+  type SeededAccount,
+  type SeederRpcServerLike,
+} from '../src/dev-seed';
 import { writeFileSync, unlinkSync, existsSync, mkdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -220,6 +224,84 @@ KEY_WITH_EQUALS=value=with=equals
     });
 
     await expect(seeder.seed({ scenario: 'invalid-scenario' })).rejects.toThrow(/Invalid scenario/);
+  });
+
+  it('should refuse to seed when the RPC endpoint is not actually testnet, even if config.network says testnet', async () => {
+    // Simulates a misconfigured/stale ILN_RPC_URL: the `network` label says
+    // testnet, but the endpoint it's paired with reports the mainnet
+    // passphrase. config.network alone must not be trusted.
+    const seeder = new TestnetAccountSeeder({
+      config: {
+        network: 'testnet',
+        contractId: 'CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABSC4',
+        keypairPath: '/tmp/keypair.json',
+        networkPassphrase: 'Test SDF Network ; September 2015',
+        rpcUrl: 'https://mainnet.sorobanrpc.com',
+      },
+      ui: uiMock,
+      outputPath: path.join(tempDir, '.env.testnet.accounts'),
+      server: {
+        getAccount: vi.fn(),
+        getNetwork: vi.fn().mockResolvedValue({
+          passphrase: 'Public Global Stellar Network ; September 2015',
+        }),
+        prepareTransaction: vi.fn(),
+        sendTransaction: vi.fn(),
+      } as unknown as SeederRpcServerLike,
+    });
+
+    await expect((seeder as any).assertRpcEndpointIsTestnet()).rejects.toThrow(
+      /Refusing to seed accounts/
+    );
+    await expect(seeder.seed()).rejects.toThrow(/Refusing to seed accounts/);
+  });
+
+  it('should proceed past the network check when the RPC endpoint confirms the testnet passphrase', async () => {
+    const seeder = new TestnetAccountSeeder({
+      config: {
+        network: 'testnet',
+        contractId: 'CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABSC4',
+        keypairPath: '/tmp/keypair.json',
+        networkPassphrase: 'Test SDF Network ; September 2015',
+        rpcUrl: 'https://soroban-testnet.stellar.org',
+      },
+      ui: uiMock,
+      outputPath: path.join(tempDir, '.env.testnet.accounts'),
+      server: {
+        getAccount: vi.fn(),
+        getNetwork: vi.fn().mockResolvedValue({
+          passphrase: 'Test SDF Network ; September 2015',
+        }),
+        prepareTransaction: vi.fn(),
+        sendTransaction: vi.fn(),
+      } as unknown as SeederRpcServerLike,
+    });
+
+    await expect((seeder as any).assertRpcEndpointIsTestnet()).resolves.toBeUndefined();
+  });
+
+  it('should refuse to seed rather than proceed unverified when the RPC endpoint cannot be reached', async () => {
+    const seeder = new TestnetAccountSeeder({
+      config: {
+        network: 'testnet',
+        contractId: 'CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABSC4',
+        keypairPath: '/tmp/keypair.json',
+        networkPassphrase: 'Test SDF Network ; September 2015',
+        rpcUrl: 'https://soroban-testnet.stellar.org',
+      },
+      ui: uiMock,
+      outputPath: path.join(tempDir, '.env.testnet.accounts'),
+      server: {
+        getAccount: vi.fn(),
+        getNetwork: vi.fn().mockRejectedValue(new Error('ECONNREFUSED')),
+        prepareTransaction: vi.fn(),
+        sendTransaction: vi.fn(),
+      } as unknown as SeederRpcServerLike,
+    });
+
+    await expect((seeder as any).assertRpcEndpointIsTestnet()).rejects.toThrow(
+      /Could not verify the RPC endpoint/
+    );
   });
 
   it('should reject invalid token', async () => {

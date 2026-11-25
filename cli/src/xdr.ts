@@ -40,6 +40,21 @@ function toReadableValue(value: unknown): unknown {
   }
 
   if (value && typeof value === 'object') {
+    if (Object.getPrototypeOf(value) !== Object.prototype) {
+      // scValToNative() falls through to returning the raw XDR value itself
+      // for SCV variants it doesn't convert (e.g. a contract instance or a
+      // ledger-key nonce). That raw value's own properties are SDK-internal
+      // implementation details, not decoded fields — serializing them with
+      // the generic object branch below would silently misrepresent the
+      // value as if it had been fully decoded, so refuse instead of
+      // guessing at a shape.
+      throw new Error(
+        `Unable to decode this XDR value: encountered an unsupported SCVal variant (${
+          (value as { constructor?: { name?: string } }).constructor?.name ?? 'unknown type'
+        }). Refusing to display a partial or misleading decode.`
+      );
+    }
+
     return Object.fromEntries(
       Object.entries(value as Record<string, unknown>).map(([key, objectValue]) => [
         key,

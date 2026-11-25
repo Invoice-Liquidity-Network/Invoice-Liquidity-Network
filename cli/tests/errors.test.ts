@@ -8,7 +8,14 @@
 
 import { describe, expect, it } from 'vitest';
 
-import { formatILNError, isStructuredError, osc8Hyperlink } from '../src/errors';
+import {
+  classifyTransactionStatus,
+  describeTransactionOutcome,
+  formatILNError,
+  isRecoverableTransactionOutcome,
+  isStructuredError,
+  osc8Hyperlink,
+} from '../src/errors';
 
 import { InvalidDiscountRateError, TokenMismatchError, NetworkError } from '@iln/sdk';
 
@@ -74,5 +81,45 @@ describe('formatILNError', () => {
     const out = formatILNError(err, { color: false, hyperlinks: false });
     expect(out).not.toContain(String.fromCharCode(27) + ']8;;');
     expect(out).toContain(err.docsUrl!);
+  });
+});
+
+/**
+ * Tests for transaction-outcome classification (#1497): a timed-out poll
+ * that never leaves NOT_FOUND must classify as "unknown", never "failed" —
+ * collapsing the two would tell a caller a transaction failed when it might
+ * still land, inviting an unsafe resubmission.
+ */
+describe('classifyTransactionStatus', () => {
+  it('classifies SUCCESS and FAILED as terminal outcomes', () => {
+    expect(classifyTransactionStatus('SUCCESS')).toBe('success');
+    expect(classifyTransactionStatus('FAILED')).toBe('failed');
+  });
+
+  it('classifies NOT_FOUND and any unrecognized status as unknown, never failed', () => {
+    expect(classifyTransactionStatus('NOT_FOUND')).toBe('unknown');
+    expect(classifyTransactionStatus('SOMETHING_NEW')).toBe('unknown');
+    expect(classifyTransactionStatus(undefined)).toBe('unknown');
+  });
+});
+
+describe('isRecoverableTransactionOutcome', () => {
+  it('treats only the unknown outcome as recoverable', () => {
+    expect(isRecoverableTransactionOutcome('unknown')).toBe(true);
+    expect(isRecoverableTransactionOutcome('success')).toBe(false);
+    expect(isRecoverableTransactionOutcome('failed')).toBe(false);
+  });
+});
+
+describe('describeTransactionOutcome', () => {
+  it('never asserts failure for an unknown outcome', () => {
+    const message = describeTransactionOutcome('unknown', 'deadbeef');
+    expect(message).toContain('deadbeef');
+    expect(message).not.toContain('failed');
+  });
+
+  it('clearly states success and failure for terminal outcomes', () => {
+    expect(describeTransactionOutcome('success', 'abc123')).toContain('succeeded');
+    expect(describeTransactionOutcome('failed', 'abc123')).toContain('failed');
   });
 });

@@ -77,7 +77,7 @@ export interface RpcServerLike {
   simulateTransaction(transaction: unknown): Promise<unknown>;
   prepareTransaction(transaction: unknown): Promise<{ toXDR(): string }>;
   sendTransaction(transaction: unknown): Promise<unknown>;
-  pollTransaction(hash: string, options?: { attempts?: number }): Promise<unknown>;
+  getTransaction(hash: string): Promise<{ status?: string; resultXdr?: unknown }>;
   getHealth?(): Promise<{ status?: string }>;
 }
 
@@ -87,6 +87,8 @@ export interface ClientOptions {
   rpcUrl: string;
   server?: RpcServerLike;
   signer: TransactionSigner;
+  /** Delay between `getTransaction` confirmation polls, in ms. Defaults to 2000. */
+  pollIntervalMs?: number;
 }
 
 export interface WriteResult {

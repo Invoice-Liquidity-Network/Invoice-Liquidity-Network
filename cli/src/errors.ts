@@ -143,3 +143,56 @@ export function formatUnknownError(error: unknown): string {
 
   return 'Unknown error.';
 }
+
+/**
+ * Terminal outcomes the CLI can report after submitting a transaction to
+ * Soroban RPC. `unknown` covers the case where polling timed out while the
+ * RPC still reports `NOT_FOUND` — the transaction may still land in a later
+ * ledger, so it must never be collapsed into `failed`: telling the caller
+ * the transaction failed when it might actually succeed later risks an
+ * unsafe resubmission (double-send) of what is still an in-flight write.
+ */
+export type TransactionOutcome = 'success' | 'failed' | 'unknown';
+
+const TERMINAL_RPC_TRANSACTION_STATUSES: Record<string, TransactionOutcome> = {
+  SUCCESS: 'success',
+  FAILED: 'failed',
+};
+
+/**
+ * Classify a Soroban RPC `getTransaction` status string into a
+ * {@link TransactionOutcome}. Any non-terminal or unrecognized status
+ * (`NOT_FOUND`, or anything a future RPC version might add) maps to
+ * `unknown` rather than `failed`.
+ */
+export function classifyTransactionStatus(status: unknown): TransactionOutcome {
+  if (typeof status === 'string' && status in TERMINAL_RPC_TRANSACTION_STATUSES) {
+    return TERMINAL_RPC_TRANSACTION_STATUSES[status];
+  }
+
+  return 'unknown';
+}
+
+/** Only an `unknown` outcome is recoverable (worth checking again later); terminal outcomes are final. */
+export function isRecoverableTransactionOutcome(outcome: TransactionOutcome): boolean {
+  return outcome === 'unknown';
+}
+
+/**
+ * Human-readable explanation for a classified transaction outcome. Careful
+ * not to assert failure when the real outcome is still unknown.
+ */
+export function describeTransactionOutcome(outcome: TransactionOutcome, hash: string): string {
+  switch (outcome) {
+    case 'success':
+      return `Transaction ${hash} succeeded.`;
+    case 'failed':
+      return `Transaction ${hash} failed on-chain.`;
+    case 'unknown':
+      return (
+        `Transaction ${hash} has an unknown outcome: the RPC endpoint still reports it as ` +
+        `not found after polling timed out. It may yet be included in a later ledger — check ` +
+        `the hash on an explorer before resubmitting, to avoid a duplicate.`
+      );
+  }
+}

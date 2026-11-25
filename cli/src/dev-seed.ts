@@ -28,10 +28,19 @@ export interface SeedOptions {
   token?: string;
 }
 
+/** The subset of `rpc.Server` the seeder needs — narrowed for test injection. */
+export interface SeederRpcServerLike {
+  getAccount: rpc.Server['getAccount'];
+  getNetwork: rpc.Server['getNetwork'];
+  prepareTransaction: rpc.Server['prepareTransaction'];
+  sendTransaction: rpc.Server['sendTransaction'];
+}
+
 export interface SeederOptions {
   config: ResolvedConfig;
   ui: Ui;
   outputPath?: string;
+  server?: SeederRpcServerLike;
 }
 
 const VALID_SCENARIOS = ['new-user', 'active-lp', 'disputed'];
@@ -54,15 +63,17 @@ export class TestnetAccountSeeder {
   private readonly config: ResolvedConfig;
   private readonly ui: Ui;
   private readonly outputPath: string;
-  private server: rpc.Server;
+  private server: SeederRpcServerLike;
 
   constructor(options: SeederOptions) {
     this.config = options.config;
     this.ui = options.ui;
     this.outputPath = options.outputPath ?? path.join(process.cwd(), '.env.testnet.accounts');
-    this.server = new rpc.Server(options.config.rpcUrl, {
-      allowHttp: options.config.rpcUrl.startsWith('http://'),
-    });
+    this.server =
+      options.server ??
+      new rpc.Server(options.config.rpcUrl, {
+        allowHttp: options.config.rpcUrl.startsWith('http://'),
+      });
   }
 
   async seed(options?: SeedOptions): Promise<SeededAccount[]> {
@@ -87,6 +98,8 @@ export class TestnetAccountSeeder {
         `Account seeding is only available for testnet. Current network: ${this.config.network}`
       );
     }
+
+    await this.assertRpcEndpointIsTestnet();
 
     const effectiveScenario = scenario ?? 'new-user';
     this.ui.info(
@@ -130,6 +143,36 @@ export class TestnetAccountSeeder {
     this.printAccountsTable(accounts);
 
     return accounts;
+  }
+
+  /**
+   * Defense in depth: `config.network` is just a label from the config
+   * file/env that can drift from the RPC endpoint it's paired with — e.g. a
+   * stale or typo'd `ILN_RPC_URL` pointing at a mainnet node while `network`
+   * still says "testnet". Ask the endpoint itself what network it serves
+   * before funding accounts or submitting any transaction against it, so a
+   * misconfigured `rpcUrl` can never cause seeding to touch a public
+   * network.
+   */
+  private async assertRpcEndpointIsTestnet(): Promise<void> {
+    let network: { passphrase: string };
+    try {
+      network = await this.server.getNetwork();
+    } catch (error) {
+      throw new Error(
+        `Could not verify the RPC endpoint's network before seeding testnet accounts: ${
+          error instanceof Error ? error.message : String(error)
+        }. Refusing to proceed against an unverified endpoint.`
+      );
+    }
+
+    if (network.passphrase !== Networks.TESTNET) {
+      throw new Error(
+        `Refusing to seed accounts: the configured RPC endpoint (${this.config.rpcUrl}) reports ` +
+          `network passphrase "${network.passphrase}", not the Stellar Testnet passphrase. This ` +
+          `command will not fund accounts or submit transactions against a non-testnet network.`
+      );
+    }
   }
 
   private async seedScenarioInvoices(
