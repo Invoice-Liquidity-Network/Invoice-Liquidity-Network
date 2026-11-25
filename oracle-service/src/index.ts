@@ -643,11 +643,6 @@ export async function createOracleApp(
     ));
   const reputationProvider =
     options.reputationProvider ?? (await createReputationProvider(resolved, sourceTracker));
-  // Issue #1238: the KYB provider gets the same primary/fallback treatment as
-  // the indexer and RPC. With no fallback it is passed through untouched.
-  const kybProvider = options.kybProvider
-    ? createKybProvider(options.kybProvider, options.kybFallbackProvider, sourceTracker)
-    : undefined;
   const requireKyb = options.requireKyb ?? process.env.NODE_ENV === 'production';
   // Issues #1053 and #1055: a published verdict has to be attributable (an
   // attestation the caller can verify without trusting the transport) and it
@@ -684,7 +679,9 @@ export async function createOracleApp(
     1
   );
 
-  const rawKybProvider = kyb.kybProvider;
+  const rawKybProvider = kyb.kybProvider
+    ? createKybProvider(kyb.kybProvider, options.kybFallbackProvider, sourceTracker)
+    : undefined;
   const kybProvider = rawKybProvider
     ? {
         name: rawKybProvider.name,
@@ -692,19 +689,16 @@ export async function createOracleApp(
         verifyPayer: async (payerAddress: string, metadata?: Record<string, unknown>) => {
           const start = Date.now();
           try {
-            const result = await rawKybProvider.verifyPayer(payerAddress, metadata);
-            sourceTracker.noteAttempt('kyb', true, Date.now() - start);
-            return result;
+            return await rawKybProvider.verifyPayer(payerAddress, metadata);
           } catch (error) {
-            sourceTracker.noteAttempt('kyb', false, Date.now() - start);
+            if (!options.kybFallbackProvider) {
+              sourceTracker.noteAttempt('kyb', false, Date.now() - start);
+            }
             throw error;
           }
         },
       }
     : undefined;
-  if (kyb.requireKyb && !kybProvider) {
-    sourceTracker.noteAttempt('kyb', false, 0);
-  }
 
   const verifier = new OracleVerifier({
     cache: cache.cache,
@@ -930,8 +924,8 @@ export async function createOracleApp(
   async function handleVerification(req: Request, res: Response): Promise<void> {
     const body = (req.body ?? {}) as Partial<OracleVerificationRequest> & Record<string, unknown>;
     const payer = String(body.payer ?? '').trim();
-    const amount = body.amount ?? body.invoiceAmount;
-    const invoiceId = body.invoiceId ?? body.invoice_id;
+    const amount = (body.amount ?? body.invoiceAmount) as string | number | bigint;
+    const invoiceId = (body.invoiceId ?? body.invoice_id) as string | number | bigint;
 
     if (!payer || !amount || invoiceId === undefined || invoiceId === null) {
       rejectPayerCheck('PAYER_REQUEST_MALFORMED', payer);
@@ -1109,13 +1103,14 @@ export async function createOracleApp(
       lastVerificationAt,
       signing: signerStore ? 'enabled' : 'disabled',
       audit: auditStore.kind,
-      // #1234/#1235/#1237: the loaded KYB wiring, so an operator can confirm
+      // #1234/#1235/#1237/#1240: the loaded KYB wiring, so an operator can confirm
       // the control is armed without reading the deployment manifest.
       kyb: {
         configured: Boolean(kyb.kybProvider),
         provider: kyb.kybProvider?.name ?? null,
         required: kyb.requireKyb,
         decisionTtlMs: kyb.kybDecisionTtlMs,
+        failover: Boolean(options.kybProvider && options.kybFallbackProvider),
       },
       degradedMode: degradedResponses > 0,
       degradedResponses,
@@ -1124,11 +1119,6 @@ export async function createOracleApp(
       // (issue #1238) exposes per-source failover state so a drill — or a live
       // incident — can confirm routing moved without reading logs.
       sources,
-      kyb: {
-        required: requireKyb,
-        configured: Boolean(options.kybProvider),
-        failover: Boolean(options.kybProvider && options.kybFallbackProvider),
-      },
     };
   }
 

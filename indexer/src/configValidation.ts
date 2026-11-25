@@ -53,6 +53,7 @@ export function networkForPassphrase(passphrase: string): StellarNetwork {
 export const NUMERIC_RULES: Record<string, { min: number; max?: number; unit?: string }> = {
   PORT: { min: 1, max: 65_535 },
   POLL_INTERVAL_MS: { min: 100, max: 3_600_000, unit: 'ms' },
+  RPC_TIMEOUT_MS: { min: 100, max: 120_000, unit: 'ms' },
   START_LEDGER: { min: 0 },
   CONFIRMATION_DEPTH: { min: 0, max: 1_000, unit: 'ledgers' },
   RATE_LIMIT_WINDOW_MS: { min: 1_000, unit: 'ms' },
@@ -169,32 +170,42 @@ export function validateIndexerEnv(
     warn('NETWORK_PASSPHRASE', 'is not a known Stellar network passphrase');
   }
 
-  const rpcRaw = env.RPC_URL ?? 'https://soroban-testnet.stellar.org';
-  let rpcUrl: URL | null = null;
-  try {
-    rpcUrl = new URL(rpcRaw);
-    if (rpcUrl.protocol !== 'http:' && rpcUrl.protocol !== 'https:') {
-      error('RPC_URL', `must be an http(s) URL, got protocol "${rpcUrl.protocol}"`);
-      rpcUrl = null;
+  const checkRpcUrl = (variable: string, raw: string) => {
+    let rpcUrl: URL | null = null;
+    try {
+      rpcUrl = new URL(raw);
+      if (rpcUrl.protocol !== 'http:' && rpcUrl.protocol !== 'https:') {
+        error(variable, `must be an http(s) URL, got protocol "${rpcUrl.protocol}"`);
+        rpcUrl = null;
+      }
+    } catch {
+      error(variable, 'must be an absolute http(s) URL');
     }
-  } catch {
-    error('RPC_URL', 'must be an absolute http(s) URL');
-  }
-  if (rpcUrl) {
-    const host = rpcUrl.hostname.toLowerCase();
-    if (network === 'mainnet' && /testnet|futurenet/.test(host)) {
-      error(
-        'RPC_URL',
-        `points at a ${
-          host.includes('futurenet') ? 'futurenet' : 'testnet'
-        } host while NETWORK_PASSPHRASE is mainnet`
-      );
-    } else if ((network === 'testnet' || network === 'futurenet') && /mainnet/.test(host)) {
-      error('RPC_URL', `points at a mainnet host while NETWORK_PASSPHRASE is ${network}`);
+    if (rpcUrl) {
+      const host = rpcUrl.hostname.toLowerCase();
+      if (network === 'mainnet' && /testnet|futurenet/.test(host)) {
+        error(
+          variable,
+          `points at a ${
+            host.includes('futurenet') ? 'futurenet' : 'testnet'
+          } host while NETWORK_PASSPHRASE is mainnet`
+        );
+      } else if ((network === 'testnet' || network === 'futurenet') && /mainnet/.test(host)) {
+        error(variable, `points at a mainnet host while NETWORK_PASSPHRASE is ${network}`);
+      }
+      if (production && rpcUrl.protocol === 'http:' && !isPrivateHost(host)) {
+        warn(variable, 'uses plain http to a public host in production');
+      }
     }
-    if (production && rpcUrl.protocol === 'http:' && !isPrivateHost(host)) {
-      warn('RPC_URL', 'uses plain http to a public host in production');
-    }
+  };
+  checkRpcUrl('RPC_URL', env.RPC_URL ?? 'https://soroban-testnet.stellar.org');
+  // Fallbacks must index the same network: a fallback on another network
+  // would silently swap the event source (#1454).
+  for (const fallback of (env.RPC_FALLBACK_URLS ?? '')
+    .split(',')
+    .map((url) => url.trim())
+    .filter(Boolean)) {
+    checkRpcUrl('RPC_FALLBACK_URLS', fallback);
   }
 
   // ── Storage ───────────────────────────────────────────────────────────────

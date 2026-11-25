@@ -10,7 +10,12 @@ import {
   quarantineForkDecision,
 } from './db';
 import {
+  ledgerLag,
+  lastSuccessfulPollTimestamp,
+  networkLatestLedger,
+  pollCyclesTotal,
   reorgAbortionsTotal,
+  reorgRollbackDepth,
   reorgRollbacksTotal,
   unconfirmedEventsSkippedTotal,
 } from './metrics';
@@ -95,6 +100,25 @@ export function resolveStartLedger(
  * head (#1256, #1259).
  */
 export async function pollOnce(): Promise<void> {
+  try {
+    await runPollCycle();
+  } catch (err) {
+    try {
+      pollCyclesTotal.inc({ outcome: 'failure' });
+    } catch {
+      /* metrics failure is non-fatal */
+    }
+    throw err;
+  }
+  try {
+    pollCyclesTotal.inc({ outcome: 'success' });
+    lastSuccessfulPollTimestamp.set(Date.now() / 1000);
+  } catch {
+    /* metrics failure is non-fatal */
+  }
+}
+
+async function runPollCycle(): Promise<void> {
   let stored = getCursorLedger();
 
   // ── Reconcile any uncompleted fork decision from a prior restart/crash (#1258, #1262) ──
@@ -165,6 +189,11 @@ export async function pollOnce(): Promise<void> {
 
     const response = await server.getEvents(request);
     latestKnownLedger = response.latestLedger;
+    try {
+      networkLatestLedger.set(latestKnownLedger);
+    } catch {
+      /* metrics failure is non-fatal */
+    }
 
     const MAX_REORG_ROLLBACK_LEDGERS = 100;
     if (latestKnownLedger < stored) {
@@ -186,6 +215,11 @@ export async function pollOnce(): Promise<void> {
       }
 
       const boundedRollbackLedger = Math.max(stored - MAX_REORG_ROLLBACK_LEDGERS, latestKnownLedger);
+      try {
+        reorgRollbackDepth.observe(stored - boundedRollbackLedger);
+      } catch {
+        /* metrics failure is non-fatal */
+      }
       console.warn(
         `[poller] Chain reorg detected! Latest ledger (${latestKnownLedger}) is behind cursor (${stored}). Rolling back to bounded ledger ${boundedRollbackLedger}...`
       );
@@ -254,6 +288,14 @@ export async function pollOnce(): Promise<void> {
   const newCursor = Math.max(highestEventLedger, confirmedTip);
   if (newCursor > stored) {
     setCursorLedger(newCursor);
+    stored = newCursor;
+  }
+  try {
+    // Includes the confirmation-depth window by design: with depth N a healthy
+    // indexer reports a lag of about N ledgers.
+    ledgerLag.set(Math.max(0, latestKnownLedger - stored));
+  } catch {
+    /* metrics failure is non-fatal */
   }
 }
 

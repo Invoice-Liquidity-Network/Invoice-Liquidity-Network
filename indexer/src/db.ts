@@ -12,6 +12,7 @@ import {
   reorgQuarantinedTotal,
   reorgQuarantinedActive,
   cursorMonotonicityViolationsTotal,
+  setCursorTimestampSource,
 } from './metrics';
 import { CONFIG } from './config';
 import type { ILNEvent, Invoice, InvoiceStatus, ForkDecision, QuarantinedReorg } from './types';
@@ -468,6 +469,14 @@ export interface LPStat {
   invoiceCount: number;
 }
 
+/**
+ * Aggregate rows are read with `safeIntegers(true)` so SQLite INTEGER sums
+ * arrive as BigInt. Without it better-sqlite3 converts them to JS numbers and
+ * any token sum above 2^53 stroops (~900M USDC) is silently rounded before it
+ * is serialized as a "smallest unit" decimal string (#1455).
+ */
+type SqlRow = Record<string, bigint | number | string>;
+
 export function getProtocolStats(): ProtocolStats {
   const db = getAnalyticsDb();
   const row = measureAnalytics('getProtocolStats', () =>
@@ -485,14 +494,15 @@ export function getProtocolStats(): ProtocolStats {
            END                                                            AS defaultRate
          FROM invoices`
       )
+      .safeIntegers(true)
       .get()
-  ) as ProtocolStats;
+  ) as SqlRow;
 
   return {
-    totalInvoices: row.totalInvoices,
+    totalInvoices: Number(row.totalInvoices),
     totalVolume: row.totalVolume.toString(),
     totalYield: row.totalYield.toString(),
-    defaultRate: row.defaultRate,
+    defaultRate: Number(row.defaultRate),
   };
 }
 
@@ -514,14 +524,15 @@ export function getLPStats(address: string): LPStats {
          FROM invoices
          WHERE funder = ?`
       )
+      .safeIntegers(true)
       .get(address)
-  ) as LPStats;
+  ) as SqlRow;
 
   return {
     deployed: row.deployed.toString(),
     yield: row.yield.toString(),
-    invoiceCount: row.invoiceCount,
-    defaultRate: row.defaultRate,
+    invoiceCount: Number(row.invoiceCount),
+    defaultRate: Number(row.defaultRate),
   };
 }
 
@@ -538,14 +549,15 @@ export function getFreelancerStats(address: string): FreelancerStats {
          FROM invoices
          WHERE freelancer = ?`
       )
+      .safeIntegers(true)
       .get(address)
-  ) as FreelancerStats;
+  ) as SqlRow;
 
   return {
-    submitted: row.submitted,
-    funded: row.funded,
+    submitted: Number(row.submitted),
+    funded: Number(row.funded),
     totalReceived: row.totalReceived.toString(),
-    avgDiscount: Math.round(row.avgDiscount * 100) / 100,
+    avgDiscount: Math.round(Number(row.avgDiscount) * 100) / 100,
   };
 }
 
@@ -647,13 +659,14 @@ export function getTopLPs(limit: number, period: string): LPStat[] {
          ORDER BY yield DESC, invoiceCount DESC
          LIMIT ?`
       )
+      .safeIntegers(true)
       .all(...params)
-  ) as LPStat[];
+  ) as SqlRow[];
 
   return rows.map((r) => ({
-    address: r.address,
+    address: String(r.address),
     yield: r.yield.toString(),
-    invoiceCount: r.invoiceCount,
+    invoiceCount: Number(r.invoiceCount),
   }));
 }
 
@@ -768,6 +781,22 @@ export function getCursorUpdatedAt(): number | null {
     | { updated_at: number }
     | undefined;
   return row?.updated_at ?? null;
+}
+
+// `iln_cursor_age_seconds` is computed at scrape time from the persisted row (#1453).
+setCursorTimestampSource(getCursorUpdatedAt);
+
+/**
+ * Read the cursor ledger and its last-write time in one statement, so callers
+ * never pair a ledger with a timestamp from a different write (#1452).
+ * Returns null when the cursor has never been written. Throws if the database
+ * is unreadable — callers decide how to surface that.
+ */
+export function getCursorSnapshot(): { ledger: number; updatedAt: number } | null {
+  const row = getDb()
+    .prepare('SELECT last_ledger, updated_at FROM cursor WHERE id = 1')
+    .get() as { last_ledger: number; updated_at: number } | undefined;
+  return row ? { ledger: row.last_ledger, updatedAt: row.updated_at } : null;
 }
 
 /**

@@ -16,6 +16,8 @@ The ILN Indexer is configured via environment variables. This document describes
 | `CONTRACT_ID` | `CD3TE3IAHM737P236XZL2OYU275ZKD6MN7YH7PYYAXYIGEH55OPEWYJC` | ILN contract address (`C…`) whose events are indexed. **Required when `NODE_ENV=production`**; the testnet default is for local development only |
 | `NETWORK_PASSPHRASE` | `Test SDF Network ; September 2015` | Stellar network passphrase |
 | `RPC_URL` | `https://soroban-testnet.stellar.org` | Stellar RPC node URL |
+| `RPC_FALLBACK_URLS` | - | Comma-separated fallback RPC URLs tried in order after `RPC_URL` on a timeout or transport error. Must be on the same network as `RPC_URL`. See [RPC failover](./observability-audit.md) |
+| `RPC_TIMEOUT_MS` | `10000` | Per-request RPC timeout in milliseconds (100 – 120,000). A timed-out read fails over to the next endpoint |
 | `NODE_ENV` | - | `production` enables the production startup rules below and disables GraphiQL |
 
 ### Database
@@ -191,6 +193,13 @@ URL of the Stellar RPC node to poll for events. Ensure the node has:
 - Event subscription support
 - Contract WASM access
 - Adequate rate limits for your polling frequency
+
+`RPC_FALLBACK_URLS` adds read-only fallbacks with the same requirements. All
+indexer RPC calls are reads, so a request that times out is retried on the next
+endpoint without side effects. Endpoints are named `primary`, `fallback_1`, …
+in logs and in `iln_rpc_requests_total` / `iln_rpc_failovers_total`. URLs are
+never logged or used as labels, because they can carry API keys. Startup
+validation applies the `RPC_URL` network checks to every fallback.
 
 ### DB_PATH
 

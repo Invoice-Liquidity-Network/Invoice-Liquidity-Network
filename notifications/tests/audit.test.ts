@@ -650,6 +650,152 @@ describe('Delivery audit log — durable, queryable, retention-enforced', () => 
   });
 });
 
+// ── Issue #1472: audit-cli export redaction ───────────────────────────────────
+//
+// Every console.table() call in audit-cli.ts must pass through one of the three
+// exported formatter functions below, so that:
+//   • recipient_address is never exposed beyond its 8-char prefix
+//   • destination (email / phone / webhook URL) never appears in CLI output
+//   • free-text error strings are capped so stack traces cannot leak PII
+
+const { formatAuditRow, formatDispatchRow, formatInboundEventRow } = await import(
+  '../src/audit-cli.ts'
+);
+
+describe('audit-cli formatAuditRow — recipient redaction', () => {
+  const baseRow = {
+    id: 1,
+    invoice_id: 42,
+    trigger: 'invoice_funded',
+    recipient_address: 'GCOMPLETE_ADDRESS_THAT_MUST_NOT_LEAK',
+    channel: 'email' as const,
+    status: 'delivered',
+    attempts: 1,
+    last_error: null,
+    created_at: new Date('2026-01-15T12:00:00Z').getTime(),
+    attempt_timestamps: [Date.now()],
+  };
+
+  it('truncates recipient_address to 8-char prefix + ellipsis', () => {
+    const out = formatAuditRow(baseRow);
+    expect(out.recipient).toBe('GCOMPLETE' + '…');
+    expect(out.recipient).toHaveLength(10);
+  });
+
+  it('never exposes the full recipient_address string', () => {
+    const out = formatAuditRow(baseRow);
+    const json = JSON.stringify(out);
+    expect(json).not.toContain(baseRow.recipient_address);
+  });
+
+  it('never includes a destination field', () => {
+    const out = formatAuditRow({ ...baseRow });
+    expect(Object.keys(out)).not.toContain('destination');
+  });
+
+  it('caps last_error at 40 characters', () => {
+    const longError = 'A'.repeat(80) + ' secret@example.com';
+    const out = formatAuditRow({ ...baseRow, last_error: longError });
+    expect(out.last_error.length).toBeLessThanOrEqual(40);
+    expect(out.last_error).not.toContain('secret@example.com');
+  });
+
+  it('reports attempt_count as array length, not the array itself', () => {
+    const out = formatAuditRow({ ...baseRow, attempt_timestamps: [1, 2, 3] });
+    expect(out.attempt_count).toBe(3);
+    expect(Array.isArray((out as any).attempt_timestamps)).toBe(false);
+  });
+
+  it('formats created_at as ISO 8601 string', () => {
+    const out = formatAuditRow(baseRow);
+    expect(() => new Date(out.created_at)).not.toThrow();
+    expect(out.created_at).toMatch(/^\d{4}-\d{2}-\d{2}T/);
+  });
+});
+
+describe('audit-cli formatDispatchRow — no destination or payload in output', () => {
+  const baseRow = {
+    id: 'attempt-1',
+    invoice_id: 10,
+    trigger: 'invoice_paid',
+    channel: 'email',
+    status: 'failed',
+    attempts: 3,
+    last_error: 'B'.repeat(100) + ' webhook=https://secret.example.com/token',
+    created_at: Date.now(),
+    failed_at: Date.now(),
+    // These fields must never appear in the output:
+    destination: 'private@example.com',
+    recipient_address: 'GFULLADDRESSTHATMUSTNOTLEAK',
+    payload: JSON.stringify({ secret: 'my-api-key' }),
+  };
+
+  it('never exposes destination in output', () => {
+    const out = formatDispatchRow(baseRow);
+    const json = JSON.stringify(out);
+    expect(json).not.toContain('private@example.com');
+    expect(Object.keys(out)).not.toContain('destination');
+  });
+
+  it('never exposes recipient_address in output', () => {
+    const out = formatDispatchRow(baseRow);
+    const json = JSON.stringify(out);
+    expect(json).not.toContain('GFULLADDRESSTHATMUSTNOTLEAK');
+    expect(Object.keys(out)).not.toContain('recipient_address');
+  });
+
+  it('never exposes payload in output', () => {
+    const out = formatDispatchRow(baseRow);
+    const json = JSON.stringify(out);
+    expect(json).not.toContain('my-api-key');
+    expect(Object.keys(out)).not.toContain('payload');
+  });
+
+  it('caps last_error at 60 characters', () => {
+    const out = formatDispatchRow(baseRow);
+    expect(out.last_error.length).toBeLessThanOrEqual(60);
+    expect(out.last_error).not.toContain('secret.example.com');
+  });
+});
+
+describe('audit-cli formatInboundEventRow — no PII fields in output', () => {
+  const baseRow = {
+    event_id: 'evt-abc',
+    event_type: 'InvoiceFunded',
+    invoice_id: 7,
+    ledger: 50_000,
+    status: 'dead',
+    attempts: 5,
+    last_error: 'C'.repeat(80) + ' recipient=GFULL',
+    created_at: Date.now(),
+    failed_at: Date.now(),
+    // The event_inbox table has no recipient/destination columns, but
+    // we guard against future schema drift by checking the shape.
+    next_attempt_at: Date.now(),
+    updated_at: Date.now(),
+    outcome_reason: 'max_attempts_exhausted',
+  };
+
+  it('caps last_error at 60 characters', () => {
+    const out = formatInboundEventRow(baseRow);
+    expect(out.last_error.length).toBeLessThanOrEqual(60);
+  });
+
+  it('output keys are a known safe set', () => {
+    const out = formatInboundEventRow(baseRow);
+    const keys = new Set(Object.keys(out));
+    const forbidden = ['destination', 'recipient_address', 'payload', 'subscription'];
+    for (const key of forbidden) {
+      expect(keys.has(key)).toBe(false);
+    }
+  });
+
+  it('formats created_at as ISO 8601 string', () => {
+    const out = formatInboundEventRow(baseRow);
+    expect(out.created_at).toMatch(/^\d{4}-\d{2}-\d{2}T/);
+  });
+});
+
 describe('Compliance audit chain', () => {
   beforeEach(() => {
     process.env.NOTIFICATIONS_AUDIT_KEY = 'auditor-test-key';

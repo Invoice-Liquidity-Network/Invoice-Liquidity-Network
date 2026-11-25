@@ -1,8 +1,8 @@
 /**
  * oracle-service/src/audit-trail.ts
  *
- * Immutable, append-only, tamper-evident record of every verdict
- * oracle-service publishes (issue #1055).
+ * Immutable, append-only, tamper-evident record of every verdict,
+ * failover event, and authorization publication the oracle publishes (issues #1055, #1486).
  *
  * What "tamper-evident" has to mean here
  * ───────────────────────────────────────
@@ -15,22 +15,43 @@
  *   payload   = JSON({ content, signature })
  *   signature = HMAC(auditKey, JSON(content))        — authenticity of content
  *
- * `verifyIntegrity()` re-derives both from the stored bytes rather than from
- * anything held in memory, so it also catches:
+ * `verifyIntegrity()` and `verifyCompleteness()` re-derive both from the stored bytes
+ * rather than from anything held in memory, so they also catch:
  *   - a removed row (sequence gap),
  *   - a reordered chain (prevHash mismatch),
  *   - a rewritten indexed column (projection no longer matches its payload),
  *   - a re-hashed history (HMAC no longer verifies),
  *   - a wholesale deletion by retention beyond what the signed anchor allows.
  *
- * Retention
- * ─────────
- * `docs/privacy.md` §4 requires oracle attestation logs to be kept for one
- * year for audit readiness — and no longer than that. Purging is not a plain
- * `DELETE`: each purge writes a *signed anchor* recording the sequence number
- * and hash of the last row removed. Integrity checks resume from that anchor,
- * which makes "delete the head of the chain to hide an edit" detectable: the
- * surviving rows must still chain onto a anchor the audit key vouches for.
+ * Audit Completeness (#1486)
+ * ──────────────────────────
+ * Protocol operations require completeness across three distinct event types:
+ *   1. Verification events: published or cached verdicts with full heuristic inputs.
+ *   2. Failover events: automated switches to secondary/fallback indexer, RPC, or KYB registries.
+ *   3. Authorization events: bearer token checks, admin API invocations, and key rotations.
+ *
+ * ─────────────────────────────────────────────────────────────────────────────
+ * AUDIT SPECIFICATION & MATRICES (#1486)
+ * ─────────────────────────────────────────────────────────────────────────────
+ * - Normal: Every verification, failover, and authorization event is appended sequentially
+ *   with an incrementing sequence number, chaining prevHash, and HMAC signature.
+ * - Failed: Unhandled upstream crashes causing provider failover record structured failover
+ *   entries. Unauthorized API access attempts record authorization rejection entries.
+ * - Repeated: High frequency requests are strictly queued through an append queue, preventing
+ *   chain branching, duplicate sequence numbers, or race-induced gaps.
+ * - Stale: Cached verdicts record `cacheHit: true` and data age, preserving provenance.
+ * - Interrupted: Unplanned shutdown resumes sequencing safely from the last durable entry
+ *   or signed retention anchor.
+ *
+ * Source of Truth:
+ * - Append-only SQLite/Memory store chained by sha256 and HMAC-SHA256 with `ORACLE_AUDIT_KEY`.
+ *
+ * Failure Behavior:
+ * - Fail-closed: An append rejection prevents publishing decisions unrecorded in the trail.
+ *
+ * Residual Risk & Maintainer Approval Decisions:
+ * - High-frequency failover loops could generate high volume of audit entries.
+ *   Mitigation: Purging via signed retention anchors keeps the chain size bounded.
  */
 
 import { createHash, createHmac } from 'crypto';
@@ -42,9 +63,47 @@ import type { OracleCompositionOutcome, OracleVerificationResponse } from './typ
 // Types
 // ---------------------------------------------------------------------------
 
+export type AuditEventType = 'verification' | 'failover' | 'authorization';
+
+export interface FailoverAuditDetails {
+  sourceId: string;
+  primaryProvider: string;
+  fallbackProvider: string;
+  reason: string;
+  durationMs?: number;
+  triggerPayer?: string;
+}
+
+export interface AuthorizationAuditDetails {
+  action: 'bearer_auth' | 'admin_api' | 'key_rotation';
+  actor: string;
+  permitted: boolean;
+  reason?: string;
+  keyId?: string;
+}
+
+export interface FailoverAuditParams {
+  sourceId: string;
+  primaryProvider: string;
+  fallbackProvider: string;
+  reason: string;
+  durationMs?: number;
+  triggerPayer?: string;
+  requestId?: string;
+}
+
+export interface AuthorizationAuditParams {
+  action: 'bearer_auth' | 'admin_api' | 'key_rotation';
+  actor: string;
+  permitted: boolean;
+  reason?: string;
+  keyId?: string;
+  requestId?: string;
+}
+
 /**
- * The inputs the verdict was computed from. Stored verbatim so an auditor can
- * reconstruct *why* a payer was accepted, not just that they were.
+ * The inputs the verdict or event was computed from. Stored verbatim so an auditor can
+ * reconstruct *why* a decision was made.
  */
 export interface AuditEntryContent {
   seq: number;
@@ -68,6 +127,12 @@ export interface AuditEntryContent {
   averageHistoricalAmount: string;
   amountDeviation: number;
   settlementVarianceDays: number;
+  /** Event classification (#1486). Defaults to 'verification' for verdict entries. */
+  eventType?: AuditEventType;
+  /** Structured failover details when eventType === 'failover'. */
+  failoverDetails?: FailoverAuditDetails;
+  /** Structured authorization details when eventType === 'authorization'. */
+  authorizationDetails?: AuthorizationAuditDetails;
 }
 
 export interface AuditEntry extends AuditEntryContent {
@@ -86,6 +151,7 @@ export interface AuditQuery {
   invoiceId?: string;
   limit?: number;
   offset?: number;
+  eventType?: AuditEventType;
 }
 
 export interface IntegrityCheckResult {
@@ -107,6 +173,18 @@ export interface IntegrityCheckResult {
   /** Stored anchor failed its own signature check — history was truncated. */
   anchorInvalid?: boolean;
   checkedAt: string;
+}
+
+export interface AuditCompletenessResult {
+  complete: boolean;
+  totalEntries: number;
+  verificationCount: number;
+  failoverCount: number;
+  authorizationCount: number;
+  gaps: number[];
+  checkedFromSeq: number;
+  checkedThroughSeq: number;
+  integrityValid: boolean;
 }
 
 export interface AuditTrailOptions {
@@ -176,11 +254,19 @@ const CONTENT_KEY_ORDER = [
   'averageHistoricalAmount',
   'amountDeviation',
   'settlementVarianceDays',
-] as const satisfies readonly (keyof AuditEntryContent)[];
+  'eventType',
+  'failoverDetails',
+  'authorizationDetails',
+] as const;
 
 export function canonicalizeContent(content: AuditEntryContent): string {
   const ordered: Record<string, unknown> = {};
-  for (const key of CONTENT_KEY_ORDER) ordered[key] = content[key];
+  const record = content as unknown as Record<string, unknown>;
+  for (const key of CONTENT_KEY_ORDER) {
+    if (key in record && record[key] !== undefined) {
+      ordered[key] = record[key];
+    }
+  }
   return JSON.stringify(ordered);
 }
 
@@ -205,6 +291,82 @@ function contentFromResponse(response: OracleVerificationResponse, seq: number):
     averageHistoricalAmount: response.averageHistoricalAmount,
     amountDeviation: response.amountDeviation,
     settlementVarianceDays: response.settlementVarianceDays,
+    eventType: 'verification',
+  };
+}
+
+function contentFromFailover(
+  params: FailoverAuditParams,
+  seq: number,
+  now: () => number
+): AuditEntryContent {
+  const generatedAt = new Date(now()).toISOString();
+  return {
+    seq,
+    requestId: params.requestId ?? `failover-${params.sourceId}-${now()}`,
+    payer: params.triggerPayer ?? `system:failover:${params.sourceId}`,
+    invoiceId: `failover:${params.sourceId}`,
+    amount: '0',
+    trustScore: 0,
+    confidence: 0,
+    isVerified: false,
+    outcome: 'failover' as OracleCompositionOutcome,
+    fraudSignals: [params.reason],
+    cacheHit: false,
+    dataAgeMs: 0,
+    generatedAt,
+    reputationScore: 0,
+    historicalSuccessRate: 0,
+    historicalDefaultRate: 0,
+    averageHistoricalAmount: '0',
+    amountDeviation: 0,
+    settlementVarianceDays: 0,
+    eventType: 'failover',
+    failoverDetails: {
+      sourceId: params.sourceId,
+      primaryProvider: params.primaryProvider,
+      fallbackProvider: params.fallbackProvider,
+      reason: params.reason,
+      durationMs: params.durationMs,
+      triggerPayer: params.triggerPayer,
+    },
+  };
+}
+
+function contentFromAuthorization(
+  params: AuthorizationAuditParams,
+  seq: number,
+  now: () => number
+): AuditEntryContent {
+  const generatedAt = new Date(now()).toISOString();
+  return {
+    seq,
+    requestId: params.requestId ?? `auth-${params.action}-${now()}`,
+    payer: `actor:${params.actor}`,
+    invoiceId: `auth:${params.action}`,
+    amount: '0',
+    trustScore: params.permitted ? 100 : 0,
+    confidence: 1,
+    isVerified: params.permitted,
+    outcome: (params.permitted ? 'authorized' : 'unauthorized') as OracleCompositionOutcome,
+    fraudSignals: params.permitted ? [] : [params.reason ?? 'AuthorizationDenied'],
+    cacheHit: false,
+    dataAgeMs: 0,
+    generatedAt,
+    reputationScore: 0,
+    historicalSuccessRate: 0,
+    historicalDefaultRate: 0,
+    averageHistoricalAmount: '0',
+    amountDeviation: 0,
+    settlementVarianceDays: 0,
+    eventType: 'authorization',
+    authorizationDetails: {
+      action: params.action,
+      actor: params.actor,
+      permitted: params.permitted,
+      reason: params.reason,
+      keyId: params.keyId,
+    },
   };
 }
 
@@ -259,13 +421,43 @@ export class AuditTrail {
    * caller that awaits this cannot serve a verdict that is not recorded.
    */
   append(response: OracleVerificationResponse): Promise<AuditEntry> {
-    const task = this.appendQueue.then(() => this.appendNow(response));
-    // Keep the queue alive even when an append rejects.
+    return this.appendVerification(response);
+  }
+
+  /**
+   * Append a verification decision event.
+   */
+  appendVerification(response: OracleVerificationResponse): Promise<AuditEntry> {
+    const task = this.appendQueue.then(() =>
+      this.appendNow((seq) => contentFromResponse(response, seq))
+    );
     this.appendQueue = task.catch(() => undefined);
     return task;
   }
 
-  private async appendNow(response: OracleVerificationResponse): Promise<AuditEntry> {
+  /**
+   * Append a source failover event (#1486).
+   */
+  appendFailover(params: FailoverAuditParams): Promise<AuditEntry> {
+    const task = this.appendQueue.then(() =>
+      this.appendNow((seq) => contentFromFailover(params, seq, this.now))
+    );
+    this.appendQueue = task.catch(() => undefined);
+    return task;
+  }
+
+  /**
+   * Append an authorization check event (#1486).
+   */
+  appendAuthorization(params: AuthorizationAuditParams): Promise<AuditEntry> {
+    const task = this.appendQueue.then(() =>
+      this.appendNow((seq) => contentFromAuthorization(params, seq, this.now))
+    );
+    this.appendQueue = task.catch(() => undefined);
+    return task;
+  }
+
+  private async appendNow(contentGenerator: (seq: number) => AuditEntryContent): Promise<AuditEntry> {
     const anchor = await this.readAnchor();
     const last = await this.store.lastRow();
 
@@ -273,7 +465,7 @@ export class AuditTrail {
     const prevSeq = last ? last.seq : anchor?.seq ?? 0;
     const seq = prevSeq + 1;
 
-    const content = contentFromResponse(response, seq);
+    const content = contentGenerator(seq);
     const signature = hmacHex(this.auditKey, canonicalizeContent(content));
     const payload = JSON.stringify({ content, prevHash, signature } satisfies PayloadEnvelope);
     const hash = sha256Hex(prevHash + payload);
@@ -300,15 +492,23 @@ export class AuditTrail {
   /** Entries for a time range and/or feed, oldest first. */
   async getEntries(query: AuditQuery = {}): Promise<AuditEntry[]> {
     const rows = await this.store.query(query);
-    return rows.map((row) => rowToEntry(row));
+    const entries = rows.map((row) => rowToEntry(row));
+    if (query.eventType) {
+      return entries.filter((e) => (e.eventType ?? 'verification') === query.eventType);
+    }
+    return entries;
   }
 
   /** Rows matching `query`, ignoring its paging — the total behind a page. */
   async count(query: AuditQuery = {}): Promise<number> {
+    if (query.eventType) {
+      const entries = await this.getEntries(query);
+      return entries.length;
+    }
     return this.store.count(query);
   }
 
-  // ── Integrity ──────────────────────────────────────────────────────────────
+  // ── Integrity & Completeness ────────────────────────────────────────────────
 
   /**
    * Re-derive the whole chain from the store and report the first inconsistency.
@@ -365,6 +565,52 @@ export class AuditTrail {
     }
 
     return { ...base, entries: rows.length };
+  }
+
+  /**
+   * Verify audit trail completeness across all verification, failover, and
+   * authorization events (#1486).
+   */
+  async verifyCompleteness(): Promise<AuditCompletenessResult> {
+    const integrity = await this.verifyIntegrity();
+    const rows = await this.store.rowsAfter(integrity.checkedFromSeq);
+
+    let verificationCount = 0;
+    let failoverCount = 0;
+    let authorizationCount = 0;
+    const gaps: number[] = [];
+    let expectedSeq = integrity.checkedFromSeq + 1;
+
+    for (const row of rows) {
+      if (row.seq !== expectedSeq) {
+        gaps.push(row.seq);
+      }
+      expectedSeq = row.seq + 1;
+
+      const envelope = parsePayload(row.payload);
+      const eventType = envelope?.content.eventType ?? 'verification';
+      if (eventType === 'failover') {
+        failoverCount += 1;
+      } else if (eventType === 'authorization') {
+        authorizationCount += 1;
+      } else {
+        verificationCount += 1;
+      }
+    }
+
+    const lastSeq = rows.length > 0 ? rows[rows.length - 1].seq : integrity.checkedFromSeq;
+
+    return {
+      complete: integrity.valid && gaps.length === 0,
+      totalEntries: rows.length,
+      verificationCount,
+      failoverCount,
+      authorizationCount,
+      gaps,
+      checkedFromSeq: integrity.checkedFromSeq,
+      checkedThroughSeq: lastSeq,
+      integrityValid: integrity.valid,
+    };
   }
 
   /**

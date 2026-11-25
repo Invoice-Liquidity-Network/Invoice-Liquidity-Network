@@ -297,6 +297,25 @@ of the flush. When direct delivery throws, the provider fallback chain gets one
 in-process attempt first, and the row records the provider's own error as the
 primary cause (`<provider error> (fallback: <why the fallback could not help>`).
 
+### Recipient ownership and failover boundary
+
+The recipient address is the Stellar address on the subscription, not proof
+that the destination email, phone, or webhook is controlled by that address.
+Before a queued subscription is delivered, the processor requires
+`ownership_verified_at`; old/unverified rows fail closed until the owner signs
+a single-use, expiring challenge. Challenge replay, expiry, address mismatch,
+and invalid signatures are rejected. Recipient destinations are validated and
+stored as keyed tokens; encrypted subscription data must remain readable with
+the configured current or previous key for pending work to resume.
+
+Fallback is channel failover for subscriptions belonging to the **same
+verified Stellar address** and matching trigger. The service tries configured
+fallback channels in order and continues after an individual fallback fails;
+capacity limits can prevent failover. This is not automatic provider-vendor
+failover within a channel, and a fallback subscription/destination must exist.
+If every attempt fails, the journal row remains pending for a later poll until
+the bounded attempt limit moves it to `failed`.
+
 ### The window that remains open
 
 If the process dies after the provider accepted the webhook but before the row
@@ -321,6 +340,10 @@ a chain event) and the `X-ILN-Event-Id` header.
   days. Purging pending work would break the guarantee, so it never does.
 - The guarantee covers the dispatch pipeline started by the poller. `POST /test-webhook`
   is a diagnostic send and is not journaled.
+- The dispatch journal does not make delivery exactly once. Ownership verification
+  establishes control of the Stellar address; it does not prove that a destination
+  mailbox, phone number, or webhook endpoint is secure or remains under that
+  person's control. Operators still need to handle failed and unreadable rows.
 
 ### Tests
 

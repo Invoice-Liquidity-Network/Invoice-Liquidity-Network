@@ -65,6 +65,18 @@ export async function pollOnce(): Promise<void> {
       }
     }
 
+    // Commit only after every event in this page has been processed. This makes
+    // the checkpoint a durable page boundary: a crash can replay at most the
+    // current page, while a failed event never advances the cursor past work
+    // that has not completed.
+    const pageCursor = Math.max(
+      highestEventLedger,
+      response.events.length === 0 ? Math.max(0, latestKnownLedger - 1) : stored
+    );
+    if (pageCursor > stored) {
+      setCursorLedger(pageCursor);
+    }
+
     paginationCursor = response.events.length === BATCH_SIZE ? response.cursor : undefined;
   } while (paginationCursor);
 

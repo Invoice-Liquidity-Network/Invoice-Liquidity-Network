@@ -288,7 +288,7 @@ export interface OracleServiceHealth {
   signing: 'enabled' | 'disabled';
   audit: 'sqlite' | 'memory';
   /**
-   * KYB wiring as loaded at boot (#1234/#1235) and the decision TTL that cache
+   * KYB wiring as loaded at boot (#1234/#1235/#1240) and the decision TTL that cache
    * replays are bounded by (#1237). Surfaced so operators can confirm the
    * control is active without reading the deployment manifest.
    */
@@ -297,6 +297,7 @@ export interface OracleServiceHealth {
     provider: string | null;
     required: boolean;
     decisionTtlMs: number;
+    failover?: boolean;
   };
   /** Issue #1057: true once the service has served a degraded response. */
   degradedMode: boolean;
@@ -309,25 +310,12 @@ export interface OracleServiceHealth {
    * armed and healthy" — the difference matters during a payer/KYB incident.
    */
   sources?: Record<string, SourceHealthState>;
-  /**
-   * KYB enforcement posture (issue #1240): whether a successful KYB check is
-   * *required* before a positive verdict, whether a provider is *configured*,
-   * and whether automated failover is *armed*. Surfaced so an incident
-   * responder never has to guess whether a rejection was policy (an unverified
-   * payer) or plumbing (an unreachable registry).
-   */
-  kyb: {
-    required: boolean;
-    configured: boolean;
-    failover: boolean;
-  };
   /** Issue #1054: per-stage SLO violation totals served by this instance. */
   sloViolations?: {
     fetch: number;
     aggregate: number;
     publish: number;
   };
-  sources?: Record<string, SourceHealthState>;
 }
 
 export interface OracleServiceMetricsSnapshot {

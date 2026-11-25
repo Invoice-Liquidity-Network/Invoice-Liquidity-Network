@@ -1,7 +1,7 @@
 /**
  * oracle-service/src/audit-store.ts
  *
- * Persistence layer for the oracle audit trail (issue #1055).
+ * Persistence layer for the oracle audit trail (issue #1055, #1485).
  *
  * Two implementations of `AuditRowStore` are provided:
  *  - `SqliteAuditStore` — durable, the production driver (the same engine the
@@ -14,6 +14,39 @@
  * `AuditTrail.verifyIntegrity()` treat the store as untrusted input — a driver
  * that returns forged, reordered, or deleted rows is detected rather than
  * believed.
+ *
+ * Retention & Traceability Audit (#1485)
+ * ──────────────────────────────────────
+ * In accordance with docs/privacy.md §4, payer-specific verification entries are
+ * purged after one year. However, administrative and source configuration changes
+ * (source failover registrations, policy changes, manual purge anchors, key rotations)
+ * MUST remain traceable across purges.
+ *
+ * ─────────────────────────────────────────────────────────────────────────────
+ * AUDIT SPECIFICATION & MATRICES (#1485)
+ * ─────────────────────────────────────────────────────────────────────────────
+ * - Normal: Expired verification rows (seq <= throughSeq) are pruned via deleteThrough,
+ *   a signed anchor record is written/updated, while administrative provenance records
+ *   remain durable and unpurged in audit_admin_provenance.
+ * - Failed: Database write errors during anchor persistence abort the purge process
+ *   before rows are deleted, preventing unanchored deletions.
+ * - Repeated: Multiple consecutive purge sweeps do not corrupt admin provenance or
+ *   duplicate signed anchor state.
+ * - Stale: Stale purge requests with throughSeq <= current anchor sequence are no-ops
+ *   and do not roll back the anchor.
+ * - Interrupted: Crash recovery guarantees: anchor is written before entries are
+ *   deleted; surviving rows remain chained to the valid anchor.
+ *
+ * Source of Truth:
+ * - SQLite tables: audit_entries, audit_anchor, and audit_admin_provenance.
+ *
+ * Failure Behavior:
+ * - Fail-closed: Administrative changes require successful persistence in provenance
+ *   table; failure prevents silent unrecorded state mutations.
+ *
+ * Residual Risk & Maintainer Approval Decisions:
+ * - Growth of audit_admin_provenance is minimal (low frequency compared to verdicts)
+ *   and is exempt from automated time-based deletion to preserve long-term audit readiness.
  */
 
 import { createRequire } from 'node:module';
@@ -57,6 +90,8 @@ export interface AuditAnchorRecord {
   purgedAt: string;
   /** HMAC produced by the trail; the store only persists it. */
   signature: string;
+  /** Cryptographic binding to the latest admin provenance ledger state (#1485). */
+  adminStateHash?: string;
 }
 
 export interface AuditRowFilter {
@@ -66,6 +101,28 @@ export interface AuditRowFilter {
   to?: string;
   payer?: string;
   invoiceId?: string;
+  limit?: number;
+  offset?: number;
+}
+
+/**
+ * Administrative and source configuration provenance record (#1485).
+ * Preserves traceability of admin operations across retention purges.
+ */
+export interface AdminAuditRecord {
+  id: string;
+  action: 'source_config_change' | 'retention_policy_change' | 'key_rotation' | 'manual_purge' | string;
+  actor: string;
+  details: string;
+  timestamp: string;
+  signature?: string;
+}
+
+export interface AdminProvenanceFilter {
+  action?: string;
+  actor?: string;
+  from?: string;
+  to?: string;
   limit?: number;
   offset?: number;
 }
@@ -95,6 +152,12 @@ export interface AuditRowStore {
   deleteThrough(throughSeq: number): Promise<number>;
   getAnchor(): Promise<AuditAnchorRecord | null>;
   setAnchor(anchor: AuditAnchorRecord): Promise<void>;
+  /** Record administrative and source changes that outlive retention purges (#1485). */
+  recordAdminAction?(record: AdminAuditRecord): Promise<void>;
+  /** Retrieve administrative provenance records. */
+  getAdminActions?(filter?: AdminProvenanceFilter): Promise<AdminAuditRecord[]>;
+  /** Count administrative provenance records matching filter. */
+  countAdminActions?(filter?: AdminProvenanceFilter): Promise<number>;
   close(): Promise<void>;
 }
 
@@ -127,6 +190,7 @@ export class MemoryAuditStore implements AuditRowStore {
   readonly kind = 'memory' as const;
 
   private readonly rows = new Map<number, AuditRow>();
+  private readonly adminRecords = new Map<string, AdminAuditRecord>();
   private anchor: AuditAnchorRecord | null = null;
 
   async lastRow(): Promise<AuditRow | null> {
@@ -184,8 +248,33 @@ export class MemoryAuditStore implements AuditRowStore {
     this.anchor = { ...anchor };
   }
 
+  async recordAdminAction(record: AdminAuditRecord): Promise<void> {
+    if (this.adminRecords.has(record.id)) {
+      throw new Error(`MemoryAuditStore: admin record ${record.id} already exists`);
+    }
+    this.adminRecords.set(record.id, Object.freeze({ ...record }));
+  }
+
+  async getAdminActions(filter: AdminProvenanceFilter = {}): Promise<AdminAuditRecord[]> {
+    let records = [...this.adminRecords.values()];
+    if (filter.action) records = records.filter((r) => r.action === filter.action);
+    if (filter.actor) records = records.filter((r) => r.actor === filter.actor);
+    if (filter.from) records = records.filter((r) => r.timestamp >= filter.from!);
+    if (filter.to) records = records.filter((r) => r.timestamp <= filter.to!);
+    records.sort((a, b) => a.timestamp.localeCompare(b.timestamp));
+    const start = filter.offset ?? 0;
+    const end = filter.limit === undefined ? undefined : start + filter.limit;
+    return records.slice(start, end).map((r) => ({ ...r }));
+  }
+
+  async countAdminActions(filter: AdminProvenanceFilter = {}): Promise<number> {
+    const matched = await this.getAdminActions(filter);
+    return matched.length;
+  }
+
   async close(): Promise<void> {
     this.rows.clear();
+    this.adminRecords.clear();
     this.anchor = null;
   }
 }
@@ -236,8 +325,22 @@ CREATE TABLE IF NOT EXISTS audit_anchor (
   hash          TEXT    NOT NULL,
   purged_through INTEGER NOT NULL,
   purged_at     TEXT    NOT NULL,
-  signature     TEXT    NOT NULL
+  signature     TEXT    NOT NULL,
+  admin_state_hash TEXT
 );
+
+-- Administrative & configuration provenance table (#1485).
+-- Survives automated verification retention purges to maintain long-term compliance auditability.
+CREATE TABLE IF NOT EXISTS audit_admin_provenance (
+  id          TEXT PRIMARY KEY,
+  action      TEXT NOT NULL,
+  actor       TEXT NOT NULL,
+  details     TEXT NOT NULL,
+  timestamp   TEXT NOT NULL,
+  signature   TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_audit_admin_time ON audit_admin_provenance (timestamp);
+CREATE INDEX IF NOT EXISTS idx_audit_admin_actor ON audit_admin_provenance (actor);
 `;
 
 interface AuditRowDbShape {
@@ -259,6 +362,16 @@ interface AuditAnchorDbShape {
   purged_through: number;
   purged_at: string;
   signature: string;
+  admin_state_hash?: string | null;
+}
+
+interface AdminAuditDbShape {
+  id: string;
+  action: string;
+  actor: string;
+  details: string;
+  timestamp: string;
+  signature: string | null;
 }
 
 function toRow(record: AuditRowDbShape): AuditRow {
@@ -276,18 +389,19 @@ function toRow(record: AuditRowDbShape): AuditRow {
   };
 }
 
+function toAdminRecord(record: AdminAuditDbShape): AdminAuditRecord {
+  return {
+    id: record.id,
+    action: record.action,
+    actor: record.actor,
+    details: record.details,
+    timestamp: record.timestamp,
+    signature: record.signature ?? undefined,
+  };
+}
+
 /**
  * WHERE clause shared by the paged read and its matching count.
- *
- * Anonymous placeholders, with the optional filters written as `? = '' OR col = ?`
- * so the parameter list stays fixed. Numbered `?1` parameters are the
- * alternative, but better-sqlite3 treats them as *named* ones and refuses to
- * bind them positionally — and a filter that cannot be expressed without a
- * branch would put SQL injection into the audit read path, which is the last
- * place that deserves it.
- *
- * Defined once rather than per statement: a count whose predicates drifted from
- * the page it describes would report a total the returned rows do not match.
  */
 const AUDIT_FILTER_WHERE = `
    WHERE (? = '' OR generated_at >= ?)
@@ -295,13 +409,26 @@ const AUDIT_FILTER_WHERE = `
      AND (? = '' OR payer = ?)
      AND (? = '' OR invoice_id = ?)`;
 
-/** Positional parameters for {@link AUDIT_FILTER_WHERE}; each value bound twice. */
 function filterParams(filter: AuditRowFilter): unknown[] {
   const from = filter.from ?? '';
   const to = filter.to ?? '';
   const payer = filter.payer ?? '';
   const invoiceId = filter.invoiceId ?? '';
   return [from, from, to, to, payer, payer, invoiceId, invoiceId];
+}
+
+const ADMIN_FILTER_WHERE = `
+   WHERE (? = '' OR action = ?)
+     AND (? = '' OR actor = ?)
+     AND (? = '' OR timestamp >= ?)
+     AND (? = '' OR timestamp <= ?)`;
+
+function adminFilterParams(filter: AdminProvenanceFilter): unknown[] {
+  const action = filter.action ?? '';
+  const actor = filter.actor ?? '';
+  const from = filter.from ?? '';
+  const to = filter.to ?? '';
+  return [action, action, actor, actor, from, from, to, to];
 }
 
 /**
@@ -323,6 +450,9 @@ export class SqliteAuditStore implements AuditRowStore {
     deleteThrough: SqliteStatement;
     readAnchor: SqliteStatement;
     writeAnchor: SqliteStatement;
+    recordAdmin: SqliteStatement;
+    selectAdmin: SqliteStatement;
+    countAdmin: SqliteStatement;
   };
 
   constructor(opts: { path?: string; db?: SqliteDatabaseLike } = {}) {
@@ -339,6 +469,13 @@ export class SqliteAuditStore implements AuditRowStore {
     }
 
     this.db.exec(AUDIT_SCHEMA);
+
+    // Compatibility check for databases created prior to admin_state_hash column (#1485)
+    try {
+      this.db.exec('ALTER TABLE audit_anchor ADD COLUMN admin_state_hash TEXT;');
+    } catch {
+      // Column already exists
+    }
 
     this.statements = {
       insert: this.db.prepare(`
@@ -357,15 +494,26 @@ export class SqliteAuditStore implements AuditRowStore {
       deleteThrough: this.db.prepare('DELETE FROM audit_entries WHERE seq <= ?'),
       readAnchor: this.db.prepare('SELECT * FROM audit_anchor WHERE id = 1'),
       writeAnchor: this.db.prepare(`
-        INSERT INTO audit_anchor (id, seq, hash, purged_through, purged_at, signature)
-        VALUES (1, ?, ?, ?, ?, ?)
+        INSERT INTO audit_anchor (id, seq, hash, purged_through, purged_at, signature, admin_state_hash)
+        VALUES (1, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(id) DO UPDATE SET
           seq = excluded.seq,
           hash = excluded.hash,
           purged_through = excluded.purged_through,
           purged_at = excluded.purged_at,
-          signature = excluded.signature
+          signature = excluded.signature,
+          admin_state_hash = excluded.admin_state_hash
       `),
+      recordAdmin: this.db.prepare(`
+        INSERT INTO audit_admin_provenance (id, action, actor, details, timestamp, signature)
+        VALUES (?, ?, ?, ?, ?, ?)
+      `),
+      selectAdmin: this.db.prepare(`
+        SELECT * FROM audit_admin_provenance${ADMIN_FILTER_WHERE}
+         ORDER BY timestamp ASC
+         LIMIT ? OFFSET ?
+      `),
+      countAdmin: this.db.prepare(`SELECT COUNT(*) AS total FROM audit_admin_provenance${ADMIN_FILTER_WHERE}`),
     };
   }
 
@@ -421,6 +569,7 @@ export class SqliteAuditStore implements AuditRowStore {
       purgedThrough: Number(row.purged_through),
       purgedAt: row.purged_at,
       signature: row.signature,
+      adminStateHash: row.admin_state_hash ?? undefined,
     };
   }
 
@@ -430,8 +579,34 @@ export class SqliteAuditStore implements AuditRowStore {
       anchor.hash,
       anchor.purgedThrough,
       anchor.purgedAt,
-      anchor.signature
+      anchor.signature,
+      anchor.adminStateHash ?? null
     );
+  }
+
+  async recordAdminAction(record: AdminAuditRecord): Promise<void> {
+    this.statements.recordAdmin.run(
+      record.id,
+      record.action,
+      record.actor,
+      record.details,
+      record.timestamp,
+      record.signature ?? null
+    );
+  }
+
+  async getAdminActions(filter: AdminProvenanceFilter = {}): Promise<AdminAuditRecord[]> {
+    const rows = this.statements.selectAdmin.all(
+      ...adminFilterParams(filter),
+      filter.limit ?? -1,
+      filter.offset ?? 0
+    ) as AdminAuditDbShape[];
+    return rows.map(toAdminRecord);
+  }
+
+  async countAdminActions(filter: AdminProvenanceFilter = {}): Promise<number> {
+    const row = this.statements.countAdmin.get(...adminFilterParams(filter)) as { total: number } | undefined;
+    return Number(row?.total ?? 0);
   }
 
   async close(): Promise<void> {

@@ -8,10 +8,39 @@ const StellarAddress: OpenAPIV3.SchemaObject = {
   example: 'GABC1234EXAMPLESTELLARADDRESS000000000000000000000000000',
 };
 
+// Mirrors `InvoiceStatus` in src/types.ts (all nine on-chain states). The
+// conformance test fails if the two drift (#1455).
+export const INVOICE_STATUSES = [
+  'Pending',
+  'PartiallyFunded',
+  'Funded',
+  'Paid',
+  'Defaulted',
+  'Appealed',
+  'Disputed',
+  'Expired',
+  'Cancelled',
+] as const;
+
 const InvoiceStatus: OpenAPIV3.SchemaObject = {
   type: 'string',
-  enum: ['Pending', 'Funded', 'Paid', 'Defaulted'],
+  enum: [...INVOICE_STATUSES],
 };
+
+/**
+ * Token amounts are i128 values in the token's smallest unit (stroops for
+ * USDC: 1 USDC = 10_000_000). They are serialized as base-10 integer strings
+ * because they exceed Number.MAX_SAFE_INTEGER; never parse them as floats.
+ */
+const TokenAmount: OpenAPIV3.SchemaObject = {
+  type: 'string',
+  pattern: '^-?[0-9]+$',
+  description: 'Integer amount in the smallest token unit, as a base-10 string (no decimals, no exponent)',
+  example: '1000000',
+};
+
+/** A ratio in [0, 1] computed from settled (Paid + Defaulted) invoices; 0 when none are settled. */
+const Ratio: OpenAPIV3.SchemaObject = { type: 'number', minimum: 0, maximum: 1 };
 
 const Invoice: OpenAPIV3.SchemaObject = {
   type: 'object',
@@ -19,7 +48,7 @@ const Invoice: OpenAPIV3.SchemaObject = {
     id: { type: 'integer', example: 1 },
     freelancer: StellarAddress,
     payer: StellarAddress,
-    amount: { type: 'string', example: '1000000' },
+    amount: TokenAmount,
     due_date: { type: 'integer', description: 'Unix timestamp in seconds', example: 1893456000 },
     discount_rate: { type: 'integer', description: 'Basis points (e.g. 500 = 5%)', example: 500 },
     status: InvoiceStatus,
@@ -41,10 +70,114 @@ const Invoice: OpenAPIV3.SchemaObject = {
   ],
 };
 
+const ProjectedInvoice: OpenAPIV3.SchemaObject = {
+  type: 'object',
+  description:
+    'Invoice row restricted to the columns named in `fields`. Unknown field names are ignored; ' +
+    'if none are valid the full Invoice is returned.',
+  properties: Invoice.properties,
+};
+
 const ErrorResponse: OpenAPIV3.SchemaObject = {
   type: 'object',
   properties: { error: { type: 'string' } },
   required: ['error'],
+};
+
+const jsonError = (description: string): OpenAPIV3.ResponseObject => ({
+  description,
+  content: { 'application/json': { schema: ErrorResponse } },
+});
+
+/** 429 (rate limiter) and 500 (unhandled error) can be returned by every route. */
+const commonErrors: OpenAPIV3.ResponsesObject = {
+  '429': jsonError('Too many requests — rate limit exceeded'),
+  '500': jsonError('Internal server error'),
+};
+
+const HealthBody: OpenAPIV3.SchemaObject = {
+  type: 'object',
+  properties: {
+    status: { type: 'string', enum: ['ok', 'error'] },
+    db: { type: 'string', enum: ['ok', 'error'] },
+    lastSync: {
+      type: 'string',
+      format: 'date-time',
+      nullable: true,
+      description: 'When the persisted cursor last advanced; null if never synced or the database is down',
+    },
+    uptime: { type: 'integer', description: 'Milliseconds since process start' },
+  },
+  required: ['status', 'db', 'lastSync', 'uptime'],
+};
+
+const provenanceKinds = ['persisted', 'process', 'derived', 'heuristic', 'not_collected'];
+
+const DashboardBody: OpenAPIV3.SchemaObject = {
+  type: 'object',
+  description: 'See docs/indexer/observability-audit.md for the meaning and trust level of each field.',
+  properties: {
+    generatedAt: { type: 'string', format: 'date-time' },
+    sync: {
+      type: 'object',
+      properties: {
+        status: { type: 'string', enum: ['live', 'stale', 'never_synced', 'unavailable'] },
+        lastSyncTime: { type: 'string', format: 'date-time', nullable: true },
+        lastSyncLedger: { type: 'integer', nullable: true },
+        syncLag: {
+          type: 'integer',
+          nullable: true,
+          minimum: 0,
+          description: 'Seconds since the cursor was last written (wall clock). Not ledger lag.',
+        },
+        isSyncing: { type: 'boolean' },
+        staleAfterSeconds: { type: 'integer' },
+      },
+      required: ['status', 'lastSyncTime', 'lastSyncLedger', 'syncLag', 'isSyncing', 'staleAfterSeconds'],
+    },
+    performance: {
+      type: 'object',
+      properties: {
+        requestCount: { type: 'integer' },
+        averageResponseTime: { type: 'number', description: 'Milliseconds' },
+        dbQueryCount: { type: 'integer', description: 'Not collected; always 0' },
+        dbQueryAvgTime: { type: 'number', description: 'Not collected; always 0' },
+        memoryUsage: { type: 'object' },
+      },
+      required: ['requestCount', 'averageResponseTime', 'dbQueryCount', 'dbQueryAvgTime', 'memoryUsage'],
+    },
+    errors: {
+      type: 'object',
+      properties: {
+        totalErrors: { type: 'integer' },
+        errorRate: { type: 'number', minimum: 0 },
+        lastError: { type: 'string', nullable: true },
+        errorsByType: { type: 'object' },
+      },
+      required: ['totalErrors', 'errorRate', 'lastError', 'errorsByType'],
+    },
+    uptime: {
+      type: 'object',
+      properties: {
+        startTime: { type: 'string', format: 'date-time' },
+        uptimeSeconds: { type: 'integer' },
+        uptimeFormatted: { type: 'string' },
+      },
+      required: ['startTime', 'uptimeSeconds', 'uptimeFormatted'],
+    },
+    provenance: {
+      type: 'object',
+      additionalProperties: {
+        type: 'object',
+        properties: {
+          kind: { type: 'string', enum: provenanceKinds },
+          source: { type: 'string' },
+        },
+        required: ['kind', 'source'],
+      },
+    },
+  },
+  required: ['generatedAt', 'sync', 'performance', 'errors', 'uptime', 'provenance'],
 };
 
 const errorResponses: OpenAPIV3.ResponsesObject = {
@@ -98,25 +231,18 @@ export const openApiSpec: OpenAPIV3.Document = {
       get: {
         tags: ['System'],
         summary: 'Health check',
-        description: 'Returns service health, database status, last sync ledger time, and uptime.',
+        description:
+          'Liveness/readiness probe. 200 with status "ok" when the database answers; ' +
+          '503 with status "error" when it does not. Not rate limited and never cached.',
         operationId: 'getHealth',
         responses: {
           '200': {
-            description: 'Service status',
-            content: {
-              'application/json': {
-                schema: {
-                  type: 'object',
-                  properties: {
-                    status: { type: 'string', enum: ['ok', 'degraded'] },
-                    db: { type: 'string', enum: ['ok', 'error'] },
-                    lastSync: { type: 'string', format: 'date-time', nullable: true },
-                    uptime: { type: 'integer', description: 'Milliseconds since process start' },
-                  },
-                  required: ['status', 'db', 'lastSync', 'uptime'],
-                },
-              },
-            },
+            description: 'Database reachable',
+            content: { 'application/json': { schema: HealthBody } },
+          },
+          '503': {
+            description: 'Database unreachable',
+            content: { 'application/json': { schema: HealthBody } },
           },
         },
       },
@@ -125,13 +251,16 @@ export const openApiSpec: OpenAPIV3.Document = {
       get: {
         tags: ['System'],
         summary: 'Dashboard metrics',
-        description: 'Aggregate request count, error rates, and latency data for monitoring.',
+        description:
+          'Sync freshness, request/error counters and uptime. Every field is labelled in `provenance`. ' +
+          'Served with Cache-Control: no-store.',
         operationId: 'getDashboard',
         responses: {
           '200': {
             description: 'Dashboard metrics object',
-            content: { 'application/json': { schema: { type: 'object' } } },
+            content: { 'application/json': { schema: DashboardBody } },
           },
+          ...commonErrors,
         },
       },
     },
@@ -151,15 +280,16 @@ export const openApiSpec: OpenAPIV3.Document = {
                   type: 'object',
                   properties: {
                     totalInvoices: { type: 'integer' },
-                    totalVolume: { type: 'string', description: 'Smallest token unit' },
-                    totalYield: { type: 'string', description: 'Smallest token unit' },
-                    defaultRate: { type: 'number', minimum: 0, maximum: 1 },
+                    totalVolume: TokenAmount,
+                    totalYield: TokenAmount,
+                    defaultRate: Ratio,
                   },
                   required: ['totalInvoices', 'totalVolume', 'totalYield', 'defaultRate'],
                 },
               },
             },
           },
+          ...commonErrors,
         },
       },
     },
@@ -170,8 +300,9 @@ export const openApiSpec: OpenAPIV3.Document = {
         tags: ['Invoices'],
         summary: 'List invoices',
         description:
-          'Returns a paginated list of indexed invoices. All filters are optional and ANDed together. ' +
-          'Use `cursor` from the previous response to fetch the next page.',
+          'Returns a paginated list of indexed invoices ordered by id. All filters are optional and ANDed together. ' +
+          'Use `nextCursor` from the previous response to fetch the next page. An unparseable `cursor` is ignored ' +
+          '(the first page is returned). An out-of-range or non-integer `limit` falls back to 100.',
         operationId: 'listInvoices',
         parameters: [
           {
@@ -208,7 +339,7 @@ export const openApiSpec: OpenAPIV3.Document = {
             name: 'cursor',
             in: 'query',
             schema: { type: 'string' },
-            description: 'Opaque pagination cursor from a previous response',
+            description: 'Opaque pagination cursor (`nextCursor` from a previous response)',
           },
         ],
         responses: {
@@ -221,7 +352,10 @@ export const openApiSpec: OpenAPIV3.Document = {
                   properties: {
                     invoices: { type: 'array', items: Invoice },
                     hasMore: { type: 'boolean' },
-                    nextCursor: { type: 'string', nullable: true },
+                    nextCursor: {
+                      type: 'string',
+                      description: 'Present only when hasMore is true; omitted on the last page',
+                    },
                   },
                   required: ['invoices', 'hasMore'],
                 },
@@ -289,13 +423,20 @@ export const openApiSpec: OpenAPIV3.Document = {
             },
             description: 'Role the address played in the invoice',
           },
+          {
+            name: 'fields',
+            in: 'query',
+            schema: { type: 'string', example: 'id,amount,status,due_date' },
+            description:
+              'Comma-separated column projection. Unknown names are ignored; if none are valid the full Invoice is returned.',
+          },
         ],
         responses: {
           '200': {
-            description: 'List of matching invoices',
+            description: 'List of matching invoices (projected when `fields` is set)',
             content: {
               'application/json': {
-                schema: { type: 'array', items: Invoice },
+                schema: { type: 'array', items: { anyOf: [Invoice, ProjectedInvoice] } },
               },
             },
           },
@@ -335,7 +476,7 @@ export const openApiSpec: OpenAPIV3.Document = {
                     type: 'object',
                     properties: {
                       address: StellarAddress,
-                      yield: { type: 'string' },
+                      yield: TokenAmount,
                       invoiceCount: { type: 'integer' },
                     },
                     required: ['address', 'yield', 'invoiceCount'],
@@ -371,16 +512,17 @@ export const openApiSpec: OpenAPIV3.Document = {
                 schema: {
                   type: 'object',
                   properties: {
-                    deployed: { type: 'string' },
-                    yield: { type: 'string' },
+                    deployed: TokenAmount,
+                    yield: TokenAmount,
                     invoiceCount: { type: 'integer' },
-                    defaultRate: { type: 'number' },
+                    defaultRate: Ratio,
                   },
                   required: ['deployed', 'yield', 'invoiceCount', 'defaultRate'],
                 },
               },
             },
           },
+          ...commonErrors,
         },
       },
     },
@@ -409,14 +551,15 @@ export const openApiSpec: OpenAPIV3.Document = {
                   properties: {
                     submitted: { type: 'integer' },
                     funded: { type: 'integer' },
-                    totalReceived: { type: 'string' },
-                    avgDiscount: { type: 'number' },
+                    totalReceived: TokenAmount,
+                    avgDiscount: { type: 'number', description: 'Mean discount rate in basis points' },
                   },
                   required: ['submitted', 'funded', 'totalReceived', 'avgDiscount'],
                 },
               },
             },
           },
+          ...commonErrors,
         },
       },
     },
@@ -789,7 +932,18 @@ export const openApiSpec: OpenAPIV3.Document = {
               'text/csv': { schema: { type: 'string' } }
             },
           },
-          '202': { description: 'Export not ready yet' },
+          '202': {
+            description: 'Export not ready yet',
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  properties: { error: { type: 'string' }, status: { type: 'string' } },
+                  required: ['error', 'status'],
+                },
+              },
+            },
+          },
           ...errorResponses,
         },
       },

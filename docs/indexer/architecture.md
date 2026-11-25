@@ -189,8 +189,13 @@ message that enters the metrics (`recordError`) is passed through
 7. Truncates the result to 240 characters.
 
 The metrics query path is also failure-tolerant: if the database query fails,
-the dashboard returns `null` sync fields with a `200` rather than surfacing a
-`500` with error details to the caller.
+the dashboard returns `null` sync fields with `sync.status: "unavailable"` and a
+`200`, rather than surfacing a `500` with error details to the caller.
+
+**Provenance**: every field is labelled in the response's `provenance` map
+(`persisted`, `process`, `derived`, `heuristic`, `not_collected`). The response
+is served with `Cache-Control: no-store`. See
+[observability-audit.md](./observability-audit.md#1452-dashboard-data-provenance).
 
 **Deployment guidance**: because the endpoint is public, do not put anything
 sensitive in fields that flow through `recordError`. If operational metrics

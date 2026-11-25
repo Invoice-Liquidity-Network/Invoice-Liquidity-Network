@@ -132,11 +132,16 @@ export interface WebSocketClient {
   subscribedAddresses: Set<string>;
   lastHeartbeat: number;
   isAlive: boolean;
+  sessionId?: string;
+  lastEventTimestamp?: number;
+  sentEventIds?: Set<string>;
 }
 
 export interface WebSocketMessage {
-  type: 'subscribe' | 'unsubscribe' | 'event' | 'heartbeat' | 'error';
+  type: 'subscribe' | 'unsubscribe' | 'event' | 'heartbeat' | 'error' | 'reconnect' | 'replay_complete';
   payload?: unknown;
   address?: string;
   timestamp?: number;
+  sessionId?: string;
+  lastEventTimestamp?: number;
 }

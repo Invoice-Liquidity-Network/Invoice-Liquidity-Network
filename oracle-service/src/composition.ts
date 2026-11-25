@@ -64,6 +64,21 @@ import type {
 /** Bumped whenever the rules below change, so stored verdicts stay auditable. */
 export const COMPOSITION_POLICY_VERSION = 'heuristic-blocking-v1';
 
+/**
+ * Maximum age of an external KYB attestation before it is treated as `unknown`
+ * regardless of its reported status.
+ *
+ * A KYB result checked months ago tells us nothing about the payer's current
+ * standing — accounts get compromised, businesses change ownership, and
+ * providers update their databases.  Letting a stale `verified` attestation
+ * continue to add a confidence bonus would let an outdated check prop up a
+ * marginal verdict indefinitely.
+ *
+ * Default: 30 days.  Callers that want a tighter window pass `externalMaxAgeMs`
+ * to `toExternalSignal`.
+ */
+export const EXTERNAL_STALENESS_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
+
 /** Minimum trust score for a verified verdict. */
 export const MIN_TRUST_SCORE = 70;
 
@@ -95,9 +110,23 @@ function round(value: number, digits = 4): number {
   return Math.round(value * factor) / factor;
 }
 
-/** Normalize a provider result (or its absence) into the reported sub-signal. */
+/**
+ * Normalize a provider result (or its absence) into the reported sub-signal.
+ *
+ * Staleness guard: when `checkedAt` is set and the attestation is older than
+ * `maxAgeMs` (default `EXTERNAL_STALENESS_MAX_AGE_MS`), the status is
+ * downgraded to `'unknown'` so a stale `verified` cannot silently continue to
+ * add a confidence bonus.  The original `checkedAt` timestamp is preserved for
+ * audit purposes; a `reasons` entry is appended to record the downgrade.
+ *
+ * "Provider throws" case: callers that catch a thrown error must pass
+ * `undefined` (or a result with `status: 'unknown'`).  Passing `undefined`
+ * here is the correct contract — this function normalises it to inert
+ * `unknown`, which `composeConfidence` leaves unchanged.
+ */
 export function toExternalSignal(
-  external: ExternalVerificationResult | undefined
+  external: ExternalVerificationResult | undefined,
+  opts: { maxAgeMs?: number; now?: number } = {}
 ): OracleExternalSignal {
   if (!external) {
     return {
@@ -109,15 +138,31 @@ export function toExternalSignal(
     };
   }
 
+  const maxAgeMs = opts.maxAgeMs ?? EXTERNAL_STALENESS_MAX_AGE_MS;
+  const now = opts.now ?? Date.now();
+
+  let { status } = external;
+  const reasons = [...(external.reasons ?? [])];
+
+  if (external.checkedAt) {
+    const checkedAtMs = new Date(external.checkedAt).getTime();
+    if (Number.isFinite(checkedAtMs) && now - checkedAtMs > maxAgeMs) {
+      status = 'unknown';
+      reasons.push(
+        `External attestation is stale (checkedAt ${external.checkedAt}); treated as unknown.`
+      );
+    }
+  }
+
   return {
-    status: external.status,
+    status,
     provider: external.provider,
     providerConfidence:
       typeof external.providerConfidence === 'number'
         ? clamp(round(external.providerConfidence), 0, 1)
         : null,
     checkedAt: external.checkedAt ?? null,
-    reasons: external.reasons ?? [],
+    reasons,
   };
 }
 
@@ -152,6 +197,15 @@ export interface ComposeVerdictInput {
   fraudSignals: string[];
   isFresh: boolean;
   external: ExternalVerificationResult | undefined;
+  /**
+   * Maximum age of the external attestation before it is downgraded to
+   * `unknown`.  Defaults to `EXTERNAL_STALENESS_MAX_AGE_MS` (30 days).
+   * Pass a custom value in tests to control staleness without wall-clock
+   * manipulation.
+   */
+  externalMaxAgeMs?: number;
+  /** Inject a fake clock for deterministic staleness tests. */
+  now?: number;
 }
 
 export interface ComposedVerdict {
@@ -165,7 +219,10 @@ export interface ComposedVerdict {
 
 /** Apply the policy documented at the top of this file. */
 export function composeVerdict(input: ComposeVerdictInput): ComposedVerdict {
-  const external = toExternalSignal(input.external);
+  const external = toExternalSignal(input.external, {
+    maxAgeMs: input.externalMaxAgeMs,
+    now: input.now,
+  });
   const composedConfidence = composeConfidence(input.baseConfidence, external);
   const confidenceLevel = confidenceLevelFromScore(composedConfidence);
 

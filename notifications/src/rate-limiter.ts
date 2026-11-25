@@ -1,3 +1,15 @@
+export interface BucketState {
+  timestamps: number[];
+  windowMs: number;
+  limit: number;
+}
+
+export interface RateLimiterSnapshot {
+  userBuckets: Record<string, BucketState>;
+  recipientBuckets: Record<string, BucketState>;
+  exportedAt: number;
+}
+
 type RateLimitBaseConfig = {
   /** Maximum requests per window per user. */
   perUserLimit: number;
@@ -25,13 +37,7 @@ export interface RateLimitResult {
   resetAt: number;
 }
 
-interface Bucket {
-  timestamps: number[];
-  windowMs: number;
-  limit: number;
-}
-
-function checkBucket(bucket: Bucket, now: number): RateLimitResult {
+function checkBucket(bucket: BucketState, now: number): RateLimitResult {
   // Evict timestamps outside the current window.
   const windowStart = now - bucket.windowMs;
   bucket.timestamps = bucket.timestamps.filter((t) => t > windowStart);
@@ -60,14 +66,14 @@ function checkBucket(bucket: Bucket, now: number): RateLimitResult {
 }
 
 export class RateLimiter {
-  private userBuckets = new Map<string, Bucket>();
-  private recipientBuckets = new Map<string, Bucket>();
+  private userBuckets = new Map<string, BucketState>();
+  private recipientBuckets = new Map<string, BucketState>();
   private config: RateLimitBaseConfig & { perRecipientLimit: number };
 
   constructor(config: RateLimitConfig) {
     this.config = {
       perUserLimit: config.perUserLimit,
-      perRecipientLimit: config.perRecipientLimit ?? config.perChannelLimit,
+      perRecipientLimit: config.perRecipientLimit ?? config.perChannelLimit ?? 200,
       windowMs: config.windowMs,
     };
   }
@@ -92,10 +98,6 @@ export class RateLimiter {
     const recipientKey = JSON.stringify([channel, normalizedRecipient]);
     if (!this.recipientBuckets.has(recipientKey)) {
       this.recipientBuckets.set(recipientKey, {
-    // Per-recipient check (user + channel combined).
-    const recipientKey = `${userId}:${channel}`;
-    if (!this.channelBuckets.has(recipientKey)) {
-      this.channelBuckets.set(recipientKey, {
         timestamps: [],
         windowMs: this.config.windowMs,
         limit: this.config.perRecipientLimit,
@@ -103,8 +105,6 @@ export class RateLimiter {
     }
     const recipientResult = checkBucket(this.recipientBuckets.get(recipientKey)!, now);
     if (!recipientResult.allowed) {
-    const channelResult = checkBucket(this.channelBuckets.get(recipientKey)!, now);
-    if (!channelResult.allowed) {
       // Roll back the user-bucket timestamp we just inserted.
       const ub = this.userBuckets.get(userId)!;
       ub.timestamps.pop();
@@ -120,8 +120,101 @@ export class RateLimiter {
     };
   }
 
+  /**
+   * Export the current rate limiter state for persistence across restarts
+   * or replication across distributed worker instances (#1465).
+   */
+  exportState(now: number = Date.now()): RateLimiterSnapshot {
+    const userBuckets: Record<string, BucketState> = {};
+    for (const [key, bucket] of this.userBuckets.entries()) {
+      const windowStart = now - bucket.windowMs;
+      const validTimestamps = bucket.timestamps.filter((t) => t > windowStart);
+      if (validTimestamps.length > 0) {
+        userBuckets[key] = {
+          timestamps: [...validTimestamps],
+          windowMs: bucket.windowMs,
+          limit: bucket.limit,
+        };
+      }
+    }
+
+    const recipientBuckets: Record<string, BucketState> = {};
+    for (const [key, bucket] of this.recipientBuckets.entries()) {
+      const windowStart = now - bucket.windowMs;
+      const validTimestamps = bucket.timestamps.filter((t) => t > windowStart);
+      if (validTimestamps.length > 0) {
+        recipientBuckets[key] = {
+          timestamps: [...validTimestamps],
+          windowMs: bucket.windowMs,
+          limit: bucket.limit,
+        };
+      }
+    }
+
+    return {
+      userBuckets,
+      recipientBuckets,
+      exportedAt: now,
+    };
+  }
+
+  /**
+   * Import rate limiter state from persistent storage or a peer worker,
+   * pruning any timestamps that have expired relative to current time (#1465).
+   */
+  importState(snapshot: RateLimiterSnapshot, now: number = Date.now()): void {
+    if (!snapshot) return;
+
+    if (snapshot.userBuckets) {
+      for (const [key, bucket] of Object.entries(snapshot.userBuckets)) {
+        const windowStart = now - bucket.windowMs;
+        const activeTimestamps = (bucket.timestamps || []).filter((t) => t > windowStart);
+        if (activeTimestamps.length > 0) {
+          const existing = this.userBuckets.get(key);
+          if (existing) {
+            existing.timestamps = [...existing.timestamps, ...activeTimestamps]
+              .filter((t) => t > windowStart)
+              .sort((a, b) => a - b);
+          } else {
+            this.userBuckets.set(key, {
+              timestamps: activeTimestamps.sort((a, b) => a - b),
+              windowMs: bucket.windowMs || this.config.windowMs,
+              limit: bucket.limit || this.config.perUserLimit,
+            });
+          }
+        }
+      }
+    }
+
+    if (snapshot.recipientBuckets) {
+      for (const [key, bucket] of Object.entries(snapshot.recipientBuckets)) {
+        const windowStart = now - bucket.windowMs;
+        const activeTimestamps = (bucket.timestamps || []).filter((t) => t > windowStart);
+        if (activeTimestamps.length > 0) {
+          const existing = this.recipientBuckets.get(key);
+          if (existing) {
+            existing.timestamps = [...existing.timestamps, ...activeTimestamps]
+              .filter((t) => t > windowStart)
+              .sort((a, b) => a - b);
+          } else {
+            this.recipientBuckets.set(key, {
+              timestamps: activeTimestamps.sort((a, b) => a - b),
+              windowMs: bucket.windowMs || this.config.windowMs,
+              limit: bucket.limit || this.config.perRecipientLimit,
+            });
+          }
+        }
+      }
+    }
+  }
+
   /** Remove the aggregate user bucket; recipient quotas expire with their window. */
-  reset(userId: string): void {
-    this.userBuckets.delete(userId);
+  reset(userId?: string): void {
+    if (userId) {
+      this.userBuckets.delete(userId);
+    } else {
+      this.userBuckets.clear();
+      this.recipientBuckets.clear();
+    }
   }
 }

@@ -34,6 +34,100 @@ import {
 } from './db';
 import type { DispatchAttemptStatus, InboundEventStatus } from './db';
 
+// ── Redaction helpers (exported for unit testing) ────────────────────────────
+//
+// The CLI may be invoked by an operator who has access to the support tooling
+// but must NOT see raw recipient addresses or delivery destinations (email,
+// phone number, webhook URL).  Every code-path that writes to stdout therefore
+// goes through one of the functions below, which:
+//   • truncate recipient_address to its 8-char public prefix + '…'
+//   • omit the `destination` field entirely
+//   • cap free-text error strings so stack traces do not leak PII
+//
+// The DB layer's listDispatchAttempts() already projects away destination and
+// payload.  listInboundEvents() returns event_inbox rows, which contain no
+// recipient or destination columns.  verifyComplianceAuditChain() returns only
+// {valid, entries, headHash} — the signed payload blobs stay in the DB.
+
+/** Safe projection for a delivery audit log row sent to console.table(). */
+export function formatAuditRow(r: {
+  id: number | string;
+  invoice_id: number;
+  trigger: string;
+  recipient_address: string;
+  channel: string;
+  status: string;
+  attempts: number;
+  last_error: string | null;
+  created_at: number;
+  attempt_timestamps: unknown[];
+}) {
+  return {
+    id: r.id,
+    invoice: r.invoice_id,
+    trigger: r.trigger,
+    recipient: r.recipient_address.slice(0, 8) + '…',
+    channel: r.channel,
+    status: r.status,
+    attempts: r.attempts,
+    last_error: r.last_error ? r.last_error.slice(0, 40) : '',
+    created_at: new Date(r.created_at).toISOString(),
+    attempt_count: r.attempt_timestamps.length,
+  };
+}
+
+/** Safe projection for a dispatch-attempt row sent to console.table(). */
+export function formatDispatchRow(row: {
+  id: string;
+  invoice_id: number;
+  trigger: string;
+  channel: string;
+  status: string;
+  attempts: number;
+  last_error: string | null;
+  created_at: number;
+  failed_at: number | null;
+  [key: string]: unknown;
+}) {
+  return {
+    id: row.id,
+    invoice_id: row.invoice_id,
+    trigger: row.trigger,
+    channel: row.channel,
+    status: row.status,
+    attempts: row.attempts,
+    last_error: row.last_error ? row.last_error.slice(0, 60) : '',
+    created_at: new Date(row.created_at).toISOString(),
+    failed_at: row.failed_at ? new Date(row.failed_at).toISOString() : '',
+  };
+}
+
+/** Safe projection for an inbound-event row sent to console.table(). */
+export function formatInboundEventRow(row: {
+  event_id: string;
+  event_type: string;
+  invoice_id: number;
+  ledger: number;
+  status: string;
+  attempts: number;
+  last_error: string | null;
+  created_at: number;
+  failed_at: number | null;
+  [key: string]: unknown;
+}) {
+  return {
+    event_id: row.event_id,
+    event_type: row.event_type,
+    invoice_id: row.invoice_id,
+    ledger: row.ledger,
+    status: row.status,
+    attempts: row.attempts,
+    last_error: row.last_error ? row.last_error.slice(0, 60) : '',
+    created_at: new Date(row.created_at).toISOString(),
+    failed_at: row.failed_at ? new Date(row.failed_at).toISOString() : '',
+  };
+}
+
 const args = process.argv.slice(2);
 
 function getArg(name: string): string | undefined {
@@ -83,12 +177,7 @@ async function main() {
       listDispatchAttempts({
         status: dispatchList as DispatchAttemptStatus,
         limit: limit ? parseInt(limit, 10) : undefined,
-      }).map((row) => ({
-        ...row,
-        last_error: row.last_error ? row.last_error.slice(0, 60) : '',
-        created_at: new Date(row.created_at).toISOString(),
-        failed_at: row.failed_at ? new Date(row.failed_at).toISOString() : '',
-      }))
+      }).map(formatDispatchRow)
     );
     return;
   }
@@ -128,12 +217,7 @@ async function main() {
       listInboundEvents({
         status: eventList as InboundEventStatus,
         limit: limit ? parseInt(limit, 10) : undefined,
-      }).map((row) => ({
-        ...row,
-        last_error: row.last_error ? row.last_error.slice(0, 60) : '',
-        created_at: new Date(row.created_at).toISOString(),
-        failed_at: row.failed_at ? new Date(row.failed_at).toISOString() : '',
-      }))
+      }).map(formatInboundEventRow)
     );
     return;
   }
@@ -254,19 +338,7 @@ Examples:
     return;
   }
 
-  console.table(
-    records.map((r) => ({
-      id: r.id,
-      invoice: r.invoice_id,
-      trigger: r.trigger,
-      recipient: r.recipient_address.slice(0, 8) + '…',
-      channel: r.channel,
-      status: r.status,
-      attempts: r.attempts,
-      last_error: r.last_error ? r.last_error.slice(0, 40) : '',
-      created_at: new Date(r.created_at).toISOString(),
-      attempt_timestamps: r.attempt_timestamps.length,
-    }))
+  console.table(records.map(formatAuditRow))
   );
 
   console.log(

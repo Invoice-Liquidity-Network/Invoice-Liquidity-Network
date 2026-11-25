@@ -218,3 +218,148 @@ export const rateLimitStoreErrorsTotal = new Counter({
   help: 'Rate limit store failures; the affected requests were allowed (fail open)',
   registers: [registry],
 });
+
+// ── Indexer health & lag (#1453) ─────────────────────────────────────────────
+//
+// Conventions for the metrics below (see docs/indexer/observability-audit.md):
+//  - Ages and timestamps are in *seconds* (Prometheus base unit). The older
+//    `iln_cursor_updated_at` gauge is kept in milliseconds for compatibility.
+//  - A value that is unknown (never synced, database unreadable, no RPC answer
+//    yet) is *absent*, never 0, so `absent()` alerts fire instead of a 0 that
+//    looks healthy.
+//  - RPC endpoints are labelled by role (`primary`, `fallback_1`, …), never by
+//    URL, because RPC URLs can carry API keys.
+
+export const networkLatestLedger = new Gauge({
+  name: 'iln_network_latest_ledger',
+  help: 'Latest ledger sequence reported by the RPC node in the most recent successful getEvents call',
+  registers: [registry],
+});
+
+export const ledgerLag = new Gauge({
+  name: 'iln_ledger_lag',
+  help: 'Ledgers between the RPC network tip and the persisted cursor (network tip - cursor), set after each successful poll',
+  registers: [registry],
+});
+
+let cursorTimestampSource: (() => number | null) | null = null;
+
+/**
+ * Register where the cursor's last-write time (Unix ms) is read from at scrape
+ * time. db.ts registers `getCursorUpdatedAt` so the age always reflects the
+ * persisted cursor row (the source of truth), including after a restart.
+ */
+export function setCursorTimestampSource(source: (() => number | null) | null): void {
+  cursorTimestampSource = source;
+}
+
+export const cursorAgeSeconds = new Gauge({
+  name: 'iln_cursor_age_seconds',
+  help: 'Seconds since the persisted cursor was last advanced; absent when never synced or the database is unreadable',
+  // prom-client always emits an unlabelled gauge (as 0 after reset), which
+  // would make "unknown" look "fresh". A label lets the series be absent.
+  labelNames: ['source'] as const,
+  registers: [registry],
+  collect() {
+    let updatedAtMs: number | null = null;
+    try {
+      updatedAtMs = cursorTimestampSource ? cursorTimestampSource() : null;
+    } catch {
+      updatedAtMs = null;
+    }
+    this.reset();
+    if (updatedAtMs !== null && Number.isFinite(updatedAtMs)) {
+      // A cursor written by a host with a skewed clock can be "in the future";
+      // clamp to 0 rather than export a negative age.
+      this.set({ source: 'cursor_table' }, Math.max(0, (Date.now() - updatedAtMs) / 1000));
+    }
+  },
+});
+
+export const pollCyclesTotal = new Counter({
+  name: 'iln_poll_cycles_total',
+  help: 'Completed polling cycles by outcome (success | failure)',
+  labelNames: ['outcome'] as const,
+  registers: [registry],
+});
+
+export const lastSuccessfulPollTimestamp = new Gauge({
+  name: 'iln_last_successful_poll_timestamp_seconds',
+  help: 'Unix time (seconds) at which the last polling cycle completed without error',
+  registers: [registry],
+});
+
+export const reorgRollbackDepth = new Histogram({
+  name: 'iln_reorg_rollback_depth_ledgers',
+  help: 'Ledgers rolled back per detected chain re-org (cursor - rollback target)',
+  buckets: [1, 2, 5, 10, 25, 50, 100],
+  registers: [registry],
+});
+
+// ── RPC transport (#1454) ────────────────────────────────────────────────────
+
+export const rpcRequestsTotal = new Counter({
+  name: 'iln_rpc_requests_total',
+  help: 'RPC read attempts by endpoint role, operation and outcome (success | timeout | transport_error | rpc_error)',
+  labelNames: ['endpoint', 'operation', 'outcome'] as const,
+  registers: [registry],
+});
+
+export const rpcFailoversTotal = new Counter({
+  name: 'iln_rpc_failovers_total',
+  help: 'Times an RPC read moved to the next configured endpoint after a timeout or transport error',
+  labelNames: ['operation', 'from'] as const,
+  registers: [registry],
+});
+
+// ── Dead-letter queue (#1453) ────────────────────────────────────────────────
+
+interface DeadLetterStatsSource {
+  stats(): { pending: number; exhausted: number };
+}
+
+const deadLetterQueues = new Set<DeadLetterStatsSource>();
+
+/** Report a dead-letter queue in `iln_dlq_entries`. Returns an unregister function. */
+export function registerDeadLetterQueue(queue: DeadLetterStatsSource): () => void {
+  deadLetterQueues.add(queue);
+  return () => {
+    deadLetterQueues.delete(queue);
+  };
+}
+
+export const dlqEntries = new Gauge({
+  name: 'iln_dlq_entries',
+  help: 'Dead-letter entries by state (pending | exhausted) across registered queues; absent when no queue is registered',
+  labelNames: ['state'] as const,
+  registers: [registry],
+  collect() {
+    this.reset();
+    if (deadLetterQueues.size === 0) return;
+    let pending = 0;
+    let exhausted = 0;
+    for (const queue of deadLetterQueues) {
+      try {
+        const s = queue.stats();
+        pending += s.pending;
+        exhausted += s.exhausted;
+      } catch {
+        /* a failing queue must not break the scrape */
+      }
+    }
+    this.set({ state: 'pending' }, pending);
+    this.set({ state: 'exhausted' }, exhausted);
+  },
+});
+
+export const dlqEnqueuedTotal = new Counter({
+  name: 'iln_dlq_enqueued_total',
+  help: 'Failed attempts recorded in dead-letter queues (first failures and repeated failures)',
+  registers: [registry],
+});
+
+export const dlqExhaustedTotal = new Counter({
+  name: 'iln_dlq_exhausted_total',
+  help: 'Dead-letter entries that reached their attempt budget (or failed permanently) and stopped retrying',
+  registers: [registry],
+});

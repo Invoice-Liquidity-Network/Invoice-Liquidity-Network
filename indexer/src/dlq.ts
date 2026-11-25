@@ -23,6 +23,8 @@
  * cursor on restart; persisting the queue is a maintainer decision.
  */
 
+import { dlqEnqueuedTotal, dlqExhaustedTotal } from './metrics';
+
 export type DeadLetterState = 'pending' | 'exhausted';
 
 export interface DeadLetterEntry<T = unknown> {
@@ -191,7 +193,19 @@ export class DeadLetterQueue<T = any> {
     entry.attempts += 1;
     entry.lastError = errorMessage(error);
     entry.lastFailedAt = now;
+    try {
+      dlqEnqueuedTotal.inc();
+    } catch {
+      /* metrics failure is non-fatal */
+    }
     if (permanent || entry.attempts >= this.maxAttempts) {
+      if (entry.state !== 'exhausted') {
+        try {
+          dlqExhaustedTotal.inc();
+        } catch {
+          /* metrics failure is non-fatal */
+        }
+      }
       entry.state = 'exhausted';
       delete entry.nextRetryAt;
       return;

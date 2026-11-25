@@ -131,7 +131,7 @@ describe('KYB failover through the app wiring (#1238)', () => {
       expect(fallbackCalls).toBe(1);
 
       // Operator-visible proof of the failover, without reading logs.
-      expect(health().kyb).toEqual({ required: false, configured: true, failover: true });
+      expect(health().kyb).toMatchObject({ required: false, configured: true, failover: true });
       expect(health().sources).toMatchObject({
         'kyb-primary': 'unavailable',
         'kyb-fallback': 'healthy',
@@ -189,7 +189,7 @@ describe('KYB failover through the app wiring (#1238)', () => {
       expect(res.body.isVerified).toBe(false);
       expect(res.body.composition.outcome).toBe('rejected-kyb-unavailable');
       expect(res.body.authorization.primary).toBe('PAYER_KYB_UNAVAILABLE');
-      expect(health().kyb).toEqual({ required: true, configured: true, failover: false });
+      expect(health().kyb).toMatchObject({ required: true, configured: true, failover: false });
     } finally {
       await close();
     }
@@ -227,7 +227,7 @@ describe('KYB failover through the app wiring (#1238)', () => {
 
       expect(res.body.isVerified).toBe(true);
       expect(res.body.kybResult.provider).toBe('solo-kyb');
-      expect(health().kyb).toEqual({ required: false, configured: true, failover: false });
+      expect(health().kyb).toMatchObject({ required: false, configured: true, failover: false });
       expect(health().sources).toEqual({});
     } finally {
       await close();

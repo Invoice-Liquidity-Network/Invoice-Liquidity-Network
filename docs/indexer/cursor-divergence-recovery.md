@@ -14,9 +14,13 @@ There are no shipped alert rules for these signals yet; use these PromQL
 expressions in your alerting stack (all metrics come from `GET /metrics`):
 
 - **Cursor stalled** — the poller has not advanced the cursor for 5 minutes:
-  `time() - iln_cursor_updated_at / 1000 > 300`
-- **Cursor behind the confirmed tip** — more than 100 ledgers of lag:
-  `iln_confirmed_tip_ledger - iln_last_processed_ledger > 100`
+  `iln_cursor_age_seconds > 300` (absent when the database is unreadable, so
+  pair it with `absent(iln_cursor_age_seconds)`)
+- **Cursor behind the network tip** — more than 100 ledgers beyond the
+  confirmation depth: `iln_ledger_lag - iln_confirmation_depth > 100`.
+  (`iln_confirmed_tip_ledger - iln_last_processed_ledger` cannot detect lag: the
+  poller sets both in the same cycle and the difference is ≤ 0. See
+  [observability-audit.md](./observability-audit.md#1453-health-and-lag-metrics).)
 - **Rewind attempts** — something tried to move the cursor backwards outside an
   authorised rollback: `increase(iln_cursor_monotonicity_violations_total[15m]) > 0`
 - **State drift** — discrepancy between on-chain contract invoice status and

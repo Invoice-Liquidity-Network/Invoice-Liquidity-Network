@@ -142,75 +142,8 @@ class InMemoryOracleCache implements OracleCacheReaderWriter {
   }
 }
 
-class RedisOracleCache implements OracleCacheReaderWriter {
-  constructor(private readonly client: RedisClientType) {}
-
-  async get(key: string): Promise<OracleCacheEntry | null> {
-    const raw = await this.client.get(key);
-    if (!raw) {
-      return null;
-    }
-
-    try {
-      const parsed = JSON.parse(raw) as OracleCacheEntry;
-      return parsed;
-    } catch {
-      return null;
-    }
-  }
-
-  async set(
-    key: string,
-    response: OracleVerificationResponse,
-    ttlSeconds: number = DEFAULT_TTL_SECONDS
-  ): Promise<void> {
-    const payload: OracleCacheEntry = {
-      key,
-      response,
-      generatedAtMs: Date.parse(response.generatedAt) || Date.now(),
-    };
-
-    await this.client.set(key, JSON.stringify(payload), {
-      EX: ttlSeconds,
-    });
-    // Last-known-good backup for degraded mode (issue #1057): a separate
-    // key with a long TTL so a total source outage can still serve the most
-    // recent answer marked stale.
-    await this.client.set(`${key}:stale`, JSON.stringify(payload), {
-      EX: 24 * 60 * 60,
-    });
-  }
-
-  async getStale(key: string): Promise<OracleCacheEntry | null> {
-    const raw = await this.client.get(`${key}:stale`);
-    if (!raw) {
-      return null;
-    }
-
-    try {
-      return JSON.parse(raw) as OracleCacheEntry;
-    } catch {
-      return null;
-    }
-  }
-
-  async invalidateByPrefix(prefix: string): Promise<number> {
-    // SCAN rather than KEYS: KEYS blocks the Redis event loop for the whole
-    // keyspace, which is not acceptable on a request path.
-    let cursor = 0;
-    let removed = 0;
-
-    do {
-      const batch = await this.client.scan(cursor, { MATCH: `${prefix}*`, COUNT: 200 });
-      cursor = Number(batch.cursor);
-      if (batch.keys.length > 0) {
-        removed += await this.client.del(batch.keys);
-      }
-    } while (cursor !== 0);
-
-    return removed;
-  }
-}
+import { RedisOracleCache } from './cacheRedis';
+export { RedisOracleCache } from './cacheRedis';
 
 export interface CreateOracleCacheOptions {
   redisUrl?: string;

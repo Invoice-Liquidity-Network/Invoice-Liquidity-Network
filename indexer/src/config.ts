@@ -6,6 +6,16 @@ export const CONFIG = {
   contractId: process.env.CONTRACT_ID ?? 'CD3TE3IAHM737P236XZL2OYU275ZKD6MN7YH7PYYAXYIGEH55OPEWYJC',
   networkPassphrase: process.env.NETWORK_PASSPHRASE ?? 'Test SDF Network ; September 2015',
   rpcUrl: process.env.RPC_URL ?? 'https://soroban-testnet.stellar.org',
+  /**
+   * Optional comma-separated fallback RPC URLs, tried in order when the current
+   * endpoint times out or fails at the transport level (#1454). Reads only.
+   */
+  rpcFallbackUrls: (process.env.RPC_FALLBACK_URLS ?? '')
+    .split(',')
+    .map((url) => url.trim())
+    .filter(Boolean),
+  /** Per-request RPC timeout in ms (default: 10 seconds). */
+  rpcTimeoutMs: Number(process.env.RPC_TIMEOUT_MS ?? '10000'),
   dbPath: process.env.DB_PATH ?? 'indexer.db',
   /** Polling interval in milliseconds (default: 5 seconds). */
   pollIntervalMs: Number(process.env.POLL_INTERVAL_MS ?? '5000'),

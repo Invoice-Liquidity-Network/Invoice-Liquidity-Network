@@ -1,18 +1,87 @@
-import { getCursorUpdatedAt, getDb } from './db';
+import { getCursorSnapshot } from './db';
+
+/**
+ * Dashboard data provenance (#1452)
+ * ---------------------------------
+ * Every field returned by `GET /v1/dashboard` is labelled in `provenance` with
+ * where it comes from and how much it can be trusted:
+ *
+ *  - `persisted`     read from the persisted `cursor` row; the source of truth for
+ *                    sync state, survives restarts, shared by all instances
+ *                    using the same database.
+ *  - `process`       in-memory counter of *this* process since `uptime.startTime`;
+ *                    reset on restart, not aggregated across instances.
+ *  - `derived`       computed from other fields at request time.
+ *  - `heuristic`     a threshold judgement, not a measurement.
+ *  - `not_collected` nothing records this value; it is always 0 and kept only
+ *                    for response-shape compatibility. Do not alert on it.
+ *
+ * Full audit (normal / failed / repeated / stale / interrupted behaviour):
+ * docs/indexer/observability-audit.md
+ */
+
+export type ProvenanceKind = 'persisted' | 'process' | 'derived' | 'heuristic' | 'not_collected';
+
+export interface FieldProvenance {
+  kind: ProvenanceKind;
+  source: string;
+}
+
+/**
+ * Sync state classification:
+ *  - `live`          cursor advanced within `staleAfterSeconds`
+ *  - `stale`         cursor exists but has not advanced within `staleAfterSeconds`
+ *  - `never_synced`  database readable, cursor never written
+ *  - `unavailable`   database read failed; sync fields are null because they are unknown
+ */
+export type SyncStatus = 'live' | 'stale' | 'never_synced' | 'unavailable';
 
 export interface DashboardMetrics {
+  /** ISO time this snapshot was computed; the endpoint is not cached (no-store). */
+  generatedAt: string;
   sync: SyncMetrics;
   performance: PerformanceMetrics;
   errors: ErrorMetrics;
   uptime: UptimeMetrics;
+  provenance: Record<string, FieldProvenance>;
 }
 
 export interface SyncMetrics {
+  status: SyncStatus;
   lastSyncTime: string | null;
   lastSyncLedger: number | null;
+  /**
+   * Seconds since the cursor row was last written (wall clock), NOT ledger lag.
+   * For ledger lag use the `iln_ledger_lag` Prometheus gauge.
+   */
   syncLag: number | null;
   isSyncing: boolean;
+  /** Threshold used for `isSyncing` / `status: 'stale'`. */
+  staleAfterSeconds: number;
 }
+
+/** Cursor older than this is reported as stale (`isSyncing: false`). */
+export const SYNC_STALE_AFTER_SECONDS = 30;
+
+export const DASHBOARD_PROVENANCE: Readonly<Record<string, FieldProvenance>> = Object.freeze({
+  'sync.status': { kind: 'derived', source: 'cursor row read outcome + staleAfterSeconds' },
+  'sync.lastSyncTime': { kind: 'persisted', source: 'cursor table: updated_at' },
+  'sync.lastSyncLedger': { kind: 'persisted', source: 'cursor table: last_ledger' },
+  'sync.syncLag': { kind: 'derived', source: 'now - cursor.updated_at (seconds, wall clock)' },
+  'sync.isSyncing': { kind: 'heuristic', source: 'syncLag < staleAfterSeconds' },
+  'performance.requestCount': { kind: 'process', source: 'HTTP responses finished by this process' },
+  'performance.averageResponseTime': { kind: 'process', source: 'mean HTTP response time (ms) in this process' },
+  'performance.dbQueryCount': { kind: 'not_collected', source: 'none (see iln_db_query_duration_seconds)' },
+  'performance.dbQueryAvgTime': { kind: 'not_collected', source: 'none (see iln_db_query_duration_seconds)' },
+  'performance.memoryUsage': { kind: 'process', source: 'process.memoryUsage() at request time' },
+  'errors.totalErrors': { kind: 'process', source: 'HTTP responses with status >= 400 in this process' },
+  'errors.errorRate': { kind: 'derived', source: 'totalErrors / requestCount (includes 4xx)' },
+  'errors.lastError': { kind: 'process', source: 'last recorded error, sanitized' },
+  'errors.errorsByType': { kind: 'process', source: 'error counts keyed by HTTP status' },
+  'uptime.startTime': { kind: 'process', source: 'process metrics start (or last resetMetrics)' },
+  'uptime.uptimeSeconds': { kind: 'derived', source: 'now - startTime' },
+  'uptime.uptimeFormatted': { kind: 'derived', source: 'uptimeSeconds' },
+});
 
 export interface PerformanceMetrics {
   requestCount: number;
@@ -38,8 +107,10 @@ export interface UptimeMetrics {
 let startTime = Date.now();
 let requestCount = 0;
 let totalResponseTime = 0;
-let dbQueryCount = 0;
-let dbQueryAvgTime = 0;
+// Never written: no code path records DB query counts into the dashboard.
+// Kept at 0 for response-shape compatibility and labelled `not_collected`.
+const dbQueryCount = 0;
+const dbQueryAvgTime = 0;
 let errorCount = 0;
 let errorsByType: Record<string, number> = {};
 let lastError: string | null = null;
@@ -83,24 +154,11 @@ export function sanitizeOperationalError(message: string): string {
 
 export function getDashboardMetrics(): DashboardMetrics {
   const now = Date.now();
-  // The dashboard is externally readable - a failing metrics query must degrade
-  // to nulls instead of throwing (which would surface an error page + stack
-  // trace to the caller).
-  let lastSyncMs: number | null = null;
-  try {
-    lastSyncMs = getCursorUpdatedAt();
-  } catch {
-    lastSyncMs = null;
-  }
   const uptimeSeconds = Math.floor((now - startTime) / 1000);
 
   return {
-    sync: {
-      lastSyncTime: lastSyncMs ? new Date(lastSyncMs).toISOString() : null,
-      lastSyncLedger: getLastSyncLedger(),
-      syncLag: lastSyncMs ? Math.floor((now - lastSyncMs) / 1000) : null,
-      isSyncing: lastSyncMs !== null && now - lastSyncMs < 30000,
-    },
+    generatedAt: new Date(now).toISOString(),
+    sync: getSyncMetrics(now),
     performance: {
       requestCount,
       averageResponseTime: requestCount > 0 ? totalResponseTime / requestCount : 0,
@@ -119,19 +177,53 @@ export function getDashboardMetrics(): DashboardMetrics {
       uptimeSeconds,
       uptimeFormatted: formatUptime(uptimeSeconds),
     },
+    provenance: { ...DASHBOARD_PROVENANCE },
   };
 }
 
-function getLastSyncLedger(): number | null {
+/**
+ * Sync state from the persisted cursor row. The dashboard is externally
+ * readable, so a failing query degrades to `status: 'unavailable'` with null
+ * fields instead of throwing (which would surface an error page + stack trace).
+ */
+function getSyncMetrics(now: number): SyncMetrics {
+  let snapshot: { ledger: number; updatedAt: number } | null;
   try {
-    const db = getDb();
-    const row = db.prepare('SELECT last_ledger FROM cursor WHERE id = 1').get() as
-      | { last_ledger: number }
-      | undefined;
-    return row?.last_ledger ?? null;
+    snapshot = getCursorSnapshot();
   } catch {
-    return null;
+    return {
+      status: 'unavailable',
+      lastSyncTime: null,
+      lastSyncLedger: null,
+      syncLag: null,
+      isSyncing: false,
+      staleAfterSeconds: SYNC_STALE_AFTER_SECONDS,
+    };
   }
+
+  if (snapshot === null) {
+    return {
+      status: 'never_synced',
+      lastSyncTime: null,
+      lastSyncLedger: null,
+      syncLag: null,
+      isSyncing: false,
+      staleAfterSeconds: SYNC_STALE_AFTER_SECONDS,
+    };
+  }
+
+  // A cursor written by a host with a skewed clock can be in the future;
+  // report 0 rather than a negative lag.
+  const syncLag = Math.max(0, Math.floor((now - snapshot.updatedAt) / 1000));
+  const isSyncing = syncLag < SYNC_STALE_AFTER_SECONDS;
+  return {
+    status: isSyncing ? 'live' : 'stale',
+    lastSyncTime: new Date(snapshot.updatedAt).toISOString(),
+    lastSyncLedger: snapshot.ledger,
+    syncLag,
+    isSyncing,
+    staleAfterSeconds: SYNC_STALE_AFTER_SECONDS,
+  };
 }
 
 function formatUptime(seconds: number): string {
@@ -153,8 +245,6 @@ export function resetMetrics(): void {
   startTime = Date.now();
   requestCount = 0;
   totalResponseTime = 0;
-  dbQueryCount = 0;
-  dbQueryAvgTime = 0;
   errorCount = 0;
   errorsByType = {};
   lastError = null;

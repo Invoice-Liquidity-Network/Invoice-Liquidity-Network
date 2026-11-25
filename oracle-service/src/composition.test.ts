@@ -236,7 +236,8 @@ describe('toExternalSignal', () => {
         providerConfidence: 0.87,
         checkedAt: '2026-01-01T00:00:00.000Z',
         reasons: ['Registry match'],
-      })
+      }),
+      { now: new Date('2026-01-01T00:00:00.000Z').getTime() }
     );
 
     expect(signal.provider).toBe('acme-kyb');

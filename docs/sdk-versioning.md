@@ -1,10 +1,11 @@
 # SDK Versioning and Support Windows
 
 This page is the policy of record for how the Invoice Liquidity Network
-versions its SDK surfaces and for how long each version is supported. It is
-backed by a machine-readable manifest, [`sdk-support-windows.json`](sdk-support-windows.json),
-that CI validates (`scripts/check-sdk-support-windows.mjs`) — so the window
-described here and the window enforced by CI cannot drift apart.
+versions its SDK surfaces and records their intended support windows. The
+machine-readable manifest, [`sdk-support-windows.json`](sdk-support-windows.json),
+is checked by CI (`scripts/check-sdk-support-windows.mjs`) against workspace
+`package.json` versions and this page. This is a repository consistency check;
+it does not query npm or verify which versions are currently published.
 
 **Owner:** @iln/sdk, @iln/sdk-next and @iln/react maintainers
 **Runbook:** [runbooks/sdk-support-windows.md](runbooks/sdk-support-windows.md)
@@ -35,18 +36,41 @@ window.
 
 ## Support windows
 
-The support model is **current minor plus the previous minor**:
+The policy target for stable surfaces is **current minor plus the previous
+minor**:
 
 1. The current minor of every `stable` surface receives bug fixes and security
    patches.
-2. The previous minor receives security patches for `deprecationNoticeDays`
-   (90) after the next minor is released.
+2. The previous minor is intended to receive security patches during the
+   `deprecationNoticeDays` (90) notice period after the next minor is released.
 3. When a version reaches its `eol` date it is **end-of-life**: no further
    patches, and consumers must upgrade. End-of-life is inclusive of the `eol`
    date — the version is still supported on its final day.
 
-`eol: null` means the surface is supported until a successor is released and
-its 90-day deprecation notice elapses. A non-null `eol` is an absolute date.
+`eol: null` means no absolute EOL date has been recorded. The stable package
+manifests currently declare version `0.1.0`; `@iln/sdk-next` has the recorded
+absolute EOL date `2026-12-31`. A non-null `eol` is an absolute date. The
+90-day notice is the stated policy; the checker validates date/status shape
+and active-window expiry, but does not calculate that the date is 90 days
+after a release or prove that prior minors receive patches.
+
+### What has been verified
+
+- The manifest versions match the three workspace package versions, and all
+  three package manifests set `engines.node` to `>=20`.
+- `@iln/react` declares peers `@iln/sdk@^0.1.0`, `react@^19.0.0`, and
+  `@tanstack/react-query@^5.62.0`. The stable SDK also declares optional React
+  and React Native peers; `@iln/sdk-next` has no peer dependencies.
+- `check:sdk-support-windows` verifies manifest coverage, package version
+  agreement, valid dates/statuses, expired active windows, and that this page
+  mentions each package and version. Its focused tests are
+  `test:sdk-support-windows`.
+
+Published registry state and consumer-resolvable version ranges are not
+verified by that check. Check the release records/registry before making a
+release decision. Whether to extend an EOL, change the 90-day policy, or ship
+a breaking release remains a maintainer approval decision; no such decision
+is implied by this audit.
 
 ## Compatibility guarantees
 

@@ -419,7 +419,7 @@ describe('#1234/#1235 production KYB wiring', () => {
 
     created = await createOracleApp(appOptions({ kybProvider: stubKyb({ name: 'vendor-api' }) }));
 
-    expect(created.health().kyb).toEqual({
+    expect(created.health().kyb).toMatchObject({
       configured: true,
       provider: 'vendor-api',
       required: true,

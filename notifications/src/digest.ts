@@ -71,6 +71,42 @@ export interface DigestSchedulerOptions {
 
 // ── Helpers ────────────────────────────────────────────────────────────────
 
+/**
+ * Deduplicate digest items to eliminate duplicate events and replay overlap (#1464).
+ */
+export function deduplicateDigestItems(items: DigestItem[]): DigestItem[] {
+  const seenKeys = new Set<string>();
+  const deduplicated: DigestItem[] = [];
+
+  for (const item of items) {
+    const key = item.eventId
+      ? `event:${item.eventId}`
+      : `invoice:${item.invoiceId}:${item.eventType}`;
+    if (!seenKeys.has(key)) {
+      seenKeys.add(key);
+      deduplicated.push(item);
+    }
+  }
+
+  return deduplicated;
+}
+
+/**
+ * Group digest items by invoice id for structured digest compilation and reporting (#1464).
+ */
+export function groupDigestItemsByInvoice(items: DigestItem[]): Map<number, DigestItem[]> {
+  const groups = new Map<number, DigestItem[]>();
+  const uniqueItems = deduplicateDigestItems(items);
+
+  for (const item of uniqueItems) {
+    const list = groups.get(item.invoiceId) ?? [];
+    list.push(item);
+    groups.set(item.invoiceId, list);
+  }
+
+  return groups;
+}
+
 function eventToDigestItem(event: InvoiceEvent): DigestItem {
   return {
     eventId: event.eventId,
@@ -193,7 +229,13 @@ export class DigestScheduler {
   buffer(stellarAddress: string, event: InvoiceEvent): void {
     const buf = this.buffers.get(stellarAddress);
     if (!buf) return;
-    if (buf.items.some((item) => item.eventId === event.eventId)) return;
+    const isDuplicate = buf.items.some((item) => {
+      if (event.eventId && item.eventId) {
+        return item.eventId === event.eventId;
+      }
+      return item.invoiceId === event.invoiceId && item.eventType === event.type;
+    });
+    if (isDuplicate) return;
     const item = eventToDigestItem(event);
     this.reconciler?.recordBuffered(stellarAddress, item, Date.now());
     buf.items.push(item);

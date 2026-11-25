@@ -1,27 +1,92 @@
 /**
- * Notification address ownership verification (#1281)
+ * Notification address ownership verification (#1281, #1468)
  *
  * A subscription routes invoice details for a Stellar address to an email,
  * webhook or phone number. Without proof that the subscriber controls that
  * address, anyone could subscribe to another account's invoice activity.
  *
- * Flow:
- *   1. POST /subscribe/challenge  → server stores a single-use nonce and
- *      returns the exact message to sign.
- *   2. The subscriber signs the message with the ed25519 key behind the
- *      Stellar address and submits the base64 signature with the nonce.
- *   3. verifyOwnershipProof() checks the signature, expiry and single use,
- *      atomically consuming the challenge on success.
+ * Recipient Ownership Verification Audit (#1468):
+ * ─────────────────────────────────────────────────────────────────────────────
+ * • Source of Truth:
+ *   - Cryptographic ed25519 signature verified with Stellar public key against
+ *     single-use challenge stored in SQLite `ownership_challenges`.
+ *   - Delivery gating checks `subscriptions.ownership_verified_at` (populated
+ *     atomically upon challenge consumption).
  *
- * The processor only delivers to subscriptions with `ownership_verified_at`
- * set, so rows created before this control (NULL) fail closed until the
- * owner re-verifies via POST /subscriptions/verify.
+ * • Sensitive Content Policy:
+ *   - All invoice lifecycle events (financial amounts, invoice statuses, counterparties),
+ *     governance actions (disputes, arbitration), and wallet-sensitive operations
+ *     (payouts, addresses) REQUIRE verified recipient ownership.
+ *   - Deliveries to unverified subscriptions fail closed with explicit audit logging
+ *     and metrics recording.
+ *
+ * • Operational & Failure Modes:
+ *   - Normal: Verified subscriber signs challenge; `ownership_verified_at` recorded;
+ *     sensitive notifications delivered.
+ *   - Failed: Missing proof, invalid signature, or address mismatch rejected with
+ *     explicit reason; delivery blocked; counters incremented.
+ *   - Repeated: Challenges are strictly single-use (`consumed_at` conditional update).
+ *     Replay bursts fail with reason 'replayed'.
+ *   - Stale: Challenges expire strictly after `CONFIG.ownershipChallengeTtlMs`
+ *     (rejected with 'expired'). Legacy unverified subscriptions remain NULL.
+ *   - Interrupted: DB failures propagate and fail closed; in-flight process crash
+ *     aborts verification without granting access.
+ *
+ * • Residual Risk & Maintainer Decisions:
+ *   - On-chain key rotation: If ed25519 account key rotates on chain, existing
+ *     verified timestamps remain until explicit revocation or re-verification.
+ *   - Off-chain delivery endpoints: Ownership verifies control of Stellar address,
+ *     not third-party destination (email/webhook/sms) security.
+ *   - Maintainer Decision: Subscriptions created prior to #1281 remain unverified
+ *     until the owner explicitly signs via `POST /subscriptions/verify`.
  */
 
 import { randomBytes } from 'crypto';
 import { Keypair, StrKey } from '@stellar/stellar-sdk';
 import { getDb, countUnverifiedSubscriptions } from './db';
 import { CONFIG } from './config';
+import type { NotificationTrigger } from './types';
+
+export type SensitiveContentCategory = 'invoice' | 'governance' | 'wallet';
+
+export const SENSITIVE_CONTENT_TRIGGERS: Record<NotificationTrigger, SensitiveContentCategory> = {
+  invoice_submitted: 'invoice',
+  invoice_funded: 'invoice',
+  invoice_paid: 'invoice',
+  payment_received: 'invoice',
+  invoice_defaulted: 'invoice',
+  invoice_due_soon: 'invoice',
+  invoice_overdue: 'invoice',
+  dispute_opened: 'governance',
+};
+
+export const SENSITIVE_CATEGORIES: ReadonlySet<SensitiveContentCategory> = new Set([
+  'invoice',
+  'governance',
+  'wallet',
+]);
+
+/** Returns true if the trigger or content category involves sensitive invoice, governance, or wallet data. */
+export function isContentSensitive(triggerOrCategory: string): boolean {
+  if (triggerOrCategory in SENSITIVE_CONTENT_TRIGGERS) return true;
+  if (SENSITIVE_CATEGORIES.has(triggerOrCategory as SensitiveContentCategory)) return true;
+  const lower = triggerOrCategory.toLowerCase();
+  return (
+    lower.startsWith('invoice') ||
+    lower.startsWith('payment') ||
+    lower.includes('governance') ||
+    lower.includes('wallet') ||
+    lower.includes('dispute') ||
+    lower.includes('payout') ||
+    lower.includes('arbitration')
+  );
+}
+
+export interface RecipientOwnershipCheckResult {
+  allowed: boolean;
+  reason?: OwnershipRejectionReason | 'unverified_recipient' | 'missing_recipient';
+  verifiedAt?: number;
+}
 
 export type OwnershipRejectionReason =
   | 'invalid_address'
@@ -117,6 +182,64 @@ export function isOwnershipVerified(subscription: {
   ownership_verified_at?: number | null;
 }): boolean {
   return typeof subscription.ownership_verified_at === 'number';
+}
+
+/**
+ * Verifies that the recipient subscription has proved ownership of their Stellar address
+ * before sensitive content (invoice, governance, or wallet data) can be delivered (#1468).
+ * Non-sensitive content may pass through, while sensitive content fails closed if unverified.
+ */
+export function verifyRecipientOwnership(
+  subscription: {
+    ownership_verified_at?: number | null;
+    stellar_address?: string;
+    address?: string;
+  } | null | undefined,
+  triggerOrCategory?: string
+): RecipientOwnershipCheckResult {
+  if (!subscription) {
+    return { allowed: false, reason: 'missing_recipient' };
+  }
+
+  const address = subscription.stellar_address ?? subscription.address ?? '';
+  if (!isValidStellarAddress(address)) {
+    recordRejection(address || '<unknown>', 'invalid_address');
+    return { allowed: false, reason: 'invalid_address' };
+  }
+
+  // If a specific trigger or category is specified and is NOT sensitive, permit delivery
+  if (triggerOrCategory && !isContentSensitive(triggerOrCategory)) {
+    return { allowed: true };
+  }
+
+  // Sensitive content requires verified ownership
+  if (!isOwnershipVerified(subscription)) {
+    recordBlockedDelivery('unverified_subscription', address);
+    return { allowed: false, reason: 'unverified_recipient' };
+  }
+
+  return { allowed: true, verifiedAt: subscription.ownership_verified_at! };
+}
+
+/**
+ * Asserts that the recipient subscription has proved ownership before sensitive dispatch.
+ * Throws an explicit error if ownership verification fails.
+ */
+export function assertRecipientOwnership(
+  subscription: {
+    ownership_verified_at?: number | null;
+    stellar_address?: string;
+    address?: string;
+  } | null | undefined,
+  triggerOrCategory?: string
+): void {
+  const result = verifyRecipientOwnership(subscription, triggerOrCategory);
+  if (!result.allowed) {
+    const address = subscription?.stellar_address ?? subscription?.address ?? '<unknown>';
+    throw new Error(
+      `[ownership] Recipient ownership verification failed for ${address}: ${result.reason}`
+    );
+  }
 }
 
 export function isValidStellarAddress(address: unknown): address is string {

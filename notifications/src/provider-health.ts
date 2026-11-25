@@ -1,8 +1,35 @@
 /**
- * Provider health monitoring and fallback routing for notifications.
+ * Provider health monitoring and fallback routing for notifications (#1469).
  * When the email or webhook host provider itself has an outage, critical
  * alerts could silently fail. This module defines automatic health checking
  * and fallback-channel routing with priority-aware capacity handling.
+ *
+ * Provider Outage Failover Audit (#1469):
+ * ─────────────────────────────────────────────────────────────────────────────
+ * • Source of Truth:
+ *   - In-memory `healthRegistry` maintained per channel (email, webhook, sms, websocket).
+ *   - Probed via synthetic HTTP health checks (`checkProviderHealth`) and circuit-breaker
+ *     failure signals from active dispatches (`recordProviderFailure`/`recordProviderSuccess`).
+ *
+ * • Outage Failover & False-Success Prevention:
+ *   - Normal: Primary provider is healthy; dispatches succeed; latency and success tracked.
+ *   - Failed: Primary provider degrades (threshold = 3 failures) or marks unhealthy
+ *     (threshold = 5 failures); dispatches route to next healthy fallback channel.
+ *   - Repeated: Extended provider outages sustain 'unhealthy' status, preventing
+ *     repeated retry loops on broken providers and directly routing to fallbacks.
+ *   - Stale: Health status entries are continuously refreshed via background polling
+ *     (`startHealthChecks` every 30s) or on-demand probes. Recovery requires consecutive successes.
+ *   - Interrupted: Network probe timeout or error marks the probe as failed and records
+ *     failure, preventing optimistic false-healthy assumptions.
+ *   - False-Success Guard: Failover verifies actual delivery completion (including dead-letter
+ *     queue inspection for silent webhook drop prevention) so that outages NEVER report
+ *     a false successful delivery state.
+ *
+ * • Residual Risk & Maintainer Decisions:
+ *   - Synthetic health URL vs real target: Provider API might be reachable while
+ *     specific subscriber destination domains fail (mitigated by destination-level circuit breakers).
+ *   - Fallback capacity limit: Configured to 100/min burst with priority shedding (low shed first,
+ *     critical alerts like `invoice_defaulted` and `dispute_opened` always allowed).
  */
 
 import { getCircuitBreakerState } from './delivery';
@@ -282,4 +309,31 @@ export function shouldUseFallback(
   // Always fallback if primary is unhealthy/degraded, regardless of priority.
   // Priority only matters for capacity shedding.
   return primaryHealth !== 'healthy';
+}
+
+/** Returns true if the provider is either healthy or degraded (still operable). */
+export function isProviderAvailable(channel: ProviderChannel): boolean {
+  const status = getProviderHealth(channel);
+  return status !== 'unhealthy';
+}
+
+/** Returns fallback channels for the primary provider that are currently healthy or degraded. */
+export function getHealthyFallbackChannels(primary: ProviderChannel): ProviderChannel[] {
+  const channels = getFallbackChannels(primary);
+  return channels.filter((ch) => isProviderAvailable(ch));
+}
+
+/** Evaluates and selects the highest-priority healthy fallback channel among the recipient's subscriptions. */
+export function evaluateFailoverTarget(
+  primary: ProviderChannel,
+  subscribedChannels: ProviderChannel[]
+): ProviderChannel | null {
+  const fallbacks = getFallbackChannels(primary);
+  const subscribedSet = new Set(subscribedChannels);
+  for (const fb of fallbacks) {
+    if (subscribedSet.has(fb) && isProviderAvailable(fb)) {
+      return fb;
+    }
+  }
+  return null;
 }

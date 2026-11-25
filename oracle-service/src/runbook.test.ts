@@ -70,7 +70,7 @@ describe('payer/KYB incident runbook (#1240)', () => {
     try {
       const snapshot = health();
       // The runbook's opening `health()` example must be a real shape.
-      expect(snapshot.kyb).toEqual({ required: false, configured: false, failover: false });
+      expect(snapshot.kyb).toMatchObject({ required: false, configured: false, failover: false });
       expect(snapshot.sources).toEqual({});
     } finally {
       await close();

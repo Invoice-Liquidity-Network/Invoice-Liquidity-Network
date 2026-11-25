@@ -16,7 +16,7 @@ This document describes the on-chain data model for third-party indexers (The Gr
 2. [Invoice State Machine](#invoice-state-machine)
 3. [Events and State Transitions](#events-and-state-transitions)
 4. [Reputation Computation](#reputation-computation)
-5. [Handling Ledger Finality (no reorgs)](#handling-ledger-finality-no-reorgs)
+5. [Cursor, replay, and ledger rewind behavior](#cursor-replay-and-ledger-rewind-behavior)
 6. [Recommended Indexer Schema (ERD)](#recommended-indexer-schema-erd)
 7. [Worked Examples](#worked-examples)
 
@@ -224,22 +224,59 @@ GROUP BY payer;
 
 ---
 
-## Handling Ledger Finality (no reorgs)
+## Cursor, replay, and ledger rewind behavior
 
-**Stellar has no chain reorganizations.** Once a ledger is closed and the Soroban RPC reports it as `CLOSED`, it is final. There is no concept of a "deep enough confirmation depth" as with EVM chains.
+The live poller uses `indexer/src/db.ts` and `indexer/src/poller.ts` as the
+source of truth. It applies a configurable confirmation-depth policy and has
+explicit rollback behavior when the RPC-reported latest ledger falls below its
+stored cursor. Treat a closed-ledger rewind as a recovery condition: do not
+assume this service never rewinds its local view.
 
-Implications for indexers:
+The `cursor` table stores one last-processed **ledger sequence** and update
+timestamp. It does not store an RPC pagination token. RPC page cursors exist
+only during a polling cycle. On restart the poller starts from the stored
+ledger, re-scans the boundary, and deduplicates already-seen events by event
+ID. An explicit `START_LEDGER` only applies to an empty database. With no
+stored or configured start, it begins 1,000 ledgers behind the RPC tip (minimum
+ledger 1).
 
-| EVM concern | Stellar equivalent | Action |
-|-------------|-------------------|--------|
-| Reorg / chain tip rewind | RPC node lag, desync, or validator branch switch | Reconcile cursor, rollback removed events, restore invoice state |
-| Uncle blocks | Not applicable | — |
-| Pending mempool | Transactions are PENDING until ledger close | Track status `PENDING` vs `CLOSED` |
-| Safe/finalized heads | Confirmation depth policy (`CONFIRMATION_DEPTH = 10`) | Process events at confirmation depth |
+The active confirmation policy defers events it considers unconfirmed. On
+normal progress the persisted cursor advances to the highest processed event
+or confirmed tip; the overlap and event-ID key make repeated polling safe.
+`setCursorLedger()` rejects a backward move in normal operation. Rollback is
+the sole authorized rewind path.
 
-### Cursor-Based Polling & Re-org Handling
+### Live SQLite schema
 
-Persist the last processed ledger sequence in a `cursor` table to resume after restarts:
+`createDb()` in `indexer/src/db.ts` creates and migrates these operational
+tables (the SQL below is a field summary, not a replacement migration):
+
+| Table | Live fields | Purpose |
+|---|---|---|
+| `invoices` | `id`, `freelancer`, `payer`, `amount`, `due_date`, `discount_rate`, `status`, `funder`, `funded_at`, `created_at`, `updated_at` | Latest fetched invoice state; amounts are text. |
+| `events` | `event_id` (primary key), `event_type`, `invoice_id`, `ledger`, `ledger_closed_at`, `created_at` | Deduplication and event history. There is no declared foreign key to `invoices`. |
+| `cursor` | `id` (constrained to 1), `last_ledger`, `updated_at` | Poll resume position. |
+| `fork_decisions` | `id`, `detected_at`, `from_ledger`, `to_ledger`, `tip_ledger`, `status`, `recovery_attempts`, `events_removed`, `invoices_affected`, `resolved_at` | Durable recovery progress. |
+| `reorg_quarantine` | `id`, `decision_id`, `from_ledger`, `to_ledger`, `reason`, `error_details`, `quarantined_at` | Failed/exhausted recovery records. |
+
+The poller records a fork decision before rollback. `rollbackToLedger()`
+transactionally removes events above the target, restores or deletes affected
+invoice rows, and rewinds the cursor. If recovery is interrupted, the next
+poll resumes the pending decision. Recovery is bounded; after three failed
+attempts it quarantines the decision. A poll with repeated tip regressions is
+also bounded and surfaces an error; the scheduled polling loop logs the error
+and retries on its next tick.
+
+`processEvent()` first checks `event_id`, fetches current invoice state from
+RPC (up to three attempts), then applies the event and invoice update in one
+SQLite transaction. An RPC failure leaves the cursor unadvanced for that
+event and the next poll replays it. Duplicate IDs are ignored. Unknown event
+types are skipped. This is idempotent event/state persistence, not a guarantee
+that RPC data is fresh or that downstream GraphQL notifications are exactly
+once.
+
+The following SQL illustrates the operational tables; additional indexes and
+the `recovery_attempts` compatibility migration are omitted:
 
 ```sql
 CREATE TABLE IF NOT EXISTS cursor (
@@ -272,16 +309,16 @@ CREATE TABLE IF NOT EXISTS reorg_quarantine (
 );
 ```
 
-#### Reorganization & Fork Replacement Guarantees
+#### Rewind and fork replacement behavior
 
-1. **Tip Rewind Detection**: When `latestKnownLedger < stored`, the poller detects a chain tip rewind.
+1. **Tip Rewind Detection**: When `latestKnownLedger < stored`, the poller detects a tip rewind.
 2. **Fork Replacement Persistence**: A `fork_decisions` entry is recorded (`status: 'in_progress'`) prior to rollback for restart safety.
 3. **Removed Event Rollback**: Events with `ledger > targetLedger` are deleted. Invoices created exclusively on the abandoned fork are deleted, and invoices with prior history are restored to their last valid state (`Pending`, `Funded`, etc.).
 4. **Idempotent Replay**: Event application and invoice mutation are executed atomically within SQLite transactions (`applyEventWithInvoice`), ensuring safe replay and restart behavior without state corruption or duplication.
 5. **Incomplete Reorg Quarantine**: In-progress fork decisions track `recovery_attempts`. If rollback fails or exhausts `MAX_REORG_RECOVERY_ATTEMPTS` (3), the decision is transitioned to `'quarantined'` and recorded in `reorg_quarantine`, preventing poller crash loops.
 6. **Cursor Monotonicity Invariants**: `setCursorLedger` guarantees that the stored cursor cannot regress during normal forward indexing. Rewinds are strictly rejected outside of authorized rollback operations.
 7. **Property-Based Verification**: Random property tests (`fast-check`) continuously verify cursor monotonicity, replay idempotency, rollback boundedness, and quarantine isolation under high permutations of inputs.
-8. **Canonical Confirmation Depth Policy**: Contract events within the unconfirmed chain tip window (`latestKnownLedger - event.ledger < confirmationDepth`) are deferred until confirmed by subsequent chain progression. The persisted cursor is bounded to the confirmed tip (`latestKnownLedger - confirmationDepth`), preventing unconfirmed state from corrupting the indexer database.
+8. **Confirmation policy**: Unconfirmed events are deferred according to the active policy. The confirmation depth is configurable; it is not a Stellar protocol constant.
 
 ---
 
@@ -338,7 +375,7 @@ CREATE INDEX idx_events_invoice_id   ON events(invoice_id);
 CREATE INDEX idx_events_ledger       ON events(ledger);
 ```
 
-### Postgres Schema (production)
+### Postgres Schema (recommended translation)
 
 ```sql
 CREATE TABLE invoices (

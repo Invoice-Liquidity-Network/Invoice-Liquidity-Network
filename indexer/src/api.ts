@@ -350,8 +350,11 @@ export function createApp(): express.Application {
   });
 
   // GET /dashboard
+  // Operational freshness data: not cacheable. A 10s CDN max-age plus 30s
+  // stale-while-revalidate could serve an `isSyncing: true` snapshot up to 40s
+  // old, longer than the 30s staleness threshold it reports (#1452).
   router.get('/dashboard', (_req: Request, res: Response) => {
-    cacheControl(res, 'short');
+    cacheControl(res, 'health');
     res.json(getDashboardMetrics());
   });
 

@@ -16,6 +16,9 @@ export class NotificationWebSocketServer {
   private clients: Map<string, WebSocketClient> = new Map();
   private ipConnections: Map<string, number> = new Map(); // Track connection counts per IP
   private heartbeatTimer: ReturnType<typeof setInterval> | null = null;
+  private recentEvents: Array<{ event: InvoiceEvent; timestamp: number }> = [];
+  private maxReplayEvents = 100;
+  private sessions: Map<string, { subscribedAddresses: Set<string>; lastSeen: number }> = new Map();
 
   constructor(private readonly port: number = 4002) {}
 
@@ -45,6 +48,8 @@ export class NotificationWebSocketServer {
 
     this.clients.clear();
     this.ipConnections.clear();
+    this.sessions.clear();
+    this.recentEvents = [];
 
     if (this.wss) {
       this.wss.close();
@@ -53,10 +58,16 @@ export class NotificationWebSocketServer {
   }
 
   broadcastEvent(event: InvoiceEvent): void {
+    const now = Date.now();
+    this.recentEvents.push({ event, timestamp: now });
+    if (this.recentEvents.length > this.maxReplayEvents) {
+      this.recentEvents.shift();
+    }
+
     const message: WebSocketMessage = {
       type: 'event',
       payload: event,
-      timestamp: Date.now(),
+      timestamp: now,
     };
 
     this.clients.forEach((client) => {
@@ -85,8 +96,31 @@ export class NotificationWebSocketServer {
     return Array.from(addresses);
   }
 
-  private handleConnection(socket: WebSocket, _req: IncomingMessage): void {
+  getRecentEventsCount(): number {
+    return this.recentEvents.length;
+  }
+
+  getSessionCount(): number {
+    return this.sessions.size;
+  }
+
+  /**
+   * Prunes expired sessions that have not reconnected within maxAgeMs (#1466).
+   */
+  pruneStaleSessions(maxAgeMs: number = 24 * 3600_000, now: number = Date.now()): number {
+    let pruned = 0;
+    for (const [sessionId, session] of this.sessions.entries()) {
+      if (now - session.lastSeen > maxAgeMs) {
+        this.sessions.delete(sessionId);
+        pruned++;
+      }
+    }
+    return pruned;
+  }
+
+  private handleConnection(socket: WebSocket, req: IncomingMessage): void {
     const clientId = this.generateClientId();
+    const ip = req?.socket?.remoteAddress || '127.0.0.1';
     
     const client: WebSocketClient = {
       id: clientId,
@@ -95,6 +129,7 @@ export class NotificationWebSocketServer {
       subscribedAddresses: new Set(),
       lastHeartbeat: Date.now(),
       isAlive: true,
+      sentEventIds: new Set(),
     };
 
     // Increment IP counter
@@ -108,6 +143,13 @@ export class NotificationWebSocketServer {
     });
 
     socket.on('close', () => {
+      if (client.sessionId) {
+        this.sessions.set(client.sessionId, {
+          subscribedAddresses: new Set(client.subscribedAddresses),
+          lastSeen: Date.now(),
+        });
+      }
+
       this.clients.delete(clientId);
       
       // Decrement IP tracking map securely on disconnection
@@ -158,6 +200,9 @@ export class NotificationWebSocketServer {
         case 'unsubscribe':
           this.handleUnsubscribe(client, message);
           break;
+        case 'reconnect':
+          this.handleReconnect(client, message);
+          break;
         case 'heartbeat':
           client.isAlive = true;
           client.lastHeartbeat = Date.now();
@@ -179,6 +224,13 @@ export class NotificationWebSocketServer {
   private handleSubscribe(client: WebSocketClient, message: WebSocketMessage): void {
     if (message.address) {
       client.subscribedAddresses.add(message.address);
+      if (client.sessionId) {
+        const session = this.sessions.get(client.sessionId);
+        if (session) {
+          session.subscribedAddresses.add(message.address);
+          session.lastSeen = Date.now();
+        }
+      }
       console.log(`[websocket] Client ${client.id} subscribed to ${message.address}`);
     }
   }
@@ -186,12 +238,89 @@ export class NotificationWebSocketServer {
   private handleUnsubscribe(client: WebSocketClient, message: WebSocketMessage): void {
     if (message.address) {
       client.subscribedAddresses.delete(message.address);
+      if (client.sessionId) {
+        const session = this.sessions.get(client.sessionId);
+        if (session) {
+          session.subscribedAddresses.delete(message.address);
+          session.lastSeen = Date.now();
+        }
+      }
       console.log(`[websocket] Client ${client.id} unsubscribed from ${message.address}`);
     }
   }
 
+  /**
+   * Handle client reconnection and replay missed events (#1466).
+   */
+  private handleReconnect(client: WebSocketClient, message: WebSocketMessage): void {
+    const sessionId = message.sessionId || client.id;
+    client.sessionId = sessionId;
+
+    // Restore previous subscription state if available
+    const existingSession = this.sessions.get(sessionId);
+    if (existingSession) {
+      for (const addr of existingSession.subscribedAddresses) {
+        client.subscribedAddresses.add(addr);
+      }
+      existingSession.lastSeen = Date.now();
+    }
+
+    if (message.address) {
+      client.subscribedAddresses.add(message.address);
+    }
+
+    let replayedCount = 0;
+    if (typeof message.lastEventTimestamp === 'number') {
+      const missed = this.recentEvents.filter(
+        (entry) => entry.timestamp > message.lastEventTimestamp!
+      );
+
+      for (const entry of missed) {
+        const event = entry.event;
+        const matchesSub =
+          client.subscribedAddresses.has(event.freelancer) ||
+          client.subscribedAddresses.has(event.payer) ||
+          (event.funder && client.subscribedAddresses.has(event.funder));
+
+        if (matchesSub) {
+          this.sendToClient(client, {
+            type: 'event',
+            payload: event,
+            timestamp: entry.timestamp,
+          });
+          replayedCount++;
+        }
+      }
+    }
+
+    this.sendToClient(client, {
+      type: 'replay_complete',
+      payload: { sessionId, replayedCount },
+      timestamp: Date.now(),
+    });
+
+    console.log(
+      `[websocket] Client ${client.id} reconnected session ${sessionId}; replayed ${replayedCount} missed events`
+    );
+  }
+
   private sendToClient(client: WebSocketClient, message: WebSocketMessage): void {
     if (client.socket.readyState === WebSocket.OPEN) {
+      // Deduplicate events to prevent duplicate deliveries (#1466)
+      if (message.type === 'event' && message.payload) {
+        const event = message.payload as InvoiceEvent;
+        const eventKey = event.eventId ?? `${event.invoiceId}:${event.type}:${message.timestamp}`;
+        if (client.sentEventIds?.has(eventKey)) {
+          return;
+        }
+        client.sentEventIds?.add(eventKey);
+        // Bound the set size
+        if (client.sentEventIds && client.sentEventIds.size > 200) {
+          const first = client.sentEventIds.values().next().value;
+          if (first) client.sentEventIds.delete(first);
+        }
+      }
+
       client.socket.send(JSON.stringify(message));
     }
   }
@@ -202,7 +331,6 @@ export class NotificationWebSocketServer {
       if (now - client.lastHeartbeat > CLIENT_TIMEOUT) {
         client.isAlive = false;
         client.socket.terminate();
-        // Disconnect handle handles map cleanups
         console.log(`[websocket] Client ${id} timed out and was terminated`);
       }
     });
@@ -212,6 +340,8 @@ export class NotificationWebSocketServer {
         client.socket.ping();
       }
     });
+
+    this.pruneStaleSessions();
   }
 
   private generateClientId(): string {

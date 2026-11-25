@@ -19,6 +19,17 @@
  * old (or too far in the future) to be honoured at all, forgetting its nonce
  * is safe; while it is still live, the nonce is retained.
  *
+ * Residual risk (issue #1480)
+ * ──────────────────────────
+ * Nonce state lives in memory only. If the oracle-service process restarts
+ * during an open rotation window a fresh OracleSigningKeyStore instance will
+ * have no memory of previously-seen nonces, so a captured previous-key update
+ * could be re-accepted until the rotation window closes. Mitigation: close the
+ * rotation window (`ORACLE_SIGNING_KEY_ROTATION_WINDOW_MS`) as soon as all
+ * producers have migrated to the new key — do not rely on restart-clearing to
+ * "reset" replay state. For key compromise, set the window to 0 so the previous
+ * key is revoked on the next deploy regardless of nonce history.
+ *
  * Key rotation procedure
  * ──────────────────────
  * 1. Generate a new secret and set it as `ORACLE_SIGNING_KEY`.

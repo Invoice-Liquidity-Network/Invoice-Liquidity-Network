@@ -9,5 +9,5 @@
   "operations-checks": "Operations Checks",
   "cursor-divergence-recovery": "Cursor Divergence Recovery",
   "api-hardening": "API Hardening",
-  "pipeline-hardening": "Pipeline Hardening"
+  "observability-audit": "Observability, RPC & OpenAPI Audit"
 }

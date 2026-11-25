@@ -53,6 +53,44 @@ Reusable workflows (`workflow_call`) also declare `permissions:` — the effecti
 still capped by whatever the **caller** grants, so the declaration documents intent and acts
 as a ceiling, never an escalation.
 
+## Runner, secret, and fork prerequisites
+
+The current workflow files use GitHub-hosted runners (`ubuntu-latest`, with
+platform matrices where explicitly shown); none selects the `self-hosted`
+label. There is therefore no repository self-hosted runner prerequisite today.
+If a workflow is changed to use self-hosted infrastructure, its administrator
+must provide the tools and services the job currently installs or starts
+(including Docker for E2E jobs), and keep untrusted pull request code away from
+persistent runners and privileged credentials. A self-hosted runner label is
+not a substitute for the job's `runs-on` and setup prerequisites.
+
+Secrets are only needed by the workflows that explicitly read them. Examples
+include `SNYK_TOKEN` for `snyk.yml`, `CODECOV_TOKEN` for coverage upload,
+`NPM_TOKEN` for package publishing, and environment-specific deployer keys for
+`deploy.yml`; the workflow reference below lists each workflow's secrets.
+Missing optional secrets use documented fallbacks where present (for example,
+project-board automation); missing required provider credentials make that
+integration fail. Deployment credentials belong in the named GitHub Environment,
+where environment protection rules can require reviewers. CI unit and build
+jobs do not require application secrets.
+
+Pull requests use `pull_request`; the repository does not use
+`pull_request_target` to run their code with the base repository's privileges.
+GitHub does not provide repository secrets to fork-originated pull request
+runs, and the `GITHUB_TOKEN` available to fork PR workflows is restricted by
+GitHub's fork policy. Secret-backed scans or uploads may therefore lack
+credentials on fork PRs. In `ci.yml` and `docs-deploy.yml`, failure-comment
+steps are explicitly skipped for fork PRs. Do not add secrets to PR code or
+make fork checks depend on a privileged token; handle any required privileged
+action through a maintainer-controlled workflow after review.
+
+**Verified limits:** the workflow files and policy checker establish runner
+labels, declared permissions, secret references, and the fork guards described
+here. Actual runner-group access, GitHub Environment reviewers, organization
+fork-token settings, and configured secret values live in GitHub settings and
+cannot be verified from this repository. Maintainers must review those settings
+when enabling a new runner or changing a workflow's privilege boundary.
+
 ## Pinned action versions (supply-chain)
 
 Every **third-party** action (anything not published by GitHub under `actions/*`) is pinned
