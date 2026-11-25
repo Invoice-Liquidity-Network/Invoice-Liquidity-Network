@@ -17,6 +17,7 @@
     "test:bounty": "node --test scripts/__tests__/bug-bounty.test.mjs",
     "test:reproducible-builds": "node scripts/verify-reproducible-builds.mjs",
     "test:compatibility": "vitest run scripts/__tests__/check-compatibility.test.ts",
+    "test:deploy": "vitest run scripts/__tests__/deploy.test.ts",
     "test:audit": "node --test scripts/__tests__/dependency-audit.test.js",
     "test:dependency-confusion": "node --test scripts/__tests__/check-dependency-confusion.test.mjs",
     "test:licenses": "node --test scripts/__tests__/check-licenses.test.mjs",

@@ -276,10 +276,16 @@ export async function runDeployment(options: DeployOptions): Promise<DeploymentS
 
   log(`Deploying Invoice Liquidity Contract to ${network}`);
 
-  const backup = backupRuntimeFiles(envPath, readmePath);
-  summary.previousContractId = extractContractId(backup.envContent);
+  // `backup` starts out unset: if reading the runtime files themselves fails
+  // (e.g. README.md is missing from this checkout), there is nothing to roll
+  // back to, so that case must be distinguished from a deploy that failed
+  // after a successful backup (see the catch block below).
+  let backup: RuntimeBackup | null = null;
 
   try {
+    backup = backupRuntimeFiles(envPath, readmePath);
+    summary.previousContractId = extractContractId(backup.envContent);
+
     // 1. Build
     run('stellar contract build');
 
@@ -355,26 +361,34 @@ export async function runDeployment(options: DeployOptions): Promise<DeploymentS
       log('Hint: Check Stellar network connection');
     }
 
-    try {
-      log('Rolling back: restoring .env and README.md to pre-deployment state');
-      restoreRuntimeFiles(backup, envPath, readmePath);
-      summary.rolledBack = true;
-      if (summary.contractId) {
+    if (backup) {
+      try {
+        log('Rolling back: restoring .env and README.md to pre-deployment state');
+        restoreRuntimeFiles(backup, envPath, readmePath);
+        summary.rolledBack = true;
+        if (summary.contractId) {
+          log(
+            `Note: contract ${summary.contractId} remains deployed on ${network} but was never wired ` +
+              'into the application. It is orphaned and safe to ignore, or clean up manually.'
+          );
+        }
+      } catch (rollbackErr) {
+        const rollbackMessage =
+          rollbackErr instanceof Error ? rollbackErr.message : String(rollbackErr);
         log(
-          `Note: contract ${summary.contractId} remains deployed on ${network} but was never wired ` +
-            'into the application. It is orphaned and safe to ignore, or clean up manually.'
+          `Rollback itself failed: ${rollbackMessage}. Manual intervention required - ` +
+            `check ${envPath} and ${readmePath} by hand.`
         );
       }
-    } catch (rollbackErr) {
-      const rollbackMessage =
-        rollbackErr instanceof Error ? rollbackErr.message : String(rollbackErr);
+      summary.status = 'rolled_back';
+    } else {
       log(
-        `Rollback itself failed: ${rollbackMessage}. Manual intervention required - ` +
-          `check ${envPath} and ${readmePath} by hand.`
+        `No backup was captured before the failure (could not read ${envPath}/${readmePath}), ` +
+          'so there is nothing to roll back.'
       );
+      summary.status = 'failed';
     }
 
-    summary.status = 'rolled_back';
     summary.error = message;
     summary.finishedAt = new Date().toISOString();
     writeDeploymentSummary(summary, logFilePath);
@@ -428,11 +442,18 @@ const isMainModule = import.meta.url === `file://${process.argv[1]}`;
 if (isMainModule) {
   const argv = process.argv.slice(2);
   const options = parseArgs(argv);
-  confirmNetwork(options.network, options.dryRun, argv).then(() => {
-    runDeployment(options).then((summary) => {
+  confirmNetwork(options.network, options.dryRun, argv)
+    .then(() => runDeployment(options))
+    .then((summary) => {
       if (summary.status === 'failed' || summary.status === 'rolled_back') {
         process.exitCode = 1;
       }
+    })
+    .catch((err) => {
+      // A rejection here means the failure happened outside runDeployment's
+      // own try/catch (e.g. the confirmation prompt, or mkdirSync for the log
+      // directory) and so was never written to a deployment summary.
+      console.error('[deploy] Unhandled error before a deployment summary could be written:', err);
+      process.exitCode = 1;
     });
-  });
 }
