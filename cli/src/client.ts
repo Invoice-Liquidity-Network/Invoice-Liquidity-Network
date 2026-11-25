@@ -10,7 +10,7 @@ import {
   xdr,
 } from '@stellar/stellar-sdk';
 
-import { explainContractError } from './errors';
+import { classifyTransactionStatus, describeTransactionOutcome, explainContractError } from './errors';
 import type {
   ClientOptions,
   Invoice,
@@ -26,19 +26,26 @@ import type {
 const READ_ACCOUNT = 'GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF';
 const BASE_TIMEOUT_SECONDS = 60;
 const POLL_ATTEMPTS = 30;
+const POLL_INTERVAL_MS = 2000;
 const PROTOCOL_CONFIG_CACHE_MS = 5 * 60 * 1000;
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
 
 export class ILNClient {
   private readonly contractId: string;
   private readonly networkPassphrase: string;
   private readonly server: RpcServerLike;
   private readonly signer: TransactionSigner;
+  private readonly pollIntervalMs: number;
   private protocolConfigCache: { expiresAt: number; value: ProtocolConfig } | null = null;
 
   constructor(options: ClientOptions) {
     this.contractId = options.contractId;
     this.networkPassphrase = options.networkPassphrase;
     this.signer = options.signer;
+    this.pollIntervalMs = options.pollIntervalMs ?? POLL_INTERVAL_MS;
     this.server =
       options.server ??
       new rpc.Server(options.rpcUrl, {
@@ -265,18 +272,42 @@ export class ILNClient {
       );
     }
 
-    const finalStatus = (await this.server.pollTransaction(response.hash, {
-      attempts: POLL_ATTEMPTS,
-    })) as {
-      resultXdr?: string;
-      status?: string;
-    };
+    const finalStatus = await this.pollTransactionStatus(response.hash);
+    const outcome = classifyTransactionStatus(finalStatus.status);
 
-    if (finalStatus.status !== rpc.Api.GetTransactionStatus.SUCCESS) {
-      throw new Error(`Transaction did not succeed. Final status: ${String(finalStatus.status)}.`);
+    if (outcome !== 'success') {
+      throw new Error(describeTransactionOutcome(outcome, response.hash));
     }
 
     return { hash: response.hash };
+  }
+
+  /**
+   * Poll `getTransaction` until it leaves `NOT_FOUND`, or we exhaust
+   * `POLL_ATTEMPTS`. `sendTransaction`'s PENDING/DUPLICATE response only
+   * means the network accepted the submission — it is never reported to
+   * the caller as success on its own; only this confirmed final status is.
+   */
+  private async pollTransactionStatus(
+    hash: string
+  ): Promise<{ status?: string; resultXdr?: unknown }> {
+    let lastStatus: { status?: string; resultXdr?: unknown } = {};
+
+    for (let attempt = 0; attempt < POLL_ATTEMPTS; attempt += 1) {
+      lastStatus = await this.server.getTransaction(hash);
+
+      if (lastStatus.status !== 'NOT_FOUND') {
+        return lastStatus;
+      }
+
+      if (attempt < POLL_ATTEMPTS - 1) {
+        await sleep(this.pollIntervalMs);
+      }
+    }
+
+    // Still NOT_FOUND after every attempt: the real outcome is unknown, not
+    // a failure — classifyTransactionStatus() surfaces that distinction.
+    return lastStatus;
   }
 
   private parseInvoice(value: unknown): Invoice {
