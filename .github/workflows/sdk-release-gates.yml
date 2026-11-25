@@ -1,0 +1,55 @@
+name: SDK Release Gates
+
+# Blocking guard for SDK release readiness (#1217, #1503).
+#
+# Fails when migration documentation, the version manifest, the
+# cross-repo compatibility matrix, a pending changeset, or any SDK
+# surface's (sdk/, packages/sdk/, packages/react/) package.json version
+# or exports map is missing or malformed before an SDK release is cut.
+#
+# Issue #1503: this gate previously had no workflow at all — it was only
+# reachable via `pnpm check:sdk-release-gates` run by hand, and its
+# package-version/exports checks silently ignored every surface except
+# the legacy `sdk/` package. Both gaps are closed here: the script now
+# walks every surface in SDK_SURFACES and gains a changeset-presence
+# gate, and this workflow makes the check an actual CI gate.
+#
+# Dependency-free (plain Node), so it does not need a pnpm install.
+
+on:
+  pull_request:
+    branches:
+      - main
+      - dev
+  push:
+    branches:
+      - main
+      - dev
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  sdk-release-gates:
+    name: SDK release gates
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Unit tests for the guard
+        run: node --test scripts/__tests__/check-sdk-release-gates.test.mjs
+
+      - name: Enforce SDK release gates
+        run: node scripts/check-sdk-release-gates.mjs

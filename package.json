@@ -101,6 +101,7 @@
     "sdk:compat-matrix": "node scripts/check-sdk-compat-matrix.mjs",
     "test:sdk-compat-versions": "node --test scripts/__tests__/sdk-compat-versions.test.mjs",
     "check:sdk-release-gates": "node scripts/check-sdk-release-gates.mjs",
+    "test:sdk-release-gates": "node --test scripts/__tests__/check-sdk-release-gates.test.mjs",
     "check:example-sdk-resolution": "node scripts/check-example-sdk-resolution.mjs",
     "test:example-sdk-resolution": "node --test scripts/__tests__/check-example-sdk-resolution.test.mjs",
     "check:sdk-client-drift": "node scripts/check-sdk-client-drift.mjs",

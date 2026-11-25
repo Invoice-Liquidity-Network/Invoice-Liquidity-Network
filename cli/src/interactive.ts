@@ -8,6 +8,11 @@
  *
  * No external prompt library is required — everything is built on Node.js
  * `readline` to avoid adding heavy dependencies.
+ *
+ * Destructive-action confirmation (#1494): a plain `[Y/n]` prompt is too easy
+ * to clear by reflex, so high-value transfers, admin-style state changes
+ * (marking an invoice paid), and any action on `mainnet` instead require the
+ * operator to type the word "yes" after reading an explicit warning.
  */
 
 import { createInterface } from 'node:readline';
@@ -34,6 +39,50 @@ export interface InteractiveDependencies {
 }
 
 type MenuChoice = 'submit' | 'fund' | 'pay' | 'status' | 'list' | 'exit';
+
+// ─── Destructive-action confirmation (#1494) ───────────────────────────────────
+
+/** Display-unit amount at or above which a transfer requires typed confirmation. */
+const DEFAULT_HIGH_VALUE_THRESHOLD = 1000;
+
+function highValueThreshold(): number {
+  const raw = process.env.ILN_HIGH_VALUE_THRESHOLD;
+  if (!raw) return DEFAULT_HIGH_VALUE_THRESHOLD;
+  const parsed = Number(raw);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : DEFAULT_HIGH_VALUE_THRESHOLD;
+}
+
+function isHighValueAmount(displayAmount: string): boolean {
+  return Number(displayAmount) >= highValueThreshold();
+}
+
+/**
+ * Builds the warning that forces typed "yes" confirmation, or returns
+ * `undefined` when a plain `[Y/n]` prompt is sufficient.
+ *
+ * @param amountDisplay the human-entered amount, `undefined` when the action
+ *   has no bounded amount (e.g. "fund full balance"), in which case it is
+ *   always treated as high-value since its magnitude is unknown upfront.
+ */
+function destructiveConfirmationReason(
+  config: ResolvedConfig,
+  amountDisplay: string | undefined,
+  { unboundedAmount = false, adminChange }: { unboundedAmount?: boolean; adminChange?: string } = {}
+): string | undefined {
+  const warnings: string[] = [];
+  if (config.network === 'mainnet') {
+    warnings.push('Network warning: this action runs on mainnet and will move real funds.');
+  }
+  if (unboundedAmount || (amountDisplay !== undefined && isHighValueAmount(amountDisplay))) {
+    warnings.push(
+      unboundedAmount
+        ? 'High-value warning: the transfer amount is not capped (full balance).'
+        : `High-value warning: amount ${amountDisplay} meets or exceeds the ${highValueThreshold()} confirmation threshold.`
+    );
+  }
+  if (adminChange) warnings.push(`Admin-change warning: ${adminChange}`);
+  return warnings.length ? warnings.join(' ') : undefined;
+}
 
 // ─── Main entry ───────────────────────────────────────────────────────────────
 
@@ -167,13 +216,18 @@ async function submitInvoice(deps: ActionDeps): Promise<void> {
     );
   }
 
-  const confirmed = await confirmAction(ask, ui, [
-    ['Payer', payer],
-    ['Amount', amount],
-    ['Due', due],
-    ['Rate', `${rate} bps`],
-    ['Token', tokenId],
-  ]);
+  const confirmed = await confirmAction(
+    ask,
+    ui,
+    [
+      ['Payer', payer],
+      ['Amount', amount],
+      ['Due', due],
+      ['Rate', `${rate} bps`],
+      ['Token', tokenId],
+    ],
+    destructiveConfirmationReason(config, amount)
+  );
   if (!confirmed) {
     ui.warn('Cancelled.');
     return;
@@ -198,16 +252,21 @@ async function submitInvoice(deps: ActionDeps): Promise<void> {
 // ─── Fund invoice ─────────────────────────────────────────────────────────────
 
 async function fundInvoice(deps: ActionDeps): Promise<void> {
-  const { ask, client, ui } = deps;
+  const { ask, client, config, ui } = deps;
   ui.info(pc.bold('\n── Fund Invoice ──'));
 
   const id = await askValidated(ask, ui, 'Invoice ID: ', validateInvoiceId);
   const amountInput = (await ask('Amount to fund (leave blank to fund full balance): ')).trim();
 
-  const confirmed = await confirmAction(ask, ui, [
-    ['Invoice ID', id],
-    ['Amount', amountInput || '(full balance)'],
-  ]);
+  const confirmed = await confirmAction(
+    ask,
+    ui,
+    [
+      ['Invoice ID', id],
+      ['Amount', amountInput || '(full balance)'],
+    ],
+    destructiveConfirmationReason(config, amountInput || undefined, { unboundedAmount: !amountInput })
+  );
   if (!confirmed) {
     ui.warn('Cancelled.');
     return;
@@ -227,12 +286,19 @@ async function fundInvoice(deps: ActionDeps): Promise<void> {
 // ─── Mark paid ────────────────────────────────────────────────────────────────
 
 async function markPaid(deps: ActionDeps): Promise<void> {
-  const { ask, client, ui } = deps;
+  const { ask, client, config, ui } = deps;
   ui.info(pc.bold('\n── Mark Invoice as Paid ──'));
 
   const id = await askValidated(ask, ui, 'Invoice ID: ', validateInvoiceId);
 
-  const confirmed = await confirmAction(ask, ui, [['Invoice ID', id]]);
+  const confirmed = await confirmAction(
+    ask,
+    ui,
+    [['Invoice ID', id]],
+    destructiveConfirmationReason(config, undefined, {
+      adminChange: 'marking an invoice as paid cannot be undone.',
+    })
+  );
   if (!confirmed) {
     ui.warn('Cancelled.');
     return;
@@ -354,11 +420,17 @@ async function askValidated(
 async function confirmAction(
   ask: Asker,
   ui: Ui,
-  fields: Array<[label: string, value: string]>
+  fields: Array<[label: string, value: string]>,
+  reason?: string
 ): Promise<boolean> {
   ui.info(pc.bold('\nPlease confirm:'));
   for (const [label, value] of fields) {
     ui.info(`  ${pc.cyan(label.padEnd(12))} ${value}`);
+  }
+  if (reason) {
+    ui.warn(reason);
+    const typed = (await ask(pc.bold('\nType "yes" to proceed, anything else to cancel: '))).trim().toLowerCase();
+    return typed === 'yes';
   }
   const answer = (await ask(pc.bold('\nProceed? [Y/n] '))).trim().toLowerCase();
   return answer !== 'n';

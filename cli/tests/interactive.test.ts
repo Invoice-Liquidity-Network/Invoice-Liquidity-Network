@@ -292,20 +292,6 @@ describe('fund invoice flow', () => {
     expect(out.text()).toContain('fundTx');
   });
 
-  it('funds an invoice with full balance when amount is blank', async () => {
-    const fundInvoice = vi.fn().mockResolvedValue({ hash: 'fundTxFull' });
-
-    const { deps, out } = makeDeps(
-      ['2', '42', '', 'Y', '0'], // blank amount → full balance
-      { fundInvoice }
-    );
-
-    await runInteractive(deps);
-
-    expect(fundInvoice).toHaveBeenCalledWith(42n, undefined);
-    expect(out.text()).toContain('fundTxFull');
-  });
-
   it('cancels funding when user answers N', async () => {
     const fundInvoice = vi.fn();
 
@@ -317,13 +303,86 @@ describe('fund invoice flow', () => {
   });
 });
 
+// ─── Destructive-action confirmation (#1494) ───────────────────────────────────
+
+describe('destructive-action confirmation', () => {
+  it('funds the full balance (an unbounded amount) only after typed "yes", not a bare Y', async () => {
+    const fundInvoice = vi.fn().mockResolvedValue({ hash: 'fundTxFull' });
+
+    const bareY = makeDeps(['2', '42', '', 'Y', '0'], { fundInvoice });
+    await runInteractive(bareY.deps);
+    expect(fundInvoice).not.toHaveBeenCalled();
+    expect(bareY.err.text()).toContain('High-value warning');
+
+    const typedYes = makeDeps(['2', '42', '', 'yes', '0'], { fundInvoice });
+    await runInteractive(typedYes.deps);
+    expect(fundInvoice).toHaveBeenCalledWith(42n, undefined);
+    expect(typedYes.out.text()).toContain('fundTxFull');
+  });
+
+  it('requires typed "yes" to submit an invoice at or above the high-value threshold', async () => {
+    const submitInvoice = vi.fn().mockResolvedValue({ invoiceId: 1n, txHash: 'txHigh' });
+
+    const bareY = makeDeps(['1', VALID_ADDRESS, '1000', '2026-12-31', '300', 'Y', '0'], {
+      submitInvoice,
+    });
+    await runInteractive(bareY.deps);
+    expect(submitInvoice).not.toHaveBeenCalled();
+    expect(bareY.err.text()).toContain('High-value warning');
+
+    const typedYes = makeDeps(['1', VALID_ADDRESS, '1000', '2026-12-31', '300', 'yes', '0'], {
+      submitInvoice,
+    });
+    await runInteractive(typedYes.deps);
+    expect(submitInvoice).toHaveBeenCalledOnce();
+  });
+
+  it('leaves small transfers on testnet with the plain [Y/n] prompt', async () => {
+    const submitInvoice = vi.fn().mockResolvedValue({ invoiceId: 1n, txHash: 'txLow' });
+
+    const { deps } = makeDeps(['1', VALID_ADDRESS, '10', '2026-12-31', '300', 'Y', '0'], {
+      submitInvoice,
+    });
+    await runInteractive(deps);
+    expect(submitInvoice).toHaveBeenCalledOnce();
+  });
+
+  it('requires typed "yes" for any action on mainnet, even a small amount', async () => {
+    const submitInvoice = vi.fn().mockResolvedValue({ invoiceId: 1n, txHash: 'txMainnet' });
+    const mainnetConfig: ResolvedConfig = { ...BASE_CONFIG, network: 'mainnet' };
+
+    const bareY = makeDeps(['1', VALID_ADDRESS, '10', '2026-12-31', '300', 'Y', '0'], { submitInvoice }, mainnetConfig);
+    await runInteractive(bareY.deps);
+    expect(submitInvoice).not.toHaveBeenCalled();
+    expect(bareY.err.text()).toContain('Network warning');
+
+    const typedYes = makeDeps(['1', VALID_ADDRESS, '10', '2026-12-31', '300', 'yes', '0'], { submitInvoice }, mainnetConfig);
+    await runInteractive(typedYes.deps);
+    expect(submitInvoice).toHaveBeenCalledOnce();
+  });
+
+  it('requires typed "yes" to mark an invoice as paid (admin-change warning), not a bare Y', async () => {
+    const markPaid = vi.fn().mockResolvedValue({ hash: 'paidTx' });
+
+    const bareY = makeDeps(['3', '7', 'Y', '0'], { markPaid });
+    await runInteractive(bareY.deps);
+    expect(markPaid).not.toHaveBeenCalled();
+    expect(bareY.err.text()).toContain('Admin-change warning');
+
+    const typedYes = makeDeps(['3', '7', 'yes', '0'], { markPaid });
+    await runInteractive(typedYes.deps);
+    expect(markPaid).toHaveBeenCalledWith(7n);
+    expect(typedYes.out.text()).toContain('paidTx');
+  });
+});
+
 // ─── Mark paid ────────────────────────────────────────────────────────────────
 
 describe('mark invoice as paid flow', () => {
   it('marks an invoice as paid', async () => {
     const markPaid = vi.fn().mockResolvedValue({ hash: 'paidTx' });
 
-    const { deps, out } = makeDeps(['3', '7', 'Y', '0'], { markPaid });
+    const { deps, out } = makeDeps(['3', '7', 'yes', '0'], { markPaid });
 
     await runInteractive(deps);
 
@@ -334,7 +393,7 @@ describe('mark invoice as paid flow', () => {
   it('re-prompts when invoice ID is invalid', async () => {
     const markPaid = vi.fn().mockResolvedValue({ hash: 'paidTx2' });
 
-    const { deps, err } = makeDeps(['3', 'abc', '5', 'Y', '0'], { markPaid });
+    const { deps, err } = makeDeps(['3', 'abc', '5', 'yes', '0'], { markPaid });
 
     await runInteractive(deps);
 

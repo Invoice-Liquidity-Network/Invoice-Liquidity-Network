@@ -15,6 +15,20 @@ const reportPath = valueFor('--report', null);
 const repoRoot = path.resolve(path.dirname(checklistPath), '..');
 const errors = [];
 
+// Issue #1501: required evidence categories that must each have at least one
+// checklist item, independent of that item's current status. This is what
+// makes the gate fail closed on a *missing* row rather than only on an
+// incomplete one — status/evidence-link completeness for existing rows is
+// already enforced below, and (under --rehearsal) that every row is Done or
+// Launch exception accepted.
+export const REQUIRED_EVIDENCE_CATEGORIES = Object.freeze([
+  { id: 'audit', pattern: /\baudit/i },
+  { id: 'signer', pattern: /\b(?:multi-?sig|signers?|admin keys?)\b/i },
+  { id: 'contract', pattern: /\b(?:circuit breaker|contract upgrade|upgrade path)\b/i },
+  { id: 'health', pattern: /\b(?:health|monitoring)\b/i },
+  { id: 'rollback', pattern: /\b(?:rollback|dry run)\b/i },
+]);
+
 function parseDate(value, label) {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) {
     errors.push(`${label} must use YYYY-MM-DD format.`);
@@ -103,6 +117,23 @@ try {
 
   if (itemRows.length === 0) errors.push('Checklist contains no item rows with Owner and Status columns.');
   if (reviewerRows.length === 0) errors.push('Checklist must include an independent reviewer sign-off table.');
+
+  // Fail closed when a required evidence category has no checklist item at
+  // all (issue #1501). Previously the readiness check only validated whatever
+  // rows happened to exist, so deleting the audit/signer/contract/health/
+  // rollback row entirely — rather than merely leaving it incomplete — went
+  // undetected and the checklist could still "pass".
+  for (const category of REQUIRED_EVIDENCE_CATEGORIES) {
+    const hasCoverage = itemRows.some((row) => {
+      const text = `${row.cells[row.columns.Item] ?? ''} ${row.cells[row.columns.Description] ?? ''}`;
+      return category.pattern.test(text);
+    });
+    if (!hasCoverage) {
+      errors.push(
+        `Checklist has no item covering required "${category.id}" evidence; readiness fails closed when a required evidence category is missing.`
+      );
+    }
+  }
 
   const owners = new Set();
   for (const row of itemRows) {

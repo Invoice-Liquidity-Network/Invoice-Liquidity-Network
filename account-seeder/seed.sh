@@ -34,8 +34,31 @@ fi
 echo "Starting account seeder..."
 mkdir -p .docker-output
 
-# The stellar CLI needs the network definition
-stellar network add local --rpc-url http://stellar-node:8000/rpc --network-passphrase "Standalone Network ; February 2017" || true
+# The stellar CLI needs the network definition. This seeder must only ever
+# fund accounts on the local standalone network, never on testnet/mainnet, so
+# the "local" alias is always pinned to the expected RPC endpoint and
+# passphrase below rather than trusted as-is.
+#
+# `stellar network add` fails if an alias with that name already exists (e.g.
+# a stale container volume or ambient CLI config reused the name "local" for
+# a different network); silently swallowing that failure with `|| true`
+# would leave funding/invoice calls running against whatever network "local"
+# happened to already point at. Instead, on a name conflict we remove and
+# re-add the alias so it is always pinned to the expected local network
+# before any key is generated or funded.
+LOCAL_RPC_URL="http://stellar-node:8000/rpc"
+LOCAL_NETWORK_PASSPHRASE="Standalone Network ; February 2017"
+if ! network_add_output=$(stellar network add local --rpc-url "$LOCAL_RPC_URL" --network-passphrase "$LOCAL_NETWORK_PASSPHRASE" 2>&1); then
+    if ! printf '%s' "$network_add_output" | grep -qi "already exists"; then
+        echo "Failed to configure the local Stellar network: $network_add_output" >&2
+        exit 2
+    fi
+    stellar network rm local >/dev/null 2>&1 || true
+    if ! network_add_output=$(stellar network add local --rpc-url "$LOCAL_RPC_URL" --network-passphrase "$LOCAL_NETWORK_PASSPHRASE" 2>&1); then
+        echo "Refusing to seed: could not pin the 'local' network to $LOCAL_RPC_URL after removing the conflicting alias: $network_add_output" >&2
+        exit 2
+    fi
+fi
 
 echo "Generating and funding multi-actor test scenario..."
 declare -a FREELANCER_NAMES=() PAYER_NAMES=() FUNDER_NAMES=()
@@ -49,6 +72,19 @@ seed_actor() {
     stellar keys fund "$name" --network local || true
     pub=$(stellar keys address "$name")
     sec=$(stellar keys show "$name")
+    # Refuse to write out anything that isn't a well-formed keypair. A
+    # malformed value here (an error string, empty output, a key resolved
+    # from the wrong network/keystore) must never be persisted into
+    # .docker-output/accounts.json or logged, since that file carries secret
+    # keys and is the seeder's primary secret-handling surface.
+    if ! [[ "$pub" =~ ^G[A-Z2-7]{55}$ ]]; then
+        echo "Refusing to continue: '$name' resolved to an invalid public key." >&2
+        exit 3
+    fi
+    if ! [[ "$sec" =~ ^S[A-Z2-7]{55}$ ]]; then
+        echo "Refusing to continue: '$name' resolved to an invalid secret key." >&2
+        exit 3
+    fi
     ACTOR_JSON["$name"]=$(printf '{"publicKey":"%s","secretKey":"%s"}' "$pub" "$sec")
     case "$role" in
         freelancer) FREELANCER_NAMES+=("$name") ;;
