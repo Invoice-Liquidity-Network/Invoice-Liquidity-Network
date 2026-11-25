@@ -234,6 +234,28 @@ describe('claims, paths, headers, ports', () => {
     assert.deepEqual(rules(), [RULES.ANCHOR_MISSING]);
   });
 
+  test('a claim with blank text cites evidence but asserts nothing', () => {
+    writeDocs({
+      sg: securityGuide({
+        claims: ['|  | `.github/workflows/release.yml#--provenance` |'],
+      }),
+    });
+    const result = checkSecurityDocs(root);
+    assert.deepEqual(result.findings.map((f) => f.rule), [RULES.TABLE]);
+    assert.match(result.findings[0].message, /claim text is empty/);
+  });
+
+  test('the same claim listed twice', () => {
+    writeDocs({
+      sg: securityGuide({
+        claims: [DEFAULT_CLAIMS[0], DEFAULT_CLAIMS[0]],
+      }),
+    });
+    const result = checkSecurityDocs(root);
+    assert.deepEqual(result.findings.map((f) => f.rule), [RULES.TABLE]);
+    assert.match(result.findings[0].message, /listed twice/);
+  });
+
   test('a dead repository path in prose, and a relative link to a missing doc', () => {
     writeDocs({
       sg: securityGuide({ extra: 'Reports live in `contracts/audits/`. See [CI](./ci-cd.md).' }),
