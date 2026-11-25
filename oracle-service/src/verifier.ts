@@ -197,9 +197,12 @@ function settlementDurationsDays(history: IndexerInvoiceHistoryEntry[]): number[
     .filter((value) => value > 0);
 }
 
+const REPUTATION_MAX_FUTURE_SKEW_MS = 60_000;
+
 function latestSourceTimestampMs(
   history: IndexerInvoiceHistoryEntry[],
-  reputation: ReputationSnapshot
+  reputation: ReputationSnapshot,
+  nowMs: number
 ): number {
   const historyMax = history.reduce((max, entry) => {
     const updated = normalizeTimestampToMs(entry.updated_at);
@@ -208,8 +211,12 @@ function latestSourceTimestampMs(
     return Math.max(max, updated, created, funded);
   }, 0);
 
+  // A future `last_activity` would make dataAgeMs 0 and mask stale data as
+  // fresh (#1489), so it is ignored as a freshness source.
   const reputationTimestamp = normalizeTimestampToMs(reputation.lastActivity);
-  return Math.max(historyMax, reputationTimestamp);
+  const trustedReputationTimestamp =
+    reputationTimestamp > nowMs + REPUTATION_MAX_FUTURE_SKEW_MS ? 0 : reputationTimestamp;
+  return Math.max(historyMax, trustedReputationTimestamp);
 }
 
 function detectFraudSignals(
@@ -368,7 +375,7 @@ function computeTrustScore(
     historicalDefaultRate: defaultRate,
     settlementVarianceDays,
     amountDeviation,
-    sourceTimestampMs: latestSourceTimestampMs(history, reputation) || nowMs,
+    sourceTimestampMs: latestSourceTimestampMs(history, reputation, nowMs) || nowMs,
   };
 }
 
@@ -1081,7 +1088,15 @@ export class OracleVerifier {
     }
 
     const publishStart = this.now();
-    if (!this.requireKyb && response.composition?.outcome !== 'rejected-kyb-unavailable') {
+    // A verdict built while a source was failing is not cached (#1488): it
+    // would overwrite the last-known-good entry the outage fallback serves, and
+    // pin a degraded rejection for the full TTL after the feed recovers.
+    if (
+      !historyFailed &&
+      !reputationFailed &&
+      !this.requireKyb &&
+      response.composition?.outcome !== 'rejected-kyb-unavailable'
+    ) {
       await this.cache?.set(cacheKey, response, ttlSeconds);
     }
     this.observeStage('publish', this.now() - publishStart);
@@ -1139,12 +1154,52 @@ export async function fetchOnChainReputationOrThrow(
 
   return {
     address,
-    score: Math.max(0, Number(get('score') ?? 0)) || 0,
-    totalPaid: BigInt(String(get('total_paid') ?? '0')) || 0n,
-    invoiceCount: Math.max(0, Number(get('invoice_count') ?? 0)) || 0,
-    lastActivity: Math.max(0, Number(get('last_activity') ?? 0)) || 0,
-    rank: Math.max(0, Number(get('rank') ?? 0)) || 0,
+    score: Math.min(MAX_REPUTATION_SCORE, reputationNumber(get('score'), 'score')),
+    totalPaid: reputationAmount(get('total_paid')),
+    invoiceCount: reputationNumber(get('invoice_count'), 'invoice_count'),
+    lastActivity: reputationNumber(get('last_activity'), 'last_activity'),
+    rank: reputationNumber(get('rank'), 'rank'),
   };
+}
+
+const MAX_REPUTATION_SCORE = 100;
+
+/**
+ * Schema reconciliation for `get_reputation` (#1489). Missing fields mean
+ * "no data" (0) and negatives clamp to 0, as before. A field that is present
+ * but not a finite number (NaN, Infinity, `true`, `"abc"`, an object) is a
+ * malformed payload and throws, so the failover wrapper tries the fallback RPC
+ * instead of silently treating corrupt data as a real zero.
+ */
+function reputationNumber(value: unknown, field: string): number {
+  if (value === undefined || value === null) return 0;
+  const n =
+    typeof value === 'number'
+      ? value
+      : typeof value === 'bigint'
+        ? Number(value)
+        : typeof value === 'string' && value.trim() !== ''
+          ? Number(value)
+          : NaN;
+  if (!Number.isFinite(n)) {
+    throw new Error(`Malformed reputation field "${field}"`);
+  }
+  return Math.max(0, n);
+}
+
+function reputationAmount(value: unknown): bigint {
+  if (value === undefined || value === null) return 0n;
+  let amount: bigint;
+  try {
+    if (typeof value === 'bigint') amount = value;
+    else if (typeof value === 'number' && Number.isSafeInteger(value)) amount = BigInt(value);
+    else if (typeof value === 'string' && /^-?\d+$/.test(value.trim()))
+      amount = BigInt(value.trim());
+    else throw new Error();
+  } catch {
+    throw new Error('Malformed reputation field "total_paid"');
+  }
+  return amount < 0n ? 0n : amount;
 }
 
 export async function fetchOnChainReputation(

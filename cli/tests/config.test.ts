@@ -63,6 +63,72 @@ describe('loadConfig', () => {
   });
 });
 
+describe('loadConfig fails closed on contradictory network config (#1490)', () => {
+  const base = { contractId: 'CABC', keypairPath: '/tmp/k.secret' };
+  const TESTNET = 'Test SDF Network ; September 2015';
+  const PUBLIC = 'Public Global Stellar Network ; September 2015';
+
+  it('accepts a passphrase that matches the selected network', () => {
+    const cwd = createTempProject({ ...base, network: 'mainnet' });
+
+    const config = loadConfig({ cwd, env: { ILN_NETWORK_PASSPHRASE: PUBLIC } });
+
+    expect(config.networkPassphrase).toBe(PUBLIC);
+    expect(config.rpcUrl).toMatch(/^https:/);
+  });
+
+  it('rejects a testnet passphrase on mainnet', () => {
+    const cwd = createTempProject({ ...base, network: 'mainnet' });
+
+    expect(() => loadConfig({ cwd, env: { ILN_NETWORK_PASSPHRASE: TESTNET } })).toThrow(
+      /passphrase does not match network "mainnet"/
+    );
+  });
+
+  it('rejects a mainnet passphrase when ILN_NETWORK switches to testnet', () => {
+    const cwd = createTempProject({ ...base, network: 'mainnet' });
+
+    expect(() =>
+      loadConfig({ cwd, env: { ILN_NETWORK: 'testnet', ILN_NETWORK_PASSPHRASE: PUBLIC } })
+    ).toThrow(/passphrase does not match network "testnet"/);
+  });
+
+  it('still allows a custom passphrase on standalone', () => {
+    const cwd = createTempProject({ ...base, network: 'standalone' });
+
+    const config = loadConfig({ cwd, env: { ILN_NETWORK_PASSPHRASE: 'My Local Net' } });
+
+    expect(config.networkPassphrase).toBe('My Local Net');
+  });
+
+  it.each(['not a url', 'ftp://rpc.example', 'file:///etc/passwd'])(
+    'rejects ILN_RPC_URL=%s',
+    (rpcUrl) => {
+      const cwd = createTempProject({ ...base, network: 'testnet' });
+
+      expect(() => loadConfig({ cwd, env: { ILN_RPC_URL: rpcUrl } })).toThrow(/RPC URL/);
+    }
+  );
+
+  it('rejects plain-HTTP RPC on mainnet but allows it on standalone', () => {
+    const mainnet = createTempProject({ ...base, network: 'mainnet' });
+    expect(() => loadConfig({ cwd: mainnet, env: { ILN_RPC_URL: 'http://rpc.example' } })).toThrow(
+      /must use https/
+    );
+
+    const standalone = createTempProject({ ...base, network: 'standalone' });
+    expect(loadConfig({ cwd: standalone, env: {} }).rpcUrl).toMatch(/^http:/);
+  });
+
+  it('reports an unsupported ILN_NETWORK as a config validation error', () => {
+    const cwd = createTempProject(base);
+
+    expect(() => loadConfig({ cwd, env: { ILN_NETWORK: 'futurenet' } })).toThrow(
+      expect.objectContaining({ name: 'ConfigValidationError' })
+    );
+  });
+});
+
 function createTempProject(config: Record<string, unknown>): string {
   const cwd = path.join(os.tmpdir(), `iln-cli-config-${Date.now()}-${Math.random()}`);
   mkdirSync(cwd, { recursive: true });

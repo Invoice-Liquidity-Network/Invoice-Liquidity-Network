@@ -210,14 +210,58 @@ export function loadConfig(options: LoadConfigOptions = {}): ResolvedConfig {
     );
   }
 
+  const networkPassphrase = coalesce(env.ILN_NETWORK_PASSPHRASE, defaults.networkPassphrase)!;
+  assertPassphraseMatchesNetwork(network, networkPassphrase);
+
+  const rpcUrl = coalesce(env.ILN_RPC_URL, fileConfig.rpcUrl, defaults.rpcUrl)!;
+  assertRpcUrl(network, rpcUrl);
+
   return {
     contractId,
     keypairPath: expandHome(keypairPath, env),
     network,
-    networkPassphrase: coalesce(env.ILN_NETWORK_PASSPHRASE, defaults.networkPassphrase)!,
-    rpcUrl: coalesce(env.ILN_RPC_URL, fileConfig.rpcUrl, defaults.rpcUrl)!,
+    networkPassphrase,
+    rpcUrl,
     tokenId: coalesce(env.ILN_TOKEN_ID, fileConfig.contractIds?.token),
   };
+}
+
+/**
+ * Fail closed on a passphrase that contradicts the selected network (#1490):
+ * `ILN_NETWORK=mainnet` with a testnet passphrase would build and sign
+ * transactions for a network other than the one the operator chose. Standalone
+ * keeps accepting custom passphrases for local quickstart images.
+ */
+function assertPassphraseMatchesNetwork(network: SupportedNetwork, passphrase: string): void {
+  if (network === 'standalone') return;
+  const expected = DEFAULTS[network].networkPassphrase;
+  if (passphrase !== expected) {
+    throw new ConfigValidationError(
+      `Network passphrase does not match network "${network}". Unset ILN_NETWORK_PASSPHRASE or set it to "${expected}".`
+    );
+  }
+}
+
+/**
+ * `rpcUrl` from the config file is schema-validated, but `ILN_RPC_URL` was
+ * taken as-is. Reject anything that is not an http(s) URL, and plain HTTP on
+ * mainnet, where it would expose signed transactions to tampering in transit.
+ */
+function assertRpcUrl(network: SupportedNetwork, rpcUrl: string): void {
+  let protocol: string;
+  try {
+    protocol = new URL(rpcUrl).protocol;
+  } catch {
+    throw new ConfigValidationError(
+      `Invalid RPC URL "${rpcUrl}". Check ILN_RPC_URL or \`rpcUrl\`.`
+    );
+  }
+  if (protocol !== 'https:' && protocol !== 'http:') {
+    throw new ConfigValidationError(`RPC URL must use http or https, got "${protocol}".`);
+  }
+  if (network === 'mainnet' && protocol !== 'https:') {
+    throw new ConfigValidationError('Mainnet RPC URL must use https.');
+  }
 }
 
 /**
@@ -363,7 +407,9 @@ function resolveNetwork(fileConfig: ILNConfigFile, env: NodeJS.ProcessEnv): Supp
   if (value === 'testnet' || value === 'mainnet' || value === 'standalone') {
     return value;
   }
-  throw new Error(`Unsupported network "${value}". Use one of: testnet, mainnet, standalone.`);
+  throw new ConfigValidationError(
+    `Unsupported network "${value}". Use one of: testnet, mainnet, standalone.`
+  );
 }
 
 function expandHome(input: string, env: NodeJS.ProcessEnv): string {

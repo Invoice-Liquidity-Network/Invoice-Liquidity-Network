@@ -46,7 +46,6 @@ Supported keys:
 - `tokenId`: default token contract to use for `submit`
 - `keypairPath`: path to a file containing a Stellar secret key
 - `rpcUrl`: optional RPC override
-- `networkPassphrase`: optional passphrase override
 
 Environment fallbacks:
 
@@ -55,7 +54,39 @@ Environment fallbacks:
 - `ILN_TOKEN_ID`
 - `ILN_KEYPAIR_PATH`
 - `ILN_RPC_URL`
-- `ILN_NETWORK_PASSPHRASE`
+- `ILN_NETWORK_PASSPHRASE` (environment only; there is no config-file key for it)
+
+### Fail-closed network and signer checks (#1490, #1491)
+
+The CLI refuses to start instead of guessing when config contradicts itself:
+
+| Case | Behavior |
+| --- | --- |
+| Missing contract ID or keypair path | `ConfigValidationError` (unchanged) |
+| `ILN_NETWORK_PASSPHRASE` differs from the canonical testnet/mainnet passphrase | `ConfigValidationError`; standalone still accepts custom passphrases |
+| `ILN_RPC_URL` / `rpcUrl` is not an http(s) URL | `ConfigValidationError` |
+| Mainnet RPC over plain `http://` | `ConfigValidationError` |
+| Unsupported `ILN_NETWORK` | `ConfigValidationError` (was a plain `Error`) |
+
+Source of truth, in order: environment, then the config file, then the built-in
+network defaults. `iln network switch` still clears `rpcUrl`, so mainnet falls
+back to the built-in public RPC endpoint.
+
+The keypair-file signer the CLI builds is bound to the active profile's network
+passphrase. It refuses to sign a transaction for any other network, or one
+whose source (or fee-bump fee source) is not the configured key.
+`createKeypairFileSigner(path)` without options keeps its previous behavior for
+library callers.
+
+Residual risk, needs a maintainer decision:
+
+- Mainnet silently uses a built-in public RPC when `rpcUrl` is unset. Requiring
+  an explicit mainnet RPC would break `iln network switch mainnet`.
+- Contract IDs are not checked against the selected network or validated as
+  contract StrKeys, so a testnet contract ID under `ILN_NETWORK=mainnet` is only
+  caught by the RPC.
+- Wallets in the wallet store are not scoped to a network, and key files are
+  not checked for world-readable permissions.
 
 ## Commands
 

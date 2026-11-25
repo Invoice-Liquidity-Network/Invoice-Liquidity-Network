@@ -454,4 +454,91 @@ describe('upstream outage chaos (#1058)', { timeout: 30_000 }, () => {
     expect(health.body.lastVerificationAt).toBeTruthy();
     expect(health.body.indexerBaseUrl).toBe(upstream.baseUrl);
   });
+
+  // ── Partial outage, slow responses, contradictory sources (#1488) ──────────
+
+  it('verifies through a slow upstream that still answers inside the deadline', async () => {
+    const { upstream, verify } = await harness();
+    upstream.setLatency(REQUEST_TIMEOUT_MS / 4);
+
+    const { value: res, tookMs } = await elapsedMs(() => verify({ forceRefresh: true }));
+
+    expect(res.status).toBe(200);
+    expect(res.body.isVerified).toBe(true);
+    expect(tookMs).toBeGreaterThanOrEqual(REQUEST_TIMEOUT_MS / 4);
+    expect(evidenceOf(res.body as OracleVerificationResponse)).not.toMatch(INDEXER_UNAVAILABLE);
+  });
+
+  it('treats an upstream slower than the deadline as unavailable, not as empty history', async () => {
+    const { upstream, verify } = await harness();
+    // Answers eventually, unlike the `timeout` fault: the abort must still win.
+    upstream.setLatency(REQUEST_TIMEOUT_MS * 2);
+
+    const { value: res, tookMs } = await elapsedMs(() => verify({ forceRefresh: true }));
+
+    expect(res.status).toBe(200);
+    expect(res.body.isVerified).toBe(false);
+    expect(tookMs).toBeLessThan(REQUEST_TIMEOUT_MS * 2);
+    expect(evidenceOf(res.body as OracleVerificationResponse)).toMatch(INDEXER_UNAVAILABLE);
+  });
+
+  it('isolates a partial outage to the requests that hit it', async () => {
+    const { upstream, verify } = await harness();
+    // Every other request fails: a flapping load balancer member.
+    upstream.setFaultSequence(['error-503', 'healthy', 'reset', 'healthy']);
+
+    const results = [];
+    for (const invoiceId of ['300', '301', '302', '303']) {
+      results.push(await verify({ forceRefresh: true, invoiceId }));
+    }
+
+    expect(results.map((res) => res.status)).toEqual([200, 200, 200, 200]);
+    expect(results.map((res) => res.body.isVerified)).toEqual([false, true, false, true]);
+    expect(upstream.calls).toHaveLength(4);
+  });
+
+  it('does not let a degraded verdict from a partial outage outlive the outage', async () => {
+    const { upstream, verify } = await harness();
+    upstream.setFaultSequence(['error-500']);
+
+    const during = await verify({ invoiceId: '310' });
+    expect(during.body.isVerified).toBe(false);
+
+    // Same request, no forceRefresh: a cached degraded verdict would pin the
+    // rejection after the feed recovered.
+    const after = await verify({ invoiceId: '310' });
+
+    expect(after.body.isVerified).toBe(true);
+    expect(after.body.cacheHit).toBe(false);
+  });
+
+  it('does not verify when a perfect reputation contradicts a defaulting history', async () => {
+    const nowMs = Date.now();
+    const defaulting = healthyHistory(nowMs).map((entry) => ({
+      ...entry,
+      status: 'Defaulted' as const,
+    }));
+    const { verify } = await harness(
+      { reputationProvider: async () => makeReputation(nowMs, { score: 100 }) },
+      defaulting
+    );
+
+    const res = await verify({ forceRefresh: true });
+
+    expect(res.status).toBe(200);
+    expect(res.body.isVerified).toBe(false);
+    expect(res.body.reputationScore).toBe(100);
+  });
+
+  it('does not verify when a clean history contradicts a zero on-chain reputation', async () => {
+    const { verify } = await harness({
+      reputationProvider: async () => makeReputation(Date.now(), { score: 0, invoiceCount: 0 }),
+    });
+
+    const res = await verify({ forceRefresh: true });
+
+    expect(res.status).toBe(200);
+    expect(res.body.reputationScore).toBe(0);
+    expect(res.body.isVerified).toBe(false);
+  });
 });

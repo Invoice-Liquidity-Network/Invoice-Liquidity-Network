@@ -1,9 +1,21 @@
-import { Keypair, TransactionBuilder } from '@stellar/stellar-sdk';
+import { FeeBumpTransaction, Keypair, TransactionBuilder } from '@stellar/stellar-sdk';
 import { readFileSync } from 'node:fs';
 
 import type { TransactionSigner } from './types';
 
-export function createKeypairFileSigner(keypairPath: string): TransactionSigner {
+export interface KeypairFileSignerOptions {
+  /**
+   * The network passphrase of the active profile. When set, the signer refuses
+   * to sign for any other network, so a key loaded for one network cannot be
+   * driven into signing another network's transaction (#1491).
+   */
+  networkPassphrase?: string;
+}
+
+export function createKeypairFileSigner(
+  keypairPath: string,
+  options: KeypairFileSignerOptions = {}
+): TransactionSigner {
   const secretKey = readSecretFromFile(keypairPath);
   const keypair = Keypair.fromSecret(secretKey);
 
@@ -12,7 +24,26 @@ export function createKeypairFileSigner(keypairPath: string): TransactionSigner 
       return keypair.publicKey();
     },
     async signTransaction(transactionXdr: string, networkPassphrase: string) {
+      if (
+        options.networkPassphrase !== undefined &&
+        networkPassphrase !== options.networkPassphrase
+      ) {
+        throw new Error(
+          'Refusing to sign: transaction network passphrase does not match the active profile network.'
+        );
+      }
+
       const transaction = TransactionBuilder.fromXDR(transactionXdr, networkPassphrase);
+      // The CLI only signs transactions it built with this key as source. A
+      // foreign source means the XDR came from somewhere else (#1491).
+      const source =
+        transaction instanceof FeeBumpTransaction ? transaction.feeSource : transaction.source;
+      if (source !== keypair.publicKey()) {
+        throw new Error(
+          `Refusing to sign: transaction source ${source} is not the configured signer ${keypair.publicKey()}.`
+        );
+      }
+
       transaction.sign(keypair);
       return transaction.toXDR();
     },

@@ -61,7 +61,7 @@ vi.mock('@stellar/stellar-sdk', async () => {
   };
 });
 
-const { fetchOnChainReputation } = await import('./verifier');
+const { fetchOnChainReputation, fetchOnChainReputationOrThrow } = await import('./verifier');
 
 const options = { rpcUrl: 'https://rpc.example', contractId: 'CCONTRACT' };
 const address = 'GDVEU3DD4KOFECV66VIHWEZOYX4ZKR3WV27L464SIIPOU2IUI3JCZA57';
@@ -197,5 +197,65 @@ describe('fetchOnChainReputation', () => {
     await fetchOnChainReputation(options, address);
 
     expect(getAccount).toHaveBeenCalledWith('GRANDOMSOURCE');
+  });
+});
+
+/**
+ * Schema reconciliation (#1489). Missing fields still mean "no data"; present
+ * but malformed fields throw from the OrThrow variant so the failover wrapper
+ * moves to the fallback RPC, while the total variant still degrades to zero.
+ */
+describe('reputation schema reconciliation', () => {
+
+  function returns(native: unknown) {
+    simulate.mockResolvedValue({ result: { retval: {} } });
+    scValToNative.mockReturnValue(native);
+  }
+
+  it('accepts i128 bigint and numeric-string fields', async () => {
+    returns({ score: 70n, total_paid: 9_000_000_000_000_000_000n, invoice_count: '5', rank: 2n });
+
+    const snapshot = await fetchOnChainReputationOrThrow(options, address);
+
+    expect(snapshot.score).toBe(70);
+    expect(snapshot.totalPaid).toBe(9_000_000_000_000_000_000n);
+    expect(snapshot.invoiceCount).toBe(5);
+    expect(snapshot.rank).toBe(2);
+  });
+
+  it('clamps a negative total_paid to zero instead of passing it through', async () => {
+    returns({ total_paid: '-500' });
+
+    expect((await fetchOnChainReputationOrThrow(options, address)).totalPaid).toBe(0n);
+  });
+
+  it('caps an out-of-range score at 100', async () => {
+    returns({ score: 250 });
+
+    expect((await fetchOnChainReputationOrThrow(options, address)).score).toBe(100);
+  });
+
+  it.each([
+    ['score', Infinity],
+    ['score', 'NaN'],
+    ['score', true],
+    ['invoice_count', { nested: 1 }],
+    ['rank', ''],
+    ['last_activity', 'yesterday'],
+    ['total_paid', '1.5'],
+    ['total_paid', 'abc'],
+    ['total_paid', 1.5],
+  ])('rejects malformed %s=%p from the OrThrow variant', async (field, value) => {
+    returns({ [field]: value });
+
+    await expect(fetchOnChainReputationOrThrow(options, address)).rejects.toThrow(
+      `Malformed reputation field "${field}"`
+    );
+  });
+
+  it('still degrades a malformed payload to a zeroed snapshot in the total variant', async () => {
+    returns({ score: Infinity, total_paid: '9000' });
+
+    expect(await fetchOnChainReputation(options, address)).toEqual(ZEROED);
   });
 });
