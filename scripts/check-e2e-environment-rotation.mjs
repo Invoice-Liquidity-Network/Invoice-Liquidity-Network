@@ -10,7 +10,13 @@
  *   - an ownership role is empty,
  *   - a credential is missing fields or has inconsistent dates
  *     (`next_rotation_due != last_rotated + rotation_days`), or
- *   - a credential is past its `next_rotation_due` (`rotation-overdue`).
+ *   - a credential is past its `next_rotation_due` (`rotation-overdue`), or
+ *   - the manifest's `environment` block (the node image / RPC URL it claims
+ *     the E2E suite runs against) has drifted from what `tests/e2e/docker-
+ *     compose.yml` and the rest of the E2E tooling actually provision
+ *     (`environment-mismatch`). A stale `environment` block is as dangerous
+ *     as a stale credential: it lets the manifest claim an environment that
+ *     no longer matches what CI actually exercises.
  *
  * A credential that lapses within `rotation.min_remaining_days` produces a
  * `rotation-due-soon` warning without failing the build, so operators get an
@@ -25,6 +31,29 @@ import { fileURLToPath } from 'node:url';
 export const DEFAULT_MANIFEST = 'tests/e2e/environment-ownership.json';
 export const EXPECTED_CONTROL = 'e2e-environment-ownership';
 export const OWNER_ROLES = ['primary', 'secondary', 'escalation'];
+export const ENVIRONMENT_FIELDS = ['name', 'provider', 'node_image', 'rpc_url'];
+// The compose file `scripts/provision-e2e-node.mjs` actually runs in CI
+// (docker compose -f tests/e2e/docker-compose.yml up -d stellar-quickstart)
+// — the real source of truth for which node image E2E runs against.
+export const E2E_COMPOSE_FILE = 'tests/e2e/docker-compose.yml';
+// Used consistently by provision-e2e-node.mjs, wait-for-stellar-rpc.mjs, and
+// every E2E test file's RPC_URL constant.
+export const EXPECTED_E2E_RPC_URL = 'http://localhost:8000/soroban/rpc';
+
+/**
+ * Extract the `image:` value for `service` from a Docker Compose YAML file's
+ * raw text. Deliberately avoids a YAML dependency: the compose files this
+ * repo uses are flat enough that scanning for the service header followed by
+ * an indented `image:` line is unambiguous.
+ */
+export function readComposeServiceImage(composeText, service) {
+  const serviceHeader = new RegExp(`^\\s*${service}:\\s*$`, 'm');
+  const headerMatch = serviceHeader.exec(composeText);
+  if (!headerMatch) return null;
+  const rest = composeText.slice(headerMatch.index + headerMatch[0].length);
+  const imageMatch = /^\s+image:\s*(\S+)\s*$/m.exec(rest);
+  return imageMatch ? imageMatch[1] : null;
+}
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -178,6 +207,59 @@ export function validateEnvironmentOwnership(manifest, options = {}) {
           }
         }
       });
+    }
+  }
+
+  const environment = manifest.environment;
+  if (!environment || typeof environment !== 'object' || Array.isArray(environment)) {
+    fail('missing-environment', 'environment block is required');
+  } else {
+    for (const field of ENVIRONMENT_FIELDS) {
+      if (typeof environment[field] !== 'string' || environment[field].trim() === '') {
+        fail('invalid-environment', `environment.${field} must be a non-empty string`);
+      }
+    }
+
+    summary.environment = {
+      name: typeof environment.name === 'string' ? environment.name : null,
+      node_image: typeof environment.node_image === 'string' ? environment.node_image : null,
+      rpc_url: typeof environment.rpc_url === 'string' ? environment.rpc_url : null,
+    };
+
+    if (typeof environment.rpc_url === 'string' && environment.rpc_url !== EXPECTED_E2E_RPC_URL) {
+      fail(
+        'environment-mismatch',
+        `environment.rpc_url ("${environment.rpc_url}") does not match the RPC URL every other ` +
+          `E2E script and workflow uses ("${EXPECTED_E2E_RPC_URL}")`
+      );
+    }
+
+    if (typeof environment.node_image === 'string' && options.rootDir) {
+      const composePath = resolve(options.rootDir, E2E_COMPOSE_FILE);
+      if (!existsSync(composePath)) {
+        fail(
+          'environment-mismatch',
+          `cannot verify environment.node_image: ${E2E_COMPOSE_FILE} does not exist`
+        );
+      } else {
+        const actualImage = readComposeServiceImage(
+          readFileSync(composePath, 'utf8'),
+          'stellar-quickstart'
+        );
+        if (!actualImage) {
+          fail(
+            'environment-mismatch',
+            `could not find the stellar-quickstart service's "image:" in ${E2E_COMPOSE_FILE} to ` +
+              'verify environment.node_image'
+          );
+        } else if (actualImage !== environment.node_image) {
+          fail(
+            'environment-mismatch',
+            `environment.node_image ("${environment.node_image}") does not match the image ` +
+              `${E2E_COMPOSE_FILE} actually provisions ("${actualImage}")`
+          );
+        }
+      }
     }
   }
 
