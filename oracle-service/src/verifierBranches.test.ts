@@ -406,3 +406,27 @@ describe('OracleVerifier request handling', () => {
     expect((await v.verify(request)).isVerified).toBe(false);
   });
 });
+
+describe('reputation freshness (#1489)', () => {
+  const staleHistory = [
+    makeHistoryEntry(NOW, { agoMs: 30 * DAY_MS, updated_at: NOW - 30 * DAY_MS }),
+  ];
+
+  it('does not let a future last_activity mask stale history as fresh', () => {
+    const result = assess(staleHistory, {
+      reputation: makeReputation(NOW, { lastActivity: NOW + 365 * DAY_MS }),
+      maxOracleAgeMs: DAY_MS,
+    });
+
+    expect(result.response.dataAgeMs).toBeGreaterThan(DAY_MS);
+  });
+
+  it('still trusts a last_activity within clock skew', () => {
+    const result = assess(staleHistory, {
+      reputation: makeReputation(NOW, { lastActivity: NOW + 30_000 }),
+      maxOracleAgeMs: DAY_MS,
+    });
+
+    expect(result.response.dataAgeMs).toBe(0);
+  });
+});

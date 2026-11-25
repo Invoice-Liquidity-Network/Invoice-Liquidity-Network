@@ -70,6 +70,14 @@ export interface ChaosUpstream {
   /** Requests the upstream received, oldest first. Cleared by {@link resetCalls}. */
   readonly calls: readonly CapturedCall[];
   setFault(fault: UpstreamFault): void;
+  /**
+   * Faults for the next requests, one per request, oldest first; once drained
+   * the {@link setFault} fault applies again. Models a partial outage where only
+   * some requests fail (#1488).
+   */
+  setFaultSequence(faults: UpstreamFault[]): void;
+  /** Delay before every answer, to model a slow but live upstream (#1488). */
+  setLatency(ms: number): void;
   setHistory(entries: IndexerInvoiceHistoryEntry[]): void;
   resetCalls(): void;
   /**
@@ -93,12 +101,21 @@ export async function startChaosUpstream(
 ): Promise<ChaosUpstream> {
   const calls: CapturedCall[] = [];
   const openSockets = new Set<{ destroy(): void }>();
-  let fault: UpstreamFault = 'healthy';
+  let currentFault: UpstreamFault = 'healthy';
   let history = initialHistory;
+  let sequence: UpstreamFault[] = [];
+  let latencyMs = 0;
 
-  const server = http.createServer((req, res) => {
+  const server = http.createServer(async (req, res) => {
     const url = new URL(req.url ?? '/', 'http://upstream.invalid');
     calls.push({ method: req.method ?? 'GET', path: url.pathname, query: url.search });
+    const fault = sequence.shift() ?? currentFault;
+
+    if (latencyMs > 0) {
+      await new Promise((resolve) => setTimeout(resolve, latencyMs));
+      // The client may have given up while we slept; writing then is a no-op.
+      if (res.destroyed) return;
+    }
 
     if (fault === 'timeout') {
       // Deliberately no response: the client deadline is the only exit.
@@ -170,7 +187,13 @@ export async function startChaosUpstream(
     baseUrl,
     calls,
     setFault(next) {
-      fault = next;
+      currentFault = next;
+    },
+    setFaultSequence(faults) {
+      sequence = [...faults];
+    },
+    setLatency(ms) {
+      latencyMs = ms;
     },
     setHistory(entries) {
       history = entries;

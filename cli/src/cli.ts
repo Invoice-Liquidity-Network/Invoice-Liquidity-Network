@@ -85,7 +85,9 @@ export async function runCli(
         contractId: config.contractId,
         networkPassphrase: config.networkPassphrase,
         rpcUrl: config.rpcUrl,
-        signer: createKeypairFileSigner(config.keypairPath),
+        signer: createKeypairFileSigner(config.keypairPath, {
+          networkPassphrase: config.networkPassphrase,
+        }),
       }));
   const createDevEnvironment =
     dependencies.createDevEnvironment ?? ((devUi: Ui) => new LocalDevEnvironment({ ui: devUi }));

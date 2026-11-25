@@ -557,6 +557,41 @@ feeding future assessments; that is a separate on-chain surface.
 
 `<FEED>` is `HISTORY`, `REPUTATION`, `EXTERNAL`, `KYB`, or `COMPOSITE_TRUST`.
 
+## Payer reputation and upstream chaos (#1488, #1489)
+
+**Source of truth.** Payer reputation is read from the `get_reputation` view of
+the on-chain contract at `ORACLE_REPUTATION_CONTRACT_ID`, through
+`fetchOnChainReputationOrThrow` in `verifier.ts`. No contract in this
+repository defines that method, so its schema is reconciled on the oracle side:
+
+| Payload | Behavior |
+| --- | --- |
+| Well-formed (number, bigint or numeric-string fields) | Mapped to a snapshot |
+| Field missing or `null` | Treated as 0 ("no data") |
+| Negative value | Clamped to 0, including `total_paid` |
+| `score` above 100 | Capped at 100 |
+| Present but malformed (NaN, Infinity, boolean, non-numeric or fractional `total_paid`, object) | Throws, so failover tries `ORACLE_REPUTATION_FALLBACK_RPC_URL`; with every source down the provider still returns a zeroed snapshot |
+| `last_activity` more than 60 s in the future | Ignored for freshness, so it cannot mask stale history |
+
+**Upstream chaos.** `upstream-outage.test.ts` drives a real socket and now also
+covers a slow upstream inside and past the deadline, a partial outage where
+only some requests fail, and contradictory sources (perfect reputation with a
+defaulting history, and the reverse). None of these verify a payer.
+
+A verdict built while the indexer or reputation source failed is no longer
+written to the cache. Before, it overwrote the last-known-good entry and pinned
+the degraded rejection for the full TTL after the feed recovered.
+
+Residual risk, needs a maintainer decision:
+
+- With no history and no `last_activity`, `sourceTimestampMs` falls back to
+  now, so missing data counts as fresh. The verdict is still rejected for low
+  trust.
+- Because degraded verdicts are no longer cached, a sustained outage re-queries
+  the upstream on every request, bounded by `requestTimeoutMs`.
+- Primary and fallback RPC results are not cross-checked; the first source that
+  answers wins.
+
 ## Known limitations
 
 1. **Reputation is optional.** If no RPC/contract is configured, every payer
