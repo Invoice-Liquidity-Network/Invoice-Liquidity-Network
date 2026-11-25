@@ -47,13 +47,14 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 20
+      - name: Setup pnpm with store cache
+        uses: ./.github/actions/setup-pnpm
 
       - name: Install deploy tooling
         run: npm install -g tsx
+
+      - name: Run deploy script tests
+        run: pnpm exec vitest run scripts/__tests__/deploy.test.ts
 
       - name: Dry run placeholder
         if: ${{ github.event.inputs.dry_run == 'true' }}

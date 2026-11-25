@@ -703,7 +703,12 @@ jobs:
   sdk-types-sync:
     name: SDK types in sync
     needs: [pnpm-cache, changes]
-    if: needs.changes.outputs.backend == 'true'
+    # Also runs on sdk/** changes, not just backend/**: a PR that only edits
+    # InvoiceClient.ts's contract call sites (argument counts/order) carries
+    # the same ABI-drift risk as a submodule pin bump, but previously never
+    # triggered this job, so drift introduced purely from the SDK side went
+    # unchecked (issue #1502).
+    if: needs.changes.outputs.backend == 'true' || needs.changes.outputs.sdk == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
