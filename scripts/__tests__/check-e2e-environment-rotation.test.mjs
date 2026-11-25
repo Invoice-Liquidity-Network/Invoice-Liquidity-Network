@@ -5,8 +5,11 @@ import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
   DEFAULT_MANIFEST,
+  E2E_COMPOSE_FILE,
+  EXPECTED_E2E_RPC_URL,
   addDaysIso,
   isoDateToUtcMs,
+  readComposeServiceImage,
   validateEnvironmentOwnership,
 } from '../check-e2e-environment-rotation.mjs';
 
@@ -36,6 +39,12 @@ function baseManifest() {
           next_rotation_due: '2026-12-30',
         },
       ],
+    },
+    environment: {
+      name: 'e2e-local-stellar',
+      provider: 'github-actions-ubuntu-latest',
+      node_image: 'stellar/quickstart:latest',
+      rpc_url: EXPECTED_E2E_RPC_URL,
     },
     runbook: 'docs/runbooks/e2e-environment-ownership.md',
   };
@@ -139,6 +148,71 @@ describe('validateEnvironmentOwnership — failures', () => {
 
     assert.equal(result.ok, false);
     assert.ok(result.violations.some((v) => v.code === 'missing-runbook'));
+  });
+
+  it('rejects a missing environment block', () => {
+    const manifest = baseManifest();
+    delete manifest.environment;
+    const result = validate(manifest);
+
+    assert.equal(result.ok, false);
+    assert.ok(result.violations.some((v) => v.code === 'missing-environment'));
+  });
+
+  it('rejects an environment block missing a required field', () => {
+    const manifest = baseManifest();
+    manifest.environment.node_image = '';
+    const result = validate(manifest);
+
+    assert.equal(result.ok, false);
+    assert.ok(result.violations.some((v) => v.code === 'invalid-environment'));
+  });
+
+  it('rejects environment.rpc_url that does not match what E2E tooling actually uses', () => {
+    const manifest = baseManifest();
+    manifest.environment.rpc_url = 'http://localhost:8000/rpc';
+    const result = validate(manifest);
+
+    assert.equal(result.ok, false);
+    const mismatch = result.violations.find((v) => v.code === 'environment-mismatch');
+    assert.ok(mismatch, JSON.stringify(result.violations));
+    assert.match(mismatch.message, /rpc_url/);
+  });
+
+  it('rejects environment.node_image that has drifted from tests/e2e/docker-compose.yml', () => {
+    const manifest = baseManifest();
+    manifest.environment.node_image = 'stellar/quickstart:testing';
+    const result = validate(manifest, { rootDir: REPO_ROOT });
+
+    assert.equal(result.ok, false);
+    const mismatch = result.violations.find((v) => v.code === 'environment-mismatch');
+    assert.ok(mismatch, JSON.stringify(result.violations));
+    assert.match(mismatch.message, /node_image/);
+  });
+});
+
+describe('readComposeServiceImage', () => {
+  it('extracts the image for a named service', () => {
+    const compose = [
+      'services:',
+      '  stellar-quickstart:',
+      '    image: stellar/quickstart:latest',
+      '    command: --local',
+    ].join('\n');
+
+    assert.equal(readComposeServiceImage(compose, 'stellar-quickstart'), 'stellar/quickstart:latest');
+  });
+
+  it('returns null for an unknown service', () => {
+    const compose = 'services:\n  stellar-quickstart:\n    image: stellar/quickstart:latest\n';
+    assert.equal(readComposeServiceImage(compose, 'does-not-exist'), null);
+  });
+
+  it('matches the image this repository actually ships in tests/e2e/docker-compose.yml', () => {
+    const composeText = readFileSync(resolve(REPO_ROOT, E2E_COMPOSE_FILE), 'utf8');
+    const image = readComposeServiceImage(composeText, 'stellar-quickstart');
+
+    assert.ok(image, 'expected to find an image for the stellar-quickstart service');
   });
 });
 

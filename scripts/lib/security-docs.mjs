@@ -295,12 +295,22 @@ export function checkClaims(root, report) {
     report(RULES.TABLE, doc, 0, 'claims table markers not found');
     return { claims: 0 };
   }
+  const seen = new Set();
   for (const row of table.rows) {
+    const claim = (row.cells[0] ?? '').trim();
     const refs = parseEvidence(row.cells[1] ?? '');
     if (row.cells.length !== 2 || refs.length === 0) {
       report(RULES.TABLE, doc, row.line, `claim cites no evidence: ${row.raw.slice(0, 80)}`);
       continue;
     }
+    if (claim === '') {
+      report(RULES.TABLE, doc, row.line, 'claim text is empty — evidence alone asserts nothing');
+      continue;
+    }
+    if (seen.has(claim)) {
+      report(RULES.TABLE, doc, row.line, `claim is listed twice: ${claim.slice(0, 80)}`);
+    }
+    seen.add(claim);
     checkEvidence(root, doc, row, refs, report);
   }
   return { claims: table.rows.length };

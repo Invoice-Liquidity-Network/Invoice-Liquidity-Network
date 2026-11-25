@@ -9,7 +9,7 @@
   "environment": {
     "name": "e2e-local-stellar",
     "provider": "github-actions-ubuntu-latest",
-    "node_image": "stellar/quickstart:testing",
+    "node_image": "stellar/quickstart:latest",
     "rpc_url": "http://localhost:8000/soroban/rpc"
   },
   "rotation": {

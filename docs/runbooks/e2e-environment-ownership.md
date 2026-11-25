@@ -25,6 +25,7 @@ becomes a release-integrity risk. This control makes ownership and rotation
 | Every E2E credential has a rotation interval and a `next_rotation_due` date | manifest `rotation.credentials[]`, validated for internal consistency (`last_rotated + rotation_days == next_rotation_due`) |
 | The control fails the build when a credential is past its rotation due date | `scripts/check-e2e-environment-rotation.mjs` exits non-zero on `rotation-overdue` |
 | Operators get an early warning before a credential lapses | `rotation.min_remaining_days` emits a `rotation-due-soon` warning in CI |
+| The manifest's declared environment (node image, RPC URL) matches what E2E tooling actually provisions | manifest `environment`, cross-checked against `tests/e2e/docker-compose.yml` and the RPC URL used across the E2E suite; fails on `environment-mismatch` |
 | Evidence is attached to every release | `.github/workflows/e2e.yml` runs the check and uploads its report inside the E2E evidence bundle (see `docs/runbooks/e2e-release-evidence.md`) |
 
 ---
@@ -110,6 +111,8 @@ node scripts/check-e2e-environment-rotation.mjs --as-of=2027-01-15
 | `[invalid-manifest]` | the manifest is missing or malformed | restore `tests/e2e/environment-ownership.json` from git; it is required, not optional |
 | `[inconsistent-dates]` | `next_rotation_due != last_rotated + rotation_days` | correct the manifest so the arithmetic is self-consistent |
 | `[missing-runbook]` | the referenced runbook `runbook` path does not exist | restore this file or fix the `runbook` field |
+| `[environment-mismatch]` | manifest `environment.node_image` or `environment.rpc_url` no longer matches `tests/e2e/docker-compose.yml` / the RPC URL the E2E suite actually uses | update the manifest's `environment` block to match reality, or fix the drifted config — whichever is correct |
+| `[missing-environment]` / `[invalid-environment]` | the manifest has no `environment` block, or it is missing a required field (`name`, `provider`, `node_image`, `rpc_url`) | restore the `environment` block in `tests/e2e/environment-ownership.json` |
 | E2E workflow fails at the ownership step | the gate is working as intended | follow the rotation procedure; do **not** bypass the step |
 
 ---
