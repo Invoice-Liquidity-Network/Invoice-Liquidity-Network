@@ -79,8 +79,14 @@ function splitRow(line) {
 }
 
 /**
- * Extract the package-relevant rows (those with a Path and Status column)
- * from parsed tables.
+ * Extract the package-relevant rows (those with at least a Path column) from
+ * parsed tables. A Status column is optional: docs/monorepo-map.md's "Test
+ * Workspaces" table intentionally omits one (test workspaces aren't
+ * semantically versioned), but its rows still document a real path and must
+ * count toward "is this workspace package documented" — previously requiring
+ * Status here made every row in that table invisible to the checker, so
+ * `tests/sdk-integration/` was flagged UNDOCUMENTED_PACKAGE despite being
+ * listed in the doc (verified against the real table in docs/monorepo-map.md).
  */
 export function extractPackageRows(tables) {
   const rows = [];
@@ -88,7 +94,7 @@ export function extractPackageRows(tables) {
     const pathIdx = table.headers.findIndex((h) => /path/i.test(h));
     const statusIdx = table.headers.findIndex((h) => /status/i.test(h));
     const pkgIdx = table.headers.findIndex((h) => /package/i.test(h));
-    if (pathIdx === -1 || statusIdx === -1) continue;
+    if (pathIdx === -1) continue;
 
     for (const cells of table.rows) {
       const path = strip(cellAt(cells, pathIdx));

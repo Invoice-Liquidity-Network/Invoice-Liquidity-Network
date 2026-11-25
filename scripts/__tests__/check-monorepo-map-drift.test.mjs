@@ -63,6 +63,19 @@ describe('extractPackageRows', () => {
     assert.equal(cli.pkg, '@invoice-liquidity/cli');
     assert.equal(cli.status, 'Stable');
   });
+
+  it('still collects rows from a table with a Path+Package column but no Status column', () => {
+    // Matches docs/monorepo-map.md's real "Test Workspaces" table shape.
+    const doc =
+      '| Path | Package | Purpose | Dependencies |\n' +
+      '|------|---------|---------|-------------|\n' +
+      '| `tests/sdk-integration/` | `@iln/sdk-integration-tests` | Integration tests. | `@iln/sdk` |\n';
+    const rows = extractPackageRows(parseTables(doc));
+    assert.equal(rows.length, 1);
+    assert.equal(rows[0].path, 'tests/sdk-integration/');
+    assert.equal(rows[0].pkg, '@iln/sdk-integration-tests');
+    assert.equal(rows[0].status, null);
+  });
 });
 
 describe('buildFindings', () => {
@@ -146,5 +159,23 @@ describe('buildFindings', () => {
     const findings = buildFindings(rows, packages);
     const hit = findings.find((f) => f.code === 'UNDOCUMENTED_PACKAGE');
     assert.ok(hit, 'expected UNDOCUMENTED_PACKAGE');
+  });
+
+  it('does not flag a package documented only in a Status-less table (e.g. Test Workspaces)', () => {
+    const doc =
+      SAMPLE_DOC +
+      '\n## Test Workspaces\n\n' +
+      '| Path | Package | Purpose | Dependencies |\n' +
+      '|------|---------|---------|-------------|\n' +
+      '| `tests/sdk-integration/` | `@iln/sdk-integration-tests` | Integration tests. | `@iln/sdk` |\n';
+    const rows = extractPackageRows(parseTables(doc));
+    const packages = makePackages();
+    packages.set('tests/sdk-integration/', {
+      name: '@iln/sdk-integration-tests',
+      version: '0.1.0',
+      private: true,
+    });
+    const findings = buildFindings(rows, packages);
+    assert.equal(findings.filter((f) => f.code === 'UNDOCUMENTED_PACKAGE').length, 0);
   });
 });
