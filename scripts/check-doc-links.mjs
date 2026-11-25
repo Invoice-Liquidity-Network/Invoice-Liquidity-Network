@@ -54,7 +54,24 @@ async function checkExternalLink(url, fetchImpl = fetch) {
   }
 }
 
-async function checkFile(filePath, repoRoot) {
+// Caches each unique external URL's result for the lifetime of one checker
+// instance so that a URL referenced from several files (e.g. a historical PR
+// link cited from multiple changelog/doc entries) is fetched exactly once and
+// classified identically everywhere it appears. Without this, concurrent
+// per-occurrence fetches of the same URL could race a transient failure
+// against a success, making the same unchanged input report differently
+// between files, or between runs, for no doc-content reason.
+export function createLinkChecker(fetchImpl = fetch) {
+  const cache = new Map();
+  return function checkOnce(url) {
+    if (!cache.has(url)) {
+      cache.set(url, checkExternalLink(url, fetchImpl));
+    }
+    return cache.get(url);
+  };
+}
+
+async function checkFile(filePath, repoRoot, checkLink) {
   const content = readFileSync(filePath, 'utf8');
   // Fenced and inline code examples show markdown as text and should not be
   // checked as links from the file containing the example.
@@ -72,7 +89,7 @@ async function checkFile(filePath, repoRoot) {
       // strip title part: url "title"
       const url = link.split(/\s+/)[0];
       if (/^https?:\/\//i.test(url)) {
-        const result = await checkExternalLink(url);
+        const result = await checkLink(url);
         if (result.problem) problems.push(result.problem);
         if (result.warning) warnings.push(result.warning);
       } else {
@@ -139,10 +156,11 @@ async function main() {
 
   console.log(`Checking ${fileList.length} files...`);
 
+  const checkLink = createLinkChecker();
   const results = [];
   for (const f of fileList) {
     try {
-      const r = await checkFile(resolve(repoRoot, f), repoRoot);
+      const r = await checkFile(resolve(repoRoot, f), repoRoot, checkLink);
       results.push(r);
     } catch (err) {
       results.push({ file: f, problems: [`error ${String(err)}`], warnings: [] });

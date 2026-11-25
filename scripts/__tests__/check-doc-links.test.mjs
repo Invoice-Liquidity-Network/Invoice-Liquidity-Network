@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
 import { afterEach, test } from 'node:test';
 import assert from 'node:assert/strict';
-import { checkExternalLink } from '../check-doc-links.mjs';
+import { checkExternalLink, createLinkChecker } from '../check-doc-links.mjs';
 
 const repoRoot = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
 const checkScript = join(repoRoot, 'scripts', 'check-doc-links.mjs');
@@ -110,6 +110,41 @@ test('doc link check treats rate limiting and server errors as unverified, not b
     status: 410,
   }));
   assert.match(gone.problem, /410/);
+});
+
+test('link checker fetches a URL referenced many times exactly once and reuses the result', async () => {
+  let calls = 0;
+  const checkOnce = createLinkChecker(async () => {
+    calls++;
+    return { ok: true, status: 200 };
+  });
+
+  const results = await Promise.all([
+    checkOnce('https://docs.example.invalid/a'),
+    checkOnce('https://docs.example.invalid/a'),
+    checkOnce('https://docs.example.invalid/a'),
+  ]);
+
+  assert.equal(calls, 1);
+  for (const r of results) assert.deepEqual(r, { problem: null, warning: null });
+});
+
+test('link checker gives every occurrence of a URL the same classification within one run', async () => {
+  // A flaky fetch would otherwise be free to answer a retried, independent
+  // check differently per occurrence of the same link in the same run.
+  let calls = 0;
+  const checkOnce = createLinkChecker(async () => {
+    calls++;
+    return calls === 1 ? { ok: false, status: 404 } : { ok: true, status: 200 };
+  });
+
+  const [first, second] = await Promise.all([
+    checkOnce('https://docs.example.invalid/b'),
+    checkOnce('https://docs.example.invalid/b'),
+  ]);
+
+  assert.equal(calls, 1);
+  assert.deepEqual(first, second);
 });
 
 test('doc link check retries HEAD rejections with GET before judging the link', async () => {
