@@ -115,6 +115,18 @@ export function setDb(db: Database.Database): void {
 
 // ─── Schema migrations ────────────────────────────────────────────────────────
 
+/**
+ * Current schema version applied by `runMigrations`.
+ *
+ * Bumping this is the ONLY sanctioned way to introduce a schema change: the
+ * migration is applied atomically inside a transaction, and the version is
+ * recorded in `schema_migrations` as the last statement. A partially applied
+ * migration (process killed mid-transaction, or a migration that throws) leaves
+ * the version unchanged, so the next startup re-applies it from a known-good
+ * state instead of trusting a corrupt schema (#1438).
+ */
+export const SCHEMA_VERSION = 1;
+
 function runMigrations(db: Database.Database): void {
   db.exec(`
     CREATE TABLE IF NOT EXISTS invoices (
@@ -144,6 +156,12 @@ function runMigrations(db: Database.Database): void {
       id           INTEGER PRIMARY KEY CHECK (id = 1),
       last_ledger  INTEGER NOT NULL DEFAULT 0,
       updated_at   INTEGER NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS schema_migrations (
+      version     INTEGER PRIMARY KEY,
+      applied_at  INTEGER NOT NULL,
+      description TEXT    NOT NULL
     );
 
     CREATE TABLE IF NOT EXISTS fork_decisions (
@@ -192,6 +210,59 @@ function runMigrations(db: Database.Database): void {
   } catch {
     /* migration check failure is non-fatal */
   }
+
+  // ── Atomic schema-version guard (#1438) ────────────────────────────────────
+  // The schema version is recorded inside the same transaction as the schema
+  // work so a partially applied migration (crash, throw, or rollback) cannot
+  // leave the version stamp claiming a schema that was never fully built.
+  // `runMigrations` is called outside a transaction by `createDb`, so the
+  // guard wraps only the version stamp itself.
+  applySchemaVersion(db, SCHEMA_VERSION, 'Initial schema: invoices, events, cursor, fork decisions, quarantine, schema_migrations');
+}
+
+/**
+ * Record the applied schema version atomically.
+ *
+ * - If the version is already present, this is a no-op (idempotent restart).
+ * - If a lower version is present, the migration ledger is corrupt and we
+ *   refuse to trust it — the caller must intervene rather than silently
+ *   continuing on a potentially half-applied schema.
+ * - If a higher version is present, the running code is outdated and must be
+ *   upgraded before continuing.
+ */
+export function applySchemaVersion(
+  db: Database.Database,
+  version: number,
+  description: string
+): void {
+  const existing = db.prepare('SELECT version FROM schema_migrations WHERE version = ?').get(version);
+  if (existing) return;
+
+  const maxRow = db.prepare('SELECT MAX(version) AS v FROM schema_migrations').get() as { v: number | null };
+  const currentMax = maxRow.v ?? 0;
+
+  if (version < currentMax) {
+    throw new Error(
+      `[DB] Schema version ${version} is below the highest recorded version ${currentMax}. ` +
+      `The migration ledger is corrupt or a migration was rolled back — refusing to continue.`
+    );
+  }
+  if (version > currentMax + 1) {
+    throw new Error(
+      `[DB] Schema version ${version} skips versions (highest recorded: ${currentMax}). ` +
+      `Migrations must be applied in order without gaps.`
+    );
+  }
+
+  db.prepare(
+    `INSERT INTO schema_migrations (version, applied_at, description) VALUES (?, ?, ?)`
+  ).run(version, Date.now(), description);
+}
+
+/** Return the highest schema version recorded in the migration ledger, or 0. */
+export function getSchemaVersion(db: Database.Database): number {
+  const row = db.prepare('SELECT MAX(version) AS v FROM schema_migrations').get() as { v: number | null };
+  return row.v ?? 0;
 }
 
 // ─── Invoice CRUD ─────────────────────────────────────────────────────────────

@@ -145,3 +145,85 @@ describe("pollOnce re-org recovery (#1256)", () => {
     expect(getCursorLedger()).toBe(510);
   });
 });
+
+describe("Issue #1436: Cursor is the durability boundary — partial poll cannot advance it", () => {
+  beforeEach(() => {
+    setDb(createDb(":memory:"));
+    setCursorLedger(100);
+    vi.mocked(fetchInvoice).mockReset().mockResolvedValue(null);
+    vi.mocked(server.getEvents).mockReset();
+  });
+
+  it("does not advance the persisted cursor on a later page if an earlier page's event fails to persist", async () => {
+    // Page 1: a FULL batch (200 events) at ledgers 101..300, all persisted.
+    // Page 2: a single event whose processing throws after page 1 committed.
+    const page1 = Array.from({ length: 200 }, (_, i) =>
+      makeEventAt(101 + i, `p1-${i}`)
+    );
+    const page2 = [makeEventAt(303, "p2-c")];
+
+    // Page 1 events succeed (fetchInvoice resolves null); page 2 rejects on
+    // every attempt so processEvent's retry loop actually throws.
+    let fetchCalls = 0;
+    vi.mocked(fetchInvoice).mockImplementation(() => {
+      fetchCalls++;
+      if (fetchCalls <= 200) return Promise.resolve(null);
+      return Promise.reject(new Error("RPC transient failure on page 2"));
+    });
+
+    vi.mocked(server.getEvents)
+      .mockResolvedValueOnce({ events: page1, latestLedger: 400, cursor: "page2" } as any)
+      .mockResolvedValueOnce({ events: page2, latestLedger: 400, cursor: undefined } as any);
+
+    await expect(pollOnce()).rejects.toThrow("RPC transient failure on page 2");
+
+    // The persisted cursor must NOT have advanced past the last durably
+    // persisted event (300). It must not reflect page 2's ledger 303, which
+    // was never written. The pre-cycle cursor (100) is also preserved because
+    // the single durability boundary only fires after the whole cycle succeeds.
+    const cursor = getCursorLedger();
+    expect(cursor).toBeLessThanOrEqual(300);
+    expect(cursor).toBeGreaterThanOrEqual(100);
+
+    // Durability check: the events from page 1 ARE persisted, but page 2 is not.
+    const { hasEvent } = await import("../src/db");
+    expect(hasEvent("p1-0")).toBe(true);
+    expect(hasEvent("p1-199")).toBe(true);
+    expect(hasEvent("p2-c")).toBe(false);
+  });
+
+  it("does not advance the persisted cursor at all when the first page throws before any event persists", async () => {
+    setCursorLedger(200);
+    const page1 = [makeEventAt(201, "fail-a")];
+
+    vi.mocked(fetchInvoice).mockReset().mockRejectedValue(new Error("boom"));
+    vi.mocked(server.getEvents).mockResolvedValueOnce({
+      events: page1,
+      latestLedger: 250,
+      cursor: undefined,
+    } as any);
+
+    await expect(pollOnce()).rejects.toThrow("boom");
+
+    // Cursor must remain at the pre-cycle value: nothing was persisted, so the
+    // durability boundary must not have moved.
+    expect(getCursorLedger()).toBe(200);
+  });
+
+  it("advances the cursor only after every page of a multi-page cycle succeeds", async () => {
+    setCursorLedger(300);
+    const page1 = [makeEventAt(301, "m1"), makeEventAt(302, "m2")];
+    const page2 = [makeEventAt(303, "m3")];
+
+    vi.mocked(fetchInvoice).mockResolvedValue(null);
+    vi.mocked(server.getEvents)
+      .mockResolvedValueOnce({ events: page1, latestLedger: 320, cursor: "page2" } as any)
+      .mockResolvedValueOnce({ events: page2, latestLedger: 320, cursor: undefined } as any);
+
+    await pollOnce();
+
+    // All three events persisted (320 - 303 = 17 >= depth 10 → confirmed).
+    // Cursor advances to max(highestEventLedger=303, confirmedTip=310) = 310.
+    expect(getCursorLedger()).toBe(310);
+  });
+});

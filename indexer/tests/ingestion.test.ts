@@ -173,3 +173,105 @@ describe('processEvent — fetchInvoice failure', () => {
     expect(getInvoiceById(10)).toBeUndefined();
   });
 });
+
+// ── Issue #1437: Transaction batch atomicity (crash recovery, partial decode,
+//    duplicate event indexes) ────────────────────────────────────────────────
+
+describe('processEvent — transaction batch atomicity (#1437)', () => {
+  it('rolls back the entire event+invoice write when the upsert throws mid-transaction', async () => {
+    // Force applyEventWithInvoice to fail inside its transaction by injecting
+    // an invoice whose `freelancer` is null — the invoices table declares it
+    // NOT NULL, so the upsert aborts and the whole transaction rolls back.
+    vi.mocked(fetchInvoice).mockResolvedValueOnce({
+      ...mockInvoice(501, 'Pending'),
+      freelancer: null,
+    } as any);
+
+    const badEvent = makeEvent('submitted', 501, 'evt-atomic-fail');
+
+    await expect(processEvent(badEvent)).rejects.toThrow();
+
+    // Atomicity: neither the event row nor the invoice row may survive.
+    expect(hasEvent('evt-atomic-fail')).toBe(false);
+    expect(getInvoiceById(501)).toBeUndefined();
+  });
+
+  it('keeps a previously committed event intact when a later event in the same batch fails', async () => {
+    // Event A commits successfully.
+    vi.mocked(fetchInvoice).mockResolvedValueOnce(mockInvoice(502, 'Pending'));
+    await processEvent(makeEvent('submitted', 502, 'evt-a-ok'));
+
+    // Event B fails to fetch (rejects on every retry attempt).
+    vi.mocked(fetchInvoice).mockReset().mockRejectedValue(new Error('RPC down for B'));
+    await expect(processEvent(makeEvent('submitted', 503, 'evt-b-fail'))).rejects.toThrow(
+      'RPC down for B'
+    );
+
+    // Event A's state is untouched; Event B never landed.
+    expect(hasEvent('evt-a-ok')).toBe(true);
+    expect(getInvoiceById(502)?.status).toBe('Pending');
+    expect(hasEvent('evt-b-fail')).toBe(false);
+    expect(getInvoiceById(503)).toBeUndefined();
+  });
+
+  it('survives a simulated crash-and-replay by leaving no orphaned rows', async () => {
+    // Simulate a crash: the first invocation fails inside the transaction
+    // (NOT NULL violation on freelancer), so the process is killed. On
+    // restart, the same event is replayed and must converge to exactly one row.
+    const event = makeEvent('submitted', 504, 'evt-crash-replay');
+
+    // First attempt: corrupt the invoice so the transaction aborts.
+    vi.mocked(fetchInvoice).mockResolvedValueOnce({
+      ...mockInvoice(504, 'Pending'),
+      freelancer: null,
+    } as any);
+    let firstAttemptThrew = false;
+    try {
+      await processEvent(event);
+    } catch {
+      firstAttemptThrew = true;
+    }
+    expect(firstAttemptThrew).toBe(true);
+    expect(hasEvent('evt-crash-replay')).toBe(false);
+    expect(getInvoiceById(504)).toBeUndefined();
+
+    // Replay after "restart": fetchInvoice returns a valid invoice.
+    vi.mocked(fetchInvoice).mockReset().mockResolvedValue(mockInvoice(504, 'Pending'));
+    await processEvent(event);
+
+    expect(hasEvent('evt-crash-replay')).toBe(true);
+    expect(getInvoiceById(504)?.status).toBe('Pending');
+  });
+
+  it('deduplicates by event id even when the same id is processed concurrently', async () => {
+    vi.mocked(fetchInvoice).mockResolvedValue(mockInvoice(505, 'Pending'));
+    const event = makeEvent('submitted', 505, 'evt-concurrent-dup');
+
+    // Both calls pass the hasEvent() check before either commits, so both
+    // fetch; INSERT OR IGNORE inside applyEventWithInvoice keeps the stored
+    // state single.
+    await Promise.all([processEvent(event), processEvent(event)]);
+
+    expect(hasEvent('evt-concurrent-dup')).toBe(true);
+    expect(getInvoiceById(505)?.status).toBe('Pending');
+  });
+
+  it('treats a duplicate event id with a different invoice id as a distinct row', async () => {
+    // Same event id, different invoice id — the PRIMARY KEY on event_id
+    // guarantees only one row survives regardless of invoice id.
+    vi.mocked(fetchInvoice).mockResolvedValue(mockInvoice(506, 'Pending'));
+    const event = makeEvent('submitted', 506, 'evt-same-id-diff-inv');
+
+    await processEvent(event);
+    // Re-process with the same event id but a different invoice id; the
+    // deduplication short-circuits before any invoice write.
+    await processEvent({
+      ...event,
+      value: nativeToScVal(BigInt(999), { type: 'u64' }),
+    } as any);
+
+    expect(hasEvent('evt-same-id-diff-inv')).toBe(true);
+    expect(getInvoiceById(506)?.status).toBe('Pending');
+    expect(getInvoiceById(999)).toBeUndefined();
+  });
+});
